@@ -540,8 +540,8 @@ export default function AdminStudio() {
                   style={{ willChange: 'transform' }}
                   size={{ width: el.is_background ? '100%' : `${(el.width / 100) * dimensions.width}px`, height: el.is_background ? '100%' : `${(el.height / 100) * dimensions.height}px` }}
                   position={{ x: el.is_background ? 0 : (el.pos_x / 100) * dimensions.width, y: el.is_background ? 0 : (el.pos_y / 100) * dimensions.height }}
-                  onDragStop={(_e, d) => updateLayer(el.id, { pos_x: (d.x / dimensions.width) * 100, pos_y: (d.y / dimensions.height) * 100 })}
-                  onResizeStop={(_e, _dir, ref, _delta, pos) => updateLayer(el.id, { width: (ref.offsetWidth / dimensions.width) * 100, height: (ref.offsetHeight / dimensions.height) * 100, pos_x: (pos.x / dimensions.width) * 100, pos_y: (pos.y / dimensions.height) * 100 })}
+                  onDragStop={(_e, d) => { updateLayer(el.id, { pos_x: (d.x / dimensions.width) * 100, pos_y: (d.y / dimensions.height) * 100 }); }}
+                  onResizeStop={(_e, _dir, ref, _delta, pos) => { updateLayer(el.id, { width: (ref.offsetWidth / dimensions.width) * 100, height: (ref.offsetHeight / dimensions.height) * 100, pos_x: (pos.x / dimensions.width) * 100, pos_y: (pos.y / dimensions.height) * 100 }); }}
                   disableDragging={el.is_background} enableResizing={!el.is_background} bounds="parent"
                   className={`group ${el.is_background ? 'z-0' : 'z-30'}`}>
                   <div className={`relative h-full w-full ${el.is_background ? '' : 'border-2 border-cyan-500/30'} ${el.locked ? 'opacity-75' : ''}`}>
