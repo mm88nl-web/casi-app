@@ -42,13 +42,14 @@ function generateRandomName(): string {
 }
 
 function NameEntryScreen({ onConfirm }: { onConfirm: (name: string) => void }) {
-  const [name, setName] = useState(generateRandomName);
+  const [name, setName] = useState(generateRandomName());
   const [showSignInNote, setShowSignInNote] = useState(false);
+
   return (
     <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-10">
-          <h1 className="text-5xl font-black italic tracking-tighter uppercase leading-none mb-2">Casi</h1>
+          <h1 className="text-5xl font-black italic uppercase tracking-tighter leading-none mb-2">Casi</h1>
           <p className="text-gray-600 font-mono text-xs uppercase tracking-widest">Viewer</p>
         </div>
         <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-4">
@@ -58,14 +59,13 @@ function NameEntryScreen({ onConfirm }: { onConfirm: (name: string) => void }) {
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && name.trim() && onConfirm(name.trim())}
               maxLength={24} autoFocus
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm font-black outline-none focus:border-cyan-500/50 transition-colors pr-24"
-              placeholder="Your viewer name" />
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm font-black outline-none focus:border-cyan-500/50 transition-colors pr-24" />
             <button onClick={() => setName(generateRandomName())}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-mono text-gray-500 hover:text-cyan-400 uppercase tracking-widest transition-colors">
               ↺ random
             </button>
           </div>
-          <p className="text-[9px] font-mono text-gray-600 mb-5">Random name generated — change it or keep it. Saved on this device.</p>
+          <p className="text-[9px] font-mono text-gray-600 mb-5">A random name was generated — change it or keep it.</p>
           <button onClick={() => name.trim() && onConfirm(name.trim())} disabled={!name.trim()}
             className="w-full bg-cyan-500 hover:bg-cyan-400 disabled:bg-gray-800 disabled:text-gray-600 text-black font-black text-sm py-3 rounded-xl uppercase tracking-widest transition-all">
             Enter stream →
@@ -78,8 +78,7 @@ function NameEntryScreen({ onConfirm }: { onConfirm: (name: string) => void }) {
         {showSignInNote && (
           <div className="mt-3 bg-white/3 border border-white/8 rounded-xl p-4 text-center animate-in fade-in duration-200">
             <p className="text-xs font-mono text-gray-500 leading-relaxed">
-              Account sign-in is coming soon.<br />
-              Your name is saved on this device for now.
+              Account sign-in coming soon.<br />Your name is saved on this device for now.
             </p>
           </div>
         )}
@@ -112,16 +111,17 @@ function OverlayContent() {
   const [message, setMessage] = useState('');
   const [duration, setDuration] = useState(30);
   const [submitting, setSubmitting] = useState(false);
-  const [notification, setNotification] = useState<{ text: string; type: 'success' | 'queue' | 'denied' | 'warning' } | null>(null);
+  const [notification, setNotification] = useState<{ text: string; type: string } | null>(null);
 
   const supabase = useRef(createClient()).current;
   const viewerNameRef = useRef('');
 
-  // No username param — redirect to search
-  if (!isOBS && !username) {
-    if (typeof window !== 'undefined') window.location.href = '/search';
-    return null;
-  }
+  // Redirect if no username
+  useEffect(() => {
+    if (!isOBS && !username) {
+      window.location.href = '/search';
+    }
+  }, [username, isOBS]);
 
   useEffect(() => {
     try {
@@ -137,7 +137,7 @@ function OverlayContent() {
     setNameConfirmed(true);
   };
 
-  const showNotification = (text: string, type: 'success' | 'queue' | 'denied' | 'warning') => {
+  const showNotification = (text: string, type: string) => {
     setNotification({ text, type });
     setTimeout(() => setNotification(null), 6000);
   };
@@ -161,11 +161,15 @@ function OverlayContent() {
         .eq('profile_id', profId).eq('viewer_name', name)
         .in('status', ['pending', 'active', 'approved_queued', 'denied'])
         .order('created_at', { ascending: false });
-      setMyBookings((mine || []).filter(b => b.status !== 'denied' || Date.now() - new Date(b.created_at).getTime() < 30000));
+      const relevant = (mine || []).filter((b: any) =>
+        b.status !== 'denied' || Date.now() - new Date(b.created_at).getTime() < 30000
+      );
+      setMyBookings(relevant);
     }
   }, [supabase]);
 
   useEffect(() => {
+    if (!username) return;
     let cleanup: (() => void) | undefined;
     const init = async () => {
       const { data: prof } = await supabase.from('profiles').select('*').eq('username', username).single();
@@ -174,13 +178,15 @@ function OverlayContent() {
         const saved = (() => { try { return localStorage.getItem(VIEWER_NAME_KEY) || ''; } catch { return ''; } })();
         viewerNameRef.current = saved;
         await loadData(prof.id, saved);
+        setLoading(false);
         const channel = supabase.channel(`overlay_${prof.id}`)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'overlay_elements', filter: `profile_id=eq.${prof.id}` }, () => loadData(prof.id))
           .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `profile_id=eq.${prof.id}` }, () => loadData(prof.id))
           .subscribe();
         cleanup = () => { supabase.removeChannel(channel); };
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     };
     init();
     return () => { if (cleanup) cleanup(); };
@@ -190,29 +196,25 @@ function OverlayContent() {
   useEffect(() => {
     const prev = prevMyBookingsRef.current;
     myBookings.forEach(booking => {
-      const old = prev.find(b => b.id === booking.id);
+      const old = prev.find((b: any) => b.id === booking.id);
       if (!old) return;
       if (old.status === 'pending' && booking.status === 'denied') showNotification('Your request was denied', 'denied');
       if (old.status === 'pending' && booking.status === 'active') showNotification('Your beam is now live! 🎉', 'success');
-      if (old.status === 'pending' && booking.status === 'approved_queued') showNotification("Approved — you're in the queue!", 'queue');
+      if (old.status === 'pending' && booking.status === 'approved_queued') showNotification('Approved — you\'re in the queue!', 'queue');
     });
     prevMyBookingsRef.current = myBookings;
   }, [myBookings]);
 
-  const getActiveBookingForSlot = (id: string) => activeBookings.find(b => b.element_id === id) || null;
-  const getMyBookingForSlot = (id: string) => myBookings.find(b => b.element_id === id && b.status !== 'denied') || null;
-  const getMyQueuePosition = (elementId: string, bookingId: string) => {
-    const queue = approvedQueuedBookings.filter(b => b.element_id === elementId);
-    return queue.findIndex(b => b.id === bookingId) + 1;
-  };
-  const handleCountdownWarning = (bookingId: string, seconds: number) => {
-    if (seconds <= 120 && seconds > 0) setExpiringSoon(prev => new Set(prev).add(bookingId));
-    else if (seconds <= 0) setExpiringSoon(prev => { const s = new Set(prev); s.delete(bookingId); return s; });
-  };
+  const getActiveBookingForSlot = (id: string) => activeBookings.find((b: any) => b.element_id === id) || null;
+  const getMyBookingForSlot = (id: string) => myBookings.find((b: any) => b.element_id === id && b.status !== 'denied') || null;
 
   const openSlot = (el: any, joinQueue: boolean, extend = false) => {
-    setSelectedSlot(el); setIsQueue(joinQueue); setIsExtend(extend);
-    setImageUrl(''); setImageValid(false); setMessage('');
+    setSelectedSlot(el);
+    setIsQueue(joinQueue);
+    setIsExtend(extend);
+    setImageUrl('');
+    setImageValid(false);
+    setMessage('');
     const maxDur = el.max_duration_minutes;
     setDuration(maxDur ? Math.min(30, maxDur) : 30);
     if (extend) {
@@ -220,7 +222,9 @@ function OverlayContent() {
       if (myBooking?.image_url) { setImageUrl(myBooking.image_url); setImageValid(true); }
     }
   };
+
   const closeSlot = () => { setSelectedSlot(null); setIsExtend(false); };
+
   const setDurationClamped = (val: number) => {
     const max = selectedSlot?.max_duration_minutes;
     setDuration(max ? Math.min(val, max) : val);
@@ -230,7 +234,7 @@ function OverlayContent() {
     if (!savedViewerName || !imageUrl || !selectedSlot) return;
     setSubmitting(true);
 
-    // Spam protection — max 1 pending request per viewer per slot
+    // Spam protection
     const { data: existing } = await supabase.from('bookings').select('id')
       .eq('profile_id', profile.id).eq('element_id', selectedSlot.id)
       .eq('viewer_name', savedViewerName).eq('status', 'pending').single();
@@ -254,8 +258,8 @@ function OverlayContent() {
     if (!error) {
       closeSlot();
       showNotification(
-        isExtend ? 'Extension requested!' : isQueue ? 'Request sent — waiting for queue approval' : 'Request sent — waiting for approval',
-        isExtend || isQueue ? 'queue' : 'success'
+        isExtend ? 'Extension requested!' : isQueue ? 'Request sent — streamer will review' : 'Request sent!',
+        isQueue || isExtend ? 'queue' : 'success'
       );
       if (profile?.id) await loadData(profile.id, savedViewerName);
     }
@@ -266,11 +270,12 @@ function OverlayContent() {
       ? (selectedSlot.price_value * duration).toFixed(0)
       : (selectedSlot.price_value * (duration / 60)).toFixed(2)
     : '0';
+
   const activeForSelected = selectedSlot ? getActiveBookingForSlot(selectedSlot.id) : null;
   const accentColor = isExtend ? '#eab308' : isQueue ? '#f97316' : '#06b6d4';
-  const visibleMyBookings = myBookings.filter(b => b.status !== 'denied');
+  const visibleMyBookings = myBookings.filter((b: any) => b.status !== 'denied');
 
-  const notificationColors = {
+  const notificationColors: Record<string, string> = {
     success: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400',
     queue: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400',
     denied: 'bg-red-500/10 border-red-500/30 text-red-400',
@@ -280,26 +285,15 @@ function OverlayContent() {
   if (loading) return null;
   if (!isOBS && !nameConfirmed) return <NameEntryScreen onConfirm={confirmName} />;
 
-  const displayElements = elements.map(el =>
-    selectedSlot?.id === el.id && imageValid && imageUrl ? { ...el, image_url: imageUrl, _preview: true } : el
-  );
-
   return (
     <div className={`min-h-screen ${isOBS ? 'bg-transparent' : 'bg-[#050505]'} text-white`}>
+
       {!isOBS && (
-        <nav className="flex items-center justify-between px-12 py-6 border-b border-white/5 bg-black/40 backdrop-blur-xl">
-          <div className="flex items-center gap-4">
-            <a href="/search" className="text-4xl font-black italic tracking-tighter uppercase leading-none hover:text-cyan-400 transition-colors">Casi</a>
-            {profile && (
-              <div className="flex items-center gap-2">
-                {profile.is_live && <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />}
-                <span className="text-gray-500 font-mono text-xs">@{username}</span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-4">
+        <nav className="flex items-center justify-between px-4 sm:px-8 py-4 border-b border-white/5 bg-black/40 backdrop-blur-xl">
+          <a href="/search" className="text-xl sm:text-3xl font-black italic tracking-tighter uppercase leading-none hover:text-cyan-400 transition-colors">Casi</a>
+          <div className="flex items-center gap-2 sm:gap-4">
             {notification && (
-              <div className={`border text-xs font-mono px-4 py-2 rounded-full animate-in fade-in duration-300 ${notificationColors[notification.type]}`}>
+              <div className={`border text-[10px] sm:text-xs font-mono px-3 py-1.5 rounded-full animate-in fade-in duration-300 max-w-[160px] sm:max-w-none truncate ${notificationColors[notification.type] || notificationColors.success}`}>
                 {notification.text}
               </div>
             )}
@@ -309,55 +303,44 @@ function OverlayContent() {
             {savedViewerName && !selectedSlot && (
               showChangeName ? (
                 <input type="text" defaultValue={savedViewerName} autoFocus
-                  onKeyDown={(e) => { if (e.key === 'Enter') { const v = (e.target as HTMLInputElement).value.trim(); if (v) { confirmName(v); setShowChangeName(false); } } if (e.key === 'Escape') setShowChangeName(false); }}
-                  onBlur={(e) => { const v = e.target.value.trim(); if (v) confirmName(v); setShowChangeName(false); }}
-                  className="bg-white/5 border border-white/20 rounded-lg px-3 py-1 text-xs text-white outline-none focus:border-cyan-500/50 w-32 animate-in fade-in duration-200" />
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { const val = (e.target as HTMLInputElement).value.trim(); if (val) { confirmName(val); setShowChangeName(false); } }
+                    if (e.key === 'Escape') setShowChangeName(false);
+                  }}
+                  onBlur={(e) => { const val = e.target.value.trim(); if (val) confirmName(val); setShowChangeName(false); }}
+                  className="bg-white/5 border border-white/20 rounded-lg px-3 py-1 text-xs text-white outline-none focus:border-cyan-500/50 w-28" />
               ) : (
                 <button onClick={() => setShowChangeName(true)}
-                  className="flex items-center gap-2 bg-white/5 border border-white/10 hover:border-white/20 rounded-full px-3 py-1.5 transition-all group">
+                  className="flex items-center gap-1.5 bg-white/5 border border-white/10 hover:border-white/20 rounded-full px-3 py-1.5 transition-all">
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
-                  <span className="text-[10px] font-mono text-gray-400 group-hover:text-white transition-colors">@{savedViewerName}</span>
-                  <span className="text-[8px] font-mono text-gray-700 group-hover:text-gray-500 transition-colors">change</span>
+                  <span className="text-[10px] font-mono text-gray-400">@{savedViewerName}</span>
                 </button>
               )
             )}
-            <a href="/search" className="text-[10px] font-mono text-gray-600 hover:text-gray-400 uppercase tracking-widest transition-colors">Browse streams</a>
           </div>
         </nav>
       )}
 
-      <main className={`${isOBS ? 'p-0' : 'p-8 pb-4'} max-w-[1600px] mx-auto`}>
+      <main className={`${isOBS ? 'p-0' : 'px-3 sm:px-6 py-4 sm:py-6'} max-w-6xl mx-auto`}>
 
-        {/* Viewer's active beams */}
+        {/* My active beams */}
         {!isOBS && visibleMyBookings.length > 0 && !selectedSlot && (
-          <div className="mb-6 p-4 bg-white/3 border border-white/10 rounded-2xl">
-            <p className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-3">Your beams on this stream</p>
-            <div className="flex flex-wrap gap-3">
-              {visibleMyBookings.map(booking => {
-                const activeBooking = activeBookings.find(b => b.id === booking.id);
+          <div className="mb-4 p-3 sm:p-4 bg-white/3 border border-white/10 rounded-2xl">
+            <p className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-2">Your beams</p>
+            <div className="flex flex-wrap gap-2">
+              {visibleMyBookings.map((booking: any) => {
+                const activeBooking = activeBookings.find((b: any) => b.id === booking.id);
                 const isLive = booking.status === 'active';
                 const isApproved = booking.status === 'approved_queued';
-                const isPending = booking.status === 'pending';
                 const isExpiring = isLive && expiringSoon.has(booking.id);
-                const slotEl = elements.find(el => el.id === booking.element_id);
-                const activeForMySlot = getActiveBookingForSlot(booking.element_id);
-                const myQueuePos = isApproved ? getMyQueuePosition(booking.element_id, booking.id) : null;
                 return (
-                  <div key={booking.id} className={`flex items-center gap-3 rounded-2xl px-4 py-2 border transition-all ${isExpiring ? 'bg-yellow-500/10 border-yellow-500/30 animate-pulse' : isLive ? 'bg-cyan-500/10 border-cyan-500/20' : isApproved ? 'bg-orange-500/10 border-orange-500/20' : 'bg-white/5 border-white/10'}`}>
-                    {booking.image_url && <img src={booking.image_url} className="w-8 h-8 object-contain rounded-lg" alt="" />}
-                    <div>
-                      <p className={`text-[10px] font-black uppercase tracking-widest ${isExpiring ? 'text-yellow-400' : isLive ? 'text-cyan-400' : isApproved ? 'text-orange-400' : 'text-gray-400'}`}>
-                        {isExpiring ? '⚠ Expiring soon' : isLive ? '● Live now' : isApproved ? `⏳ Queue #${myQueuePos}` : '⌛ Pending'}
-                      </p>
-                      {isLive && activeBooking && <p className={`text-[10px] font-mono ${isExpiring ? 'text-yellow-400/70' : 'text-cyan-400/70'}`}><Countdown booking={activeBooking} onWarning={(s) => handleCountdownWarning(booking.id, s)} /> remaining</p>}
-                      {isApproved && activeForMySlot && myQueuePos === 1 && <p className="text-[10px] font-mono text-orange-400/70">~<Countdown booking={activeForMySlot} /> til live</p>}
-                      {isPending && <p className="text-[10px] font-mono text-gray-600">Waiting for streamer</p>}
-                    </div>
-                    {isExpiring && slotEl && !slotEl.locked && (
-                      <button onClick={() => openSlot(slotEl, false, true)}
-                        className="ml-2 bg-yellow-500 hover:bg-yellow-400 text-black text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest transition-all">
-                        Extend
-                      </button>
+                  <div key={booking.id} className={`flex items-center gap-2 rounded-xl px-3 py-1.5 border text-xs transition-all ${isExpiring ? 'bg-yellow-500/10 border-yellow-500/30 animate-pulse' : isLive ? 'bg-cyan-500/10 border-cyan-500/20' : isApproved ? 'bg-orange-500/10 border-orange-500/20' : 'bg-white/5 border-white/10'}`}>
+                    {booking.image_url && <img src={booking.image_url} className="w-6 h-6 object-contain rounded" alt="" />}
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${isExpiring ? 'text-yellow-400' : isLive ? 'text-cyan-400' : isApproved ? 'text-orange-400' : 'text-gray-400'}`}>
+                      {isExpiring ? '⚠ Expiring' : isLive ? '● Live' : isApproved ? '⏳ Queued' : '⌛ Pending'}
+                    </span>
+                    {isLive && activeBooking && (
+                      <span className="text-[10px] font-mono text-cyan-400/70"><Countdown booking={activeBooking} /></span>
                     )}
                   </div>
                 );
@@ -366,9 +349,9 @@ function OverlayContent() {
           </div>
         )}
 
-        {/* Stream canvas */}
-        <div className={`relative aspect-video overflow-visible ${isOBS ? 'bg-transparent' : `rounded-[2rem] border bg-black shadow-2xl ${selectedSlot ? 'border-white/20' : 'border-white/10'}`}`}>
-          {displayElements.map((el: any) => {
+        {/* Stream view */}
+        <div className={`relative ${isOBS ? '' : 'aspect-video rounded-xl sm:rounded-2xl border border-white/10 bg-black shadow-2xl overflow-hidden'}`}>
+          {elements.map((el: any) => {
             const activeBooking = getActiveBookingForSlot(el.id);
             const isOccupied = !!activeBooking;
             const queueCount = queueCounts[el.id] || 0;
@@ -377,56 +360,56 @@ function OverlayContent() {
             const myBookingIsExpiring = myBookingForSlot && expiringSoon.has(myBookingForSlot.id);
             const isLocked = !!el.locked;
             const maxDur = el.max_duration_minutes;
+            const displayImage = (isSelected && imageValid && imageUrl) ? imageUrl : (el.image_url || null);
 
             return (
-              <div key={el.id} style={{ position: 'absolute', left: `${el.pos_x}%`, top: `${el.pos_y}%`, width: `${el.width}%`, height: `${el.height}%`, zIndex: el.is_background ? 10 : 50, transition: 'all 0.35s cubic-bezier(0.16,1,0.3,1)' }}>
-                {el.image_url ? (
+              <div key={el.id} style={{
+                position: 'absolute',
+                left: `${el.pos_x}%`, top: `${el.pos_y}%`,
+                width: `${el.width}%`, height: `${el.height}%`,
+                zIndex: el.is_background ? 10 : 50,
+                transition: 'all 0.35s cubic-bezier(0.16,1,0.3,1)',
+              }}>
+                {displayImage ? (
                   <div className="relative w-full h-full">
-                    <img src={el.image_url} className={`w-full h-full pointer-events-none ${el.is_background ? 'object-cover' : 'object-fill drop-shadow-[0_10px_30px_rgba(0,0,0,0.6)]'}`} alt="" />
-                    {el._preview && <div className="absolute inset-0 rounded-lg pointer-events-none" style={{ boxShadow: `inset 0 0 0 2px ${accentColor}80` }} />}
+                    <img src={displayImage} className={`w-full h-full pointer-events-none ${el.is_background ? 'object-cover' : 'object-fill'}`} alt="" />
+                    {isSelected && imageValid && (
+                      <div className="absolute inset-0 rounded pointer-events-none" style={{ boxShadow: `inset 0 0 0 2px ${accentColor}80` }} />
+                    )}
                   </div>
                 ) : (
-                  <div className={`w-full h-full flex flex-col items-center justify-center rounded-xl border-2 border-dashed ${isSelected ? '' : isLocked ? 'border-red-500/30 bg-red-500/5' : isOccupied ? 'border-orange-500/40 bg-orange-500/5' : el.is_background ? 'border-purple-500/40 bg-purple-500/5' : 'border-cyan-500/40 bg-cyan-500/5'}`}
-                    style={isSelected ? { borderColor: `${accentColor}cc`, backgroundColor: `${accentColor}15` } : {}}>
-                    {isLocked ? <><span className="text-lg mb-1">🔒</span><span className="text-[10px] font-mono text-red-400/60 uppercase">Slot locked</span></>
-                      : isOccupied ? <><span className="text-[10px] font-mono text-orange-400/70 uppercase">In use</span><span className="text-xs font-black text-orange-400 mt-1"><Countdown booking={activeBooking} /></span></>
-                      : isSelected ? <span className="text-[11px] font-mono uppercase" style={{ color: `${accentColor}99` }}>← Paste a URL to preview</span>
-                      : <><span className="text-[11px] font-mono uppercase" style={{ color: el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(6,182,212,0.6)' }}>{el.is_background ? 'Backdrop Available' : 'Beam Available'}</span>
-                          {el.price_value > 0 && <span className="text-xs font-black mt-1" style={{ color: el.is_background ? 'rgba(168,85,247,0.9)' : 'rgba(6,182,212,0.9)' }}>${el.price_value}/{el.price_unit}</span>}
-                          {maxDur && <span className="text-[9px] font-mono text-gray-600 mt-0.5">max {maxDur} min</span>}</>}
+                  <div className={`w-full h-full flex flex-col items-center justify-center rounded-xl border-2 border-dashed ${isLocked ? 'border-red-500/30 bg-red-500/5' : isOccupied ? 'border-orange-500/40 bg-orange-500/5' : el.is_background ? 'border-purple-500/40 bg-purple-500/5' : 'border-cyan-500/40 bg-cyan-500/5'}`}>
+                    {isLocked ? <span className="text-[10px] font-mono text-red-400/60 uppercase">🔒 Locked</span> :
+                     isOccupied ? <span className="text-xs font-black text-orange-400"><Countdown booking={activeBooking} /></span> :
+                     <span className="text-[10px] font-mono uppercase" style={{ color: el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(6,182,212,0.6)' }}>{el.is_background ? 'Backdrop' : 'Beam'}</span>}
                   </div>
                 )}
 
+                {/* Action buttons */}
                 {el.price_value > 0 && !isOBS && (
-                  <div className="absolute flex flex-col items-center gap-2 z-[100]" style={{ bottom: el.is_background ? '2rem' : '-5rem', left: '50%', transform: 'translateX(-50%)' }}>
-                    <div className="bg-black/90 backdrop-blur-md px-4 py-2 rounded-full border border-cyan-500/40 flex items-center gap-1 pointer-events-none whitespace-nowrap">
-                      <span className="text-[12px] font-black text-cyan-400">$</span>
-                      <span className="text-[13px] font-black text-white uppercase tracking-tighter">{el.price_value}/{el.price_unit}</span>
+                  <div className="absolute flex flex-col items-center gap-1.5 z-[100]"
+                    style={{ bottom: el.is_background ? '1rem' : '-4.5rem', left: '50%', transform: 'translateX(-50%)' }}>
+                    <div className="bg-black/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-cyan-500/40 flex items-center gap-1 pointer-events-none whitespace-nowrap">
+                      <span className="text-[11px] font-black text-cyan-400">${el.price_value}/{el.price_unit}</span>
                       {maxDur && <span className="text-[9px] font-mono text-gray-500 ml-1">· max {maxDur}m</span>}
                     </div>
                     {isLocked ? (
-                      <div className="text-[9px] font-mono text-red-400/60 uppercase tracking-widest px-3 py-1 rounded-full border border-red-500/20 bg-red-500/5 whitespace-nowrap">🔒 Slot locked</div>
+                      <span className="text-[9px] font-mono text-red-400/60 px-2 py-1 rounded-full border border-red-500/20 bg-red-500/5 whitespace-nowrap">🔒 Locked</span>
                     ) : myBookingForSlot ? (
-                      <div className="flex flex-col items-center gap-1">
-                        <div className={`text-[9px] font-mono uppercase tracking-widest px-3 py-1 rounded-full border whitespace-nowrap ${myBookingIsExpiring ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10 animate-pulse' : myBookingForSlot.status === 'active' ? 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10' : myBookingForSlot.status === 'approved_queued' ? 'text-orange-400 border-orange-500/30 bg-orange-500/10' : 'text-gray-500 border-white/10 bg-white/5'}`}>
-                          {myBookingIsExpiring ? '⚠ Expiring soon' : myBookingForSlot.status === 'active' ? '● Your beam is live' : myBookingForSlot.status === 'approved_queued' ? '⏳ Approved — starting soon' : '⌛ Pending review'}
-                        </div>
-                        {myBookingIsExpiring && !myBookings.some(b => b.element_id === el.id && b.status === 'pending' && b.id !== myBookingForSlot.id) && (
-                          <button onClick={() => openSlot(el, false, true)} className="bg-yellow-500 hover:bg-yellow-400 text-black text-[9px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest transition-all whitespace-nowrap">Extend slot</button>
-                        )}
-                      </div>
+                      <span className={`text-[9px] font-mono px-3 py-1 rounded-full border whitespace-nowrap ${myBookingIsExpiring ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10 animate-pulse' : myBookingForSlot.status === 'active' ? 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10' : myBookingForSlot.status === 'approved_queued' ? 'text-orange-400 border-orange-500/30 bg-orange-500/10' : 'text-gray-500 border-white/10 bg-white/5'}`}>
+                        {myBookingIsExpiring ? '⚠ Expiring' : myBookingForSlot.status === 'active' ? '● Live' : myBookingForSlot.status === 'approved_queued' ? '⏳ Queued' : '⌛ Pending'}
+                      </span>
                     ) : isOccupied ? (
-                      <div className="flex flex-col items-center gap-1">
-                        <button onClick={() => openSlot(el, true)} className="bg-orange-500 hover:bg-orange-400 text-black text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest transition-all shadow-lg whitespace-nowrap">
-                          Join queue{queueCount > 0 ? ` (${queueCount})` : ''}
-                        </button>
-                        <span className="text-[9px] font-mono text-orange-400/60 whitespace-nowrap">Available in <Countdown booking={activeBooking} /></span>
-                      </div>
-                    ) : !selectedSlot && (
-                      <button onClick={() => openSlot(el, false)} className="bg-cyan-500 hover:bg-cyan-400 text-black text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest transition-all shadow-lg shadow-cyan-500/30 whitespace-nowrap">
+                      <button onClick={() => openSlot(el, true)}
+                        className="bg-orange-500 hover:bg-orange-400 active:bg-orange-600 text-black text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest transition-all whitespace-nowrap touch-manipulation">
+                        Join queue{queueCount > 0 ? ` (${queueCount})` : ''}
+                      </button>
+                    ) : !selectedSlot ? (
+                      <button onClick={() => openSlot(el, false)}
+                        className="bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-black text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest transition-all shadow-lg shadow-cyan-500/30 whitespace-nowrap touch-manipulation">
                         Rent this slot
                       </button>
-                    )}
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -434,89 +417,93 @@ function OverlayContent() {
           })}
         </div>
 
-        {/* Booking form */}
+        {/* Booking form — full screen on mobile */}
         {!isOBS && selectedSlot && (
-          <div className="mt-3 rounded-2xl p-5 animate-in slide-in-from-bottom-4 duration-300" style={{ background: '#0a0a0a', border: `1px solid ${accentColor}40` }}>
-            <div className="flex items-center justify-between mb-4">
+          <div className="mt-3 rounded-2xl p-4 sm:p-5 animate-in slide-in-from-bottom-4 duration-300"
+            style={{ background: '#0a0a0a', border: `1px solid ${accentColor}40` }}>
+            <div className="flex items-start justify-between mb-4">
               <div>
                 <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: accentColor }}>
-                  {isExtend ? '⏱ Extend your slot' : isQueue ? '⏳ Join the queue' : '🎯 Rent this slot'}
+                  {isExtend ? '⏱ Extend' : isQueue ? '⏳ Join queue' : '🎯 Rent slot'}
                 </p>
-                <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className="text-xl font-black" style={{ color: accentColor }}>${selectedSlot.price_value}/{selectedSlot.price_unit}</span>
-                  {selectedSlot.max_duration_minutes && <span className="text-xs text-gray-500 font-mono">· max {selectedSlot.max_duration_minutes} min</span>}
-                  {isQueue && activeForSelected && <span className="text-xs text-gray-500 font-mono">· available in <Countdown booking={activeForSelected} /></span>}
-                </div>
+                <p className="text-lg font-black" style={{ color: accentColor }}>${selectedSlot.price_value}/{selectedSlot.price_unit}</p>
               </div>
               <button onClick={closeSlot} className="text-[10px] font-mono text-gray-600 hover:text-white uppercase tracking-widest transition-colors">Cancel</button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[10px] font-mono text-gray-500 uppercase tracking-widest block mb-1">Image or GIF URL</label>
-                  <input type="text" value={imageUrl}
-                    onChange={(e) => { setImageUrl(e.target.value); setImageValid(false); }}
-                    placeholder="https://your-image.png or .gif"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-gray-700"
-                    style={{ borderColor: imageValid ? `${accentColor}60` : undefined }} autoFocus={!isExtend} />
-                  {imageUrl && <img src={imageUrl} className="hidden" alt="" onLoad={() => setImageValid(true)} onError={() => setImageValid(false)} />}
-                  {imageValid && <p className="text-xs font-mono mt-1" style={{ color: accentColor }}>✓ Looking good on the stream above</p>}
-                  {imageUrl && !imageValid && <p className="text-red-400 text-xs font-mono mt-1">Image not loading — check the URL</p>}
-                </div>
-                <div className="flex items-center gap-2 bg-white/3 border border-white/8 rounded-xl px-4 py-3">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 flex-shrink-0" />
-                  <span className="text-sm text-white font-black">@{savedViewerName}</span>
-                  <button onClick={() => { closeSlot(); setTimeout(() => setShowChangeName(true), 100); }} className="ml-auto text-[9px] font-mono text-gray-600 hover:text-gray-400 uppercase tracking-widest transition-colors">change</button>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-mono text-gray-500 uppercase tracking-widest block mb-1">Image or GIF URL</label>
+                <input type="text" value={imageUrl}
+                  onChange={(e) => { setImageUrl(e.target.value); setImageValid(false); }}
+                  placeholder="https://your-image.png or .gif"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-gray-700"
+                  style={{ borderColor: imageValid ? `${accentColor}60` : undefined }}
+                  autoFocus={!isExtend} />
+                {imageUrl && <img src={imageUrl} className="hidden" alt="" onLoad={() => setImageValid(true)} onError={() => setImageValid(false)} />}
+                {imageValid && <p className="text-[10px] font-mono mt-1" style={{ color: accentColor }}>✓ Image loaded</p>}
+                {imageUrl && !imageValid && <p className="text-red-400 text-[10px] font-mono mt-1">Image not loading</p>}
+              </div>
+
+              {/* Name display */}
+              <div className="flex items-center gap-2 bg-white/3 border border-white/8 rounded-xl px-4 py-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 flex-shrink-0" />
+                <span className="text-sm text-white font-black flex-1">@{savedViewerName}</span>
+                <button onClick={() => setShowChangeName(true)} className="text-[9px] font-mono text-gray-600 hover:text-gray-400 uppercase tracking-widest transition-colors">change</button>
+              </div>
+
+              {/* Duration */}
+              <div>
+                <label className="text-[10px] font-mono text-gray-500 uppercase tracking-widest block mb-1">
+                  Duration{selectedSlot.max_duration_minutes ? ` — max ${selectedSlot.max_duration_minutes} min` : ''}
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input type="number" min={1} max={selectedSlot.max_duration_minutes || 480} value={duration}
+                    onChange={(e) => setDurationClamped(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-20 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none" />
+                  <span className="text-xs text-gray-500 font-mono">min</span>
+                  <div className="flex gap-1">
+                    {[15, 30, 60].filter(d => !selectedSlot.max_duration_minutes || d <= selectedSlot.max_duration_minutes).map(d => (
+                      <button key={d} onClick={() => setDurationClamped(d)}
+                        className={`text-[10px] font-mono px-3 py-2 rounded-lg border transition-all touch-manipulation ${duration === d ? 'text-black' : 'border-white/10 text-gray-500'}`}
+                        style={duration === d ? { background: accentColor, borderColor: accentColor } : {}}>
+                        {d}m
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-              <div className="space-y-3">
+
+              {/* Message */}
+              <div>
+                <label className="text-[10px] font-mono text-gray-500 uppercase tracking-widest block mb-1">Message (optional)</label>
+                <textarea value={message} onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Anything for the streamer..." rows={2}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-gray-700 resize-none" />
+              </div>
+
+              {/* Cost + submit */}
+              <div className="flex items-center justify-between pt-1">
                 <div>
-                  <label className="text-[10px] font-mono text-gray-500 uppercase tracking-widest block mb-1">
-                    Duration (min){selectedSlot.max_duration_minutes ? ` — max ${selectedSlot.max_duration_minutes}` : ''}
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input type="number" min={1} max={selectedSlot.max_duration_minutes || 480} value={duration}
-                      onChange={(e) => setDurationClamped(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-24 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/30 transition-colors" />
-                    <div className="flex gap-1">
-                      {[15, 30, 60].filter(d => !selectedSlot.max_duration_minutes || d <= selectedSlot.max_duration_minutes).map(d => (
-                        <button key={d} onClick={() => setDurationClamped(d)}
-                          className={`text-[10px] font-mono px-3 py-1.5 rounded-lg border transition-all ${duration === d ? 'text-black' : 'border-white/10 text-gray-500 hover:border-white/20'}`}
-                          style={duration === d ? { background: accentColor, borderColor: accentColor } : {}}>
-                          {d}m
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <p className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Est. cost</p>
+                  <p className="text-lg font-black" style={{ color: accentColor }}>${estimatedCost}</p>
                 </div>
-                <div>
-                  <label className="text-[10px] font-mono text-gray-500 uppercase tracking-widest block mb-1">Message (optional)</label>
-                  <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={2}
-                    placeholder="Anything for the streamer..."
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/30 transition-colors placeholder:text-gray-700 resize-none" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Est. cost</p>
-                    <p className="text-lg font-black" style={{ color: accentColor }}>${estimatedCost}</p>
-                  </div>
-                  <button onClick={submitBooking} disabled={!imageValid || submitting}
-                    className="font-black text-sm py-3 px-8 rounded-xl uppercase tracking-widest transition-all disabled:bg-gray-800 disabled:text-gray-600"
-                    style={{ background: (!imageValid || submitting) ? undefined : accentColor, color: (!imageValid || submitting) ? undefined : 'black' }}>
-                    {submitting ? 'Sending...' : isExtend ? 'Request Extension' : isQueue ? 'Join Queue' : 'Send Request'}
-                  </button>
-                </div>
+                <button onClick={submitBooking} disabled={!imageValid || submitting}
+                  className="font-black text-sm py-3 px-6 sm:px-8 rounded-xl uppercase tracking-widest transition-all disabled:bg-gray-800 disabled:text-gray-600 touch-manipulation"
+                  style={{ background: (!imageValid || submitting) ? undefined : accentColor, color: (!imageValid || submitting) ? undefined : 'black' }}>
+                  {submitting ? 'Sending...' : isExtend ? 'Extend' : isQueue ? 'Join Queue' : 'Send Request'}
+                </button>
               </div>
             </div>
           </div>
         )}
 
         {/* Slots list */}
-        {!isOBS && !selectedSlot && elements.filter(el => el.price_value > 0).length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-xs font-mono text-gray-500 uppercase tracking-widest mb-4">Available Slots</h2>
-            <div className="flex flex-wrap gap-3">
-              {elements.filter(el => el.price_value > 0).map((el) => {
+        {!isOBS && !selectedSlot && elements.filter((el: any) => el.price_value > 0).length > 0 && (
+          <div className="mt-6 sm:mt-8">
+            <h2 className="text-xs font-mono text-gray-500 uppercase tracking-widest mb-3">Available Slots</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+              {elements.filter((el: any) => el.price_value > 0).map((el: any) => {
                 const activeBooking = getActiveBookingForSlot(el.id);
                 const isOccupied = !!activeBooking;
                 const queueCount = queueCounts[el.id] || 0;
@@ -526,15 +513,17 @@ function OverlayContent() {
                   <button key={el.id}
                     onClick={() => !myBookingForSlot && !isLocked && openSlot(el, isOccupied)}
                     disabled={!!myBookingForSlot || isLocked}
-                    className={`flex items-center gap-3 border rounded-2xl px-5 py-3 transition-all group ${isLocked ? 'opacity-50 cursor-not-allowed border-red-500/20 bg-red-500/5' : myBookingForSlot ? 'opacity-60 cursor-default border-white/10 bg-white/5' : isOccupied ? 'bg-orange-500/5 border-orange-500/20 hover:border-orange-500/40' : 'bg-white/5 border-white/10 hover:border-cyan-500/40 hover:bg-white/10'}`}>
-                    <div className={`w-10 h-10 rounded-lg border border-dashed flex items-center justify-center overflow-hidden ${isLocked ? 'border-red-500/30' : isOccupied ? 'border-orange-500/30' : el.is_background ? 'border-purple-500/30' : 'border-cyan-500/30'}`}>
-                      {el.image_url
-                        ? <img src={el.image_url} className="w-full h-full object-contain" alt="" />
-                        : <span className={`text-[8px] font-mono ${isLocked ? 'text-red-500/50' : isOccupied ? 'text-orange-500/50' : el.is_background ? 'text-purple-500/50' : 'text-cyan-500/50'}`}>{isLocked ? '🔒' : el.is_background ? 'BG' : 'BEAM'}</span>}
-                    </div>
-                    <div className="text-left">
+                    className={`flex items-center gap-3 border rounded-xl px-4 py-3 transition-all text-left touch-manipulation ${isLocked ? 'opacity-50 cursor-not-allowed border-red-500/20 bg-red-500/5' : myBookingForSlot ? 'opacity-60 cursor-default border-white/10 bg-white/5' : isOccupied ? 'bg-orange-500/5 border-orange-500/20 hover:border-orange-500/40 active:bg-orange-500/10' : 'bg-white/5 border-white/10 hover:border-cyan-500/40 active:bg-white/10'}`}>
+                    {el.image_url ? (
+                      <img src={el.image_url} className="w-10 h-10 object-contain rounded-lg flex-shrink-0" alt="" />
+                    ) : (
+                      <div className={`w-10 h-10 rounded-lg border border-dashed flex items-center justify-center flex-shrink-0 ${isLocked ? 'border-red-500/30' : isOccupied ? 'border-orange-500/30' : el.is_background ? 'border-purple-500/30' : 'border-cyan-500/30'}`}>
+                        <span className="text-xs">{isLocked ? '🔒' : el.is_background ? '🖼' : '✦'}</span>
+                      </div>
+                    )}
+                    <div>
                       <p className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">
-                        {isLocked ? 'Locked' : myBookingForSlot ? `Your beam — ${myBookingForSlot.status.replace('_', ' ')}` : isOccupied ? `In use${queueCount > 0 ? ` · ${queueCount} queued` : ''}` : el.is_background ? 'Full Backdrop' : 'Beam'}
+                        {isLocked ? 'Locked' : myBookingForSlot ? myBookingForSlot.status.replace('_', ' ') : isOccupied ? `In use${queueCount > 0 ? ` · ${queueCount} waiting` : ''}` : el.is_background ? 'Full Backdrop' : 'Beam'}
                       </p>
                       <p className={`text-sm font-black ${isLocked ? 'text-red-400/50' : myBookingForSlot ? 'text-gray-400' : isOccupied ? 'text-orange-400' : 'text-cyan-400'}`}>
                         ${el.price_value}/{el.price_unit}
@@ -548,12 +537,9 @@ function OverlayContent() {
           </div>
         )}
 
-        {/* Footer — find other streams */}
-        {!isOBS && !selectedSlot && (
-          <div className="mt-10 pt-6 border-t border-white/5 text-center">
-            <a href="/search" className="text-[10px] font-mono text-gray-700 hover:text-gray-500 uppercase tracking-widest transition-colors">
-              Find other streamers on Casi →
-            </a>
+        {!isOBS && (
+          <div className="mt-8 pt-4 border-t border-white/5 text-center">
+            <a href="/search" className="text-[10px] font-mono text-gray-700 hover:text-gray-500 uppercase tracking-widest transition-colors">Browse other streams →</a>
           </div>
         )}
       </main>
@@ -561,6 +547,6 @@ function OverlayContent() {
   );
 }
 
-export default function Overlay() {
+export default function PerfectOverlay() {
   return <Suspense fallback={null}><OverlayContent /></Suspense>;
 }
