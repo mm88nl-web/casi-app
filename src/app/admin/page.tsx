@@ -105,13 +105,17 @@ function BackdropModal({ onConfirm, onClose }: {
 }
 
 /* ── Slot Info Panel ── */
-function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLockToggle, onDelete }: {
+function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLockToggle, onDelete, onUpdatePrice }: {
   el: any; activeBooking: any; queueBookings: any[];
   onClose: () => void; onKick: (b: any) => void;
   onLockToggle: (id: string, locked: boolean) => void;
   onDelete: (id: string) => void;
+  onUpdatePrice: (id: string, value: number, unit: string) => void;
 }) {
   const [seconds, setSeconds] = useState(activeBooking ? getSecondsRemaining(activeBooking) : 0);
+  const [editPrice, setEditPrice] = useState(String(el.price_value || 0));
+  const [editUnit, setEditUnit] = useState(el.price_unit || 'min');
+  const savePrice = () => onUpdatePrice(el.id, parseFloat(editPrice) || 0, editUnit);
   useEffect(() => {
     setSeconds(activeBooking ? getSecondsRemaining(activeBooking) : 0);
     if (!activeBooking) return;
@@ -143,7 +147,25 @@ function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLo
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
         </div>
         <div style={{ padding: 24 }}>
-          {/* Active booking */}
+          {/* Price editor */}
+          <div style={{ background: 'rgba(245,130,32,0.05)', border: '1px solid rgba(245,130,32,0.15)', borderRadius: 12, padding: 16, marginBottom: 20 }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#F58220', marginBottom: 12 }}>Pricing</div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#050505', border: '1px solid #222', borderRadius: 8, padding: '10px 14px' }}>
+                  <span style={{ color: '#F58220', fontWeight: 800 }}>$</span>
+                  <input type="number" min={0} value={editPrice} onChange={(e) => setEditPrice(e.target.value)} onBlur={savePrice} onKeyDown={(e) => e.key === 'Enter' && savePrice()}
+                    style={{ background: 'transparent', border: 'none', outline: 'none', color: '#e8e8e8', fontSize: 16, fontWeight: 700, fontFamily: "'DM Mono', monospace", width: '100%' }} />
+                </div>
+              </div>
+              <select value={editUnit} onChange={(e) => { setEditUnit(e.target.value); onUpdatePrice(el.id, parseFloat(editPrice)||0, e.target.value); }}
+                style={{ background: '#050505', border: '1px solid #222', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#e8e8e8', outline: 'none', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                <option value="min">/min</option>
+                <option value="hr">/hr</option>
+              </select>
+              <button onClick={savePrice} style={{ background: '#F58220', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', color: '#050505', cursor: 'pointer' }}>Save</button>
+            </div>
+          </div>
           {activeBooking ? (
             <div style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.2)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
@@ -618,6 +640,7 @@ export default function AdminStudio() {
             queueBookings={approvedQueued.filter(b => b.element_id === selectedEl.id).sort((a, b) => new Date(a.approved_at).getTime() - new Date(b.approved_at).getTime())}
             onClose={() => setSelectedSlotId(null)}
             onKick={kickBeam} onLockToggle={toggleLock} onDelete={deleteLayer}
+            onUpdatePrice={(id, value, unit) => updateLayer(id, { price_value: value, price_unit: unit })}
           />
         )}
 
@@ -706,23 +729,11 @@ export default function AdminStudio() {
                       <img src={el.image_url} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'fill', pointerEvents: 'none' }} alt="" />
                     )}
                     {/* Price editor + info */}
-                    <div style={{ position: 'absolute', left: 0, bottom: el.is_background ? 12 : -44, display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.92)', borderRadius: 6, padding: '4px 8px', border: '1px solid #222', zIndex: 50, backdropFilter: 'blur(4px)' }}>
-                      <span style={{ color: '#F58220', fontSize: 11, fontWeight: 800 }}>$</span>
-                      <input type="number" style={{ width: 36, background: 'transparent', fontSize: 11, outline: 'none', color: '#e8e8e8', border: 'none', borderBottom: '1px solid #333', fontFamily: "'DM Mono', monospace" }}
-                        value={el.price_value || 0}
-                        onChange={(e) => updateLocalOnly(el.id, { price_value: e.target.value })}
-                        onBlur={(e) => updateLayer(el.id, { price_value: e.target.value })} />
-                      <select style={{ background: '#050505', fontSize: 10, outline: 'none', color: '#e8e8e8', cursor: 'pointer', border: 'none', fontFamily: "'DM Mono', monospace" }}
-                        value={el.price_unit || 'min'}
-                        onChange={(e) => updateLayer(el.id, { price_unit: e.target.value })}>
-                        <option value="min">/min</option>
-                        <option value="hr">/hr</option>
-                      </select>
-                      <button onClick={(e) => { e.stopPropagation(); setSelectedSlotId(el.id); }}
-                        style={{ marginLeft: 4, fontSize: 9, fontFamily: "'DM Mono', monospace", color: '#555', background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>
-                        Info
-                      </button>
-                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); setSelectedSlotId(el.id); }}
+  style={{ position: 'absolute', left: 0, bottom: el.is_background ? 12 : -34, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.88)', borderRadius: 6, padding: '5px 10px', border: '1px solid #222', zIndex: 50, cursor: 'pointer' }}>
+  <span style={{ color: '#F58220', fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 500 }}>${el.price_value || 0}/{el.price_unit || 'min'}</span>
+  <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: '#555', textTransform: 'uppercase', letterSpacing: 1 }}>edit ›</span>
+</button>
                     {/* Clear button */}
                     {!el.is_background && (
                       <button onClick={(e) => { e.stopPropagation(); deleteLayer(el.id); }}
