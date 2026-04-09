@@ -3,7 +3,6 @@ import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 
-/* ── Logo ── */
 function Logo({ scale = 0.32, color = '#F58220', bg = '#050505' }: { scale?: number; color?: string; bg?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width={400 * scale} height={200 * scale}>
@@ -18,7 +17,6 @@ function Logo({ scale = 0.32, color = '#F58220', bg = '#050505' }: { scale?: num
   );
 }
 
-/* ── Helpers ── */
 function getSecondsRemaining(booking: any): number {
   if (!booking?.started_at || !booking?.duration_minutes) return 0;
   const started = new Date(booking.started_at).getTime();
@@ -44,18 +42,16 @@ function Countdown({ booking, onWarning }: { booking: any; onWarning?: (s: numbe
   return <span>{formatTime(seconds)}</span>;
 }
 
-/* ── Name entry ── */
 const VIEWER_NAME_KEY = 'casi_viewer_name';
 const ADJECTIVES = ['Cool','Fast','Bold','Wild','Epic','Slick','Dark','Neon','Hyper','Ultra','Turbo','Mega','Swift','Storm','Blaze'];
 const ANIMALS    = ['Tiger','Panda','Fox','Wolf','Hawk','Bear','Shark','Eagle','Viper','Lynx','Raven','Cobra','Falcon','Bison','Orca'];
 function generateRandomName() {
   const adj    = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
   const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
-  const num    = Math.floor(Math.random() * 99) + 1;
-  return `${adj}${animal}${num}`;
+  return `${adj}${animal}${Math.floor(Math.random() * 99) + 1}`;
 }
 
-function NameEntryScreen({ onConfirm }: { onConfirm: (name: string) => void }) {
+function NameEntryScreen({ onConfirm, tc }: { onConfirm: (name: string) => void; tc: string }) {
   const [name, setName] = useState(generateRandomName());
   const [showNote, setShowNote] = useState(false);
   return (
@@ -64,8 +60,8 @@ function NameEntryScreen({ onConfirm }: { onConfirm: (name: string) => void }) {
       <div style={{ minHeight:'100vh', background:'#050505', display:'flex', alignItems:'center', justifyContent:'center', padding:24, fontFamily:"'Syne',sans-serif" }}>
         <div style={{ width:'100%', maxWidth:380 }}>
           <div style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom:40 }}>
-            <Logo scale={0.5} />
-            <div style={{ fontSize:28, fontWeight:800, color:'#F58220', letterSpacing:-1, marginTop:8 }}>casi</div>
+            <Logo scale={0.5} color={tc} />
+            <div style={{ fontSize:28, fontWeight:800, color:tc, letterSpacing:-1, marginTop:8 }}>casi</div>
             <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:3, textTransform:'uppercase', color:'#444', marginTop:4 }}>Viewer</div>
           </div>
           <div style={{ background:'#0a0a0a', border:'1px solid #1c1c1c', borderRadius:16, padding:28, marginBottom:12 }}>
@@ -75,7 +71,7 @@ function NameEntryScreen({ onConfirm }: { onConfirm: (name: string) => void }) {
                 onKeyDown={(e) => e.key==='Enter' && name.trim() && onConfirm(name.trim())}
                 maxLength={24} autoFocus
                 style={{ width:'100%', background:'rgba(255,255,255,0.04)', border:'1px solid #1c1c1c', borderRadius:10, padding:'13px 16px', paddingRight:90, fontSize:15, fontWeight:700, color:'#e8e8e8', outline:'none', fontFamily:"'Syne',sans-serif" }}
-                onFocus={(e)=>e.target.style.borderColor='rgba(245,130,32,0.4)'}
+                onFocus={(e)=>e.target.style.borderColor=`${tc}60`}
                 onBlur={(e)=>e.target.style.borderColor='#1c1c1c'} />
               <button onClick={() => setName(generateRandomName())}
                 style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', fontFamily:"'DM Mono',monospace", fontSize:10, color:'#555', cursor:'pointer', textTransform:'uppercase', letterSpacing:1 }}>
@@ -84,7 +80,7 @@ function NameEntryScreen({ onConfirm }: { onConfirm: (name: string) => void }) {
             </div>
             <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#333', marginBottom:20 }}>A random name was generated — change it or keep it.</div>
             <button onClick={() => name.trim() && onConfirm(name.trim())} disabled={!name.trim()}
-              style={{ width:'100%', background:name.trim()?'#F58220':'#1c1c1c', border:'none', borderRadius:10, padding:14, fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:14, textTransform:'uppercase', letterSpacing:0.5, color:name.trim()?'#050505':'#444', cursor:name.trim()?'pointer':'not-allowed', transition:'all .2s' }}>
+              style={{ width:'100%', background:name.trim()?tc:'#1c1c1c', border:'none', borderRadius:10, padding:14, fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:14, textTransform:'uppercase', letterSpacing:0.5, color:'#050505', cursor:name.trim()?'pointer':'not-allowed', transition:'all .2s' }}>
               Enter stream →
             </button>
           </div>
@@ -103,38 +99,38 @@ function NameEntryScreen({ onConfirm }: { onConfirm: (name: string) => void }) {
   );
 }
 
-/* ══════════════════════════════════════════
-   MAIN OVERLAY
-══════════════════════════════════════════ */
 function OverlayContent() {
   const searchParams = useSearchParams();
   const username = searchParams.get('s') || '';
   const isOBS = searchParams.get('mode') === 'obs';
 
-  const [elements, setElements]                   = useState<any[]>([]);
-  const [profile, setProfile]                     = useState<any>(null);
-  const [activeBookings, setActiveBookings]        = useState<any[]>([]);
+  const [elements, setElements]         = useState<any[]>([]);
+  const [profile, setProfile]           = useState<any>(null);
+  const [activeBookings, setActiveBookings]   = useState<any[]>([]);
   const [approvedQueuedBookings, setApprovedQueuedBookings] = useState<any[]>([]);
-  const [queueCounts, setQueueCounts]             = useState<Record<string,number>>({});
-  const [loading, setLoading]                     = useState(true);
-  const [myBookings, setMyBookings]               = useState<any[]>([]);
-  const [expiringSoon, setExpiringSoon]           = useState<Set<string>>(new Set());
-  const [savedViewerName, setSavedViewerName]     = useState<string|null>(null);
-  const [nameConfirmed, setNameConfirmed]         = useState(false);
-  const [showChangeName, setShowChangeName]       = useState(false);
-  const [selectedSlot, setSelectedSlot]           = useState<any>(null);
-  const [isQueue, setIsQueue]                     = useState(false);
-  const [isExtend, setIsExtend]                   = useState(false);
-  const [imageUrl, setImageUrl]                   = useState('');
-  const [imageValid, setImageValid]               = useState(false);
-  const [message, setMessage]                     = useState('');
-  const [duration, setDuration]                   = useState(30);
-  const [submitting, setSubmitting]               = useState(false);
-  const [cancelling, setCancelling]               = useState<string|null>(null);
-  const [notification, setNotification]           = useState<{text:string;type:string}|null>(null);
+  const [queueCounts, setQueueCounts]   = useState<Record<string,number>>({});
+  const [loading, setLoading]           = useState(true);
+  const [myBookings, setMyBookings]     = useState<any[]>([]);
+  const [expiringSoon, setExpiringSoon] = useState<Set<string>>(new Set());
+  const [savedViewerName, setSavedViewerName] = useState<string|null>(null);
+  const [nameConfirmed, setNameConfirmed]     = useState(false);
+  const [showChangeName, setShowChangeName]   = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<any>(null);
+  const [isQueue, setIsQueue]           = useState(false);
+  const [isExtend, setIsExtend]         = useState(false);
+  const [imageUrl, setImageUrl]         = useState('');
+  const [imageValid, setImageValid]     = useState(false);
+  const [message, setMessage]           = useState('');
+  const [duration, setDuration]         = useState(30);
+  const [submitting, setSubmitting]     = useState(false);
+  const [cancelling, setCancelling]     = useState<string|null>(null);
+  const [notification, setNotification] = useState<{text:string;type:string}|null>(null);
 
   const supabase = useRef(createClient()).current;
   const viewerNameRef = useRef('');
+
+  // Theme color — derived from profile, falls back to Casi orange
+  const tc = profile?.theme_color || '#F58220';
 
   useEffect(() => {
     if (!isOBS && !username) window.location.href = '/search';
@@ -165,11 +161,12 @@ function OverlayContent() {
       supabase.from('bookings').select('*').eq('profile_id', profId).eq('status','approved_queued').order('approved_at',{ascending:true}),
       supabase.from('bookings').select('element_id').eq('profile_id', profId).eq('status','pending'),
     ]);
-    setElements((els || []).filter((el: any) => el.is_background || el.price_value > 0));
-    setActiveBookings(active || []);
-    setApprovedQueuedBookings(aq || []);
+    // Filter out beams with no price on viewer overlay
+    setElements((els||[]).filter((el:any) => el.is_background || el.price_value > 0));
+    setActiveBookings(active||[]);
+    setApprovedQueuedBookings(aq||[]);
     const counts: Record<string,number> = {};
-    (queued || []).forEach((b:any) => { if (b.element_id) counts[b.element_id] = (counts[b.element_id]||0)+1; });
+    (queued||[]).forEach((b:any) => { if (b.element_id) counts[b.element_id]=(counts[b.element_id]||0)+1; });
     setQueueCounts(counts);
     if (name) {
       const { data: mine } = await supabase.from('bookings').select('*')
@@ -203,7 +200,6 @@ function OverlayContent() {
     return () => { if (cleanup) cleanup(); };
   }, [username, supabase, loadData]);
 
-  // Notify viewer of status changes
   const prevMyBookingsRef = useRef<any[]>([]);
   useEffect(() => {
     const prev = prevMyBookingsRef.current;
@@ -217,22 +213,19 @@ function OverlayContent() {
     prevMyBookingsRef.current = myBookings;
   }, [myBookings]);
 
-  const getActiveBookingForSlot  = (id: string) => activeBookings.find((b:any) => b.element_id===id)||null;
-  const getMyBookingForSlot      = (id: string) => myBookings.find((b:any) => b.element_id===id && b.status!=='denied')||null;
+  const getActiveBookingForSlot = (id: string) => activeBookings.find((b:any) => b.element_id===id)||null;
+  const getMyBookingForSlot     = (id: string) => myBookings.find((b:any) => b.element_id===id && b.status!=='denied')||null;
 
-  // ── Can the viewer extend? Only if no one is queued behind them ──
   const canExtend = (elementId: string) => {
     const queueBehind = approvedQueuedBookings.filter((b:any) => b.element_id===elementId);
-    const pendingBehind = queueCounts[elementId] || 0;
-    return queueBehind.length === 0 && pendingBehind === 0;
+    return queueBehind.length === 0 && (queueCounts[elementId]||0) === 0;
   };
 
-  // ── Cancel a pending or approved_queued booking ──
   const cancelBooking = async (bookingId: string) => {
     setCancelling(bookingId);
-    await supabase.from('bookings').update({ status: 'denied' }).eq('id', bookingId);
+    await supabase.from('bookings').update({ status:'denied' }).eq('id', bookingId);
     setCancelling(null);
-    showNotif('Booking cancelled', 'warning');
+    showNotif('Booking cancelled','warning');
     if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
   };
 
@@ -261,17 +254,17 @@ function OverlayContent() {
     if (existing) { setSubmitting(false); showNotif('You already have a pending request','warning'); closeSlot(); return; }
     const currentQueue = queueCounts[selectedSlot.id]||0;
     const { error } = await supabase.from('bookings').insert({
-      profile_id: profile.id, element_id: selectedSlot.id,
-      viewer_name: savedViewerName, image_url: imageUrl, message,
-      price_value: selectedSlot.price_value, price_unit: selectedSlot.price_unit,
-      duration_minutes: duration, status: 'pending',
-      queue_position: (isQueue||isExtend) ? currentQueue+1 : null,
-      is_queued: isQueue||isExtend,
+      profile_id:profile.id, element_id:selectedSlot.id,
+      viewer_name:savedViewerName, image_url:imageUrl, message,
+      price_value:selectedSlot.price_value, price_unit:selectedSlot.price_unit,
+      duration_minutes:duration, status:'pending',
+      queue_position:(isQueue||isExtend)?currentQueue+1:null,
+      is_queued:isQueue||isExtend,
     });
     setSubmitting(false);
     if (!error) {
       closeSlot();
-      showNotif(isExtend ? 'Extension requested!' : isQueue ? 'Request sent — streamer will review' : 'Request sent!', isQueue||isExtend ? 'queue' : 'success');
+      showNotif(isExtend?'Extension requested!':isQueue?'Request sent — streamer will review':'Request sent!', isQueue||isExtend?'queue':'success');
       if (profile?.id) await loadData(profile.id, savedViewerName);
     }
   };
@@ -282,18 +275,12 @@ function OverlayContent() {
       : (selectedSlot.price_value * (duration/60)).toFixed(2)
     : '0';
 
-  const accentColor = isExtend ? '#eab308' : isQueue ? '#F58220' : '#06b6d4';
+  // For booking form accent: extend=yellow, queue=streamer theme, rent=streamer theme
+  const accentColor = isExtend ? '#eab308' : tc;
   const visibleMyBookings = myBookings.filter((b:any) => b.status!=='denied');
 
-  const notifStyles: Record<string,any> = {
-    success: { background:'rgba(6,182,212,0.1)',  border:'1px solid rgba(6,182,212,0.25)',  color:'#06b6d4' },
-    queue:   { background:'rgba(245,130,32,0.1)', border:'1px solid rgba(245,130,32,0.25)', color:'#F58220' },
-    denied:  { background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.25)',color:'#f87171' },
-    warning: { background:'rgba(234,179,8,0.1)',  border:'1px solid rgba(234,179,8,0.25)',  color:'#facc15' },
-  };
-
   if (loading) return null;
-  if (!isOBS && !nameConfirmed) return <NameEntryScreen onConfirm={confirmName} />;
+  if (!isOBS && !nameConfirmed) return <NameEntryScreen onConfirm={confirmName} tc={tc} />;
 
   return (
     <>
@@ -304,33 +291,28 @@ function OverlayContent() {
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         .ov { min-height:100vh; background:${isOBS?'transparent':'#050505'}; color:#e8e8e8; font-family:'Syne',sans-serif; }
 
-        /* NAV */
         .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid #0d0d0d; background:rgba(5,5,5,0.94); backdrop-filter:blur(20px); position:sticky; top:0; z-index:50; }
         .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; }
-        .ov-wm { font-size:18px; font-weight:800; color:#F58220; letter-spacing:-0.5px; }
+        .ov-wm { font-size:18px; font-weight:800; color:${tc}; letter-spacing:-0.5px; }
         .ov-nav-right { display:flex; align-items:center; gap:10px; }
         .notif { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:fadeIn .3s ease; white-space:nowrap; max-width:200px; overflow:hidden; text-overflow:ellipsis; }
         .viewer-chip { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.04); border:1px solid #1c1c1c; border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
         .viewer-chip:hover { border-color:#333; }
-        .vdot { width:6px; height:6px; border-radius:50%; background:#06b6d4; animation:blink 1.5s infinite; flex-shrink:0; }
+        .vdot { width:6px; height:6px; border-radius:50%; background:${tc}; animation:blink 1.5s infinite; flex-shrink:0; }
         .vname { font-family:'DM Mono',monospace; font-size:10px; color:#888; }
-        .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid rgba(245,130,32,0.3); border-radius:8px; padding:6px 12px; font-size:12px; color:#e8e8e8; outline:none; font-family:'DM Mono',monospace; width:130px; }
+        .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid ${tc}50; border-radius:8px; padding:6px 12px; font-size:12px; color:#e8e8e8; outline:none; font-family:'DM Mono',monospace; width:130px; }
 
-        /* MAIN */
         .ov-main { max-width:1200px; margin:0 auto; padding:16px 20px 48px; }
 
-        /* MY BEAMS */
         .my-beams { background:#080808; border:1px solid #111; border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
         .my-beams-lbl { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:#444; margin-bottom:10px; }
         .my-beams-list { display:flex; flex-wrap:wrap; gap:8px; }
-        .beam-chip { display:flex; align-items:center; gap:8px; border-radius:10px; padding:8px 12px; border:1px solid; font-size:12px; position:relative; }
+        .beam-chip { display:flex; align-items:center; gap:8px; border-radius:10px; padding:8px 12px; border:1px solid; font-size:12px; }
         .cancel-btn { background:none; border:none; font-family:'DM Mono',monospace; font-size:9px; color:rgba(248,113,113,0.5); cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:color .2s; padding:0; margin-left:4px; }
         .cancel-btn:hover { color:#f87171; }
 
-        /* STREAM CANVAS */
         .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid #1c1c1c; background:#050505; position:relative; overflow:hidden; margin-bottom:10px; }
 
-        /* SLOT CARDS */
         .slots-sec { margin-top:20px; }
         .slots-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:#444; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
         .slots-lbl::before { content:''; display:block; width:16px; height:1px; background:#333; }
@@ -342,7 +324,6 @@ function OverlayContent() {
         .s-type  { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:#444; margin-bottom:3px; }
         .s-price { font-family:'DM Mono',monospace; font-size:13px; font-weight:500; }
 
-        /* BOOKING FORM */
         .bf { background:#080808; border-radius:14px; padding:20px; margin-top:10px; animation:fadeIn .25s ease; }
         .bf-hdr { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:18px; }
         .bf-type  { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px; }
@@ -362,9 +343,8 @@ function OverlayContent() {
         .bf-cost-val { font-size:22px; font-weight:800; letter-spacing:-0.5px; margin-top:2px; }
         .bf-sub { font-family:'Syne',sans-serif; font-weight:800; font-size:14px; text-transform:uppercase; letter-spacing:0.3px; padding:13px 24px; border-radius:10px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
         .bf-sub:disabled { background:#1c1c1c !important; color:#444 !important; cursor:not-allowed; }
-        .bf-sub:hover:not(:disabled) { transform:translateY(-1px); }
+        .bf-sub:hover:not(:disabled) { filter:brightness(1.1); transform:translateY(-1px); }
 
-        /* MOBILE */
         @media (max-width:640px) {
           .ov-nav { padding:0 16px; }
           .ov-main { padding:12px 14px 60px; }
@@ -373,21 +353,25 @@ function OverlayContent() {
           .bf-sub { width:100%; text-align:center; }
           .slots-grid { grid-template-columns:1fr 1fr; }
         }
-        @media (max-width:360px) {
-          .slots-grid { grid-template-columns:1fr; }
-        }
+        @media (max-width:360px) { .slots-grid { grid-template-columns:1fr; } }
       `}</style>
 
       <div className="ov">
-        {/* NAV */}
         {!isOBS && (
           <nav className="ov-nav">
             <a href="/search" className="ov-logo">
-              <Logo scale={0.26} />
+              <Logo scale={0.26} color={tc} />
               <span className="ov-wm">casi</span>
             </a>
             <div className="ov-nav-right">
-              {notification && <div className="notif" style={notifStyles[notification.type]||notifStyles.success}>{notification.text}</div>}
+              {notification && (
+                <div className="notif" style={
+                  notification.type==='success' ? { background:`${tc}18`, border:`1px solid ${tc}40`, color:tc } :
+                  notification.type==='queue'   ? { background:`${tc}15`, border:`1px solid ${tc}35`, color:tc } :
+                  notification.type==='denied'  ? { background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.25)', color:'#f87171' } :
+                  { background:'rgba(234,179,8,0.1)', border:'1px solid rgba(234,179,8,0.25)', color:'#facc15' }
+                }>{notification.text}</div>
+              )}
               {selectedSlot && <button onClick={closeSlot} style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#555', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5 }}>Cancel</button>}
               {savedViewerName && !selectedSlot && (
                 showChangeName ? (
@@ -407,33 +391,30 @@ function OverlayContent() {
 
         <main className={isOBS ? '' : 'ov-main'}>
 
-          {/* MY BEAMS — with cancel option */}
+          {/* MY BEAMS */}
           {!isOBS && visibleMyBookings.length > 0 && !selectedSlot && (
             <div className="my-beams">
               <div className="my-beams-lbl">Your beams</div>
               <div className="my-beams-list">
                 {visibleMyBookings.map((booking: any) => {
-                  const isLive      = booking.status === 'active';
-                  const isApproved  = booking.status === 'approved_queued';
-                  const isPending   = booking.status === 'pending';
-                  const isExpiring  = isLive && expiringSoon.has(booking.id);
+                  const isLive     = booking.status==='active';
+                  const isApproved = booking.status==='approved_queued';
+                  const isPending  = booking.status==='pending';
+                  const isExpiring = isLive && expiringSoon.has(booking.id);
                   const activeBooking = activeBookings.find((b:any) => b.id===booking.id);
-                  // Can cancel if pending or approved_queued (not yet live)
                   const canCancel = isPending || isApproved;
-
                   const chipStyle = isExpiring
-                    ? { background:'rgba(234,179,8,0.08)',  borderColor:'rgba(234,179,8,0.25)',  color:'#facc15' }
+                    ? { background:'rgba(234,179,8,0.08)', borderColor:'rgba(234,179,8,0.25)', color:'#facc15' }
                     : isLive
-                    ? { background:'rgba(6,182,212,0.08)',  borderColor:'rgba(6,182,212,0.2)',   color:'#06b6d4' }
+                    ? { background:`${tc}12`, borderColor:`${tc}35`, color:tc }
                     : isApproved
-                    ? { background:'rgba(245,130,32,0.08)', borderColor:'rgba(245,130,32,0.2)',  color:'#F58220' }
-                    : { background:'rgba(255,255,255,0.03)', borderColor:'#1c1c1c',              color:'#555'   };
-
+                    ? { background:`${tc}10`, borderColor:`${tc}30`, color:tc }
+                    : { background:'rgba(255,255,255,0.03)', borderColor:'#1c1c1c', color:'#555' };
                   return (
                     <div key={booking.id} className="beam-chip" style={chipStyle}>
                       {booking.image_url && <img src={booking.image_url} style={{ width:20, height:20, objectFit:'contain', borderRadius:4 }} alt="" />}
                       <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, fontWeight:500 }}>
-                        {isExpiring ? '⚠ Expiring' : isLive ? '● Live' : isApproved ? '⏳ Queued' : '⌛ Pending'}
+                        {isExpiring?'⚠ Expiring':isLive?'● Live':isApproved?'⏳ Queued':'⌛ Pending'}
                       </span>
                       {isLive && activeBooking && (
                         <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, opacity:0.7 }}>
@@ -443,12 +424,9 @@ function OverlayContent() {
                           }} />
                         </span>
                       )}
-                      {/* Cancel button for pending / queued */}
                       {canCancel && (
-                        <button className="cancel-btn"
-                          onClick={() => cancelBooking(booking.id)}
-                          disabled={cancelling === booking.id}>
-                          {cancelling === booking.id ? '…' : '✕ cancel'}
+                        <button className="cancel-btn" onClick={() => cancelBooking(booking.id)} disabled={cancelling===booking.id}>
+                          {cancelling===booking.id?'…':'✕ cancel'}
                         </button>
                       )}
                     </div>
@@ -469,7 +447,6 @@ function OverlayContent() {
               const myIsExpiring    = myBookingForSlot && expiringSoon.has(myBookingForSlot.id);
               const isLocked        = !!el.locked;
               const displayImage    = (isSelected && imageValid && imageUrl) ? imageUrl : (el.image_url||null);
-              // Extend only allowed if no one is waiting
               const showExtend      = myBookingForSlot?.status==='active' && myIsExpiring && canExtend(el.id);
 
               return (
@@ -480,48 +457,43 @@ function OverlayContent() {
                       {isSelected && imageValid && <div style={{ position:'absolute', inset:0, borderRadius:4, boxShadow:`inset 0 0 0 2px ${accentColor}80`, pointerEvents:'none' }} />}
                     </div>
                   ) : (
-                    <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:el.is_background?12:6, border:`1.5px dashed ${isLocked?'rgba(248,113,113,0.3)':isOccupied?'rgba(245,130,32,0.3)':el.is_background?'rgba(168,85,247,0.3)':'rgba(6,182,212,0.3)'}`, background:isLocked?'rgba(248,113,113,0.03)':isOccupied?'rgba(245,130,32,0.03)':el.is_background?'rgba(168,85,247,0.03)':'rgba(6,182,212,0.03)' }}>
+                    <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:el.is_background?12:6, border:`1.5px dashed ${isLocked?'rgba(248,113,113,0.3)':isOccupied?`${tc}50`:el.is_background?'rgba(168,85,247,0.3)':`${tc}40`}`, background:isLocked?'rgba(248,113,113,0.03)':isOccupied?`${tc}05`:el.is_background?'rgba(168,85,247,0.03)':`${tc}05` }}>
                       <span style={{ fontSize:el.is_background?20:14, marginBottom:4 }}>{isLocked?'🔒':isOccupied?'':el.is_background?'🖼':'✦'}</span>
-                      {isOccupied && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'rgba(245,130,32,0.7)' }}><Countdown booking={activeBooking} /></span>}
+                      {isOccupied && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:`${tc}b0` }}><Countdown booking={activeBooking} /></span>}
                     </div>
                   )}
 
-                  {/* Slot actions */}
                   {el.price_value > 0 && !isOBS && (
                     <div style={{ position:'absolute', bottom:el.is_background?12:-54, left:'50%', transform:'translateX(-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:5, zIndex:100, whiteSpace:'nowrap' }}>
-                      {/* Price tag */}
                       <div style={{ background:'rgba(5,5,5,0.92)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:20, padding:'3px 10px', display:'flex', alignItems:'center', gap:5 }}>
-                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:500, color:'#F58220' }}>${el.price_value}/{el.price_unit}</span>
+                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:500, color:tc }}>${el.price_value}/{el.price_unit}</span>
                         {el.max_duration_minutes && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'#444' }}>· max {el.max_duration_minutes}m</span>}
                       </div>
-                      {/* Action */}
                       {isLocked ? (
                         <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'rgba(248,113,113,0.5)', padding:'3px 8px', border:'1px solid rgba(248,113,113,0.15)', borderRadius:20 }}>🔒 Locked</span>
                       ) : myBookingForSlot ? (
                         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
-                          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, padding:'3px 10px', borderRadius:20, border:'1px solid', ...(myIsExpiring?{color:'#facc15',borderColor:'rgba(234,179,8,0.3)',background:'rgba(234,179,8,0.08)'}:myBookingForSlot.status==='active'?{color:'#06b6d4',borderColor:'rgba(6,182,212,0.3)',background:'rgba(6,182,212,0.08)'}:myBookingForSlot.status==='approved_queued'?{color:'#F58220',borderColor:'rgba(245,130,32,0.3)',background:'rgba(245,130,32,0.08)'}:{color:'#555',borderColor:'#1c1c1c',background:'rgba(255,255,255,0.03)'}) }}>
-                            {myIsExpiring?'⚠ Expiring':myBookingForSlot.status==='active'?'● Live':myBookingForSlot.status==='approved_queued'?'⏳ Queued':'⌛ Pending'}
+                          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, padding:'3px 10px', borderRadius:20, border:'1px solid', ...(myIsExpiring?{color:'#facc15',borderColor:'rgba(234,179,8,0.3)',background:'rgba(234,179,8,0.08)'}:myBookingForSlot.status==='active'?{color:tc,borderColor:`${tc}50`,background:`${tc}12`}:myBookingForSlot.status==='approved_queued'?{color:tc,borderColor:`${tc}40`,background:`${tc}10`}:{color:'#555',borderColor:'#1c1c1c',background:'rgba(255,255,255,0.03)'}) }}>
+                            {myIsExpiring?'⚠ Expiring':myBookingForSlot.status==='active'?'● Your beam is live':myBookingForSlot.status==='approved_queued'?'⏳ Queued':'⌛ Pending'}
                           </span>
-                          {/* Extend — only if no queue behind */}
                           {showExtend && (
                             <button onClick={() => openSlot(el, false, true)}
                               style={{ background:'#eab308', border:'none', borderRadius:20, padding:'4px 12px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:10, textTransform:'uppercase', color:'#050505', cursor:'pointer' }}>
                               Extend
                             </button>
                           )}
-                          {/* Expiring but queue exists — show message instead */}
                           {myIsExpiring && !canExtend(el.id) && (
                             <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'rgba(234,179,8,0.5)' }}>Next viewer waiting</span>
                           )}
                         </div>
                       ) : isOccupied ? (
                         <button onClick={() => openSlot(el, true)}
-                          style={{ background:'#F58220', border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'#050505', cursor:'pointer' }}>
+                          style={{ background:tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'#050505', cursor:'pointer' }}>
                           Join queue{queueCount>0?` (${queueCount})`:''}
                         </button>
                       ) : !selectedSlot ? (
                         <button onClick={() => openSlot(el, false)}
-                          style={{ background:'#06b6d4', border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'#050505', cursor:'pointer', boxShadow:'0 4px 14px rgba(6,182,212,0.2)' }}>
+                          style={{ background:tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'#050505', cursor:'pointer', boxShadow:`0 4px 14px ${tc}30` }}>
                           Rent this slot
                         </button>
                       ) : null}
@@ -542,7 +514,6 @@ function OverlayContent() {
                 </div>
                 <button className="bf-x" onClick={closeSlot}>✕</button>
               </div>
-
               <div className="bf-grid">
                 <div>
                   <div style={{ marginBottom:14 }}>
@@ -556,7 +527,6 @@ function OverlayContent() {
                       {imageValid?'✓ Image loaded':imageUrl?'Image not loading — check URL':'Paste a direct image URL'}
                     </div>
                   </div>
-                  {/* Viewer name */}
                   <div>
                     <label className="bf-lbl">Viewing as</label>
                     <div style={{ display:'flex', alignItems:'center', gap:10, background:'#050505', border:'1px solid #1c1c1c', borderRadius:10, padding:'10px 14px' }}>
@@ -566,9 +536,7 @@ function OverlayContent() {
                     </div>
                   </div>
                 </div>
-
                 <div>
-                  {/* Duration */}
                   <div style={{ marginBottom:14 }}>
                     <label className="bf-lbl">Duration{selectedSlot.max_duration_minutes?` — max ${selectedSlot.max_duration_minutes}m`:''}</label>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -585,7 +553,6 @@ function OverlayContent() {
                       ))}
                     </div>
                   </div>
-                  {/* Message */}
                   <div>
                     <label className="bf-lbl">Message (optional)</label>
                     <textarea value={message} onChange={(e) => setMessage(e.target.value)}
@@ -594,7 +561,6 @@ function OverlayContent() {
                   </div>
                 </div>
               </div>
-
               <div className="bf-footer">
                 <div>
                   <div className="bf-cost-lbl">Estimated cost</div>
@@ -619,12 +585,12 @@ function OverlayContent() {
                   const queueCount       = queueCounts[el.id]||0;
                   const myBookingForSlot = getMyBookingForSlot(el.id);
                   const isLocked         = !!el.locked;
-                  const priceColor       = isLocked?'#555':myBookingForSlot?'#555':isOccupied?'#F58220':'#06b6d4';
+                  const priceColor       = isLocked?'#555':myBookingForSlot?'#555':tc;
                   return (
                     <button key={el.id} className={`slot-card ${myBookingForSlot||isLocked?'s-disabled':''}`}
-                      style={{ borderColor:isOccupied&&!myBookingForSlot&&!isLocked?'rgba(245,130,32,0.15)':!myBookingForSlot&&!isLocked?'rgba(6,182,212,0.1)':undefined }}
+                      style={{ borderColor:isOccupied&&!myBookingForSlot&&!isLocked?`${tc}25`:!myBookingForSlot&&!isLocked?`${tc}18`:undefined }}
                       onClick={() => !myBookingForSlot&&!isLocked&&openSlot(el,isOccupied)}>
-                      <div className="s-thumb" style={{ borderColor:isOccupied?'rgba(245,130,32,0.2)':'rgba(6,182,212,0.15)' }}>
+                      <div className="s-thumb" style={{ borderColor:isOccupied?`${tc}35`:`${tc}25` }}>
                         {el.image_url?<img src={el.image_url} style={{ width:'100%',height:'100%',objectFit:'contain' }} alt="" />:<span>{isLocked?'🔒':el.is_background?'🖼':'✦'}</span>}
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
@@ -638,7 +604,6 @@ function OverlayContent() {
             </div>
           )}
 
-          {/* Footer */}
           {!isOBS && (
             <div style={{ marginTop:36, paddingTop:20, borderTop:'1px solid #0d0d0d', textAlign:'center' }}>
               <a href="/search" style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'#222', textDecoration:'none' }}>
