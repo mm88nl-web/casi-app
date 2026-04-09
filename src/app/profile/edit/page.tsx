@@ -43,6 +43,10 @@ export default function ProfileEditPage() {
   const [error, setError] = useState('');
   const router = useRouter();
   const supabase = createClient();
+  const [stripeConnected, setStripeConnected] = useState(false);
+  const [stripeLoading, setStripeLoading]     = useState(false);
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const stripeStatus = searchParams?.get('stripe');
 
   useEffect(() => {
     const load = async () => {
@@ -56,6 +60,7 @@ export default function ProfileEditPage() {
         setAvatarUrl(prof.avatar_url || '');
         if (prof.avatar_url) setAvatarValid(true);
         if (prof.theme_color) setThemeColor(prof.theme_color);
+        if (prof?.stripe_account_id) setStripeConnected(true);
       }
       setLoading(false);
     };
@@ -76,6 +81,19 @@ export default function ProfileEditPage() {
     if (err) { setError(err.message); return; }
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
+  };
+  
+  const handleStripeConnect = async () => {
+    setStripeLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const res = await fetch('/api/stripe/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: user!.id }),
+    });
+    const { url } = await res.json();
+    if (url) window.location.href = url;
+    else setStripeLoading(false);
   };
 
   const tc = themeColor; // shorthand for inline use
@@ -261,6 +279,35 @@ export default function ProfileEditPage() {
               </div>
               <div className="theme-preview-bar" style={{ background: `linear-gradient(90deg, ${tc}, ${tc}40)` }} />
               <div className="pe-hint">Viewers see this color on your overlay page and public profile</div>
+            </div>
+            {/* ── STRIPE CONNECT ── */}
+            <div className="pe-field" style={{ marginTop: 8 }}>
+              <label className="pe-label">Payments</label>
+              {stripeStatus === 'success' && (
+                <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4ade80', marginBottom: 12 }}>
+                  ✓ Stripe account connected — you can now receive payments
+                </div>
+              )}
+              {stripeStatus === 'refresh' && (
+                <div style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: 10, padding: '10px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#facc15', marginBottom: 12 }}>
+                  Onboarding incomplete — finish connecting your account to receive payments
+                </div>
+              )}
+              <div style={{ background: '#0a0a0a', border: '1px solid #1c1c1c', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: stripeConnected ? '#4ade80' : '#e8e8e8', marginBottom: 3 }}>
+                    {stripeConnected ? '✓ Connected to Stripe' : 'Connect Stripe to get paid'}
+                  </div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>
+                    {stripeConnected ? 'Viewers can now pay for beam slots' : 'Required to accept payments from viewers'}
+                  </div>
+                </div>
+                <button type="button" onClick={handleStripeConnect} disabled={stripeLoading}
+                  style={{ background: stripeConnected ? 'rgba(74,222,128,0.1)' : tc, border: stripeConnected ? '1px solid rgba(74,222,128,0.25)' : 'none', borderRadius: 8, padding: '10px 16px', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', color: stripeConnected ? '#4ade80' : '#050505', cursor: stripeLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  {stripeLoading ? 'Redirecting…' : stripeConnected ? '↗ Manage' : 'Connect →'}
+                </button>
+              </div>
+              <div className="pe-hint">Casi takes a 5% platform fee. Payouts go directly to your bank.</div>
             </div>
 
             {error && <div className="pe-error">{error}</div>}

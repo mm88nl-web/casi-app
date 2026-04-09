@@ -201,17 +201,46 @@ function OverlayContent() {
   }, [username, supabase, loadData]);
 
   const prevMyBookingsRef = useRef<any[]>([]);
+
+  // 1. Status Change Notifications
   useEffect(() => {
     const prev = prevMyBookingsRef.current;
     myBookings.forEach(booking => {
-      const old = prev.find((b:any) => b.id===booking.id);
+      const old = prev.find((b: any) => b.id === booking.id);
       if (!old) return;
-      if (old.status==='pending' && booking.status==='denied')         showNotif('Your request was denied','denied');
-      if (old.status==='pending' && booking.status==='active')         showNotif('Your beam is live! 🎉','success');
-      if (old.status==='pending' && booking.status==='approved_queued') showNotif("Approved — you're in the queue!",'queue');
+      if (old.status === 'pending' && booking.status === 'denied')          showNotif('Your request was denied', 'denied');
+      if (old.status === 'pending' && booking.status === 'active')          showNotif('Your beam is live! 🎉', 'success');
+      if (old.status === 'pending' && booking.status === 'approved_queued') showNotif("Approved — you're in the queue!", 'queue');
     });
     prevMyBookingsRef.current = myBookings;
   }, [myBookings]);
+
+  // 2. Stripe Payment Return Handler
+  useEffect(() => {
+    if (!profile) return;
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get('payment');
+    const bookingId = params.get('booking_id');
+
+    if (payment === 'success' && bookingId) {
+      showNotif('Payment successful — request sent! 🎉', 'success');
+      // Clean up the URL so the viewer doesn't see Stripe parameters
+      const clean = `${window.location.pathname}?s=${profile.username}`;
+      window.history.replaceState({}, '', clean);
+    }
+
+    if (payment === 'cancelled' && bookingId) {
+      // Mark as denied in DB so the pending slot clears
+      supabase.from('bookings').update({ status: 'denied' }).eq('id', bookingId).then(() => {
+        if (typeof loadData === 'function') {
+          loadData(profile.id, savedViewerName ?? undefined);
+        }
+      });
+      showNotif('Payment cancelled', 'warning');
+      const clean = `${window.location.pathname}?s=${profile.username}`;
+      window.history.replaceState({}, '', clean);
+    }
+  }, [profile]);
 
   const getActiveBookingForSlot = (id: string) => activeBookings.find((b:any) => b.element_id===id)||null;
   const getMyBookingForSlot     = (id: string) => myBookings.find((b:any) => b.element_id===id && b.status!=='denied')||null;
@@ -246,27 +275,62 @@ function OverlayContent() {
   };
 
   const submitBooking = async () => {
-    if (!savedViewerName||!imageUrl||!selectedSlot) return;
+    if (!savedViewerName || !imageUrl || !selectedSlot) return;
     setSubmitting(true);
+
+    // Check for duplicate pending
     const { data: existing } = await supabase.from('bookings').select('id')
-      .eq('profile_id',profile.id).eq('element_id',selectedSlot.id)
-      .eq('viewer_name',savedViewerName).eq('status','pending').single();
-    if (existing) { setSubmitting(false); showNotif('You already have a pending request','warning'); closeSlot(); return; }
-    const currentQueue = queueCounts[selectedSlot.id]||0;
-    const { error } = await supabase.from('bookings').insert({
-      profile_id:profile.id, element_id:selectedSlot.id,
-      viewer_name:savedViewerName, image_url:imageUrl, message,
-      price_value:selectedSlot.price_value, price_unit:selectedSlot.price_unit,
-      duration_minutes:duration, status:'pending',
-      queue_position:(isQueue||isExtend)?currentQueue+1:null,
-      is_queued:isQueue||isExtend,
-    });
-    setSubmitting(false);
-    if (!error) {
+      .eq('profile_id', profile.id).eq('element_id', selectedSlot.id)
+      .eq('viewer_name', savedViewerName).eq('status', 'pending').single();
+    if (existing) {
+      setSubmitting(false);
+      showNotif('You already have a pending request', 'warning');
       closeSlot();
-      showNotif(isExtend?'Extension requested!':isQueue?'Request sent — streamer will review':'Request sent!', isQueue||isExtend?'queue':'success');
-      if (profile?.id) await loadData(profile.id, savedViewerName);
+      return;
     }
+
+    const currentQueue = queueCounts[selectedSlot.id] || 0;
+
+    // Insert booking first to get an id
+    const { data: newBooking, error } = await supabase.from('bookings').insert({
+      profile_id: profile.id,
+      element_id: selectedSlot.id,
+      viewer_name: savedViewerName,
+      image_url: imageUrl,
+      message,
+      price_value: selectedSlot.price_value,
+      price_unit: selectedSlot.price_unit,
+      duration_minutes: duration,
+      status: 'pending',
+      queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
+      is_queued: isQueue || isExtend,
+    }).select().single();
+
+    if (error || !newBooking) {
+      setSubmitting(false);
+      showNotif('Something went wrong', 'warning');
+      return;
+    }
+
+    // Call authorize to get Stripe Checkout URL
+    const res = await fetch('/api/stripe/authorize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_id: newBooking.id }),
+    });
+    const { checkout_url, error: stripeError } = await res.json();
+
+    if (stripeError || !checkout_url) {
+      // Stripe not set up — fall back to free/unapproved flow
+      setSubmitting(false);
+      closeSlot();
+      showNotif(isExtend ? 'Extension requested!' : isQueue ? 'Request sent — streamer will review' : 'Request sent!', isQueue || isExtend ? 'queue' : 'success');
+      if (profile?.id) await loadData(profile.id, savedViewerName);
+      return;
+    }
+
+    // Redirect to Stripe Checkout
+    window.location.href = checkout_url;
   };
 
   const estimatedCost = selectedSlot
