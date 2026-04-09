@@ -165,7 +165,7 @@ function OverlayContent() {
       supabase.from('bookings').select('*').eq('profile_id', profId).eq('status','approved_queued').order('approved_at',{ascending:true}),
       supabase.from('bookings').select('element_id').eq('profile_id', profId).eq('status','pending'),
     ]);
-    setElements(els || []);
+    setElements((els || []).filter((el: any) => el.is_background || el.price_value > 0));
     setActiveBookings(active || []);
     setApprovedQueuedBookings(aq || []);
     const counts: Record<string,number> = {};
