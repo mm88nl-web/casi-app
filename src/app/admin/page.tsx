@@ -288,7 +288,11 @@ export default function AdminStudio() {
   const [showBackdropModal, setShowBackdropModal] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const [showInfoPanel, setShowInfoPanel] = useState(false); // separate from selection
   const [togglingLive, setTogglingLive] = useState(false);
+  // Track drag distance to distinguish tap vs drag
+  const dragStartPos = useRef<{x:number;y:number}|null>(null);
+  const isDragging = useRef(false);
 
   const router = useRouter();
   const supabase = useRef(createClient()).current;
@@ -423,12 +427,13 @@ export default function AdminStudio() {
     }).select().single();
     if (data) {
       setElements(prev => [...prev, data]);
-      setSelectedSlotId(data.id); // auto-select new beam
+      setSelectedSlotId(data.id); // auto-select new beam, show sliders
+      setShowInfoPanel(false);
     }
   };
 
   const deleteLayer = async (id: string) => {
-    if (selectedSlotId === id) setSelectedSlotId(null);
+    if (selectedSlotId === id) { setSelectedSlotId(null); setShowInfoPanel(false); }
     await supabase.from('overlay_elements').delete().eq('id', id);
     setElements(prev => prev.filter(el => el.id !== id));
   };
@@ -442,6 +447,7 @@ export default function AdminStudio() {
     await Promise.all(toDelete.map(el => supabase.from('overlay_elements').delete().eq('id', el.id)));
     setElements(prev => prev.filter(el => protectedIds.has(el.id)));
     setSelectedSlotId(null);
+    setShowInfoPanel(false);
     setSaveStatus(`Cleared ${toDelete.length}`);
     setTimeout(() => setSaveStatus('Ready'), 2000);
   };
@@ -476,6 +482,7 @@ export default function AdminStudio() {
 
   const kickBeam = useCallback(async (booking: any) => {
     setSelectedSlotId(null);
+    setShowInfoPanel(false);
     await expireBooking(booking);
   }, [expireBooking]);
 
@@ -625,6 +632,8 @@ export default function AdminStudio() {
           .top-nav { padding:0 16px; }
           .nav-tabs { display:none; }
           .save-status-txt { display:none; }
+          /* Hide Backdrop + Clear from top nav on mobile */
+          .studio-action-hide { display:none !important; }
           .studio-body { padding:12px 16px 100px; }
           .beams-bar { padding:10px 16px; }
           .req-body { padding:16px 16px 100px; }
@@ -632,13 +641,15 @@ export default function AdminStudio() {
           .req-card { flex-direction:column; }
           .req-actions { flex-direction:row; width:100%; }
           .req-actions .act-btn { flex:1; text-align:center; }
-          .bot-nav { display:flex; position:fixed; bottom:0; left:0; right:0; z-index:90; background:rgba(5,5,5,0.97); border-top:1px solid #111; padding:8px 0 env(safe-area-inset-bottom,8px); }
-          .bot-tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 4px; border:none; background:none; cursor:pointer; position:relative; transition:color .2s; }
+          .bot-nav {
+            display:flex; position:fixed; bottom:0; left:0; right:0; z-index:90;
+            background:rgba(5,5,5,0.97); border-top:1px solid #111;
+            padding:8px 0 env(safe-area-inset-bottom,8px);
+          }
+          .bot-tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 2px; border:none; background:none; cursor:pointer; position:relative; transition:color .2s; min-width:0; }
           .bot-tab.active { color:#F58220; }
           .bot-tab:not(.active) { color:#444; }
-          .bot-badge { position:absolute; top:4px; right:calc(50% - 16px); background:#F58220; color:#050505; font-size:9px; font-weight:800; width:14px; height:14px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
-          /* Hide studio actions except beam on mobile — use the info panel for price */
-          .studio-action-hide { display:none; }
+          .bot-badge { position:absolute; top:2px; right:calc(50% - 18px); background:#F58220; color:#050505; font-size:9px; font-weight:800; width:14px; height:14px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
         }
       `}</style>
 
@@ -669,7 +680,7 @@ export default function AdminStudio() {
             {view === 'studio' && (
               <>
                 <button onClick={addBeam} className="btn-sm b-orange">+ Beam</button>
-                <button onClick={() => hasBackdrop && backdropEl ? setSelectedSlotId(backdropEl.id) : setShowBackdropModal(true)} className={`btn-sm ${hasBackdrop ? 'b-purple' : 'b-outline'} studio-action-hide`}>
+                <button onClick={() => hasBackdrop && backdropEl ? (setSelectedSlotId(backdropEl.id), setShowInfoPanel(true)) : setShowBackdropModal(true)} className={`btn-sm ${hasBackdrop ? 'b-purple' : 'b-outline'} studio-action-hide`}>
                   {hasBackdrop ? '● Backdrop' : 'Backdrop'}
                 </button>
                 <button onClick={clearAll} className="btn-sm b-danger studio-action-hide">Clear</button>
@@ -684,14 +695,14 @@ export default function AdminStudio() {
 
         {/* MODALS */}
         {showBackdropModal && <BackdropModal onConfirm={createFullBackdrop} onClose={() => setShowBackdropModal(false)} />}
-        {selectedEl && view === 'studio' && (
+        {selectedEl && showInfoPanel && view === 'studio' && (
           <SlotInfoPanel
             el={selectedEl}
             activeBooking={activeBookings.find(b => b.element_id === selectedEl.id) || null}
             queueBookings={approvedQueued.filter(b => b.element_id === selectedEl.id).sort((a, b) => new Date(a.approved_at).getTime() - new Date(b.approved_at).getTime())}
-            onClose={() => setSelectedSlotId(null)}
+            onClose={() => setShowInfoPanel(false)}
             onKick={kickBeam} onLockToggle={toggleLock} onDelete={deleteLayer}
-            onUpdatePrice={(id, price, unit) => updateLayer(id, { price_value: price, price_unit: unit })}
+            onUpdatePrice={(id, price, unit) => { updateLayer(id, { price_value: price, price_unit: unit }); setShowInfoPanel(false); }}
           />
         )}
 
@@ -766,8 +777,10 @@ export default function AdminStudio() {
             {/* Canvas */}
             <div className="canvas-wrap" ref={setMonitorRef}
               onClick={(e) => {
-                // Deselect if clicking canvas background (not a beam)
-                if ((e.target as HTMLElement).classList.contains('canvas-wrap')) setSelectedSlotId(null);
+                if ((e.target as HTMLElement).classList.contains('canvas-wrap')) {
+                  setSelectedSlotId(null);
+                  setShowInfoPanel(false);
+                }
               }}>
               {dimensions.width > 0 && elements.map((el) => {
                 const isSelected = selectedSlotId === el.id;
@@ -775,13 +788,33 @@ export default function AdminStudio() {
                   <Rnd key={el.id}
                     size={{ width: el.is_background ? '100%' : `${(el.width / 100) * dimensions.width}px`, height: el.is_background ? '100%' : `${(el.height / 100) * dimensions.height}px` }}
                     position={{ x: el.is_background ? 0 : (el.pos_x / 100) * dimensions.width, y: el.is_background ? 0 : (el.pos_y / 100) * dimensions.height }}
-                    onDragStop={(_e, d) => { updateLayer(el.id, { pos_x: (d.x / dimensions.width) * 100, pos_y: (d.y / dimensions.height) * 100 }); }}
+                    onDragStart={(_e, d) => {
+                      dragStartPos.current = { x: d.x, y: d.y };
+                      isDragging.current = false;
+                    }}
+                    onDrag={(_e, d) => {
+                      if (dragStartPos.current) {
+                        const dist = Math.abs(d.x - dragStartPos.current.x) + Math.abs(d.y - dragStartPos.current.y);
+                        if (dist > 6) isDragging.current = true;
+                      }
+                    }}
+                    onDragStop={(_e, d) => {
+                      if (!isDragging.current) {
+                        // It was a tap — select beam, show sliders (not info panel)
+                        if (!el.is_background) {
+                          setSelectedSlotId(el.id);
+                          setShowInfoPanel(false);
+                        }
+                      } else {
+                        updateLayer(el.id, { pos_x: (d.x / dimensions.width) * 100, pos_y: (d.y / dimensions.height) * 100 });
+                      }
+                      isDragging.current = false;
+                    }}
                     onResizeStop={(_e, _dir, ref, _delta, pos) => { updateLayer(el.id, { width: (ref.offsetWidth / dimensions.width) * 100, height: (ref.offsetHeight / dimensions.height) * 100, pos_x: (pos.x / dimensions.width) * 100, pos_y: (pos.y / dimensions.height) * 100 }); }}
                     disableDragging={el.is_background} enableResizing={!el.is_background} bounds="parent"
                     style={{ zIndex: el.is_background ? 0 : (isSelected ? 40 : 30) }}>
                     <div
-                      onClick={(e) => { e.stopPropagation(); if (!el.is_background) setSelectedSlotId(el.id); }}
-                      style={{ position: 'relative', width: '100%', height: '100%', border: el.is_background ? 'none' : isSelected ? '2px solid #F58220' : '1.5px solid rgba(245,130,32,0.3)', borderRadius: el.is_background ? 0 : 6, opacity: el.locked ? 0.7 : 1, cursor: el.is_background ? 'default' : 'pointer' }}>
+                      style={{ position: 'relative', width: '100%', height: '100%', border: el.is_background ? 'none' : isSelected ? '2px solid #F58220' : '1.5px solid rgba(245,130,32,0.3)', borderRadius: el.is_background ? 0 : 6, opacity: el.locked ? 0.7 : 1 }}>
                       {!el.image_url ? (
                         <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(245,130,32,0.35)'}`, borderRadius: el.is_background ? 12 : 6, background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(245,130,32,0.04)' }}>
                           {el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>}
@@ -794,21 +827,16 @@ export default function AdminStudio() {
                       ) : (
                         <img src={el.image_url} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'fill', pointerEvents: 'none' }} alt="" />
                       )}
-                      {/* Selection indicator */}
+                      {/* Selection glow */}
                       {isSelected && !el.is_background && (
                         <div style={{ position: 'absolute', top: -2, left: -2, right: -2, bottom: -2, border: '2px solid #F58220', borderRadius: 8, pointerEvents: 'none', boxShadow: '0 0 0 3px rgba(245,130,32,0.15)' }} />
                       )}
-                      {/* Info button (desktop) */}
+                      {/* Delete button — large touch target */}
                       {!el.is_background && (
-                        <button onClick={(e) => { e.stopPropagation(); setSelectedSlotId(el.id); }}
-                          style={{ position: 'absolute', top: 4, right: 28, background: 'rgba(0,0,0,0.85)', border: 'none', borderRadius: 4, color: '#888', fontSize: 9, padding: '3px 6px', cursor: 'pointer', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 1, zIndex: 50 }}>
-                          ⚙
-                        </button>
-                      )}
-                      {/* Delete button */}
-                      {!el.is_background && (
-                        <button onClick={(e) => { e.stopPropagation(); deleteLayer(el.id); }}
-                          style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(239,68,68,0.85)', border: 'none', borderRadius: 4, color: 'white', fontSize: 9, padding: '3px 7px', cursor: 'pointer', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 1, zIndex: 50 }}>
+                        <button
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => { e.stopPropagation(); deleteLayer(el.id); }}
+                          style={{ position: 'absolute', top: 0, right: 0, width: 32, height: 32, background: 'rgba(239,68,68,0.9)', border: 'none', borderRadius: '0 6px 0 6px', color: 'white', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
                           ✕
                         </button>
                       )}
@@ -823,17 +851,16 @@ export default function AdminStudio() {
               <div className="slider-panel">
                 <div className="slider-panel-header">
                   <span className="slider-panel-title">
-                    ✦ Beam position &amp; size
-                    {selectedEl.price_value > 0 && <span style={{ color: '#888', fontWeight: 400, marginLeft: 8, fontSize: 12 }}>${selectedEl.price_value}/{selectedEl.price_unit}</span>}
+                    ✦ {selectedEl.price_value > 0 ? `$${selectedEl.price_value}/${selectedEl.price_unit}` : 'Beam'}
                   </span>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => setSelectedSlotId(null)}
-                      style={{ background: 'none', border: '1px solid #222', borderRadius: 6, color: '#555', fontFamily: "'DM Mono', monospace", fontSize: 10, padding: '4px 10px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>
-                      Done
-                    </button>
-                    <button onClick={() => { /* open info panel */ setSelectedSlotId(selectedEl.id); }}
-                      style={{ background: 'rgba(245,130,32,0.08)', border: '1px solid rgba(245,130,32,0.2)', borderRadius: 6, color: '#F58220', fontFamily: "'DM Mono', monospace", fontSize: 10, padding: '4px 10px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>
+                    <button onClick={() => { setShowInfoPanel(true); }}
+                      style={{ background: 'rgba(245,130,32,0.08)', border: '1px solid rgba(245,130,32,0.2)', borderRadius: 8, color: '#F58220', fontFamily: "'DM Mono', monospace", fontSize: 11, padding: '8px 14px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>
                       Info / Price
+                    </button>
+                    <button onClick={() => { setSelectedSlotId(null); setShowInfoPanel(false); }}
+                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #222', borderRadius: 8, color: '#888', fontFamily: "'DM Mono', monospace", fontSize: 11, padding: '8px 14px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>
+                      Done
                     </button>
                   </div>
                 </div>
@@ -850,8 +877,8 @@ export default function AdminStudio() {
 
             <div className="canvas-hint">
               {selectedEl && !selectedEl.is_background
-                ? 'Drag beam on canvas · Use sliders below for precise control'
-                : 'Tap a beam to select · Drag to reposition · Resize from corners'}
+                ? 'Drag beam to move · Sliders for precise control · Info/Price for settings'
+                : 'Tap a beam to select · Drag to move · Resize from corners'}
             </div>
           </div>
         )}
@@ -1169,6 +1196,14 @@ export default function AdminStudio() {
               <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{v}</span>
             </button>
           ))}
+          {/* Backdrop + Clear shown in bottom nav on mobile when in studio */}
+          {view === 'studio' && (
+            <button onClick={() => hasBackdrop && backdropEl ? (setSelectedSlotId(backdropEl.id), setShowInfoPanel(true)) : setShowBackdropModal(true)}
+              className="bot-tab" style={{ color: hasBackdrop ? '#c084fc' : '#444' }}>
+              <span style={{ fontSize: 18 }}>🖼️</span>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{hasBackdrop ? 'Backdrop' : 'Add BG'}</span>
+            </button>
+          )}
         </div>
 
       </div>
