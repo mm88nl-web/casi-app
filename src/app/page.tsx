@@ -2,19 +2,19 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 
-const LOGO = (
-  <svg width="72" height="30" viewBox="0 0 180 72" fill="none">
-    <line x1="2"  y1="22" x2="38" y2="22" stroke="#F7931A" strokeWidth="5" strokeLinecap="round"/>
-    <line x1="2"  y1="36" x2="30" y2="36" stroke="#F7931A" strokeWidth="5" strokeLinecap="round"/>
-    <line x1="2"  y1="50" x2="38" y2="50" stroke="#F7931A" strokeWidth="5" strokeLinecap="round"/>
-    <path d="M38 36 C52 12,66 6,90 6 C114 6,128 12,142 36 C128 60,114 66,90 66 C66 66,52 60,38 36Z"
-          stroke="#F7931A" strokeWidth="4.5" fill="none"/>
-    <circle cx="90" cy="36" r="24" fill="#F7931A"/>
-    <line x1="142" y1="22" x2="178" y2="22" stroke="#F7931A" strokeWidth="5" strokeLinecap="round"/>
-    <line x1="150" y1="36" x2="178" y2="36" stroke="#F7931A" strokeWidth="5" strokeLinecap="round"/>
-    <line x1="142" y1="50" x2="178" y2="50" stroke="#F7931A" strokeWidth="5" strokeLinecap="round"/>
-  </svg>
-);
+function Logo({ scale = 1 }: { scale?: number }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width={400 * scale} height={200 * scale}>
+      <g stroke="#F58220" fill="#F58220" strokeWidth="16" strokeLinecap="round">
+        <line x1="50" y1="60" x2="350" y2="60" />
+        <line x1="20" y1="100" x2="380" y2="100" />
+        <line x1="50" y1="140" x2="350" y2="140" />
+      </g>
+      <path fill="#F58220" stroke="none" d="M 90,100 C 130,30 270,30 310,100 C 270,170 130,170 90,100 Z" />
+      <circle fill="#050505" cx="200" cy="100" r="45" />
+    </svg>
+  );
+}
 
 export default function HomePage() {
   const [liveCount, setLiveCount] = useState(0);
@@ -86,15 +86,15 @@ export default function HomePage() {
         .casi-wordmark {
           font-size: 22px;
           font-weight: 800;
-          color: #F7931A;
+          color: #F58220;
           letter-spacing: -1px;
         }
 
-        /* middle section — hidden on mobile */
-        .casi-nav-mid {
+        /* nav right group */
+        .casi-nav-right {
           display: flex;
           align-items: center;
-          gap: 24px;
+          gap: 20px;
         }
 
         .nav-link {
@@ -138,14 +138,14 @@ export default function HomePage() {
         @keyframes ldpulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
         .btn-primary {
-          background: #F7931A;
+          background: #F58220;
           color: #050505;
           font-family: 'Syne', sans-serif;
           font-weight: 800;
-          font-size: 13px;
+          font-size: 12px;
           letter-spacing: 0.5px;
           text-transform: uppercase;
-          padding: 11px 22px;
+          padding: 10px 18px;
           border-radius: 8px;
           text-decoration: none;
           transition: all 0.2s;
@@ -172,13 +172,13 @@ export default function HomePage() {
           font-size: 10px;
           letter-spacing: 3px;
           text-transform: uppercase;
-          color: #F7931A;
+          color: #F58220;
           margin-bottom: 24px;
           display: flex;
           align-items: center;
           gap: 10px;
         }
-        .hero-eyebrow::before { content:''; display:block; width:32px; height:1px; background:#F7931A; }
+        .hero-eyebrow::before { content:''; display:block; width:32px; height:1px; background:#F58220; }
 
         .hero-headline {
           font-size: clamp(40px, 5vw, 68px);
@@ -188,7 +188,7 @@ export default function HomePage() {
           color: #f0f0f0;
           margin-bottom: 24px;
         }
-        .hero-headline .accent { color: #F7931A; }
+        .hero-headline .accent { color: #F58220; }
 
         .hero-sub {
           font-size: 16px;
@@ -226,7 +226,7 @@ export default function HomePage() {
         .stat-num {
           font-size: 28px;
           font-weight: 800;
-          color: #F7931A;
+          color: #F58220;
           letter-spacing: -1px;
           font-family: 'DM Mono', monospace;
         }
@@ -280,7 +280,7 @@ export default function HomePage() {
         .beam-tl { top:10%; left:5%; width:22%; height:30%; }
         .beam-tr { top:10%; right:5%; width:22%; height:30%; border-color:rgba(6,182,212,0.4); background:rgba(6,182,212,0.05); }
         .beam-label { font-family:'DM Mono',monospace; font-size:7px; letter-spacing:1px; text-transform:uppercase; color:rgba(247,147,26,0.7); }
-        .beam-price { font-family:'DM Mono',monospace; font-size:9px; font-weight:500; color:#F7931A; margin-top:2px; }
+        .beam-price { font-family:'DM Mono',monospace; font-size:9px; font-weight:500; color:#F58220; margin-top:2px; }
         .beam-occupied { font-family:'DM Mono',monospace; font-size:7px; color:#06b6d4; letter-spacing:1px; }
         .beam-avatar {
           width:28px; height:28px; border-radius:4px;
@@ -301,9 +301,9 @@ export default function HomePage() {
         .how-header { margin-bottom:56px; }
         .section-label {
           font-family:'DM Mono',monospace; font-size:10px; letter-spacing:3px; text-transform:uppercase;
-          color:#F7931A; margin-bottom:16px; display:flex; align-items:center; gap:10px;
+          color:#F58220; margin-bottom:16px; display:flex; align-items:center; gap:10px;
         }
-        .section-label::before { content:''; display:block; width:24px; height:1px; background:#F7931A; }
+        .section-label::before { content:''; display:block; width:24px; height:1px; background:#F58220; }
         .section-title { font-size:36px; font-weight:800; letter-spacing:-1.5px; color:#f0f0f0; }
 
         .steps-grid {
@@ -318,7 +318,7 @@ export default function HomePage() {
         .step-title { font-size:20px; font-weight:700; letter-spacing:-0.5px; color:#e8e8e8; margin-bottom:10px; }
         .step-body { font-size:14px; line-height:1.65; color:#555; }
         .step-accent { position:absolute; bottom:0; left:0; right:0; height:2px; background:transparent; transition:background 0.2s; }
-        .step-card:hover .step-accent { background:linear-gradient(90deg,#F7931A,transparent); }
+        .step-card:hover .step-accent { background:linear-gradient(90deg,#F58220,transparent); }
 
         /* ── CTA ── */
         .cta-section { position:relative; z-index:1; max-width:1100px; margin:0 auto 100px; padding:0 40px; }
@@ -339,9 +339,13 @@ export default function HomePage() {
 
         /* ── MOBILE ── */
         @media (max-width: 768px) {
-          /* Nav: just logo + CTA button */
-          .casi-nav { padding: 12px 16px; }
-          .casi-nav-mid { display: none; }
+          .casi-nav { padding: 10px 14px; gap: 8px; }
+          .casi-nav-right { gap: 10px; }
+          /* Hide live pill on mobile — saves space */
+          .nav-live-hide { display: none; }
+          /* Make nav-links smaller */
+          .nav-link { font-size: 10px; letter-spacing: 1px; }
+          .btn-primary { font-size: 11px; padding: 9px 14px; }
 
           .hero {
             grid-template-columns: 1fr;
@@ -370,24 +374,21 @@ export default function HomePage() {
         {/* NAV */}
         <nav className="casi-nav">
           <a href="/" className="casi-nav-logo">
-            {LOGO}
+            <Logo scale={0.18} />
             <span className="casi-wordmark">casi</span>
           </a>
 
-          {/* Middle links — hidden on mobile */}
-          <div className="casi-nav-mid">
+          <div className="casi-nav-right">
             {liveCount > 0 && (
-              <a href="/search" className="live-pill">
+              <a href="/search" className="live-pill nav-live-hide">
                 <span className="live-dot" />
                 {liveCount} live now
               </a>
             )}
             <a href="/search" className="nav-link">Browse</a>
             <a href="/login" className="nav-link">Sign in</a>
+            <a href="/signup" className="btn-primary">Start streaming →</a>
           </div>
-
-          {/* CTA always visible */}
-          <a href="/signup" className="btn-primary">Start streaming →</a>
         </nav>
 
         {/* HERO */}
@@ -497,7 +498,7 @@ export default function HomePage() {
         {/* FOOTER */}
         <footer className="casi-footer">
           <a href="/" className="casi-nav-logo" style={{ textDecoration: 'none' }}>
-            {LOGO}
+            <Logo scale={0.15} />
           </a>
           <div className="footer-links">
             <a href="/search" className="nav-link">Find streams</a>

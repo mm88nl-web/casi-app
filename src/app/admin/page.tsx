@@ -288,9 +288,9 @@ export default function AdminStudio() {
   const [showBackdropModal, setShowBackdropModal] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
-  const [showInfoPanel, setShowInfoPanel] = useState(false); // separate from selection
+  const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [togglingLive, setTogglingLive] = useState(false);
-  // Track drag distance to distinguish tap vs drag
+  const [showBanner, setShowBanner] = useState(false);
   const dragStartPos = useRef<{x:number;y:number}|null>(null);
   const isDragging = useRef(false);
 
@@ -306,6 +306,11 @@ export default function AdminStudio() {
       const { data: els } = await supabase.from('overlay_elements').select('*').eq('profile_id', user.id);
       if (els) setElements(els);
       setIsReady(true);
+      // Show onboarding banner if not dismissed and no elements yet
+      try {
+        const dismissed = localStorage.getItem('casi_onboarding_dismissed');
+        if (!dismissed && (!els || els.length === 0)) setShowBanner(true);
+      } catch {}
     };
     init();
   }, [router, supabase]);
@@ -542,23 +547,23 @@ export default function AdminStudio() {
         .sw { min-height:100vh; background:#050505; color:#e8e8e8; font-family:'Syne',sans-serif; display:flex; flex-direction:column; }
 
         /* NAV */
-        .top-nav { display:flex; align-items:center; justify-content:space-between; padding:0 32px; height:64px; flex-shrink:0; border-bottom:1px solid #111; background:rgba(5,5,5,0.96); backdrop-filter:blur(20px); position:sticky; top:0; z-index:100; overflow:hidden; }
-        .tnl { display:flex; align-items:center; gap:32px; flex-shrink:0; }
-        .nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; flex-shrink:0; }
+        .top-nav { display:flex; align-items:center; justify-content:space-between; padding:0 32px; height:64px; flex-shrink:0; border-bottom:1px solid #111; background:rgba(5,5,5,0.96); backdrop-filter:blur(20px); position:sticky; top:0; z-index:100; }
+        .tnl { display:flex; align-items:center; gap:32px; }
+        .nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
         .nav-wm { font-size:20px; font-weight:800; color:#F58220; letter-spacing:-0.5px; }
         .nav-tabs { display:flex; gap:4px; }
         .nav-tab { font-family:'DM Mono',monospace; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; padding:7px 14px; border-radius:8px; border:none; background:none; color:#555; cursor:pointer; transition:all .2s; position:relative; }
         .nav-tab:hover { color:#e8e8e8; background:rgba(255,255,255,0.04); }
         .nav-tab.active { color:#F58220; background:rgba(245,130,32,0.08); }
         .nav-badge { position:absolute; top:2px; right:2px; background:#F58220; color:#050505; font-size:9px; font-weight:800; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
-        .tnr { display:flex; align-items:center; gap:8px; flex-shrink:0; }
-        .live-toggle { display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius:8px; border:1px solid; cursor:pointer; font-family:'Syne',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; transition:all .2s; white-space:nowrap; }
+        .tnr { display:flex; align-items:center; gap:12px; }
+        .live-toggle { display:flex; align-items:center; gap:8px; padding:8px 16px; border-radius:8px; border:1px solid; cursor:pointer; font-family:'Syne',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; transition:all .2s; }
         .lt-off { background:rgba(255,255,255,0.04); border-color:#222; color:#555; }
         .lt-on  { background:rgba(239,68,68,0.12); border-color:rgba(239,68,68,0.35); color:#f87171; }
         .live-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
         .ld-off { background:#444; }
         .ld-on  { background:#f87171; animation:blink 1.5s infinite; }
-        .btn-sm { font-family:'Syne',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; padding:8px 14px; border-radius:8px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; flex-shrink:0; }
+        .btn-sm { font-family:'Syne',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; padding:8px 16px; border-radius:8px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
         .b-orange  { background:#F58220; color:#050505; }
         .b-orange:hover { background:#ff9030; }
         .b-outline { background:rgba(255,255,255,0.04); color:#888; border:1px solid #222 !important; }
@@ -568,7 +573,7 @@ export default function AdminStudio() {
         .b-purple  { background:rgba(168,85,247,0.1); color:#c084fc; border:1px solid rgba(168,85,247,0.25) !important; }
         .b-purple:hover { background:rgba(168,85,247,0.18); }
 
-        .nav-username { font-family:'DM Mono',monospace; font-size:11px; color:#444; text-decoration:none; letter-spacing:1px; white-space:nowrap; }
+        /* BEAMS BAR */
         .beams-bar { display:flex; flex-wrap:wrap; gap:8px; padding:12px 32px; border-bottom:1px solid #0d0d0d; }
         .beam-chip { display:flex; align-items:center; gap:10px; background:#0d0d0d; border:1px solid #1c1c1c; border-radius:10px; padding:8px 14px; cursor:pointer; transition:border-color .2s; }
         .beam-chip:hover { border-color:rgba(245,130,32,0.3); }
@@ -637,6 +642,8 @@ export default function AdminStudio() {
           .live-toggle { padding:8px 10px; }
           /* Hide Backdrop + Clear from top nav on mobile */
           .studio-action-hide { display:none !important; }
+          /* Banner collapses to single column on mobile */
+          .banner-steps { grid-template-columns: 1fr !important; }
           .studio-body { padding:12px 12px 100px; }
           .beams-bar { padding:10px 12px; }
           .req-body { padding:16px 12px 100px; }
@@ -678,18 +685,19 @@ export default function AdminStudio() {
             <span className="save-status-txt" style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, color: '#333' }}>{saveStatus}</span>
             <button onClick={toggleLive} disabled={togglingLive} className={`live-toggle ${profile.is_live ? 'lt-on' : 'lt-off'}`}>
               <span className={`live-dot ${profile.is_live ? 'ld-on' : 'ld-off'}`} />
-              <span className="live-text">{profile.is_live ? 'Live' : 'Go Live'}</span>
+              {profile.is_live ? 'Live' : 'Go Live'}
             </button>
             {view === 'studio' && (
               <>
-                <button onClick={addBeam} className="btn-sm b-orange">+ Beam</button>
+                <button onClick={addBeam} className="btn-sm b-orange banner-add-beam-trigger">+ Beam</button>
                 <button onClick={() => hasBackdrop && backdropEl ? (setSelectedSlotId(backdropEl.id), setShowInfoPanel(true)) : setShowBackdropModal(true)} className={`btn-sm ${hasBackdrop ? 'b-purple' : 'b-outline'} studio-action-hide`}>
                   {hasBackdrop ? '● Backdrop' : 'Backdrop'}
                 </button>
                 <button onClick={clearAll} className="btn-sm b-danger studio-action-hide">Clear</button>
               </>
             )}
-            <a href={`/s/${profile.username}`} target="_blank" rel="noopener noreferrer" className="nav-username">
+            <a href={`/s/${profile.username}`} target="_blank" rel="noopener noreferrer"
+              style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444', textDecoration: 'none', letterSpacing: 1 }}>
               @{profile.username}
             </a>
           </div>
@@ -750,6 +758,104 @@ export default function AdminStudio() {
           </div>
         )}
 
+        {/* ── ONBOARDING BANNER ── */}
+        {showBanner && view === 'studio' && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(245,130,32,0.07) 0%, rgba(6,182,212,0.05) 100%)',
+            borderBottom: '1px solid rgba(245,130,32,0.15)',
+            padding: '0',
+            position: 'relative',
+          }}>
+            {/* Header row */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#F58220' }}>
+                  ✦ Quick setup
+                </span>
+                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333' }}>— 3 steps to go live</span>
+              </div>
+              <button
+                onClick={() => { try { localStorage.setItem('casi_onboarding_dismissed', '1'); } catch {} setShowBanner(false); }}
+                style={{ background: 'none', border: 'none', color: '#333', cursor: 'pointer', fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, padding: '4px 8px', borderRadius: 4, transition: 'color .2s' }}
+                onMouseOver={(e) => (e.currentTarget.style.color = '#888')}
+                onMouseOut={(e) => (e.currentTarget.style.color = '#333')}>
+                Dismiss ✕
+              </button>
+            </div>
+
+            {/* Steps */}
+            <div className="banner-steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, padding: '12px 24px 20px' }}>
+              {[
+                {
+                  num: '01',
+                  color: '#F58220',
+                  title: 'Add a beam slot',
+                  body: 'Hit + Beam above to add a slot to your canvas. Drag it where you want it on screen, then set a price.',
+                  action: (
+                    <button
+                      onClick={async () => {
+                        // Trigger addBeam — find the + Beam button and click it
+                        const btn = document.querySelector('.banner-add-beam-trigger') as HTMLButtonElement;
+                        if (btn) btn.click();
+                      }}
+                      style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: '#F58220', border: 'none', borderRadius: 6, padding: '7px 14px', color: '#050505', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', letterSpacing: 0.3 }}>
+                      + Add beam
+                    </button>
+                  ),
+                },
+                {
+                  num: '02',
+                  color: '#06b6d4',
+                  title: 'Add OBS browser source',
+                  body: 'In OBS, add a Browser Source. Paste your overlay URL from Settings. Set background to transparent.',
+                  action: (
+                    <button
+                      onClick={() => setView('settings')}
+                      style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.25)', borderRadius: 6, padding: '7px 14px', color: '#06b6d4', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', letterSpacing: 0.3 }}>
+                      Get URL →
+                    </button>
+                  ),
+                },
+                {
+                  num: '03',
+                  color: '#4ade80',
+                  title: 'Go live and share',
+                  body: 'Hit Go Live, copy your viewer link, and share it in your stream chat. Viewers can now rent your slots.',
+                  action: (
+                    <span style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', letterSpacing: 0.5 }}>
+                      Use the Go Live button above ↑
+                    </span>
+                  ),
+                },
+              ].map((step, i) => (
+                <div key={step.num} style={{
+                  padding: '16px 20px',
+                  borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                  display: 'flex', flexDirection: 'column',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, color: step.color, background: `${step.color}15`, border: `1px solid ${step.color}30`, borderRadius: 4, padding: '2px 6px' }}>{step.num}</span>
+                    <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 700, color: '#e8e8e8' }}>{step.title}</span>
+                  </div>
+                  <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, lineHeight: 1.6, color: '#555', flex: 1 }}>{step.body}</p>
+                  {step.action}
+                </div>
+              ))}
+            </div>
+
+            {/* Progress indicator — dims steps as elements are added */}
+            <div style={{ display: 'flex', gap: 4, padding: '0 24px 14px' }}>
+              {[
+                elements.length > 0,
+                false, // OBS step — can't auto-detect
+                profile?.is_live,
+              ].map((done, i) => (
+                <div key={i} style={{ height: 2, flex: 1, borderRadius: 1, background: done ? '#F58220' : '#1c1c1c', transition: 'background .4s' }} />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ACTIVE BEAMS BAR */}
         {activeBookings.length > 0 && view === 'studio' && (
           <div className="beams-bar">
@@ -776,108 +882,87 @@ export default function AdminStudio() {
         {view === 'studio' && (
           <div className="studio-body">
 
-            {/* Canvas wrapper — position:relative so overlay buttons can anchor to it */}
-            <div style={{ position: 'relative' }}>
-              <div className="canvas-wrap" ref={setMonitorRef}
-                onClick={(e) => {
-                  if ((e.target as HTMLElement).classList.contains('canvas-wrap')) {
-                    setSelectedSlotId(null);
-                    setShowInfoPanel(false);
-                  }
-                }}>
-                {dimensions.width > 0 && elements.map((el) => {
-                  const isSelected = selectedSlotId === el.id;
-                  return (
-                    <Rnd key={el.id}
-                      size={{ width: el.is_background ? '100%' : `${(el.width / 100) * dimensions.width}px`, height: el.is_background ? '100%' : `${(el.height / 100) * dimensions.height}px` }}
-                      position={{ x: el.is_background ? 0 : (el.pos_x / 100) * dimensions.width, y: el.is_background ? 0 : (el.pos_y / 100) * dimensions.height }}
-                      onDragStart={(_e, d) => {
-                        dragStartPos.current = { x: d.x, y: d.y };
-                        isDragging.current = false;
-                      }}
-                      onDrag={(_e, d) => {
-                        if (dragStartPos.current) {
-                          const dist = Math.abs(d.x - dragStartPos.current.x) + Math.abs(d.y - dragStartPos.current.y);
-                          if (dist > 8) isDragging.current = true;
-                        }
-                      }}
-                      onDragStop={(_e, d) => {
-                        if (!isDragging.current) {
-                          if (!el.is_background) { setSelectedSlotId(el.id); setShowInfoPanel(false); }
-                        } else {
-                          updateLayer(el.id, { pos_x: (d.x / dimensions.width) * 100, pos_y: (d.y / dimensions.height) * 100 });
-                        }
-                        isDragging.current = false;
-                      }}
-                      onResizeStop={(_e, _dir, ref, _delta, pos) => { updateLayer(el.id, { width: (ref.offsetWidth / dimensions.width) * 100, height: (ref.offsetHeight / dimensions.height) * 100, pos_x: (pos.x / dimensions.width) * 100, pos_y: (pos.y / dimensions.height) * 100 }); }}
-                      disableDragging={el.is_background} enableResizing={!el.is_background} bounds="parent"
-                      style={{ zIndex: el.is_background ? 0 : (isSelected ? 40 : 30) }}>
-                      <div style={{ position: 'relative', width: '100%', height: '100%', border: el.is_background ? 'none' : isSelected ? '2px solid #F58220' : '1.5px solid rgba(245,130,32,0.3)', borderRadius: el.is_background ? 0 : 6, opacity: el.locked ? 0.7 : 1 }}>
-                        {!el.image_url ? (
-                          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(245,130,32,0.35)'}`, borderRadius: el.is_background ? 12 : 6, background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(245,130,32,0.04)' }}>
-                            {el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>}
-                            <span style={{ fontSize: el.is_background ? 24 : 14, marginBottom: 2 }}>{el.is_background ? '🖼️' : '✦'}</span>
-                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, textTransform: 'uppercase', letterSpacing: 1, color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(245,130,32,0.6)' }}>
-                              {el.locked ? 'Locked' : el.is_background ? 'Backdrop' : 'Beam'}
-                            </span>
-                            {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 500, marginTop: 2, color: el.is_background ? 'rgba(168,85,247,0.9)' : '#F58220' }}>${el.price_value}/{el.price_unit}</span>}
-                          </div>
-                        ) : (
-                          <img src={el.image_url} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'fill', pointerEvents: 'none' }} alt="" />
-                        )}
-                        {isSelected && !el.is_background && (
-                          <div style={{ position: 'absolute', top: -2, left: -2, right: -2, bottom: -2, border: '2px solid #F58220', borderRadius: 8, pointerEvents: 'none', boxShadow: '0 0 0 3px rgba(245,130,32,0.15)' }} />
-                        )}
-                      </div>
-                    </Rnd>
-                  );
-                })}
-              </div>
-
-              {/* ── OVERLAY BUTTONS — rendered OUTSIDE Rnd so touch events work reliably ── */}
-              {dimensions.width > 0 && elements.filter(el => !el.is_background).map((el) => {
-                const canvasEl = document.querySelector('.canvas-wrap');
-                const canvasRect = canvasEl?.getBoundingClientRect();
-                // Position in % relative to canvas
-                const left = (el.pos_x / 100) * dimensions.width;
-                const top = (el.pos_y / 100) * dimensions.height;
-                const w = (el.width / 100) * dimensions.width;
+            {/* Canvas */}
+            <div className="canvas-wrap" ref={setMonitorRef}
+              onClick={(e) => {
+                if ((e.target as HTMLElement).classList.contains('canvas-wrap')) {
+                  setSelectedSlotId(null);
+                  setShowInfoPanel(false);
+                }
+              }}>
+              {dimensions.width > 0 && elements.map((el) => {
+                const isSelected = selectedSlotId === el.id;
                 return (
-                  <div key={`btns-${el.id}`} style={{
-                    position: 'absolute',
-                    left: left,
-                    top: top,
-                    width: w,
-                    height: (el.height / 100) * dimensions.height,
-                    zIndex: 200,
-                    pointerEvents: 'none', // let drags pass through
-                  }}>
-                    {/* Delete — top-right corner, big touch target */}
-                    <button
-                      style={{ position: 'absolute', top: 0, right: 0, width: 36, height: 36, background: 'rgba(220,38,38,0.92)', border: 'none', borderRadius: '0 6px 0 8px', color: 'white', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'all', touchAction: 'manipulation', zIndex: 201 }}
-                      onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); deleteLayer(el.id); }}>
-                      ✕
-                    </button>
-                    {/* Select/Info — top-left corner, big touch target */}
-                    <button
-                      style={{ position: 'absolute', top: 0, left: 0, width: 36, height: 36, background: 'rgba(0,0,0,0.75)', border: 'none', borderRadius: '6px 0 8px 0', color: '#888', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'all', touchAction: 'manipulation', zIndex: 201 }}
-                      onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); setSelectedSlotId(el.id); setShowInfoPanel(false); }}>
-                      ⚙
-                    </button>
-                  </div>
+                  <Rnd key={el.id}
+                    size={{ width: el.is_background ? '100%' : `${(el.width / 100) * dimensions.width}px`, height: el.is_background ? '100%' : `${(el.height / 100) * dimensions.height}px` }}
+                    position={{ x: el.is_background ? 0 : (el.pos_x / 100) * dimensions.width, y: el.is_background ? 0 : (el.pos_y / 100) * dimensions.height }}
+                    onDragStart={(_e, d) => {
+                      dragStartPos.current = { x: d.x, y: d.y };
+                      isDragging.current = false;
+                    }}
+                    onDrag={(_e, d) => {
+                      if (dragStartPos.current) {
+                        const dist = Math.abs(d.x - dragStartPos.current.x) + Math.abs(d.y - dragStartPos.current.y);
+                        if (dist > 6) isDragging.current = true;
+                      }
+                    }}
+                    onDragStop={(_e, d) => {
+                      if (!isDragging.current) {
+                        // It was a tap — select beam, show sliders (not info panel)
+                        if (!el.is_background) {
+                          setSelectedSlotId(el.id);
+                          setShowInfoPanel(false);
+                        }
+                      } else {
+                        updateLayer(el.id, { pos_x: (d.x / dimensions.width) * 100, pos_y: (d.y / dimensions.height) * 100 });
+                      }
+                      isDragging.current = false;
+                    }}
+                    onResizeStop={(_e, _dir, ref, _delta, pos) => { updateLayer(el.id, { width: (ref.offsetWidth / dimensions.width) * 100, height: (ref.offsetHeight / dimensions.height) * 100, pos_x: (pos.x / dimensions.width) * 100, pos_y: (pos.y / dimensions.height) * 100 }); }}
+                    disableDragging={el.is_background} enableResizing={!el.is_background} bounds="parent"
+                    style={{ zIndex: el.is_background ? 0 : (isSelected ? 40 : 30) }}>
+                    <div
+                      style={{ position: 'relative', width: '100%', height: '100%', border: el.is_background ? 'none' : isSelected ? '2px solid #F58220' : '1.5px solid rgba(245,130,32,0.3)', borderRadius: el.is_background ? 0 : 6, opacity: el.locked ? 0.7 : 1 }}>
+                      {!el.image_url ? (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(245,130,32,0.35)'}`, borderRadius: el.is_background ? 12 : 6, background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(245,130,32,0.04)' }}>
+                          {el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>}
+                          <span style={{ fontSize: el.is_background ? 24 : 16, marginBottom: 4 }}>{el.is_background ? '🖼️' : '✦'}</span>
+                          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(245,130,32,0.6)' }}>
+                            {el.locked ? 'No requests' : el.is_background ? 'Backdrop' : 'Beam'}
+                          </span>
+                          {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : '#F58220' }}>${el.price_value}/{el.price_unit}</span>}
+                        </div>
+                      ) : (
+                        <img src={el.image_url} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'fill', pointerEvents: 'none' }} alt="" />
+                      )}
+                      {/* Selection glow */}
+                      {isSelected && !el.is_background && (
+                        <div style={{ position: 'absolute', top: -2, left: -2, right: -2, bottom: -2, border: '2px solid #F58220', borderRadius: 8, pointerEvents: 'none', boxShadow: '0 0 0 3px rgba(245,130,32,0.15)' }} />
+                      )}
+                      {/* Delete button — large touch target */}
+                      {!el.is_background && (
+                        <button
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => { e.stopPropagation(); deleteLayer(el.id); }}
+                          style={{ position: 'absolute', top: 0, right: 0, width: 32, height: 32, background: 'rgba(239,68,68,0.9)', border: 'none', borderRadius: '0 6px 0 6px', color: 'white', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </Rnd>
                 );
               })}
             </div>
 
-            {/* Slider position panel */}
+            {/* Slider position panel — shown when a non-background beam is selected */}
             {selectedEl && !selectedEl.is_background && (
               <div className="slider-panel">
                 <div className="slider-panel-header">
                   <span className="slider-panel-title">
-                    ✦ {selectedEl.price_value > 0 ? `$${selectedEl.price_value}/${selectedEl.price_unit}` : 'Beam — no price set'}
+                    ✦ {selectedEl.price_value > 0 ? `$${selectedEl.price_value}/${selectedEl.price_unit}` : 'Beam'}
                   </span>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => setShowInfoPanel(true)}
+                    <button onClick={() => { setShowInfoPanel(true); }}
                       style={{ background: 'rgba(245,130,32,0.08)', border: '1px solid rgba(245,130,32,0.2)', borderRadius: 8, color: '#F58220', fontFamily: "'DM Mono', monospace", fontSize: 11, padding: '8px 14px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>
                       Info / Price
                     </button>
@@ -901,7 +986,7 @@ export default function AdminStudio() {
             <div className="canvas-hint">
               {selectedEl && !selectedEl.is_background
                 ? 'Drag beam to move · Sliders for precise control · Info/Price for settings'
-                : 'Tap ⚙ to select beam · Drag to move · ✕ to delete'}
+                : 'Tap a beam to select · Drag to move · Resize from corners'}
             </div>
           </div>
         )}
