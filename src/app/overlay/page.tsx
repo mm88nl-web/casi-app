@@ -294,17 +294,17 @@ function OverlayContent() {
     .is('payment_intent_id', null);
 
   const { data: existing } = await supabase.from('bookings').select('id')
-    .eq('profile_id', profile.id)
-    .eq('element_id', selectedSlot.id)
-    .eq('viewer_name', savedViewerName)
-    .eq('status', 'pending')
-    .single();
-  if (existing) {
-    setSubmitting(false);
-    showNotif('You already have a pending request', 'warning');
-    closeSlot();
-    return;
-  }
+  .eq('profile_id', profile.id)
+  .eq('element_id', selectedSlot.id)
+  .eq('viewer_name', savedViewerName)
+  .in('status', ['pending', 'active', 'approved_queued'])
+  .single();
+if (existing) {
+  setSubmitting(false);
+  showNotif('You already have a booking for this slot', 'warning');
+  closeSlot();
+  return;
+}
 
   const currentQueue = queueCounts[selectedSlot.id] || 0;
 
