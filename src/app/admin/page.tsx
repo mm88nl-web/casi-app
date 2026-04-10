@@ -467,24 +467,10 @@ export default function AdminStudio() {
   const slotOccupied = activeBookings.some(b => b.element_id === booking.element_id);
 
   if (slotOccupied || booking.is_queued) {
-    // Queue booking — needs payment first
-    const res = await fetch('/api/stripe/approve-queue', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ booking_id: booking.id }),
-    });
-    const json = await res.json();
-    if (json.checkout_url) {
-      // Update status to approved_queued, viewer pays when they return
-      await supabase
-        .from('bookings')
-        .update({ status: 'approved_queued', approved_at: new Date().toISOString() })
-        .eq('id', booking.id);
-      // Show payment link to streamer to share with viewer
-      // For now copy to clipboard
-      navigator.clipboard.writeText(json.checkout_url);
-      alert('Payment link copied! Share with viewer: ' + json.checkout_url);
-    }
+    await supabase
+      .from('bookings')
+      .update({ status: 'approved_queued', approved_at: new Date().toISOString() })
+      .eq('id', booking.id);
   } else {
     // Direct booking with payment already confirmed
     await supabase
