@@ -12,7 +12,6 @@ export async function POST(req: Request) {
   const body = await req.text();
   const sig = req.headers.get('stripe-signature');
 
-  // If no webhook secret set, just parse directly (dev fallback)
   let event: any;
   if (!process.env.STRIPE_WEBHOOK_SECRET || !sig) {
     event = JSON.parse(body);
@@ -32,9 +31,13 @@ export async function POST(req: Request) {
   console.log('Webhook event received:', event.type);
 
   if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
+    const thinSession = event.data.object as any;
+    const sessionId = thinSession.id;
+
+    // Fetch full session from Stripe to get metadata (handles Thin payload style)
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
     const booking_id = session.metadata?.booking_id;
-    const payment_intent_id = session.payment_intent;
+    const payment_intent_id = session.payment_intent as string;
 
     console.log('Checkout completed — booking_id:', booking_id, 'pi:', payment_intent_id);
 
@@ -50,7 +53,7 @@ export async function POST(req: Request) {
         console.log('payment_intent_id saved to booking', booking_id);
       }
     } else {
-      console.error('Missing booking_id or payment_intent_id in session metadata');
+      console.error('Missing booking_id or payment_intent_id', { booking_id, payment_intent_id });
     }
   }
 
@@ -60,4 +63,3 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ received: true });
 }
-
