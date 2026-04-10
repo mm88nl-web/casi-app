@@ -312,13 +312,20 @@ function OverlayContent() {
       return;
     }
 
-    // Call authorize to get Stripe Checkout URL
+    // --- DEBUG VERSION ---
+    console.log('Calling authorize with booking_id:', newBooking.id);
+    
     const res = await fetch('/api/stripe/authorize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ booking_id: newBooking.id }),
     });
-    const { checkout_url, error: stripeError } = await res.json();
+
+    const json = await res.json();
+    console.log('Authorize response:', JSON.stringify(json));
+    
+    const { checkout_url, error: stripeError } = json;
+    // --- END DEBUG VERSION ---
 
     if (stripeError || !checkout_url) {
       // Stripe not set up — fall back to free/unapproved flow

@@ -10,26 +10,43 @@ const supabase = createClient(
 export async function POST(req: Request) {
   const { booking_id } = await req.json();
 
-  const { data: booking } = await supabase
+  // Fetch booking
+  const { data: booking, error: bookingError } = await supabase
     .from('bookings')
-    .select(`
-      *,
-      overlay_elements ( price_value, price_unit ),
-      profiles ( stripe_account_id, username )
-    `)
+    .select('*')
     .eq('id', booking_id)
     .single();
 
-  if (!booking) {
+  if (!booking || bookingError) {
+    console.error('Booking fetch failed:', bookingError);
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
 
-  const { price_value, price_unit } = booking.overlay_elements;
-  const { stripe_account_id, username } = booking.profiles;
+  // Fetch element
+  const { data: element } = await supabase
+    .from('overlay_elements')
+    .select('price_value, price_unit')
+    .eq('id', booking.element_id)
+    .single();
 
-  if (!stripe_account_id) {
+  // Fetch streamer profile
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('stripe_account_id, username')
+    .eq('id', booking.profile_id)
+    .single();
+
+  if (!element || !profile) {
+    console.error('Element or profile missing', { element, profile });
+    return NextResponse.json({ error: 'Missing element or profile' }, { status: 400 });
+  }
+
+  if (!profile.stripe_account_id) {
+    console.error('No stripe_account_id on profile', profile);
     return NextResponse.json({ error: 'Streamer has no Stripe account' }, { status: 400 });
   }
+
+  const { price_value, price_unit } = element;
 
   const amount =
     price_unit === 'min'
@@ -44,27 +61,26 @@ export async function POST(req: Request) {
     payment_intent_data: {
       capture_method: 'manual',
       application_fee_amount: platformFee,
-      transfer_data: { destination: stripe_account_id },
+      transfer_data: { destination: profile.stripe_account_id },
     },
     line_items: [
       {
         price_data: {
           currency: 'eur',
           product_data: {
-            name: `Beam slot — ${price_value}/${price_unit}`,
-            description: `${booking.duration_minutes} min on ${username}'s stream`,
+            name: `Beam slot — €${price_value}/${price_unit}`,
+            description: `${booking.duration_minutes} min on ${profile.username}'s stream`,
           },
           unit_amount: amount,
         },
         quantity: 1,
       },
     ],
-    success_url: `${appUrl}/overlay?s=${username}&payment=success&booking_id=${booking_id}`,
-    cancel_url: `${appUrl}/overlay?s=${username}&payment=cancelled&booking_id=${booking_id}`,
+    success_url: `${appUrl}/overlay?s=${profile.username}&payment=success&booking_id=${booking_id}`,
+    cancel_url: `${appUrl}/overlay?s=${profile.username}&payment=cancelled&booking_id=${booking_id}`,
     metadata: { booking_id },
   });
 
-  // Store payment intent id (available after checkout completes via webhook)
   await supabase
     .from('bookings')
     .update({ original_amount_cents: amount })
