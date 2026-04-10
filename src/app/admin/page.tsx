@@ -1175,7 +1175,7 @@ export default function AdminStudio() {
                   </div>
                 )}
 
-                {{approvedBackdrop.length > 0 && (
+                {approvedBackdrop.length > 0 && (
   <div style={{ marginBottom: 20 }}>
     <div className="sec-head" style={{ color: '#c084fc', opacity: 0.7 }}>⏳ Approved queue — {approvedBackdrop.length}</div>
     {approvedBackdrop.map(booking => (
