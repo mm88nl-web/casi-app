@@ -1163,7 +1163,11 @@ export default function AdminStudio() {
                           {booking.message && <div className="req-msg">"{booking.message}"</div>}
                         </div>
                         <div className="req-actions">
-                          <button onClick={() => approveBooking(booking)} className="act-btn" style={{ background: '#F58220', color: '#050505' }}>Queue</button>
+                          <button onClick={() => approveBooking(booking)} className="act-btn"
+  disabled={!booking.payment_intent_id}
+  style={{ background: !booking.payment_intent_id ? '#1c1c1c' : '#F58220', color: !booking.payment_intent_id ? '#444' : '#050505', cursor: !booking.payment_intent_id ? 'not-allowed' : 'pointer' }}>
+  {!booking.payment_intent_id ? 'Awaiting payment' : 'Queue'}
+</button>
                           <button onClick={() => denyBooking(booking.id)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
                         </div>
                       </div>
@@ -1282,7 +1286,11 @@ export default function AdminStudio() {
                           </div>
                         </div>
                         <div className="req-actions">
-                          <button onClick={() => approveBooking(booking)} className="act-btn" style={{ background: '#c084fc', color: '#050505' }}>Queue</button>
+                          <button onClick={() => approveBooking(booking)} className="act-btn"
+  disabled={!booking.payment_intent_id}
+  style={{ background: !booking.payment_intent_id ? '#1c1c1c' : '#c084fc', color: !booking.payment_intent_id ? '#444' : '#050505', cursor: !booking.payment_intent_id ? 'not-allowed' : 'pointer' }}>
+  {!booking.payment_intent_id ? 'Awaiting payment' : 'Queue'}
+</button>
                           <button onClick={() => denyBooking(booking.id)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
                         </div>
                       </div>
