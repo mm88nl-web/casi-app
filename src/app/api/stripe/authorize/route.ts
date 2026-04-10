@@ -23,11 +23,13 @@ export async function POST(req: Request) {
   }
 
   // Fetch element
-  const { data: element } = await supabase
-    .from('overlay_elements')
-    .select('price_value, price_unit')
-    .eq('id', booking.element_id)
-    .single();
+  const { data: element, error: elementError } = await supabase
+  .from('overlay_elements')
+  .select('price_value, price_unit')
+  .eq('id', booking.element_id)
+  .single();
+
+console.log('element fetch — booking.element_id:', booking.element_id, 'result:', element, 'error:', elementError);
 
   // Fetch streamer profile
   const { data: profile } = await supabase
