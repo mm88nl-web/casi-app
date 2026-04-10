@@ -479,11 +479,16 @@ export default function AdminStudio() {
   };
 
   const denyBooking = async (id: string) => {
-    setPreviewBooking(null);
-    await supabase.from('bookings').update({ status: 'denied' }).eq('id', id);
-    setPendingBookings(prev => prev.filter(b => b.id !== id));
-    setQueuedBookings(prev => prev.filter(b => b.id !== id));
-  };
+  setPreviewBooking(null);
+  // Cancel Stripe PaymentIntent + update DB
+  await fetch('/api/stripe/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ booking_id: id }),
+  });
+  setPendingBookings(prev => prev.filter(b => b.id !== id));
+  setQueuedBookings(prev => prev.filter(b => b.id !== id));
+};
 
   const kickBeam = useCallback(async (booking: any) => {
     setSelectedSlotId(null);
@@ -750,8 +755,20 @@ export default function AdminStudio() {
               )}
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => denyBooking(previewBooking.id)} style={{ flex: 1, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: 12, color: '#f87171', fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, textTransform: 'uppercase', cursor: 'pointer' }}>Deny</button>
-                <button onClick={() => approveBooking(previewBooking)} style={{ flex: 1, background: slotOccupiedForPreview ? '#F58220' : '#06b6d4', border: 'none', borderRadius: 10, padding: 12, color: '#050505', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 13, textTransform: 'uppercase', cursor: 'pointer' }}>
-                  {slotOccupiedForPreview ? 'Approve → Queue' : 'Approve → Live'}
+                <button 
+  onClick={() => approveBooking(previewBooking)} 
+  className="act-btn"
+  // Changed 'booking' to 'previewBooking'
+  disabled={!previewBooking?.payment_intent_id}
+  style={{ 
+    background: !previewBooking?.payment_intent_id ? '#1c1c1c' : slotOccupiedForPreview ? '#F58220' : '#06b6d4', 
+    color: !previewBooking?.payment_intent_id ? '#444' : '#050505',
+    cursor: !previewBooking?.payment_intent_id ? 'not-allowed' : 'pointer',
+    // Added your modal styles back in
+    flex: 1, border: 'none', borderRadius: 10, padding: 12, fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 13, textTransform: 'uppercase'
+  }}
+>
+  {!previewBooking?.payment_intent_id ? 'Awaiting payment' : slotOccupiedForPreview ? 'Approve → Queue' : 'Approve → Live'}
                 </button>
               </div>
             </div>

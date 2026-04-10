@@ -251,12 +251,17 @@ function OverlayContent() {
   };
 
   const cancelBooking = async (bookingId: string) => {
-    setCancelling(bookingId);
-    await supabase.from('bookings').update({ status:'denied' }).eq('id', bookingId);
-    setCancelling(null);
-    showNotif('Booking cancelled','warning');
-    if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
-  };
+  setCancelling(bookingId);
+  // Call cancel API which handles both Stripe + DB
+  await fetch('/api/stripe/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ booking_id: bookingId }),
+  });
+  setCancelling(null);
+  showNotif('Booking cancelled', 'warning');
+  if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+};
 
   const openSlot = (el: any, joinQueue: boolean, extend=false) => {
     setSelectedSlot(el); setIsQueue(joinQueue); setIsExtend(extend);
@@ -275,70 +280,73 @@ function OverlayContent() {
   };
 
   const submitBooking = async () => {
-    if (!savedViewerName || !imageUrl || !selectedSlot) return;
-    setSubmitting(true);
+  if (!savedViewerName || !imageUrl || !selectedSlot) return;
+  setSubmitting(true);
 
-    // Check for duplicate pending
-    const { data: existing } = await supabase.from('bookings').select('id')
-      .eq('profile_id', profile.id).eq('element_id', selectedSlot.id)
-      .eq('viewer_name', savedViewerName).eq('status', 'pending').single();
-    if (existing) {
+  const { data: existing } = await supabase.from('bookings').select('id')
+    .eq('profile_id', profile.id)
+    .eq('element_id', selectedSlot.id)
+    .eq('viewer_name', savedViewerName)
+    .eq('status', 'pending')
+    .single();
+  if (existing) {
+    setSubmitting(false);
+    showNotif('You already have a pending request', 'warning');
+    closeSlot();
+    return;
+  }
+
+  const currentQueue = queueCounts[selectedSlot.id] || 0;
+
+  const { data: newBooking, error: insertError } = await supabase.from('bookings').insert({
+    profile_id: profile.id,
+    element_id: selectedSlot.id,
+    viewer_name: savedViewerName,
+    image_url: imageUrl,
+    message: message.trim() || null,
+    duration_minutes: duration,
+    price_value: selectedSlot.price_value,
+    price_unit: selectedSlot.price_unit,
+    status: 'pending',
+    is_queued: isQueue || isExtend,
+    queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
+  }).select().single();
+
+  if (insertError || !newBooking) {
+    console.error('Insert error:', insertError);
+    showNotif('Failed to create booking', 'error');
+    setSubmitting(false);
+    return;
+  }
+
+  if (isQueue || isExtend) {
+    showNotif(isExtend ? 'Extension requested!' : "Request sent — you'll pay when approved", 'queue');
+    setSubmitting(false);
+    closeSlot();
+    if (profile?.id) await loadData(profile.id, savedViewerName);
+  } else {
+    try {
+      const res = await fetch('/api/stripe/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: newBooking.id }),
+      });
+      const json = await res.json();
+      if (json.checkout_url) {
+        window.location.href = json.checkout_url;
+      } else {
+        console.error('Stripe error:', json.error);
+        showNotif(json.error || 'Payment failed to initialize', 'error');
+        setSubmitting(false);
+      }
+    } catch (err) {
+      console.error('Authorize fetch failed:', err);
+      showNotif('Server error. Please try again.', 'error');
       setSubmitting(false);
-      showNotif('You already have a pending request', 'warning');
-      closeSlot();
-      return;
     }
+  }
+};
 
-    const currentQueue = queueCounts[selectedSlot.id] || 0;
-
-    // Insert booking first to get an id
-    const { data: newBooking, error } = await supabase.from('bookings').insert({
-      profile_id: profile.id,
-      element_id: selectedSlot.id,
-      viewer_name: savedViewerName,
-      image_url: imageUrl,
-      message,
-      price_value: selectedSlot.price_value,
-      price_unit: selectedSlot.price_unit,
-      duration_minutes: duration,
-      status: 'pending',
-      queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
-      is_queued: isQueue || isExtend,
-    }).select().single();
-
-    if (error || !newBooking) {
-      setSubmitting(false);
-      showNotif('Something went wrong', 'warning');
-      return;
-    }
-
-    // --- DEBUG VERSION ---
-    console.log('Calling authorize with booking_id:', newBooking.id);
-    
-    const res = await fetch('/api/stripe/authorize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ booking_id: newBooking.id }),
-    });
-
-    const json = await res.json();
-    console.log('Authorize response:', JSON.stringify(json));
-    
-    const { checkout_url, error: stripeError } = json;
-    // --- END DEBUG VERSION ---
-
-    if (stripeError || !checkout_url) {
-      // Stripe not set up — fall back to free/unapproved flow
-      setSubmitting(false);
-      closeSlot();
-      showNotif(isExtend ? 'Extension requested!' : isQueue ? 'Request sent — streamer will review' : 'Request sent!', isQueue || isExtend ? 'queue' : 'success');
-      if (profile?.id) await loadData(profile.id, savedViewerName);
-      return;
-    }
-
-    // Redirect to Stripe Checkout
-    window.location.href = checkout_url;
-  };
 
   const estimatedCost = selectedSlot
     ? selectedSlot.price_unit==='min'
