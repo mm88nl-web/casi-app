@@ -1102,8 +1102,9 @@ export default function AdminStudio() {
                         </div>
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
-                            style={{ background: activeBookings.some(b => b.element_id === booking.element_id) ? '#F58220' : '#06b6d4', color: '#050505' }}>
-                            {activeBookings.some(b => b.element_id === booking.element_id) ? 'Queue' : 'Approve'}
+                            disabled={!booking.payment_intent_id}
+                            style={{ background: !booking.payment_intent_id ? '#1c1c1c' : activeBookings.some(b => b.element_id === booking.element_id) ? '#F58220' : '#06b6d4', color: !booking.payment_intent_id ? '#444' : '#050505', cursor: !booking.payment_intent_id ? 'not-allowed' : 'pointer' }}>
+                            {!booking.payment_intent_id ? 'Awaiting payment' : activeBookings.some(b => b.element_id === booking.element_id) ? 'Queue' : 'Approve'}
                           </button>
                           <button onClick={() => denyBooking(booking.id)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
                         </div>
@@ -1221,8 +1222,9 @@ export default function AdminStudio() {
                         </div>
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
-                            style={{ background: '#c084fc', color: '#050505' }}>
-                            {activeBookings.some(b => b.element_id === booking.element_id) ? 'Queue' : 'Approve'}
+                            disabled={!booking.payment_intent_id}
+                            style={{ background: !booking.payment_intent_id ? '#1c1c1c' : '#c084fc', color: !booking.payment_intent_id ? '#444' : '#050505', cursor: !booking.payment_intent_id ? 'not-allowed' : 'pointer' }}>
+                            {!booking.payment_intent_id ? 'Awaiting payment' : activeBookings.some(b => b.element_id === booking.element_id) ? 'Queue' : 'Approve'}
                           </button>
                           <button onClick={() => denyBooking(booking.id)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
                         </div>
