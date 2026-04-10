@@ -283,6 +283,16 @@ function OverlayContent() {
   if (!savedViewerName || !imageUrl || !selectedSlot) return;
   setSubmitting(true);
 
+  // Clean up any stale unpaid pending bookings for this slot+viewer
+  await supabase
+    .from('bookings')
+    .update({ status: 'denied' })
+    .eq('profile_id', profile.id)
+    .eq('element_id', selectedSlot.id)
+    .eq('viewer_name', savedViewerName)
+    .eq('status', 'pending')
+    .is('payment_intent_id', null);
+
   const { data: existing } = await supabase.from('bookings').select('id')
     .eq('profile_id', profile.id)
     .eq('element_id', selectedSlot.id)

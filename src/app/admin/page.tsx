@@ -463,20 +463,47 @@ export default function AdminStudio() {
   }, [supabase]);
 
   const approveBooking = async (booking: any) => {
-    setPreviewBooking(null);
-    const slotOccupied = activeBookings.some(b => b.element_id === booking.element_id);
-    if (slotOccupied) {
-      await supabase.from('bookings').update({ status: 'approved_queued', approved_at: new Date().toISOString() }).eq('id', booking.id);
-    } else {
-      await supabase.from('bookings').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', booking.id);
-      if (booking.element_id) {
-        await supabase.from('overlay_elements').update({ image_url: booking.image_url }).eq('id', booking.element_id);
-        setElements(prev => prev.map(el => el.id === booking.element_id ? { ...el, image_url: booking.image_url } : el));
-      }
+  setPreviewBooking(null);
+  const slotOccupied = activeBookings.some(b => b.element_id === booking.element_id);
+
+  if (slotOccupied || booking.is_queued) {
+    // Queue booking — needs payment first
+    const res = await fetch('/api/stripe/approve-queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_id: booking.id }),
+    });
+    const json = await res.json();
+    if (json.checkout_url) {
+      // Update status to approved_queued, viewer pays when they return
+      await supabase
+        .from('bookings')
+        .update({ status: 'approved_queued', approved_at: new Date().toISOString() })
+        .eq('id', booking.id);
+      // Show payment link to streamer to share with viewer
+      // For now copy to clipboard
+      navigator.clipboard.writeText(json.checkout_url);
+      alert('Payment link copied! Share with viewer: ' + json.checkout_url);
     }
-    setPendingBookings(prev => prev.filter(b => b.id !== booking.id));
-    setQueuedBookings(prev => prev.filter(b => b.id !== booking.id));
-  };
+  } else {
+    // Direct booking with payment already confirmed
+    await supabase
+      .from('bookings')
+      .update({ status: 'active', started_at: new Date().toISOString() })
+      .eq('id', booking.id);
+    if (booking.element_id) {
+      await supabase
+        .from('overlay_elements')
+        .update({ image_url: booking.image_url })
+        .eq('id', booking.element_id);
+      setElements(prev => prev.map(el =>
+        el.id === booking.element_id ? { ...el, image_url: booking.image_url } : el
+      ));
+    }
+  }
+  setPendingBookings(prev => prev.filter(b => b.id !== booking.id));
+  setQueuedBookings(prev => prev.filter(b => b.id !== booking.id));
+};
 
   const denyBooking = async (id: string) => {
   setPreviewBooking(null);
@@ -491,10 +518,16 @@ export default function AdminStudio() {
 };
 
   const kickBeam = useCallback(async (booking: any) => {
-    setSelectedSlotId(null);
-    setShowInfoPanel(false);
-    await expireBooking(booking);
-  }, [expireBooking]);
+  setSelectedSlotId(null);
+  setShowInfoPanel(false);
+  // Call end-early API for proration + Stripe capture
+  await fetch('/api/stripe/end-early', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ booking_id: booking.id }),
+  });
+  if (profile?.id) loadBookings(profile.id);
+}, [profile?.id, loadBookings]);
 
   const copyUrl = (url: string, key: string) => {
     navigator.clipboard.writeText(url);
