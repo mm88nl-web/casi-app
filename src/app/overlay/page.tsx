@@ -329,8 +329,8 @@ function OverlayContent() {
     return;
   }
 
-  if (isQueue || isExtend) {
-    showNotif(isExtend ? 'Extension requested!' : "Request sent — you'll pay when approved", 'queue');
+  if (isExtend) {
+    showNotif('Extension requested!', 'queue');
     setSubmitting(false);
     closeSlot();
     if (profile?.id) await loadData(profile.id, savedViewerName);
@@ -650,6 +650,22 @@ function OverlayContent() {
                   </div>
                 </div>
               </div>
+{isQueue && (() => {
+  const active = activeBookings.find(b => b.element_id === selectedSlot?.id);
+  if (!active) return null;
+  const remaining = getSecondsRemaining(active) / 60;
+  const queue = approvedQueuedBookings.filter(b => b.element_id === selectedSlot?.id);
+  const queueMinutes = queue.reduce((sum, b) => sum + b.duration_minutes, 0);
+  const wait = Math.round(remaining + queueMinutes);
+  const ahead = queue.length;
+  return (
+    <div style={{ background: 'rgba(245,130,32,0.06)', border: '1px solid rgba(245,130,32,0.15)', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: '#555', marginBottom: 4 }}>Estimated wait</div>
+      <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 15, fontWeight: 700, color: '#F58220' }}>~{wait} min</div>
+      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', marginTop: 2 }}>{ahead} booking{ahead !== 1 ? 's' : ''} ahead of you</div>
+    </div>
+  );
+})()}
               <div className="bf-footer">
                 <div>
                   <div className="bf-cost-lbl">Estimated cost</div>

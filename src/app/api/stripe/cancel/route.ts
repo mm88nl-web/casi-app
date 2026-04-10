@@ -16,13 +16,21 @@ export async function POST(req: Request) {
     .eq('id', booking_id)
     .single();
 
-  if (!booking?.payment_intent_id) {
-    return NextResponse.json({ error: 'No payment intent found' }, { status: 404 });
+  if (!booking) {
+    return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
 
-  // Only cancel if not yet active (no proration needed)
-  if (booking.status === 'pending' || booking.status === 'approved_queued') {
-    await stripe.paymentIntents.cancel(booking.payment_intent_id);
+  if (booking.payment_intent_id) {
+    const pi = await stripe.paymentIntents.retrieve(booking.payment_intent_id);
+
+    if (pi.status === 'requires_capture') {
+      // Authorized but not captured — void it
+      await stripe.paymentIntents.cancel(booking.payment_intent_id);
+    } else if (pi.status === 'succeeded') {
+      // Already captured (end-early ran) — full refund
+      await stripe.refunds.create({ payment_intent: booking.payment_intent_id });
+    }
+    // if already canceled, do nothing
   }
 
   await supabase
