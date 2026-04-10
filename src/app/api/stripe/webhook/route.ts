@@ -1,3 +1,4 @@
+export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { stripe } from '@/lib/stripe';
@@ -60,6 +61,3 @@ export async function POST(req: Request) {
   return NextResponse.json({ received: true });
 }
 
-export const config = {
-  api: { bodyParser: false },
-};

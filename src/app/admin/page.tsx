@@ -1057,25 +1057,31 @@ export default function AdminStudio() {
                 )}
 
                 {approvedBeams.length > 0 && (
-                  <div style={{ marginBottom: 20 }}>
-                    <div className="sec-head" style={{ color: '#F58220' }}>⏳ Approved queue — {approvedBeams.length}</div>
-                    {approvedBeams.map(booking => (
-                      <div key={booking.id} className="req-card c-queued">
-                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 500, color: 'rgba(245,130,32,0.3)', minWidth: 28 }}>#{getQueuePosition(booking)}</span>
-                        <div style={{ width: 52, height: 52, borderRadius: 8, border: '1px solid rgba(245,130,32,0.15)', overflow: 'hidden', background: '#050505', flexShrink: 0 }}>
-                          {booking.image_url && <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" />}
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: '#e8e8e8', marginBottom: 3 }}>{booking.viewer_name}</div>
-                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>${booking.price_value}/{booking.price_unit} · {booking.duration_minutes} min</div>
-                        </div>
-                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(245,130,32,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>
-                          {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+  <div style={{ marginBottom: 20 }}>
+    <div className="sec-head" style={{ color: '#F58220' }}>⏳ Approved queue — {approvedBeams.length}</div>
+    {approvedBeams.map(booking => (
+      <div key={booking.id} className="req-card c-queued">
+        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 500, color: 'rgba(245,130,32,0.3)', minWidth: 28 }}>#{getQueuePosition(booking)}</span>
+        <div style={{ width: 52, height: 52, borderRadius: 8, border: '1px solid rgba(245,130,32,0.15)', overflow: 'hidden', background: '#050505', flexShrink: 0 }}>
+          {booking.image_url && <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" />}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: '#e8e8e8', marginBottom: 3 }}>{booking.viewer_name}</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>${booking.price_value}/{booking.price_unit} · {booking.duration_minutes} min</div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(245,130,32,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>
+            {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
+          </span>
+          <button onClick={() => denyBooking(booking.id)}
+            style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
+            Remove
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
 
                 {pendingBeams.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
@@ -1169,26 +1175,32 @@ export default function AdminStudio() {
                   </div>
                 )}
 
-                {approvedBackdrop.length > 0 && (
-                  <div style={{ marginBottom: 20 }}>
-                    <div className="sec-head" style={{ color: '#c084fc', opacity: 0.7 }}>⏳ Approved queue — {approvedBackdrop.length}</div>
-                    {approvedBackdrop.map(booking => (
-                      <div key={booking.id} className="req-card c-backdrop-queue">
-                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 500, color: 'rgba(192,132,252,0.3)', minWidth: 28 }}>#{getQueuePosition(booking)}</span>
-                        <div style={{ width: 52, height: 52, borderRadius: 8, border: '1px solid rgba(192,132,252,0.15)', overflow: 'hidden', background: '#050505', flexShrink: 0 }}>
-                          {booking.image_url && <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />}
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: '#e8e8e8', marginBottom: 3 }}>{booking.viewer_name}</div>
-                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>${booking.price_value}/{booking.price_unit} · {booking.duration_minutes} min</div>
-                        </div>
-                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(192,132,252,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>
-                          {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {{approvedBackdrop.length > 0 && (
+  <div style={{ marginBottom: 20 }}>
+    <div className="sec-head" style={{ color: '#c084fc', opacity: 0.7 }}>⏳ Approved queue — {approvedBackdrop.length}</div>
+    {approvedBackdrop.map(booking => (
+      <div key={booking.id} className="req-card c-backdrop-queue">
+        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 500, color: 'rgba(192,132,252,0.3)', minWidth: 28 }}>#{getQueuePosition(booking)}</span>
+        <div style={{ width: 52, height: 52, borderRadius: 8, border: '1px solid rgba(192,132,252,0.15)', overflow: 'hidden', background: '#050505', flexShrink: 0 }}>
+          {booking.image_url && <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: '#e8e8e8', marginBottom: 3 }}>{booking.viewer_name}</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>${booking.price_value}/{booking.price_unit} · {booking.duration_minutes} min</div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(192,132,252,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>
+            {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
+          </span>
+          <button onClick={() => denyBooking(booking.id)}
+            style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
+            Remove
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
 
                 {pendingBackdrop.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
