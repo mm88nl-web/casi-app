@@ -313,7 +313,7 @@ function OverlayContent() {
     element_id: selectedSlot.id,
     viewer_name: savedViewerName,
     image_url: imageUrl,
-    message: message.trim() || null,
+    message: isExtend ? `⏱ Extension request${message.trim() ? ' — ' + message.trim() : ''}` : (message.trim() || null),
     duration_minutes: duration,
     price_value: selectedSlot.price_value,
     price_unit: selectedSlot.price_unit,
@@ -329,12 +329,9 @@ function OverlayContent() {
     return;
   }
 
-  if (isExtend) {
-    showNotif('Extension requested!', 'queue');
-    setSubmitting(false);
-    closeSlot();
-    if (profile?.id) await loadData(profile.id, savedViewerName);
-  } else {
+  if (false) {
+  // extend now pays via Stripe like direct bookings
+} else {
     try {
       const res = await fetch('/api/stripe/authorize', {
         method: 'POST',
@@ -508,7 +505,7 @@ function OverlayContent() {
                       {isLive && activeBooking && (
                         <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, opacity:0.7 }}>
                           <Countdown booking={activeBooking} onWarning={(s) => {
-                            if(s<=120&&s>0) setExpiringSoon(prev=>new Set(prev).add(booking.id));
+                            if(s<=300&&s>0) setExpiringSoon(prev=>new Set(prev).add(booking.id));
                             else if(s<=0) setExpiringSoon(prev=>{const n=new Set(prev);n.delete(booking.id);return n;});
                           }} />
                         </span>
@@ -536,7 +533,7 @@ function OverlayContent() {
               const myIsExpiring    = myBookingForSlot && expiringSoon.has(myBookingForSlot.id);
               const isLocked        = !!el.locked;
               const displayImage    = (isSelected && imageValid && imageUrl) ? imageUrl : (el.image_url||null);
-              const showExtend      = myBookingForSlot?.status==='active' && myIsExpiring && canExtend(el.id);
+              const showExtend = myBookingForSlot?.status==='active' && expiringSoon.has(myBookingForSlot.id) && canExtend(el.id);
 
               return (
                 <div key={el.id} style={{ position:'absolute', left:`${el.pos_x}%`, top:`${el.pos_y}%`, width:`${el.width}%`, height:`${el.height}%`, zIndex:el.is_background?10:50, transition:'all 0.35s cubic-bezier(0.16,1,0.3,1)' }}>
