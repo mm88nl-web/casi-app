@@ -49,9 +49,9 @@ export async function POST(req: Request) {
   const { price_value, price_unit } = element;
 
   const amount =
-    price_unit === 'min'
-      ? Math.round(price_value * booking.duration_minutes * 100)
-      : Math.round(price_value * 100);
+  price_unit === 'min'
+    ? Math.round(price_value * booking.duration_minutes * 100)
+    : Math.round((price_value / 60) * booking.duration_minutes * 100);
 
   const platformFee = Math.round(amount * 0.05);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
