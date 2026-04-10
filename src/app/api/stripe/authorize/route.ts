@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Streamer has no Stripe account' }, { status: 400 });
   }
 
-  const { price_value, price_unit } = element;
+  const { price_value, price_unit } = booking;
 
   const amount =
   price_unit === 'min'
