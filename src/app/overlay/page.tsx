@@ -171,7 +171,7 @@ function OverlayContent() {
     if (name) {
       const { data: mine } = await supabase.from('bookings').select('*')
         .eq('profile_id', profId).eq('viewer_name', name)
-        .in('status',['pending','active','approved_queued','denied'])
+        .in('status',['pending','active','approved_queued'])
         .order('created_at',{ascending:false});
       const relevant = (mine||[]).filter((b:any) => b.status!=='denied' || Date.now()-new Date(b.created_at).getTime()<30000);
       setMyBookings(relevant);
