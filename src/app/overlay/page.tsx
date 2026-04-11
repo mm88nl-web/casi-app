@@ -512,6 +512,19 @@ function OverlayContent() {
                           }} />
                         </span>
                       )}
+                      {isLive && (
+  <button className="cancel-btn" onClick={async () => {
+    await fetch('/api/stripe/end-early', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_id: booking.id }),
+    });
+    showNotif('Beam ended — prorated refund issued', 'warning');
+    if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+  }}>
+    ✕ end early
+  </button>
+)}
                       {canCancel && (
                         <button className="cancel-btn" onClick={() => cancelBooking(booking.id)} disabled={cancelling===booking.id}>
                           {cancelling===booking.id?'…':'✕ cancel'}

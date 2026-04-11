@@ -1092,10 +1092,34 @@ export default function AdminStudio() {
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(245,130,32,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>
             {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
           </span>
-          <button onClick={() => denyBooking(booking.id)}
-            style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
-            Remove
-          </button>
+          <button onClick={async () => {
+  // End current active booking on this slot first
+  const current = activeBookings.find(b => b.element_id === booking.element_id);
+  if (current) {
+    await fetch('/api/stripe/end-early', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_id: current.id }),
+    });
+  }
+  // Start this booking now
+  await supabase
+    .from('bookings')
+    .update({ status: 'active', started_at: new Date().toISOString() })
+    .eq('id', booking.id);
+  await supabase
+    .from('overlay_elements')
+    .update({ image_url: booking.image_url })
+    .eq('id', booking.element_id);
+  if (profile?.id) loadBookings(profile.id);
+}}
+  style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(6,182,212,0.6)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
+  Play Now
+</button>
+<button onClick={() => denyBooking(booking.id)}
+  style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
+  Remove
+</button>
         </div>
       </div>
     ))}
@@ -1216,10 +1240,34 @@ export default function AdminStudio() {
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(192,132,252,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>
             {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
           </span>
-          <button onClick={() => denyBooking(booking.id)}
-            style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
-            Remove
-          </button>
+          <button onClick={async () => {
+  // End current active booking on this slot first
+  const current = activeBookings.find(b => b.element_id === booking.element_id);
+  if (current) {
+    await fetch('/api/stripe/end-early', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_id: current.id }),
+    });
+  }
+  // Start this booking now
+  await supabase
+    .from('bookings')
+    .update({ status: 'active', started_at: new Date().toISOString() })
+    .eq('id', booking.id);
+  await supabase
+    .from('overlay_elements')
+    .update({ image_url: booking.image_url })
+    .eq('id', booking.element_id);
+  if (profile?.id) loadBookings(profile.id);
+}}
+  style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(6,182,212,0.6)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
+  Play Now
+</button>
+<button onClick={() => denyBooking(booking.id)}
+  style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
+  Remove
+</button>
         </div>
       </div>
     ))}

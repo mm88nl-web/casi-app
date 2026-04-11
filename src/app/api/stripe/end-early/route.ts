@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
 
-  // Calculate prorated capture
+  // Prorated capture
   if (booking.payment_intent_id && booking.original_amount_cents && booking.started_at) {
     const startedAt = new Date(booking.started_at).getTime();
     const now = Date.now();
@@ -29,7 +29,6 @@ export async function POST(req: Request) {
       Math.round((actualMinutes / booking.duration_minutes) * booking.original_amount_cents),
       booking.original_amount_cents
     );
-
     try {
       await stripe.paymentIntents.capture(booking.payment_intent_id, {
         amount_to_capture: captureAmount,
@@ -45,6 +44,36 @@ export async function POST(req: Request) {
     .from('bookings')
     .update({ status: 'expired' })
     .eq('id', booking.id);
+
+  // Auto-deny any pending extensions from same viewer on this slot
+  if (booking.element_id) {
+    const { data: pendingExtensions } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('element_id', booking.element_id)
+      .eq('viewer_name', booking.viewer_name)
+      .eq('status', 'pending')
+      .eq('is_queued', true);
+
+    for (const ext of (pendingExtensions || [])) {
+      if (ext.payment_intent_id) {
+        try {
+          const pi = await stripe.paymentIntents.retrieve(ext.payment_intent_id);
+          if (pi.status === 'requires_capture') {
+            await stripe.paymentIntents.cancel(ext.payment_intent_id);
+          } else if (pi.status === 'succeeded') {
+            await stripe.refunds.create({ payment_intent: ext.payment_intent_id });
+          }
+        } catch (err: any) {
+          console.error('Extension cancel failed:', err.message);
+        }
+      }
+      await supabase
+        .from('bookings')
+        .update({ status: 'denied' })
+        .eq('id', ext.id);
+    }
+  }
 
   // Auto-start next in queue
   if (booking.element_id) {
