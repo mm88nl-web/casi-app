@@ -1,0 +1,21 @@
+ENDPOINT: /api/webhooks/solana
+METHOD: POST
+SECURITY: Verify req.headers.get("authorization") or Helius signature if configured.
+
+EXPECTED JSON PAYLOAD FROM HELIUS:
+[{
+  "source": "STREAMFLOW",
+  "type": "UNKNOWN", 
+  "signature": "TX_SIGNATURE",
+  "instructions": [
+    {
+      "programId": "strmRqUvRpeYvH9bZfBy86M8nmUqh5pGEF2p9Vv4v"
+    }
+  ],
+  "tokenTransfers": [
+    {
+      "tokenAmount": 50,
+      "mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" // USDC Devnet Mint
+    }
+  ]
+}]

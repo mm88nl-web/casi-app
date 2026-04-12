@@ -1,0 +1,23 @@
+LIBRARY: @streamflow/stream
+CLUSTER: Devnet (for testing)
+
+INITIALIZATION:
+import { StreamflowSolana, Types } from "@streamflow/stream";
+const solanaClient = new StreamflowSolana.SolanaStreamClient("https://api.devnet.solana.com");
+
+CREATE STREAM PARAMS (v3):
+const createStreamParams = {
+  recipient: "RECIPIENT_WALLET_ADDRESS", // Streamer's public key
+  amount: getBN(50, 9), // 50 USDC
+  start: Math.floor(Date.now() / 1000), 
+  duration: 3600, // 1 hour
+  cliff: 0,
+  cliffAmount: getBN(0, 9),
+  cancelableBySender: true,
+  cancelableByRecipient: false,
+  transferableBySender: true,
+  transferableByRecipient: false,
+  automaticWithdrawal: true,
+  canTopup: false,
+  name: "Casi Beam Devnet",
+};
