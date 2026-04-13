@@ -2,6 +2,8 @@
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 
 function Logo({ scale = 0.32, color = '#F58220', bg = '#050505' }: { scale?: number; color?: string; bg?: string }) {
   return (
@@ -125,6 +127,20 @@ function OverlayContent() {
   const [submitting, setSubmitting]     = useState(false);
   const [cancelling, setCancelling]     = useState<string|null>(null);
   const [notification, setNotification] = useState<{text:string;type:string}|null>(null);
+
+  // ── Wallet state ──────────────────────────────────────────────────────────
+  const { wallet, connected, connecting, connect, disconnect, publicKey } = useWallet();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
+
+  // After the user picks a wallet from the modal, trigger connect() immediately.
+  // This is the fix for "clicking Phantom does nothing" — autoConnect is false,
+  // so we must call connect() explicitly once a wallet is selected.
+  useEffect(() => {
+    if (wallet && !connected && !connecting) {
+      connect().catch(() => {}); // swallow user-rejected errors
+    }
+  }, [wallet]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ─────────────────────────────────────────────────────────────────────────
 
   const supabase = useRef(createClient()).current;
   const viewerNameRef = useRef('');
@@ -452,6 +468,31 @@ function OverlayContent() {
               <span className="ov-wm">casi</span>
             </a>
             <div className="ov-nav-right">
+              {/* Wallet Connect Button */}
+              {connected && publicKey ? (
+                <button
+                  onClick={() => disconnect()}
+                  style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1.5, textTransform:'uppercase', background:'rgba(255,255,255,0.04)', border:'1px solid #1c1c1c', borderRadius:20, padding:'5px 12px', color:'#888', cursor:'pointer', transition:'all .2s' }}
+                  onMouseEnter={e => { (e.target as HTMLButtonElement).style.color='#f87171'; (e.target as HTMLButtonElement).style.borderColor='rgba(248,113,113,0.3)'; }}
+                  onMouseLeave={e => { (e.target as HTMLButtonElement).style.color='#888'; (e.target as HTMLButtonElement).style.borderColor='#1c1c1c'; }}
+                >
+                  {publicKey.toBase58().slice(0,4)}…{publicKey.toBase58().slice(-4)} ✕
+                </button>
+              ) : (
+                <button
+                  onClick={async () => {
+                    if (wallet) {
+                      await connect();
+                    } else {
+                      setWalletModalVisible(true);
+                    }
+                  }}
+                  disabled={connecting}
+                  style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1.5, textTransform:'uppercase', background:'rgba(153,69,255,0.1)', border:'1px solid rgba(153,69,255,0.3)', borderRadius:20, padding:'5px 12px', color:'#9945FF', cursor:connecting?'not-allowed':'pointer', transition:'all .2s', opacity:connecting?0.6:1 }}
+                >
+                  {connecting ? 'Connecting…' : 'Connect Wallet'}
+                </button>
+              )}
               {notification && (
                 <div className="notif" style={
                   notification.type==='success' ? { background:`${tc}18`, border:`1px solid ${tc}40`, color:tc } :
@@ -683,10 +724,27 @@ function OverlayContent() {
                   <div className="bf-cost-lbl">Estimated cost</div>
                   <div className="bf-cost-val" style={{ color:accentColor }}>${estimatedCost}</div>
                 </div>
-                <button onClick={submitBooking} disabled={!imageValid||submitting} className="bf-sub"
-                  style={{ background:accentColor, color:'#050505' }}>
-                  {submitting?'Sending…':isExtend?'Extend':isQueue?'Join Queue':'Send Request'}
-                </button>
+                {!connected ? (
+                  <button
+                    onClick={async () => {
+                      if (wallet) {
+                        await connect();
+                      } else {
+                        setWalletModalVisible(true);
+                      }
+                    }}
+                    disabled={connecting}
+                    className="bf-sub"
+                    style={{ background:'#9945FF', color:'#fff' }}
+                  >
+                    {connecting ? 'Connecting…' : 'Connect Wallet'}
+                  </button>
+                ) : (
+                  <button onClick={submitBooking} disabled={!imageValid||submitting} className="bf-sub"
+                    style={{ background:accentColor, color:'#050505' }}>
+                    {submitting?'Sending…':isExtend?'Extend':isQueue?'Join Queue':'Send Request'}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -726,6 +784,22 @@ function OverlayContent() {
               <a href="/search" style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'#222', textDecoration:'none' }}>
                 Browse other streams →
               </a>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:20 }}>
+                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', color:'#888' }}>Powered by</span>
+                {/* Streamflow logo — keep SVG purple, no wrapper opacity */}
+                <svg width="14" height="14" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <linearGradient id="sf-grad" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#9945FF"/>
+                      <stop offset="100%" stopColor="#6E3FD4"/>
+                    </linearGradient>
+                  </defs>
+                  <path d="M15 30 Q50 10 85 30 Q50 50 15 30Z" fill="url(#sf-grad)"/>
+                  <path d="M15 50 Q50 30 85 50 Q50 70 15 50Z" fill="url(#sf-grad)" opacity="0.75"/>
+                  <path d="M15 70 Q50 50 85 70 Q50 90 15 70Z" fill="url(#sf-grad)" opacity="0.5"/>
+                </svg>
+                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', color:'#888' }}>Streamflow</span>
+              </div>
             </div>
           )}
         </main>
