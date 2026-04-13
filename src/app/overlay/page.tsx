@@ -235,9 +235,19 @@ function OverlayContent() {
     myBookings.forEach(booking => {
       const old = prev.find((b: any) => b.id === booking.id);
       if (!old) return;
-      if (old.status === 'pending' && booking.status === 'denied')          showNotif('Your request was denied', 'denied');
+      if (old.status === 'pending' && booking.status === 'denied') {
+        showNotif('Your request was denied', 'denied');
+        // Auto-cancel the Streamflow stream so unvested USDC returns to viewer immediately
+        if (booking.payment_method === 'solana' && booking.stream_id) {
+          cancelSolanaStream(booking);
+        }
+      }
       if (old.status === 'pending' && booking.status === 'active')          showNotif('Your beam is live! 🎉', 'success');
       if (old.status === 'pending' && booking.status === 'approved_queued') showNotif("Approved — you're in the queue!", 'queue');
+      // Admin kicked an active Solana beam — cancel on-chain so remaining USDC returns
+      if (old.status === 'active' && booking.status === 'expired' && booking.payment_method === 'solana' && booking.stream_id) {
+        cancelSolanaStream(booking);
+      }
     });
     prevMyBookingsRef.current = myBookings;
   }, [myBookings]);
@@ -514,7 +524,7 @@ function OverlayContent() {
           cliff:                   streamStart,                                 // must equal start when cliffAmount=0
           cliffAmount:             getBN(0, usdcDecimals),
           cancelableBySender:      true,
-          cancelableByRecipient:   false,
+          cancelableByRecipient:   true,   // allows streamer to cancel from admin if needed
           transferableBySender:    false,
           transferableByRecipient: false,
           automaticWithdrawal:     true,
@@ -596,13 +606,16 @@ function OverlayContent() {
     if (!wallet?.adapter) return;
     try {
       const { SolanaStreamClient, ICluster } = await import('@streamflow/stream');
-      const client = new SolanaStreamClient('https://api.devnet.solana.com', ICluster.Devnet);
+      const client = new SolanaStreamClient(RPC_DEVNET, ICluster.Devnet);
       await client.cancel({ id: booking.stream_id }, { invoker: wallet.adapter as any });
     } catch (err) {
       console.error('Streamflow cancel error:', err);
     }
-    await supabase.from('bookings').update({ status: 'denied' }).eq('id', booking.id);
-    showNotif('Solana stream cancelled ◎', 'warning');
+    // Clear stream_id so the "recover USDC" button disappears and booking hides from view
+    await supabase.from('bookings')
+      .update({ status: 'denied', stream_id: null })
+      .eq('id', booking.id);
+    showNotif('◎ Stream cancelled — unvested USDC returned to your wallet', 'warning');
     if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
   };
   // ──────────────────────────────────────────────────────────────────────────
@@ -615,7 +628,11 @@ function OverlayContent() {
 
   // For booking form accent: extend=yellow, queue=streamer theme, rent=streamer theme
   const accentColor = isExtend ? '#eab308' : tc;
-  const visibleMyBookings = myBookings.filter((b:any) => b.status!=='denied');
+  // Keep denied Solana bookings visible if stream_id is set — viewer may need to
+  // manually cancel to recover unvested USDC (e.g. if wallet was disconnected at denial time)
+  const visibleMyBookings = myBookings.filter((b:any) =>
+    b.status !== 'denied' || (b.payment_method === 'solana' && b.stream_id),
+  );
 
   if (loading) return null;
   if (!isOBS && !nameConfirmed) return <NameEntryScreen onConfirm={confirmName} tc={tc} />;
@@ -801,6 +818,12 @@ function OverlayContent() {
                       {canCancel && (
                         <button className="cancel-btn" onClick={() => cancelBooking(booking.id)} disabled={cancelling===booking.id}>
                           {cancelling===booking.id?'…':'✕ cancel'}
+                        </button>
+                      )}
+                      {booking.status === 'denied' && booking.payment_method === 'solana' && booking.stream_id && (
+                        <button className="cancel-btn" style={{ color: '#c084fc', borderColor: 'rgba(192,132,252,0.3)' }}
+                          onClick={() => cancelSolanaStream(booking)}>
+                          ◎ recover USDC
                         </button>
                       )}
                     </div>
