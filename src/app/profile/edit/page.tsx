@@ -114,8 +114,20 @@ export default function ProfileEditPage() {
   const handleSaveWallet = async () => {
     if (!profile || !publicKey) return;
     setSavingWallet(true);
-    await supabase.from('profiles').update({ solana_wallet: publicKey.toBase58() }).eq('id', profile.id);
-    setSolanaWallet(publicKey.toBase58());
+    const address = publicKey.toBase58();
+
+    // Persist to Supabase
+    await supabase.from('profiles').update({ solana_wallet: address }).eq('id', profile.id);
+    setSolanaWallet(address);
+
+    // Register with Helius so this streamer's payments are watched automatically
+    // Fire-and-forget — a misconfigured Helius key shouldn't block the save UX
+    fetch('/api/solana/sync-webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address }),
+    }).catch(err => console.warn('[sync-webhook]', err));
+
     setSavingWallet(false);
     setWalletSaved(true);
     setTimeout(() => setWalletSaved(false), 3000);

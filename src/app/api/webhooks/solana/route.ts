@@ -7,52 +7,72 @@ const supabase = createClient(
 );
 
 const STREAMFLOW_PROGRAM_ID = 'strmRqUvRpeYvH9bZfBy86M8nmUqh5pGEF2p9Vv4v';
-const USDC_DEVNET_MINT       = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+const USDC_DEVNET_MINT      = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+
+// Always return 200 — Helius retries on non-2xx which burns credits.
+const OK = () => NextResponse.json({ ok: true });
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
-  if (!Array.isArray(body) || body.length === 0) {
-    return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
-  }
+  if (!Array.isArray(body) || body.length === 0) return OK();
 
   for (const event of body) {
-    // Only process Streamflow USDC transactions
+    // ── Layer 1: is this a Streamflow USDC transfer? ──────────────────────
     const isStreamflow = event.instructions?.some(
       (ix: any) => ix.programId === STREAMFLOW_PROGRAM_ID,
     );
     const isUsdc = event.tokenTransfers?.some(
       (t: any) => t.mint === USDC_DEVNET_MINT,
     );
-    if (!isStreamflow || !isUsdc) continue;
+    if (!isStreamflow || !isUsdc) continue;   // not our program — skip silently
 
-    const txSignature: string = event.signature;
-    if (!txSignature) continue;
+    // ── Layer 2: does the receiver belong to one of our streamers? ────────
+    // Enhanced payload: tokenTransfers[].toUserAccount is the recipient wallet.
+    const receivers: string[] = (event.tokenTransfers ?? [])
+      .map((t: any) => t.toUserAccount)
+      .filter(Boolean);
 
-    // Match to the booking that stored this tx_signature at stream-creation time
-    const { data: booking, error } = await supabase
-      .from('bookings')
-      .select('id, status')
-      .eq('tx_signature', txSignature)
-      .eq('status', 'pending')
-      .single();
+    if (receivers.length === 0) continue;
 
-    if (error || !booking) {
-      console.warn('[solana webhook] no pending booking for tx', txSignature);
+    const { data: matchedProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .in('solana_wallet', receivers)
+      .maybeSingle();
+
+    if (!matchedProfile) {
+      // USDC Streamflow tx but receiver isn't one of our streamers — ignore
+      console.log('[solana webhook] no profile match for receivers', receivers);
       continue;
     }
 
-    // Activate the booking — the streamer's admin panel will now show it
-    const { error: updateError } = await supabase
+    // ── Layer 3: match the exact booking by tx_signature ──────────────────
+    const txSignature: string = event.signature;
+    if (!txSignature) continue;
+
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('tx_signature', txSignature)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (!booking) {
+      console.warn('[solana webhook] tx matched a streamer but no pending booking:', txSignature);
+      continue;
+    }
+
+    const { error } = await supabase
       .from('bookings')
       .update({ status: 'active' })
       .eq('id', booking.id);
 
-    if (updateError) {
-      console.error('[solana webhook] failed to activate booking', booking.id, updateError);
+    if (error) {
+      console.error('[solana webhook] failed to activate booking', booking.id, error);
     } else {
-      console.log('[solana webhook] activated booking', booking.id, 'via tx', txSignature);
+      console.log('[solana webhook] ✓ activated booking', booking.id, 'tx:', txSignature);
     }
   }
 
-  return NextResponse.json({ ok: true });
+  return OK();
 }
