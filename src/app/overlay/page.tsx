@@ -437,31 +437,61 @@ function OverlayContent() {
     try {
       // Dynamic import keeps Streamflow out of the initial bundle
       const { SolanaStreamClient, getBN, ICluster } = await import('@streamflow/stream');
+      const { Connection, PublicKey }               = await import('@solana/web3.js');
 
-      const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
-      const totalUsdc = selectedSlot.price_unit === 'min'
+      const USDC_DEVNET  = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+      const RPC_DEVNET   = 'https://api.devnet.solana.com';
+      const usdcDecimals = 6;
+      const totalUsdc    = selectedSlot.price_unit === 'min'
         ? selectedSlot.price_value * duration
         : selectedSlot.price_value * (duration / 60);
-      const usdcDecimals = 6;
 
-      const client = new SolanaStreamClient('https://api.devnet.solana.com', ICluster.Devnet);
+      // ── Pre-flight: verify viewer has a USDC ATA with enough balance ──────
+      const connection = new Connection(RPC_DEVNET);
+      const { value: tokenAccounts } = await connection.getParsedTokenAccountsByOwner(
+        publicKey,
+        { mint: new PublicKey(USDC_DEVNET) },
+      );
+
+      if (tokenAccounts.length === 0) {
+        showNotif('You need devnet USDC in your wallet. Get some at spl-token-faucet.vercel.app', 'denied');
+        await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
+        setSubmitting(false);
+        return;
+      }
+
+      const usdcBalance: number =
+        tokenAccounts[0].account.data.parsed.info.tokenAmount.uiAmount ?? 0;
+
+      if (usdcBalance < totalUsdc) {
+        showNotif(
+          `Insufficient USDC: you have ${usdcBalance.toFixed(2)}, need ${totalUsdc.toFixed(2)}`,
+          'denied',
+        );
+        await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
+        setSubmitting(false);
+        return;
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
+      const client = new SolanaStreamClient(RPC_DEVNET, ICluster.Devnet);
       const { txId, metadataId } = await client.create(
         {
-          recipient:              profile.solana_wallet,
-          tokenId:                USDC_DEVNET,
-          start:                  Math.floor(Date.now() / 1000),
-          amount:                 getBN(totalUsdc, usdcDecimals),
-          period:                 60,                                           // release every 60 s
-          amountPerPeriod:        getBN(totalUsdc / duration, usdcDecimals),   // per minute
-          cliff:                  Math.floor(Date.now() / 1000),
-          cliffAmount:            getBN(0, usdcDecimals),
-          cancelableBySender:     true,
-          cancelableByRecipient:  false,
-          transferableBySender:   false,
+          recipient:               profile.solana_wallet,
+          tokenId:                 USDC_DEVNET,
+          start:                   Math.floor(Date.now() / 1000),
+          amount:                  getBN(totalUsdc, usdcDecimals),
+          period:                  60,                                          // release every 60 s
+          amountPerPeriod:         getBN(totalUsdc / duration, usdcDecimals),  // per minute
+          cliff:                   Math.floor(Date.now() / 1000),
+          cliffAmount:             getBN(0, usdcDecimals),
+          cancelableBySender:      true,
+          cancelableByRecipient:   false,
+          transferableBySender:    false,
           transferableByRecipient: false,
-          automaticWithdrawal:    true,
-          canTopup:               false,
-          name:                   `Casi Beam — ${savedViewerName}`,
+          automaticWithdrawal:     true,
+          canTopup:                false,
+          name:                    `Casi Beam — ${savedViewerName}`,
         },
         { sender: wallet.adapter as any },
       );
@@ -474,9 +504,30 @@ function OverlayContent() {
       closeSlot();
       if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
     } catch (err: any) {
-      console.error('Streamflow error:', err);
+      // Extract simulation logs from SendTransactionError before logging
+      let simLogs: string[] = [];
+      if (typeof err?.getLogs === 'function') {
+        simLogs = await err.getLogs().catch(() => []);
+      }
+      console.error('Streamflow error:', err?.message, '\nSim logs:', simLogs);
+
+      // Map common on-chain errors to actionable messages
+      const msg: string = err?.message ?? '';
+      const logs = simLogs.join(' ');
+      let userMsg = 'Solana payment failed — please try again';
+
+      if (msg.includes('AccountNotFound') || logs.includes('AccountNotFound')) {
+        userMsg = 'USDC token account not found on devnet. Get USDC at spl-token-faucet.vercel.app';
+      } else if (msg.includes('insufficient funds') || logs.includes('0x1')) {
+        userMsg = 'Insufficient USDC balance in your wallet';
+      } else if (msg.includes('User rejected') || msg.includes('rejected the request')) {
+        userMsg = 'Transaction rejected in wallet';
+      } else if (msg.includes('Blockhash not found')) {
+        userMsg = 'Transaction expired — please try again';
+      }
+
       await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
-      showNotif(err?.message || 'Solana payment failed — please try again', 'denied');
+      showNotif(userMsg, 'denied');
     }
 
     setSubmitting(false);
