@@ -539,9 +539,42 @@ function OverlayContent() {
       }
       console.error('Streamflow error:', err?.message, '\nSim logs:', simLogs);
 
-      // Map common on-chain errors to actionable messages
       const msg: string = err?.message ?? '';
       const logs = simLogs.join(' ');
+
+      // ── AlreadyProcessed: tx landed but SDK timed out on confirmation ─────
+      // The stream IS created on-chain and USDC IS locked in escrow.
+      // Recover the signature from the wallet's most recent transaction.
+      if (msg.includes('AlreadyProcessed')) {
+        try {
+          const { Connection: Conn, PublicKey: PK } = await import('@solana/web3.js');
+          const recoveryConn = new Conn(RPC_DEVNET, 'confirmed');
+          const recent = await recoveryConn.getSignaturesForAddress(
+            new PK(publicKey.toBase58()),
+            { limit: 3 },
+          );
+          const landed = recent.find(s => !s.err);
+          if (landed) {
+            await supabase.from('bookings')
+              .update({ tx_signature: landed.signature })
+              .eq('id', newBooking.id);
+            showNotif('◎ Payment sent — awaiting streamer approval!', 'success');
+            closeSlot();
+            if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+            setSubmitting(false);
+            return;
+          }
+        } catch (recErr) {
+          console.error('[solana] AlreadyProcessed recovery failed', recErr);
+        }
+        // Recovery failed — warn user not to retry or they'll double-pay
+        showNotif('Payment likely went through — check your wallet before trying again', 'pending');
+        await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
+        setSubmitting(false);
+        return;
+      }
+
+      // Map other on-chain errors to actionable messages
       let userMsg = 'Solana payment failed — please try again';
 
       if (msg.includes('AccountNotFound') || logs.includes('AccountNotFound')) {
