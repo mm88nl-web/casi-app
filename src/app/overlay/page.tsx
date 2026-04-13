@@ -448,13 +448,35 @@ function OverlayContent() {
 
       // ── Pre-flight: verify viewer has a USDC ATA with enough balance ──────
       const connection = new Connection(RPC_DEVNET);
+
+      // 1. SOL balance — Streamflow creates escrow + metadata accounts on-chain.
+      //    Needs ~0.02 SOL for rent + fees. Without any SOL, simulation fails
+      //    with AccountNotFound (fee payer checked before program runs).
+      const solLamports = await connection.getBalance(publicKey);
+      const MIN_SOL = 0.02 * 1e9; // 0.02 SOL in lamports
+      if (solLamports < MIN_SOL) {
+        showNotif(
+          `Need at least 0.02 devnet SOL for fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.solana.com`,
+          'denied',
+        );
+        await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
+        setSubmitting(false);
+        return;
+      }
+
+      // 2. USDC ATA on devnet using the exact mint Streamflow uses.
+      //    Note: if Phantom is in Testnet Mode the 20 USDC shown is testnet —
+      //    switch Phantom back to Devnet and re-mint from spl-token-faucet.vercel.app
       const { value: tokenAccounts } = await connection.getParsedTokenAccountsByOwner(
         publicKey,
         { mint: new PublicKey(USDC_DEVNET) },
       );
 
       if (tokenAccounts.length === 0) {
-        showNotif('You need devnet USDC in your wallet. Get some at spl-token-faucet.vercel.app', 'denied');
+        showNotif(
+          'No devnet USDC found (mint 4zMMC9…DU). Switch Phantom to Devnet then mint at spl-token-faucet.vercel.app',
+          'denied',
+        );
         await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
         setSubmitting(false);
         return;
@@ -472,6 +494,8 @@ function OverlayContent() {
         setSubmitting(false);
         return;
       }
+
+      console.log('[solana] pre-flight passed — SOL:', (solLamports / 1e9).toFixed(4), 'USDC:', usdcBalance);
       // ─────────────────────────────────────────────────────────────────────
 
       const client = new SolanaStreamClient(RPC_DEVNET, ICluster.Devnet);
