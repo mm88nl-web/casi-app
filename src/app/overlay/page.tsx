@@ -132,14 +132,25 @@ function OverlayContent() {
   const { wallet, connected, connecting, connect, disconnect, publicKey } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
 
-  // After the user picks a wallet from the modal, trigger connect() immediately.
-  // This is the fix for "clicking Phantom does nothing" — autoConnect is false,
-  // so we must call connect() explicitly once a wallet is selected.
+  // Only connect when the user explicitly clicked a Connect button.
+  // Without this guard the effect fires on page load because Wallet Standard
+  // registers Phantom into `wallet` automatically, causing an instant popup.
+  const userInitiatedConnect = useRef(false);
   useEffect(() => {
-    if (wallet && !connected && !connecting) {
-      connect().catch(() => {}); // swallow user-rejected errors
+    if (wallet && !connected && !connecting && userInitiatedConnect.current) {
+      userInitiatedConnect.current = false;
+      connect().catch(() => {});
     }
   }, [wallet]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openWalletModal = () => {
+    userInitiatedConnect.current = true;
+    if (wallet) {
+      connect().catch(() => {});
+    } else {
+      setWalletModalVisible(true);
+    }
+  };
   // ─────────────────────────────────────────────────────────────────────────
 
   const supabase = useRef(createClient()).current;
@@ -480,13 +491,7 @@ function OverlayContent() {
                 </button>
               ) : (
                 <button
-                  onClick={async () => {
-                    if (wallet) {
-                      await connect();
-                    } else {
-                      setWalletModalVisible(true);
-                    }
-                  }}
+                  onClick={openWalletModal}
                   disabled={connecting}
                   style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1.5, textTransform:'uppercase', background:'rgba(153,69,255,0.1)', border:'1px solid rgba(153,69,255,0.3)', borderRadius:20, padding:'5px 12px', color:'#9945FF', cursor:connecting?'not-allowed':'pointer', transition:'all .2s', opacity:connecting?0.6:1 }}
                 >
@@ -724,27 +729,39 @@ function OverlayContent() {
                   <div className="bf-cost-lbl">Estimated cost</div>
                   <div className="bf-cost-val" style={{ color:accentColor }}>${estimatedCost}</div>
                 </div>
-                {!connected ? (
-                  <button
-                    onClick={async () => {
-                      if (wallet) {
-                        await connect();
-                      } else {
-                        setWalletModalVisible(true);
-                      }
-                    }}
-                    disabled={connecting}
-                    className="bf-sub"
-                    style={{ background:'#9945FF', color:'#fff' }}
-                  >
-                    {connecting ? 'Connecting…' : 'Connect Wallet'}
-                  </button>
-                ) : (
+                <div style={{ display:'flex', gap:8 }}>
+                  {/* ── Stripe ── */}
                   <button onClick={submitBooking} disabled={!imageValid||submitting} className="bf-sub"
-                    style={{ background:accentColor, color:'#050505' }}>
+                    style={{ background:accentColor, color:'#050505', display:'flex', alignItems:'center', gap:7 }}>
+                    {/* card icon */}
+                    <svg width="14" height="11" viewBox="0 0 14 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect x="0.5" y="0.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeOpacity="0.6"/>
+                      <rect x="0" y="3" width="14" height="2.5" fill="currentColor" fillOpacity="0.5"/>
+                      <rect x="2" y="7" width="4" height="1.5" rx="0.5" fill="currentColor"/>
+                    </svg>
                     {submitting?'Sending…':isExtend?'Extend':isQueue?'Join Queue':'Send Request'}
                   </button>
-                )}
+                  {/* ── Solana / Streamflow ── */}
+                  <button
+                    disabled={connecting || submitting}
+                    className="bf-sub"
+                    style={{ background: connected ? '#9945FF' : 'rgba(153,69,255,0.12)', color: connected ? '#fff' : '#9945FF', border: connected ? 'none' : '1px solid rgba(153,69,255,0.35)', display:'flex', alignItems:'center', gap:7, opacity: (connecting||submitting) ? 0.6 : 1 }}
+                    onClick={() => {
+                      if (!connected) {
+                        openWalletModal();
+                      } else {
+                        // Streamflow payment — coming soon
+                        showNotif('Solana streaming payments coming soon ◎', 'queue');
+                      }
+                    }}
+                  >
+                    {/* Solana ◎ mark */}
+                    <svg width="13" height="11" viewBox="0 0 13 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M1.5 8.5h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33 8.87c-.14-.14-.04-.37.17-.37ZM1.5 0h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33.37C1.19.23 1.29 0 1.5 0ZM11.67 4.37 10.58 5.5H1.82c-.21 0-.31-.23-.17-.37l1.1-1.1c.1-.1.23-.16.38-.16h8.37c.21 0 .31.23.17.37Z" fill="currentColor"/>
+                    </svg>
+                    {connecting ? 'Connecting…' : connected ? 'Pay with SOL' : 'Connect & Pay SOL'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
