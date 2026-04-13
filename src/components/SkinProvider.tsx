@@ -8,9 +8,9 @@ import { getSkinById, hexToRgbStr } from '@/lib/skins';
  * useEffect so it never causes a hydration mismatch.
  *
  * Priority:
- *   1. If `skin` is set, use that preset's full palette.
- *   2. If only `themeColor` is set (legacy), use Casi Dark as the base
- *      but override accent + accentRgb with the custom colour.
+ *   1. `skin` controls the full palette (bg, surfaces, borders, text).
+ *   2. `themeColor` always overrides the accent on top of the chosen skin —
+ *      so the streamer can pick Neon as a base but use their brand colour.
  *   3. Defaults in globals.css cover SSR / first paint.
  */
 export default function SkinProvider({
@@ -24,9 +24,9 @@ export default function SkinProvider({
     const s = getSkinById(skin);
     const root = document.documentElement;
 
-    // Resolve accent — custom themeColor overrides only when no named skin is chosen
-    const accent    = (!skin && themeColor) ? themeColor : s.accent;
-    const accentRgb = (!skin && themeColor) ? (hexToRgbStr(themeColor) ?? s.accentRgb) : s.accentRgb;
+    // themeColor always wins for accent — skin sets everything else.
+    const accent    = themeColor ? themeColor : s.accent;
+    const accentRgb = themeColor ? (hexToRgbStr(themeColor) ?? s.accentRgb) : s.accentRgb;
 
     root.style.setProperty('--casi-accent',     accent);
     root.style.setProperty('--casi-accent-rgb', accentRgb);

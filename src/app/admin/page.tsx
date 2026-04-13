@@ -86,6 +86,19 @@ function findFreePosition(elements: any[]): { pos_x: number; pos_y: number } {
   return { pos_x: Math.min(75, (last?.pos_x ?? 5) + 5), pos_y: Math.min(70, (last?.pos_y ?? 5) + 5) };
 }
 
+/* ── Profile edit accent presets ── */
+const THEME_PRESETS = [
+  { name: 'Casi Orange',   color: '#F58220' },
+  { name: 'Twitch Purple', color: '#9146FF' },
+  { name: 'Cyber Cyan',    color: '#06b6d4' },
+  { name: 'YouTube Red',   color: '#FF0000' },
+  { name: 'Matrix Green',  color: '#4ade80' },
+  { name: 'Kick Green',    color: '#53FC18' },
+  { name: 'Rose Pink',     color: '#f472b6' },
+  { name: 'Gold',          color: '#facc15' },
+  { name: 'Pure White',    color: '#e8e8e8' },
+];
+
 /* ── Backdrop Modal ── */
 function BackdropModal({ onConfirm, onClose }: {
   onConfirm: (price: number, unit: string, maxDuration: number | null) => void;
@@ -280,6 +293,16 @@ export default function AdminStudio() {
   const [profile, setProfile] = useState<any>(null);
   const [activeSkin, setActiveSkin] = useState<string | null>(null);
   const [savingSkin, setSavingSkin] = useState(false);
+  // Inline profile edit
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editBio, setEditBio] = useState('');
+  const [editAvatar, setEditAvatar] = useState('');
+  const [editAvatarValid, setEditAvatarValid] = useState(false);
+  const [editThemeColor, setEditThemeColor] = useState('#F58220');
+  const [editCustomColor, setEditCustomColor] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editSaved, setEditSaved] = useState(false);
   const [elements, setElements] = useState<any[]>([]);
   const [pendingBookings, setPendingBookings] = useState<any[]>([]);
   const [queuedBookings, setQueuedBookings] = useState<any[]>([]);
@@ -308,6 +331,13 @@ export default function AdminStudio() {
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(prof);
       if (prof?.skin) setActiveSkin(prof.skin);
+      if (prof) {
+        setEditName(prof.display_name || prof.username || '');
+        setEditBio(prof.bio || '');
+        setEditAvatar(prof.avatar_url || '');
+        if (prof.avatar_url) setEditAvatarValid(true);
+        if (prof.theme_color) setEditThemeColor(prof.theme_color);
+      }
       const { data: els } = await supabase.from('overlay_elements').select('*').eq('profile_id', user.id);
       if (els) setElements(els);
       setIsReady(true);
@@ -670,6 +700,14 @@ export default function AdminStudio() {
         .set-sub   { font-family:'DM Mono',monospace; font-size:10px; color:var(--casi-text-muted); margin-bottom:16px; }
         .code-row  { display:flex; align-items:center; gap:10px; }
         .code-box  { flex:1; background:rgba(0,0,0,0.4); border:1px solid var(--casi-border); border-radius:8px; padding:10px 14px; font-family:'DM Mono',monospace; font-size:11px; color:#888; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        /* Inline profile edit */
+        .pe-inp { width:100%; background:var(--casi-bg); border:1px solid var(--casi-border); border-radius:10px; padding:10px 13px; font-size:13px; color:var(--casi-text); outline:none; font-family:'Syne',sans-serif; transition:border-color .2s; box-sizing:border-box; }
+        .pe-inp::placeholder { color:var(--casi-text-muted); opacity:0.5; }
+        .pe-inp:focus { border-color:rgba(var(--casi-accent-rgb),0.4); }
+        .pe-lbl { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--casi-text-muted); display:block; margin-bottom:6px; }
+        .pe-swatch { width:26px; height:26px; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:all .15s; flex-shrink:0; background:none; padding:0; }
+        .pe-swatch:hover { transform:scale(1.15); }
+        .pe-swatch.active { border-color:#fff; box-shadow:0 0 0 2px rgba(255,255,255,0.2); }
 
         /* MOBILE BOTTOM NAV */
         .bot-nav { display:none; }
@@ -709,7 +747,7 @@ export default function AdminStudio() {
         }
       `}</style>
 
-      <SkinProvider skin={activeSkin} themeColor={profile?.theme_color} />
+      <SkinProvider skin={activeSkin} themeColor={editThemeColor || profile?.theme_color} />
       <div className="sw">
 
         {/* NAV */}
@@ -1414,17 +1452,134 @@ export default function AdminStudio() {
             </div>
 
             <div className="set-card">
+              {/* ── Profile summary row ── */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', border: '1px solid #222', overflow: 'hidden', background: 'var(--casi-surface)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-                  {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : '👤'}
+                <div style={{ width: 48, height: 48, borderRadius: '50%', border: `1px solid rgba(var(--casi-accent-rgb),0.25)`, overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+                  {(editAvatarValid && editAvatar) || profile.avatar_url
+                    ? <img src={editAvatarValid && editAvatar ? editAvatar : profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                    : '👤'}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)' }}>{profile.display_name || profile.username}</div>
+                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)' }}>
+                    {editOpen ? (editName || profile.username) : (profile.display_name || profile.username)}
+                  </div>
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>@{profile.username}</div>
-                  {profile.bio && <div style={{ fontSize: 12, color: 'var(--casi-text-muted)', marginTop: 4 }}>{profile.bio}</div>}
+                  {!editOpen && profile.bio && <div style={{ fontSize: 12, color: 'var(--casi-text-muted)', marginTop: 4 }}>{profile.bio}</div>}
                 </div>
-                <a href="/profile/edit" style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: 'var(--casi-accent)', textDecoration: 'none', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>Edit →</a>
+                <button
+                  onClick={() => setEditOpen(o => !o)}
+                  style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: 'var(--casi-accent)', background: editOpen ? 'rgba(var(--casi-accent-rgb),0.08)' : 'none', border: editOpen ? '1px solid rgba(var(--casi-accent-rgb),0.2)' : '1px solid transparent', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0, transition: 'all .15s' }}>
+                  {editOpen ? '✕ Close' : 'Edit ↓'}
+                </button>
               </div>
+
+              {/* ── Inline edit form ── */}
+              {editOpen && (
+                <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--casi-border)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                  {/* Display name */}
+                  <div>
+                    <label className="pe-lbl">Display name</label>
+                    <input type="text" value={editName} maxLength={32} className="pe-inp"
+                      placeholder={profile.username}
+                      onChange={(e) => setEditName(e.target.value)} />
+                  </div>
+
+                  {/* Bio */}
+                  <div>
+                    <label className="pe-lbl">Bio</label>
+                    <textarea value={editBio} maxLength={160} rows={3} className="pe-inp"
+                      style={{ resize: 'none', lineHeight: 1.5 }}
+                      placeholder="What do you stream?"
+                      onChange={(e) => setEditBio(e.target.value)} />
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', textAlign: 'right', marginTop: 2 }}>{editBio.length}/160</div>
+                  </div>
+
+                  {/* Avatar */}
+                  <div>
+                    <label className="pe-lbl">Avatar URL</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+                        {editAvatarValid && editAvatar ? <img src={editAvatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : '👤'}
+                      </div>
+                      <input type="text" value={editAvatar} className="pe-inp" style={{ flex: 1 }}
+                        placeholder="https://your-image.png"
+                        onChange={(e) => { setEditAvatar(e.target.value); setEditAvatarValid(false); }} />
+                      {editAvatar && <img src={editAvatar} style={{ display: 'none' }} alt=""
+                        onLoad={() => setEditAvatarValid(true)} onError={() => setEditAvatarValid(false)} />}
+                    </div>
+                    {editAvatar && (
+                      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, marginTop: 4, color: editAvatarValid ? '#4ade80' : '#f87171' }}>
+                        {editAvatarValid ? '✓ Image loaded' : 'Image not loading — check URL'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Accent color */}
+                  <div>
+                    <label className="pe-lbl">Accent color <span style={{ fontFamily: 'inherit', letterSpacing: 0, textTransform: 'none', color: 'var(--casi-text-muted)', opacity: 0.6 }}>— overlays skin accent</span></label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 10 }}>
+                      {THEME_PRESETS.map(p => (
+                        <button key={p.color} type="button" title={p.name}
+                          className={`pe-swatch${editThemeColor === p.color ? ' active' : ''}`}
+                          style={{ background: p.color }}
+                          onClick={() => { setEditThemeColor(p.color); setEditCustomColor(''); }} />
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 6, background: editThemeColor, border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0, boxShadow: `0 0 10px ${editThemeColor}50` }} />
+                      <input type="text" value={editCustomColor || editThemeColor} placeholder="#F58220" maxLength={7}
+                        className="pe-inp" style={{ flex: 1, fontFamily: "'DM Mono',monospace", fontSize: 12 }}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setEditCustomColor(v);
+                          if (/^#[0-9A-Fa-f]{6}$/.test(v)) setEditThemeColor(v);
+                        }} />
+                    </div>
+                    <div style={{ height: 3, borderRadius: 2, background: `linear-gradient(90deg, ${editThemeColor}, ${editThemeColor}40)`, marginTop: 10 }} />
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 8, paddingTop: 2 }}>
+                    <button type="button" onClick={() => {
+                      // Reset to current saved values
+                      setEditName(profile.display_name || profile.username || '');
+                      setEditBio(profile.bio || '');
+                      setEditAvatar(profile.avatar_url || '');
+                      setEditAvatarValid(!!profile.avatar_url);
+                      setEditThemeColor(profile.theme_color || '#F58220');
+                      setEditCustomColor('');
+                      setEditOpen(false);
+                    }} style={{ flex: 1, padding: '10px 0', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--casi-border)', borderRadius: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 12, color: 'var(--casi-text-muted)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Cancel
+                    </button>
+                    <button type="button" disabled={editSaving}
+                      onClick={async () => {
+                        if (!profile) return;
+                        setEditSaving(true);
+                        await supabase.from('profiles').update({
+                          display_name: editName || profile.username,
+                          bio: editBio || null,
+                          avatar_url: editAvatarValid ? editAvatar : null,
+                          theme_color: editThemeColor,
+                        }).eq('id', profile.id);
+                        setProfile((p: any) => ({ ...p,
+                          display_name: editName || profile.username,
+                          bio: editBio || null,
+                          avatar_url: editAvatarValid ? editAvatar : null,
+                          theme_color: editThemeColor,
+                        }));
+                        setEditSaving(false);
+                        setEditSaved(true);
+                        setEditOpen(false);
+                        setTimeout(() => setEditSaved(false), 2000);
+                      }}
+                      style={{ flex: 2, padding: '10px 0', background: editSaved ? '#4ade80' : 'var(--casi-accent)', border: 'none', borderRadius: 10, fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 12, color: 'var(--casi-bg)', cursor: editSaving ? 'not-allowed' : 'pointer', textTransform: 'uppercase', letterSpacing: 0.5, opacity: editSaving ? 0.7 : 1 }}>
+                      {editSaving ? 'Saving…' : 'Save profile'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="set-card">
               <div className="set-title">Viewer overlay</div>
