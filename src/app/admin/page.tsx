@@ -3,6 +3,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Rnd } from 'react-rnd';
 import { useRouter } from 'next/navigation';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import { SKINS } from '@/lib/skins';
 
@@ -303,6 +305,12 @@ export default function AdminStudio() {
   const [editCustomColor, setEditCustomColor] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editSaved, setEditSaved] = useState(false);
+  // Stripe + Solana
+  const [stripeConnected, setStripeConnected] = useState(false);
+  const [stripeLoading, setStripeLoading] = useState(false);
+  const [solanaWallet, setSolanaWallet] = useState('');
+  const [savingWallet, setSavingWallet] = useState(false);
+  const [walletSaved, setWalletSaved] = useState(false);
   const [elements, setElements] = useState<any[]>([]);
   const [pendingBookings, setPendingBookings] = useState<any[]>([]);
   const [queuedBookings, setQueuedBookings] = useState<any[]>([]);
@@ -324,6 +332,52 @@ export default function AdminStudio() {
   const router = useRouter();
   const supabase = useRef(createClient()).current;
 
+  // Wallet hooks
+  const { wallet, connected: walletConnected, connecting: walletConnecting, connect, publicKey } = useWallet();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
+  const userInitiatedConnect = useRef(false);
+  useEffect(() => {
+    if (wallet && !walletConnected && !walletConnecting && userInitiatedConnect.current) {
+      userInitiatedConnect.current = false;
+      connect().catch(() => {});
+    }
+  }, [wallet]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openWalletModal = () => {
+    userInitiatedConnect.current = true;
+    if (wallet) { connect().catch(() => {}); } else { setWalletModalVisible(true); }
+  };
+
+  const handleStripeConnect = async () => {
+    setStripeLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const res = await fetch('/api/stripe/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: user!.id }),
+    });
+    const { url } = await res.json();
+    if (url) window.location.href = url;
+    else setStripeLoading(false);
+  };
+
+  const handleSaveWallet = async () => {
+    if (!profile || !publicKey) return;
+    setSavingWallet(true);
+    const address = publicKey.toBase58();
+    const { error: saveError } = await supabase.from('profiles').update({ solana_wallet: address }).eq('id', profile.id);
+    if (saveError) { setSavingWallet(false); return; }
+    setSolanaWallet(address);
+    setProfile((p: any) => ({ ...p, solana_wallet: address }));
+    fetch('/api/solana/sync-webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address }),
+    }).catch(() => {});
+    setSavingWallet(false);
+    setWalletSaved(true);
+    setTimeout(() => setWalletSaved(false), 3000);
+  };
+
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -337,6 +391,8 @@ export default function AdminStudio() {
         setEditAvatar(prof.avatar_url || '');
         if (prof.avatar_url) setEditAvatarValid(true);
         if (prof.theme_color) setEditThemeColor(prof.theme_color);
+        if (prof.stripe_account_id) setStripeConnected(true);
+        if (prof.solana_wallet) setSolanaWallet(prof.solana_wallet);
       }
       const { data: els } = await supabase.from('overlay_elements').select('*').eq('profile_id', user.id);
       if (els) setElements(els);
@@ -1537,6 +1593,53 @@ export default function AdminStudio() {
                         }} />
                     </div>
                     <div style={{ height: 3, borderRadius: 2, background: `linear-gradient(90deg, ${editThemeColor}, ${editThemeColor}40)`, marginTop: 10 }} />
+                  </div>
+
+                  {/* Stripe */}
+                  <div>
+                    <label className="pe-lbl">Payments — Stripe</label>
+                    <div style={{ background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: stripeConnected ? '#4ade80' : 'var(--casi-text)', marginBottom: 2 }}>
+                          {stripeConnected ? '✓ Connected to Stripe' : 'Connect Stripe to get paid'}
+                        </div>
+                        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
+                          {stripeConnected ? 'Viewers can pay for beam slots' : 'Required to accept card payments'}
+                        </div>
+                      </div>
+                      <button type="button" onClick={handleStripeConnect} disabled={stripeLoading}
+                        style={{ background: stripeConnected ? 'rgba(74,222,128,0.1)' : 'var(--casi-accent)', border: stripeConnected ? '1px solid rgba(74,222,128,0.25)' : 'none', borderRadius: 8, padding: '8px 14px', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: stripeConnected ? '#4ade80' : 'var(--casi-bg)', cursor: stripeLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        {stripeLoading ? 'Redirecting…' : stripeConnected ? '↗ Manage' : 'Connect →'}
+                      </button>
+                    </div>
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>Casi takes a 5% platform fee. Payouts go directly to your bank.</div>
+                  </div>
+
+                  {/* Solana wallet */}
+                  <div>
+                    <label className="pe-lbl">Solana wallet <span style={{ letterSpacing: 0, textTransform: 'none', opacity: 0.6 }}>— USDC streaming payments</span></label>
+                    <div style={{ background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: solanaWallet ? '#9945FF' : 'var(--casi-text)', marginBottom: 2 }}>
+                          {solanaWallet ? `◎ ${solanaWallet.slice(0,6)}…${solanaWallet.slice(-4)}` : 'No wallet linked'}
+                        </div>
+                        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
+                          {solanaWallet ? 'Viewers can pay via Streamflow USDC' : 'Optional — Stripe works without this'}
+                        </div>
+                      </div>
+                      {walletConnected && publicKey ? (
+                        <button type="button" onClick={handleSaveWallet} disabled={savingWallet}
+                          style={{ background: walletSaved ? 'rgba(74,222,128,0.1)' : 'rgba(153,69,255,0.15)', border: walletSaved ? '1px solid rgba(74,222,128,0.3)' : '1px solid rgba(153,69,255,0.35)', borderRadius: 8, padding: '8px 14px', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: walletSaved ? '#4ade80' : '#9945FF', cursor: savingWallet ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                          {savingWallet ? 'Saving…' : walletSaved ? '✓ Saved!' : `Save ${publicKey.toBase58().slice(0,4)}…${publicKey.toBase58().slice(-4)}`}
+                        </button>
+                      ) : (
+                        <button type="button" onClick={openWalletModal} disabled={walletConnecting}
+                          style={{ background: 'rgba(153,69,255,0.1)', border: '1px solid rgba(153,69,255,0.3)', borderRadius: 8, padding: '8px 14px', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: '#9945FF', cursor: walletConnecting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0, opacity: walletConnecting ? 0.6 : 1 }}>
+                          {walletConnecting ? 'Connecting…' : 'Connect Wallet'}
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>Connect your wallet then click Save to link it to your profile.</div>
                   </div>
 
                   {/* Actions */}
