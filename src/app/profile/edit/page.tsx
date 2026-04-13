@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 
 function Logo({ scale = 0.32, color = '#F58220', bg = '#050505' }: { scale?: number; color?: string; bg?: string }) {
   return (
@@ -45,6 +47,18 @@ export default function ProfileEditPage() {
   const supabase = createClient();
   const [stripeConnected, setStripeConnected] = useState(false);
   const [stripeLoading, setStripeLoading]     = useState(false);
+  const [solanaWallet, setSolanaWallet]       = useState('');
+  const [savingWallet, setSavingWallet]       = useState(false);
+  const [walletSaved, setWalletSaved]         = useState(false);
+
+  const { publicKey, connected: walletConnected, connecting: walletConnecting } = useWallet();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
+
+  // Track user intent so the modal doesn't auto-connect on page load
+  const openWalletModal = () => {
+    if (walletConnected) return;
+    setWalletModalVisible(true);
+  };
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const stripeStatus = searchParams?.get('stripe');
 
@@ -61,6 +75,7 @@ export default function ProfileEditPage() {
         if (prof.avatar_url) setAvatarValid(true);
         if (prof.theme_color) setThemeColor(prof.theme_color);
         if (prof?.stripe_account_id) setStripeConnected(true);
+        if (prof?.solana_wallet) setSolanaWallet(prof.solana_wallet);
       }
       setLoading(false);
     };
@@ -94,6 +109,16 @@ export default function ProfileEditPage() {
     const { url } = await res.json();
     if (url) window.location.href = url;
     else setStripeLoading(false);
+  };
+
+  const handleSaveWallet = async () => {
+    if (!profile || !publicKey) return;
+    setSavingWallet(true);
+    await supabase.from('profiles').update({ solana_wallet: publicKey.toBase58() }).eq('id', profile.id);
+    setSolanaWallet(publicKey.toBase58());
+    setSavingWallet(false);
+    setWalletSaved(true);
+    setTimeout(() => setWalletSaved(false), 3000);
   };
 
   const tc = themeColor; // shorthand for inline use
@@ -308,6 +333,35 @@ export default function ProfileEditPage() {
                 </button>
               </div>
               <div className="pe-hint">Casi takes a 5% platform fee. Payouts go directly to your bank.</div>
+            </div>
+
+            {/* ── SOLANA WALLET ── */}
+            <div className="pe-field" style={{ marginTop: 8 }}>
+              <label className="pe-label">Solana wallet <span style={{ color:'#333', textTransform:'none', fontSize:9 }}>— for USDC streaming payments</span></label>
+              <div style={{ background:'#0a0a0a', border:'1px solid #1c1c1c', borderRadius:10, padding:'14px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700, color: solanaWallet ? '#9945FF' : '#e8e8e8', marginBottom:3 }}>
+                    {solanaWallet
+                      ? `◎ ${solanaWallet.slice(0,6)}…${solanaWallet.slice(-4)}`
+                      : 'Connect a Solana wallet to accept SOL payments'}
+                  </div>
+                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#444' }}>
+                    {solanaWallet ? 'Viewers can pay via Streamflow USDC streams' : 'Optional — Stripe payments always work without this'}
+                  </div>
+                </div>
+                {walletConnected && publicKey ? (
+                  <button type="button" onClick={handleSaveWallet} disabled={savingWallet}
+                    style={{ background: walletSaved ? 'rgba(74,222,128,0.1)' : 'rgba(153,69,255,0.15)', border: walletSaved ? '1px solid rgba(74,222,128,0.3)' : '1px solid rgba(153,69,255,0.35)', borderRadius:8, padding:'10px 16px', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:12, textTransform:'uppercase', color: walletSaved ? '#4ade80' : '#9945FF', cursor: savingWallet ? 'wait' : 'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
+                    {savingWallet ? 'Saving…' : walletSaved ? '✓ Saved!' : `Save ${publicKey.toBase58().slice(0,4)}…${publicKey.toBase58().slice(-4)}`}
+                  </button>
+                ) : (
+                  <button type="button" onClick={openWalletModal} disabled={walletConnecting}
+                    style={{ background:'rgba(153,69,255,0.1)', border:'1px solid rgba(153,69,255,0.3)', borderRadius:8, padding:'10px 16px', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:12, textTransform:'uppercase', color:'#9945FF', cursor: walletConnecting ? 'not-allowed' : 'pointer', whiteSpace:'nowrap', flexShrink:0, opacity: walletConnecting ? 0.6 : 1 }}>
+                    {walletConnecting ? 'Connecting…' : 'Connect Wallet'}
+                  </button>
+                )}
+              </div>
+              <div className="pe-hint">Connect your wallet here, then click Save to link it to your profile.</div>
             </div>
 
             {error && <div className="pe-error">{error}</div>}

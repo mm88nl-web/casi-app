@@ -129,7 +129,7 @@ function OverlayContent() {
   const [notification, setNotification] = useState<{text:string;type:string}|null>(null);
 
   // ── Wallet state ──────────────────────────────────────────────────────────
-  const { wallet, connected, connecting, connect, disconnect, publicKey } = useWallet();
+  const { wallet, connected, connecting, connect, disconnect, publicKey, signTransaction, signAllTransactions } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
 
   // Only connect when the user explicitly clicked a Connect button.
@@ -383,6 +383,119 @@ function OverlayContent() {
   }
 };
 
+  // ── Solana / Streamflow booking ────────────────────────────────────────────
+  const submitSolanaBooking = async () => {
+    if (!savedViewerName || !imageUrl || !selectedSlot || !publicKey || !wallet?.adapter) return;
+    if (!profile?.solana_wallet) {
+      showNotif('This streamer has not linked a Solana wallet yet', 'denied');
+      return;
+    }
+    setSubmitting(true);
+
+    // Clean up any stale Solana-pending bookings that never got a stream
+    await supabase.from('bookings').update({ status: 'denied' })
+      .eq('profile_id', profile.id).eq('element_id', selectedSlot.id)
+      .eq('viewer_name', savedViewerName).eq('status', 'pending')
+      .eq('payment_method', 'solana').is('stream_id', null);
+
+    // Duplicate check
+    if (!isExtend) {
+      const { data: existing } = await supabase.from('bookings').select('id')
+        .eq('profile_id', profile.id).eq('element_id', selectedSlot.id)
+        .eq('viewer_name', savedViewerName).in('status', ['pending','active','approved_queued'])
+        .single();
+      if (existing) {
+        setSubmitting(false);
+        showNotif('You already have a booking for this slot', 'warning');
+        closeSlot();
+        return;
+      }
+    }
+
+    const currentQueue = queueCounts[selectedSlot.id] || 0;
+    const { data: newBooking, error: insertError } = await supabase.from('bookings').insert({
+      profile_id: profile.id,
+      element_id: selectedSlot.id,
+      viewer_name: savedViewerName,
+      image_url: imageUrl,
+      message: isExtend ? `⏱ Extension request${message.trim() ? ' — ' + message.trim() : ''}` : (message.trim() || null),
+      duration_minutes: duration,
+      price_value: selectedSlot.price_value,
+      price_unit: selectedSlot.price_unit,
+      status: 'pending',
+      payment_method: 'solana',
+      is_queued: isQueue || isExtend,
+      queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
+    }).select().single();
+
+    if (insertError || !newBooking) {
+      showNotif('Failed to create booking', 'error');
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      // Dynamic import keeps Streamflow out of the initial bundle
+      const { SolanaStreamClient, getBN, ICluster } = await import('@streamflow/stream');
+
+      const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+      const totalUsdc = selectedSlot.price_unit === 'min'
+        ? selectedSlot.price_value * duration
+        : selectedSlot.price_value * (duration / 60);
+      const usdcDecimals = 6;
+
+      const client = new SolanaStreamClient('https://api.devnet.solana.com', ICluster.Devnet);
+      const { txId, metadataId } = await client.create(
+        {
+          recipient:              profile.solana_wallet,
+          tokenId:                USDC_DEVNET,
+          start:                  Math.floor(Date.now() / 1000),
+          amount:                 getBN(totalUsdc, usdcDecimals),
+          period:                 60,                                           // release every 60 s
+          amountPerPeriod:        getBN(totalUsdc / duration, usdcDecimals),   // per minute
+          cliff:                  Math.floor(Date.now() / 1000),
+          cliffAmount:            getBN(0, usdcDecimals),
+          cancelableBySender:     true,
+          cancelableByRecipient:  false,
+          transferableBySender:   false,
+          transferableByRecipient: false,
+          automaticWithdrawal:    true,
+          canTopup:               false,
+          name:                   `Casi Beam — ${savedViewerName}`,
+        },
+        { sender: wallet.adapter as any },
+      );
+
+      // Persist stream reference so the webhook and cancel flow can look it up
+      await supabase.from('bookings').update({ stream_id: metadataId, tx_signature: txId })
+        .eq('id', newBooking.id);
+
+      showNotif('◎ Stream started — beam pending approval!', 'success');
+      closeSlot();
+      if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+    } catch (err: any) {
+      console.error('Streamflow error:', err);
+      await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
+      showNotif(err?.message || 'Solana payment failed — please try again', 'denied');
+    }
+
+    setSubmitting(false);
+  };
+
+  const cancelSolanaStream = async (booking: any) => {
+    if (!wallet?.adapter) return;
+    try {
+      const { SolanaStreamClient, ICluster } = await import('@streamflow/stream');
+      const client = new SolanaStreamClient('https://api.devnet.solana.com', ICluster.Devnet);
+      await client.cancel({ id: booking.stream_id }, { invoker: wallet.adapter as any });
+    } catch (err) {
+      console.error('Streamflow cancel error:', err);
+    }
+    await supabase.from('bookings').update({ status: 'denied' }).eq('id', booking.id);
+    showNotif('Solana stream cancelled ◎', 'warning');
+    if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+  };
+  // ──────────────────────────────────────────────────────────────────────────
 
   const estimatedCost = selectedSlot
     ? selectedSlot.price_unit==='min'
@@ -560,13 +673,17 @@ function OverlayContent() {
                       )}
                       {isLive && (
   <button className="cancel-btn" onClick={async () => {
-    await fetch('/api/stripe/end-early', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ booking_id: booking.id }),
-    });
-    showNotif('Beam ended — prorated refund issued', 'warning');
-    if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+    if (booking.payment_method === 'solana') {
+      await cancelSolanaStream(booking);
+    } else {
+      await fetch('/api/stripe/end-early', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: booking.id }),
+      });
+      showNotif('Beam ended — prorated refund issued', 'warning');
+      if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+    }
   }}>
     ✕ end early
   </button>
@@ -750,8 +867,7 @@ function OverlayContent() {
                       if (!connected) {
                         openWalletModal();
                       } else {
-                        // Streamflow payment — coming soon
-                        showNotif('Solana streaming payments coming soon ◎', 'queue');
+                        submitSolanaBooking();
                       }
                     }}
                   >
