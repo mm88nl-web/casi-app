@@ -5,6 +5,11 @@ import { createClient } from '@/utils/supabase/client';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 
+// Module-level constant — accessible in every function including cancelSolanaStream
+// and the AlreadyProcessed catch block inside submitSolanaBooking.
+const RPC_DEVNET = 'https://api.devnet.solana.com';
+const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+
 function Logo({ scale = 0.32, color = '#F58220', bg = '#050505' }: { scale?: number; color?: string; bg?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width={400 * scale} height={200 * scale}>
@@ -449,8 +454,6 @@ function OverlayContent() {
       const { SolanaStreamClient, getBN, ICluster } = await import('@streamflow/stream');
       const { Connection, PublicKey }               = await import('@solana/web3.js');
 
-      const USDC_DEVNET  = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
-      const RPC_DEVNET   = 'https://api.devnet.solana.com';
       const usdcDecimals = 6;
       const totalUsdc    = selectedSlot.price_unit === 'min'
         ? selectedSlot.price_value * duration
@@ -557,8 +560,10 @@ function OverlayContent() {
       // Recover the signature from the wallet's most recent transaction.
       if (msg.includes('AlreadyProcessed')) {
         try {
-          // connection and publicKey are already in scope from the pre-flight block above
-          const recent = await connection.getSignaturesForAddress(publicKey, { limit: 3 });
+          // Connection is a dynamic import inside the try block — re-import here
+          const { Connection: RC } = await import('@solana/web3.js');
+          const recoveryConn = new RC(RPC_DEVNET, 'confirmed');
+          const recent = await recoveryConn.getSignaturesForAddress(publicKey, { limit: 3 });
           const landed = recent.find(s => !s.err);
           if (landed) {
             await supabase.from('bookings')
