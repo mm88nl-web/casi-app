@@ -44,7 +44,7 @@ export default function ProfileEditPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useRef(createClient()).current; // stable ref — prevents useEffect from re-firing every render
   const [stripeConnected, setStripeConnected] = useState(false);
   const [stripeLoading, setStripeLoading]     = useState(false);
   const [solanaWallet, setSolanaWallet]       = useState('');
@@ -129,9 +129,21 @@ export default function ProfileEditPage() {
     setSavingWallet(true);
     const address = publicKey.toBase58();
 
-    // Persist to Supabase
-    await supabase.from('profiles').update({ solana_wallet: address }).eq('id', profile.id);
+    // Persist to Supabase — surface errors so the user knows if migration hasn't been run
+    const { error: saveError } = await supabase
+      .from('profiles')
+      .update({ solana_wallet: address })
+      .eq('id', profile.id);
+
+    if (saveError) {
+      console.error('Wallet save error:', saveError);
+      setError(`Wallet save failed: ${saveError.message}. Make sure you have run the database migration (add solana_wallet column to profiles).`);
+      setSavingWallet(false);
+      return;
+    }
+
     setSolanaWallet(address);
+    setProfile((p: any) => ({ ...p, solana_wallet: address })); // keep local profile in sync
 
     // Register with Helius so this streamer's payments are watched automatically
     // Fire-and-forget — a misconfigured Helius key shouldn't block the save UX
