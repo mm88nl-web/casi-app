@@ -528,7 +528,7 @@ function OverlayContent() {
       await supabase.from('bookings').update({ stream_id: metadataId, tx_signature: txId })
         .eq('id', newBooking.id);
 
-      showNotif('◎ Stream started — beam pending approval!', 'success');
+      showNotif('◎ Payment sent — awaiting streamer approval!', 'success');
       closeSlot();
       if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
     } catch (err: any) {

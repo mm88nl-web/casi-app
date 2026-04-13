@@ -62,16 +62,11 @@ export async function POST(req: Request) {
       continue;
     }
 
-    const { error } = await supabase
-      .from('bookings')
-      .update({ status: 'active' })
-      .eq('id', booking.id);
-
-    if (error) {
-      console.error('[solana webhook] failed to activate booking', booking.id, error);
-    } else {
-      console.log('[solana webhook] ✓ activated booking', booking.id, 'tx:', txSignature);
-    }
+    // Payment confirmed on-chain. Leave status='pending' so the streamer
+    // reviews and approves via the admin dashboard (same UX as Stripe).
+    // The tx_signature already stored in the booking row is the payment proof
+    // that unlocks the admin Approve button.
+    console.log('[solana webhook] ✓ payment confirmed for booking', booking.id, 'tx:', txSignature);
   }
 
   return OK();

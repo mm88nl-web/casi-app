@@ -462,6 +462,9 @@ export default function AdminStudio() {
     await supabase.from('overlay_elements').update({ locked }).eq('id', id);
   }, [supabase]);
 
+  // Payment is confirmed if Stripe PaymentIntent exists OR Solana tx_signature exists
+  const isPaymentConfirmed = (b: any) => !!(b.payment_intent_id || b.tx_signature);
+
   const approveBooking = async (booking: any) => {
   setPreviewBooking(null);
   const slotOccupied = activeBookings.some(b => b.element_id === booking.element_id);
@@ -491,14 +494,19 @@ export default function AdminStudio() {
   setQueuedBookings(prev => prev.filter(b => b.id !== booking.id));
 };
 
-  const denyBooking = async (id: string) => {
+  const denyBooking = async (id: string, paymentMethod?: string) => {
   setPreviewBooking(null);
-  // Cancel Stripe PaymentIntent + update DB
-  await fetch('/api/stripe/cancel', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ booking_id: id }),
-  });
+  if (paymentMethod === 'solana') {
+    // Solana: just mark denied — Streamflow stream cancellation is viewer-side
+    await supabase.from('bookings').update({ status: 'denied' }).eq('id', id);
+  } else {
+    // Stripe: void/refund PaymentIntent then mark denied
+    await fetch('/api/stripe/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_id: id }),
+    });
+  }
   setPendingBookings(prev => prev.filter(b => b.id !== id));
   setQueuedBookings(prev => prev.filter(b => b.id !== id));
 };
@@ -506,14 +514,23 @@ export default function AdminStudio() {
   const kickBeam = useCallback(async (booking: any) => {
   setSelectedSlotId(null);
   setShowInfoPanel(false);
-  // Call end-early API for proration + Stripe capture
-  await fetch('/api/stripe/end-early', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ booking_id: booking.id }),
-  });
-  if (profile?.id) loadBookings(profile.id);
-}, [profile?.id, loadBookings]);
+  if (booking.payment_method === 'solana') {
+    // Solana: just expire the booking — no Stripe proration
+    await supabase
+      .from('bookings')
+      .update({ status: 'expired' })
+      .eq('id', booking.id);
+    if (profile?.id) loadBookings(profile.id);
+  } else {
+    // Stripe: prorate, capture, auto-advance queue
+    await fetch('/api/stripe/end-early', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_id: booking.id }),
+    });
+    if (profile?.id) loadBookings(profile.id);
+  }
+}, [profile?.id, loadBookings, supabase]);
 
   const copyUrl = (url: string, key: string) => {
     navigator.clipboard.writeText(url);
@@ -773,21 +790,19 @@ export default function AdminStudio() {
                 </div>
               )}
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => denyBooking(previewBooking.id)} style={{ flex: 1, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: 12, color: '#f87171', fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, textTransform: 'uppercase', cursor: 'pointer' }}>Deny</button>
-                <button 
-  onClick={() => approveBooking(previewBooking)} 
+                <button onClick={() => denyBooking(previewBooking.id, previewBooking.payment_method)} style={{ flex: 1, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: 12, color: '#f87171', fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, textTransform: 'uppercase', cursor: 'pointer' }}>Deny</button>
+                <button
+  onClick={() => approveBooking(previewBooking)}
   className="act-btn"
-  // Changed 'booking' to 'previewBooking'
-  disabled={!previewBooking?.payment_intent_id}
-  style={{ 
-    background: !previewBooking?.payment_intent_id ? '#1c1c1c' : slotOccupiedForPreview ? '#F58220' : '#06b6d4', 
-    color: !previewBooking?.payment_intent_id ? '#444' : '#050505',
-    cursor: !previewBooking?.payment_intent_id ? 'not-allowed' : 'pointer',
-    // Added your modal styles back in
+  disabled={!isPaymentConfirmed(previewBooking)}
+  style={{
+    background: !isPaymentConfirmed(previewBooking) ? '#1c1c1c' : slotOccupiedForPreview ? '#F58220' : '#06b6d4',
+    color: !isPaymentConfirmed(previewBooking) ? '#444' : '#050505',
+    cursor: !isPaymentConfirmed(previewBooking) ? 'not-allowed' : 'pointer',
     flex: 1, border: 'none', borderRadius: 10, padding: 12, fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 13, textTransform: 'uppercase'
   }}
 >
-  {!previewBooking?.payment_intent_id ? 'Awaiting payment' : slotOccupiedForPreview ? 'Approve → Queue' : 'Approve → Live'}
+  {!isPaymentConfirmed(previewBooking) ? 'Awaiting payment' : slotOccupiedForPreview ? 'Approve → Queue' : 'Approve → Live'}
                 </button>
               </div>
             </div>
@@ -1145,11 +1160,11 @@ export default function AdminStudio() {
                         </div>
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
-                            disabled={!booking.payment_intent_id}
-                            style={{ background: !booking.payment_intent_id ? '#1c1c1c' : activeBookings.some(b => b.element_id === booking.element_id) ? '#F58220' : '#06b6d4', color: !booking.payment_intent_id ? '#444' : '#050505', cursor: !booking.payment_intent_id ? 'not-allowed' : 'pointer' }}>
-                            {!booking.payment_intent_id ? 'Awaiting payment' : activeBookings.some(b => b.element_id === booking.element_id) ? 'Queue' : 'Approve'}
+                            disabled={!isPaymentConfirmed(booking)}
+                            style={{ background: !isPaymentConfirmed(booking) ? '#1c1c1c' : activeBookings.some(b => b.element_id === booking.element_id) ? '#F58220' : '#06b6d4', color: !isPaymentConfirmed(booking) ? '#444' : '#050505', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
+                            {!isPaymentConfirmed(booking) ? 'Awaiting payment' : activeBookings.some(b => b.element_id === booking.element_id) ? 'Queue' : 'Approve'}
                           </button>
-                          <button onClick={() => denyBooking(booking.id)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
+                          <button onClick={() => denyBooking(booking.id, booking.payment_method)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
                         </div>
                       </div>
                     ))}
@@ -1174,11 +1189,11 @@ export default function AdminStudio() {
                         </div>
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
-  disabled={!booking.payment_intent_id}
-  style={{ background: !booking.payment_intent_id ? '#1c1c1c' : '#F58220', color: !booking.payment_intent_id ? '#444' : '#050505', cursor: !booking.payment_intent_id ? 'not-allowed' : 'pointer' }}>
-  {!booking.payment_intent_id ? 'Awaiting payment' : 'Queue'}
+  disabled={!isPaymentConfirmed(booking)}
+  style={{ background: !isPaymentConfirmed(booking) ? '#1c1c1c' : '#F58220', color: !isPaymentConfirmed(booking) ? '#444' : '#050505', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
+  {!isPaymentConfirmed(booking) ? 'Awaiting payment' : 'Queue'}
 </button>
-                          <button onClick={() => denyBooking(booking.id)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
+                          <button onClick={() => denyBooking(booking.id, booking.payment_method)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
                         </div>
                       </div>
                     ))}
@@ -1293,11 +1308,11 @@ export default function AdminStudio() {
                         </div>
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
-                            disabled={!booking.payment_intent_id}
-                            style={{ background: !booking.payment_intent_id ? '#1c1c1c' : '#c084fc', color: !booking.payment_intent_id ? '#444' : '#050505', cursor: !booking.payment_intent_id ? 'not-allowed' : 'pointer' }}>
-                            {!booking.payment_intent_id ? 'Awaiting payment' : activeBookings.some(b => b.element_id === booking.element_id) ? 'Queue' : 'Approve'}
+                            disabled={!isPaymentConfirmed(booking)}
+                            style={{ background: !isPaymentConfirmed(booking) ? '#1c1c1c' : '#c084fc', color: !isPaymentConfirmed(booking) ? '#444' : '#050505', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
+                            {!isPaymentConfirmed(booking) ? 'Awaiting payment' : activeBookings.some(b => b.element_id === booking.element_id) ? 'Queue' : 'Approve'}
                           </button>
-                          <button onClick={() => denyBooking(booking.id)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
+                          <button onClick={() => denyBooking(booking.id, booking.payment_method)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
                         </div>
                       </div>
                     ))}
@@ -1321,11 +1336,11 @@ export default function AdminStudio() {
                         </div>
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
-  disabled={!booking.payment_intent_id}
-  style={{ background: !booking.payment_intent_id ? '#1c1c1c' : '#c084fc', color: !booking.payment_intent_id ? '#444' : '#050505', cursor: !booking.payment_intent_id ? 'not-allowed' : 'pointer' }}>
-  {!booking.payment_intent_id ? 'Awaiting payment' : 'Queue'}
+  disabled={!isPaymentConfirmed(booking)}
+  style={{ background: !isPaymentConfirmed(booking) ? '#1c1c1c' : '#c084fc', color: !isPaymentConfirmed(booking) ? '#444' : '#050505', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
+  {!isPaymentConfirmed(booking) ? 'Awaiting payment' : 'Queue'}
 </button>
-                          <button onClick={() => denyBooking(booking.id)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
+                          <button onClick={() => denyBooking(booking.id, booking.payment_method)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
                         </div>
                       </div>
                     ))}
