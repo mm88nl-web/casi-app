@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
@@ -51,13 +51,26 @@ export default function ProfileEditPage() {
   const [savingWallet, setSavingWallet]       = useState(false);
   const [walletSaved, setWalletSaved]         = useState(false);
 
-  const { publicKey, connected: walletConnected, connecting: walletConnecting } = useWallet();
+  const { wallet, publicKey, connected: walletConnected, connecting: walletConnecting, connect } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
 
-  // Track user intent so the modal doesn't auto-connect on page load
+  // Same pattern as overlay: only connect() after an explicit user click,
+  // not on page load when Wallet Standard auto-detects Phantom.
+  const userInitiatedConnect = useRef(false);
+  useEffect(() => {
+    if (wallet && !walletConnected && !walletConnecting && userInitiatedConnect.current) {
+      userInitiatedConnect.current = false;
+      connect().catch(() => {});
+    }
+  }, [wallet]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const openWalletModal = () => {
-    if (walletConnected) return;
-    setWalletModalVisible(true);
+    userInitiatedConnect.current = true;
+    if (wallet) {
+      connect().catch(() => {});   // wallet already selected — connect directly
+    } else {
+      setWalletModalVisible(true); // open picker modal
+    }
   };
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const stripeStatus = searchParams?.get('stripe');
