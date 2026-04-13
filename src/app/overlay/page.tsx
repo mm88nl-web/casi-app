@@ -499,15 +499,19 @@ function OverlayContent() {
       // ─────────────────────────────────────────────────────────────────────
 
       const client = new SolanaStreamClient(RPC_DEVNET, ICluster.Devnet);
+      // Add 30s buffer: by the time the tx is signed, propagated, and landed in
+      // a block the on-chain clock will have advanced past "now".  Streamflow
+      // rejects start timestamps that are already in the past (Custom error 112).
+      const streamStart = Math.floor(Date.now() / 1000) + 30;
       const { txId, metadataId } = await client.create(
         {
           recipient:               profile.solana_wallet,
           tokenId:                 USDC_DEVNET,
-          start:                   Math.floor(Date.now() / 1000),
+          start:                   streamStart,
           amount:                  getBN(totalUsdc, usdcDecimals),
           period:                  60,                                          // release every 60 s
           amountPerPeriod:         getBN(totalUsdc / duration, usdcDecimals),  // per minute
-          cliff:                   Math.floor(Date.now() / 1000),
+          cliff:                   streamStart,                                 // must equal start when cliffAmount=0
           cliffAmount:             getBN(0, usdcDecimals),
           cancelableBySender:      true,
           cancelableByRecipient:   false,
@@ -542,6 +546,8 @@ function OverlayContent() {
 
       if (msg.includes('AccountNotFound') || logs.includes('AccountNotFound')) {
         userMsg = 'USDC token account not found on devnet. Get USDC at spl-token-faucet.vercel.app';
+      } else if (msg.includes('Custom(112)') || logs.includes('timestamps are invalid') || logs.includes('Custom(112)')) {
+        userMsg = 'Stream timestamp error — please try again';
       } else if (msg.includes('insufficient funds') || logs.includes('0x1')) {
         userMsg = 'Insufficient USDC balance in your wallet';
       } else if (msg.includes('User rejected') || msg.includes('rejected the request')) {
