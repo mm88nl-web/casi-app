@@ -453,10 +453,10 @@ function OverlayContent() {
       //    Needs ~0.02 SOL for rent + fees. Without any SOL, simulation fails
       //    with AccountNotFound (fee payer checked before program runs).
       const solLamports = await connection.getBalance(publicKey);
-      const MIN_SOL = 0.02 * 1e9; // 0.02 SOL in lamports
+      const MIN_SOL = 0.001 * 1e9; // 0.001 SOL minimum — Streamflow needs rent for escrow accounts
       if (solLamports < MIN_SOL) {
         showNotif(
-          `Need at least 0.02 devnet SOL for fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.solana.com`,
+          `Need devnet SOL for fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.quicknode.com/solana/devnet`,
           'denied',
         );
         await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
