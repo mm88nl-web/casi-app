@@ -4,13 +4,14 @@ import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import SkinProvider from '@/components/SkinProvider';
 
 // Module-level constant — accessible in every function including cancelSolanaStream
 // and the AlreadyProcessed catch block inside submitSolanaBooking.
 const RPC_DEVNET = 'https://api.devnet.solana.com';
 const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
 
-function Logo({ scale = 0.32, color = '#F58220', bg = '#050505' }: { scale?: number; color?: string; bg?: string }) {
+function Logo({ scale = 0.32, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width={400 * scale} height={200 * scale}>
       <g stroke={color} fill={color} strokeWidth="16" strokeLinecap="round">
@@ -64,22 +65,22 @@ function NameEntryScreen({ onConfirm, tc }: { onConfirm: (name: string) => void;
   return (
     <>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@400;500&display=swap'); *{box-sizing:border-box;margin:0;padding:0}`}</style>
-      <div style={{ minHeight:'100vh', background:'#050505', display:'flex', alignItems:'center', justifyContent:'center', padding:24, fontFamily:"'Syne',sans-serif" }}>
+      <div style={{ minHeight:'100vh', background:'var(--casi-bg)', display:'flex', alignItems:'center', justifyContent:'center', padding:24, fontFamily:"'Syne',sans-serif" }}>
         <div style={{ width:'100%', maxWidth:380 }}>
           <div style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom:40 }}>
             <Logo scale={0.5} color={tc} />
             <div style={{ fontSize:28, fontWeight:800, color:tc, letterSpacing:-1, marginTop:8 }}>casi</div>
             <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:3, textTransform:'uppercase', color:'#444', marginTop:4 }}>Viewer</div>
           </div>
-          <div style={{ background:'#0a0a0a', border:'1px solid #1c1c1c', borderRadius:16, padding:28, marginBottom:12 }}>
-            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'#555', marginBottom:16 }}>Pick a name for this stream</div>
+          <div style={{ background:'var(--casi-surface)', border:'1px solid var(--casi-border)', borderRadius:16, padding:28, marginBottom:12 }}>
+            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'var(--casi-text-muted)', marginBottom:16 }}>Pick a name for this stream</div>
             <div style={{ position:'relative', marginBottom:8 }}>
               <input type="text" value={name} onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key==='Enter' && name.trim() && onConfirm(name.trim())}
                 maxLength={24} autoFocus
-                style={{ width:'100%', background:'rgba(255,255,255,0.04)', border:'1px solid #1c1c1c', borderRadius:10, padding:'13px 16px', paddingRight:90, fontSize:15, fontWeight:700, color:'#e8e8e8', outline:'none', fontFamily:"'Syne',sans-serif" }}
-                onFocus={(e)=>e.target.style.borderColor=`${tc}60`}
-                onBlur={(e)=>e.target.style.borderColor='#1c1c1c'} />
+                style={{ width:'100%', background:'rgba(255,255,255,0.04)', border:'1px solid var(--casi-border)', borderRadius:10, padding:'13px 16px', paddingRight:90, fontSize:15, fontWeight:700, color:'var(--casi-text)', outline:'none', fontFamily:"'Syne',sans-serif" }}
+                onFocus={(e)=>e.target.style.borderColor='rgba(var(--casi-accent-rgb),0.38)'}
+                onBlur={(e)=>e.target.style.borderColor='var(--casi-border)'} />
               <button onClick={() => setName(generateRandomName())}
                 style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', fontFamily:"'DM Mono',monospace", fontSize:10, color:'#555', cursor:'pointer', textTransform:'uppercase', letterSpacing:1 }}>
                 ↺ random
@@ -87,7 +88,7 @@ function NameEntryScreen({ onConfirm, tc }: { onConfirm: (name: string) => void;
             </div>
             <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#333', marginBottom:20 }}>A random name was generated — change it or keep it.</div>
             <button onClick={() => name.trim() && onConfirm(name.trim())} disabled={!name.trim()}
-              style={{ width:'100%', background:name.trim()?tc:'#1c1c1c', border:'none', borderRadius:10, padding:14, fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:14, textTransform:'uppercase', letterSpacing:0.5, color:'#050505', cursor:name.trim()?'pointer':'not-allowed', transition:'all .2s' }}>
+              style={{ width:'100%', background:name.trim()?tc:'var(--casi-border)', border:'none', borderRadius:10, padding:14, fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:14, textTransform:'uppercase', letterSpacing:0.5, color:'var(--casi-bg)', cursor:name.trim()?'pointer':'not-allowed', transition:'all .2s' }}>
               Enter stream →
             </button>
           </div>
@@ -161,8 +162,9 @@ function OverlayContent() {
   const supabase = useRef(createClient()).current;
   const viewerNameRef = useRef('');
 
-  // Theme color — derived from profile, falls back to Casi orange
-  const tc = profile?.theme_color || '#F58220';
+  // Theme color tokens — CSS vars, set by SkinProvider
+  const tc    = 'var(--casi-accent)';
+  const tcRgb = 'var(--casi-accent-rgb)';
 
   useEffect(() => {
     if (!isOBS && !username) window.location.href = '/search';
@@ -631,8 +633,9 @@ function OverlayContent() {
       : (selectedSlot.price_value * (duration/60)).toFixed(2)
     : '0';
 
-  // For booking form accent: extend=yellow, queue=streamer theme, rent=streamer theme
-  const accentColor = isExtend ? '#eab308' : tc;
+  // For booking form accent: extend=yellow, queue/rent=skin accent
+  const accentColor    = isExtend ? '#eab308' : tc;
+  const accentColorRgb = isExtend ? '234, 179, 8' : tcRgb;
   // Keep denied Solana bookings visible if stream_id is set — viewer may need to
   // manually cancel to recover unvested USDC (e.g. if wallet was disconnected at denial time)
   const visibleMyBookings = myBookings.filter((b:any) =>
@@ -640,69 +643,75 @@ function OverlayContent() {
   );
 
   if (loading) return null;
-  if (!isOBS && !nameConfirmed) return <NameEntryScreen onConfirm={confirmName} tc={tc} />;
+  if (!isOBS && !nameConfirmed) return (
+    <>
+      <SkinProvider skin={profile?.skin} themeColor={profile?.theme_color} />
+      <NameEntryScreen onConfirm={confirmName} tc={tc} />
+    </>
+  );
 
   return (
     <>
+      <SkinProvider skin={profile?.skin} themeColor={profile?.theme_color} />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:.2} }
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-        .ov { min-height:100vh; background:${isOBS?'transparent':'#050505'}; color:#e8e8e8; font-family:'Syne',sans-serif; }
+        .ov { min-height:100vh; background:${isOBS?'transparent':'var(--casi-bg)'}; color:var(--casi-text); font-family:'Syne',sans-serif; }
 
-        .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid #0d0d0d; background:rgba(5,5,5,0.94); backdrop-filter:blur(20px); position:sticky; top:0; z-index:50; }
+        .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid var(--casi-surface); background:color-mix(in srgb,var(--casi-bg) 94%,transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:50; }
         .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; }
-        .ov-wm { font-size:18px; font-weight:800; color:${tc}; letter-spacing:-0.5px; }
+        .ov-wm { font-size:18px; font-weight:800; color:var(--casi-accent); letter-spacing:-0.5px; }
         .ov-nav-right { display:flex; align-items:center; gap:10px; }
         .notif { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:fadeIn .3s ease; white-space:nowrap; max-width:200px; overflow:hidden; text-overflow:ellipsis; }
-        .viewer-chip { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.04); border:1px solid #1c1c1c; border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
+        .viewer-chip { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.04); border:1px solid var(--casi-border); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
         .viewer-chip:hover { border-color:#333; }
-        .vdot { width:6px; height:6px; border-radius:50%; background:${tc}; animation:blink 1.5s infinite; flex-shrink:0; }
+        .vdot { width:6px; height:6px; border-radius:50%; background:var(--casi-accent); animation:blink 1.5s infinite; flex-shrink:0; }
         .vname { font-family:'DM Mono',monospace; font-size:10px; color:#888; }
-        .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid ${tc}50; border-radius:8px; padding:6px 12px; font-size:12px; color:#e8e8e8; outline:none; font-family:'DM Mono',monospace; width:130px; }
+        .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid rgba(var(--casi-accent-rgb),0.31); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--casi-text); outline:none; font-family:'DM Mono',monospace; width:130px; }
 
         .ov-main { max-width:1200px; margin:0 auto; padding:16px 20px 48px; }
 
-        .my-beams { background:#080808; border:1px solid #111; border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
-        .my-beams-lbl { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:#444; margin-bottom:10px; }
+        .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
+        .my-beams-lbl { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; }
         .my-beams-list { display:flex; flex-wrap:wrap; gap:8px; }
         .beam-chip { display:flex; align-items:center; gap:8px; border-radius:10px; padding:8px 12px; border:1px solid; font-size:12px; }
         .cancel-btn { background:none; border:none; font-family:'DM Mono',monospace; font-size:9px; color:rgba(248,113,113,0.5); cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:color .2s; padding:0; margin-left:4px; }
         .cancel-btn:hover { color:#f87171; }
 
-        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid #1c1c1c; background:#050505; position:relative; overflow:hidden; margin-bottom:10px; }
+        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:var(--casi-bg); position:relative; overflow:hidden; margin-bottom:10px; }
 
         .slots-sec { margin-top:20px; }
-        .slots-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:#444; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
-        .slots-lbl::before { content:''; display:block; width:16px; height:1px; background:#333; }
+        .slots-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+        .slots-lbl::before { content:''; display:block; width:16px; height:1px; background:var(--casi-border); }
         .slots-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:8px; }
-        .slot-card { background:#080808; border:1px solid #161616; border-radius:12px; padding:14px; cursor:pointer; transition:all .2s; display:flex; align-items:center; gap:10px; }
-        .slot-card:hover:not(.s-disabled) { border-color:#2a2a2a; transform:translateY(-1px); }
+        .slot-card { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px; cursor:pointer; transition:all .2s; display:flex; align-items:center; gap:10px; }
+        .slot-card:hover:not(.s-disabled) { border-color:rgba(var(--casi-accent-rgb),0.3); transform:translateY(-1px); }
         .slot-card.s-disabled { cursor:default; opacity:0.55; }
-        .s-thumb { width:36px; height:36px; border-radius:7px; overflow:hidden; background:#050505; border:1px solid #1c1c1c; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; }
-        .s-type  { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:#444; margin-bottom:3px; }
+        .s-thumb { width:36px; height:36px; border-radius:7px; overflow:hidden; background:var(--casi-bg); border:1px solid var(--casi-border); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; }
+        .s-type  { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:3px; }
         .s-price { font-family:'DM Mono',monospace; font-size:13px; font-weight:500; }
 
-        .bf { background:#080808; border-radius:14px; padding:20px; margin-top:10px; animation:fadeIn .25s ease; }
+        .bf { background:var(--casi-surface); border-radius:14px; padding:20px; margin-top:10px; animation:fadeIn .25s ease; }
         .bf-hdr { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:18px; }
         .bf-type  { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px; }
         .bf-price { font-size:20px; font-weight:800; letter-spacing:-0.5px; }
-        .bf-x { background:none; border:none; color:#444; cursor:pointer; font-size:18px; padding:4px; transition:color .2s; }
-        .bf-x:hover { color:#e8e8e8; }
-        .bf-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:#555; display:block; margin-bottom:8px; }
-        .bf-inp { width:100%; background:#050505; border:1px solid #1c1c1c; border-radius:10px; padding:12px 16px; font-size:14px; color:#e8e8e8; outline:none; font-family:'Syne',sans-serif; transition:border-color .2s; }
+        .bf-x { background:none; border:none; color:var(--casi-text-muted); cursor:pointer; font-size:18px; padding:4px; transition:color .2s; }
+        .bf-x:hover { color:var(--casi-text); }
+        .bf-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); display:block; margin-bottom:8px; }
+        .bf-inp { width:100%; background:var(--casi-bg); border:1px solid var(--casi-border); border-radius:10px; padding:12px 16px; font-size:14px; color:var(--casi-text); outline:none; font-family:'Syne',sans-serif; transition:border-color .2s; }
         .bf-inp::placeholder { color:#333; }
         .bf-hint { font-family:'DM Mono',monospace; font-size:10px; margin-top:6px; }
         .bf-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
         .dur-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:8px; }
-        .dur-btn { font-family:'DM Mono',monospace; font-size:10px; padding:7px 12px; border-radius:8px; border:1px solid #1c1c1c; background:none; color:#555; cursor:pointer; transition:all .2s; }
-        .dur-btn:hover { border-color:#333; color:#e8e8e8; }
-        .bf-footer { display:flex; align-items:center; justify-content:space-between; padding-top:14px; border-top:1px solid #111; margin-top:8px; gap:12px; }
-        .bf-cost-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#444; }
+        .dur-btn { font-family:'DM Mono',monospace; font-size:10px; padding:7px 12px; border-radius:8px; border:1px solid var(--casi-border); background:none; color:var(--casi-text-muted); cursor:pointer; transition:all .2s; }
+        .dur-btn:hover { border-color:rgba(var(--casi-accent-rgb),0.3); color:var(--casi-text); }
+        .bf-footer { display:flex; align-items:center; justify-content:space-between; padding-top:14px; border-top:1px solid var(--casi-surface); margin-top:8px; gap:12px; }
+        .bf-cost-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--casi-text-muted); }
         .bf-cost-val { font-size:22px; font-weight:800; letter-spacing:-0.5px; margin-top:2px; }
         .bf-sub { font-family:'Syne',sans-serif; font-weight:800; font-size:14px; text-transform:uppercase; letter-spacing:0.3px; padding:13px 24px; border-radius:10px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
-        .bf-sub:disabled { background:#1c1c1c !important; color:#444 !important; cursor:not-allowed; }
+        .bf-sub:disabled { background:var(--casi-border) !important; color:#444 !important; cursor:not-allowed; }
         .bf-sub:hover:not(:disabled) { filter:brightness(1.1); transform:translateY(-1px); }
 
         @media (max-width:640px) {
@@ -728,9 +737,9 @@ function OverlayContent() {
               {connected && publicKey ? (
                 <button
                   onClick={() => disconnect()}
-                  style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1.5, textTransform:'uppercase', background:'rgba(255,255,255,0.04)', border:'1px solid #1c1c1c', borderRadius:20, padding:'5px 12px', color:'#888', cursor:'pointer', transition:'all .2s' }}
+                  style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1.5, textTransform:'uppercase', background:'rgba(255,255,255,0.04)', border:'1px solid var(--casi-border)', borderRadius:20, padding:'5px 12px', color:'#888', cursor:'pointer', transition:'all .2s' }}
                   onMouseEnter={e => { (e.target as HTMLButtonElement).style.color='#f87171'; (e.target as HTMLButtonElement).style.borderColor='rgba(248,113,113,0.3)'; }}
-                  onMouseLeave={e => { (e.target as HTMLButtonElement).style.color='#888'; (e.target as HTMLButtonElement).style.borderColor='#1c1c1c'; }}
+                  onMouseLeave={e => { (e.target as HTMLButtonElement).style.color='#888'; (e.target as HTMLButtonElement).style.borderColor='var(--casi-border)'; }}
                 >
                   {publicKey.toBase58().slice(0,4)}…{publicKey.toBase58().slice(-4)} ✕
                 </button>
@@ -745,8 +754,8 @@ function OverlayContent() {
               )}
               {notification && (
                 <div className="notif" style={
-                  notification.type==='success' ? { background:`${tc}18`, border:`1px solid ${tc}40`, color:tc } :
-                  notification.type==='queue'   ? { background:`${tc}15`, border:`1px solid ${tc}35`, color:tc } :
+                  notification.type==='success' ? { background:`rgba(${tcRgb},0.09)`, border:`1px solid rgba(${tcRgb},0.25)`, color:tc } :
+                  notification.type==='queue'   ? { background:`rgba(${tcRgb},0.08)`, border:`1px solid rgba(${tcRgb},0.21)`, color:tc } :
                   notification.type==='denied'  ? { background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.25)', color:'#f87171' } :
                   { background:'rgba(234,179,8,0.1)', border:'1px solid rgba(234,179,8,0.25)', color:'#facc15' }
                 }>{notification.text}</div>
@@ -785,10 +794,10 @@ function OverlayContent() {
                   const chipStyle = isExpiring
                     ? { background:'rgba(234,179,8,0.08)', borderColor:'rgba(234,179,8,0.25)', color:'#facc15' }
                     : isLive
-                    ? { background:`${tc}12`, borderColor:`${tc}35`, color:tc }
+                    ? { background:`rgba(${tcRgb},0.07)`, borderColor:`rgba(${tcRgb},0.21)`, color:tc }
                     : isApproved
-                    ? { background:`${tc}10`, borderColor:`${tc}30`, color:tc }
-                    : { background:'rgba(255,255,255,0.03)', borderColor:'#1c1c1c', color:'#555' };
+                    ? { background:`rgba(${tcRgb},0.06)`, borderColor:`rgba(${tcRgb},0.19)`, color:tc }
+                    : { background:'rgba(255,255,255,0.03)', borderColor:'var(--casi-border)', color:'var(--casi-text-muted)' };
                   return (
                     <div key={booking.id} className="beam-chip" style={chipStyle}>
                       {booking.image_url && <img src={booking.image_url} style={{ width:20, height:20, objectFit:'contain', borderRadius:4 }} alt="" />}
@@ -856,12 +865,12 @@ function OverlayContent() {
                   {displayImage ? (
                     <div style={{ position:'relative', width:'100%', height:'100%' }}>
                       <img src={displayImage} style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'fill', pointerEvents:'none' }} alt="" />
-                      {isSelected && imageValid && <div style={{ position:'absolute', inset:0, borderRadius:4, boxShadow:`inset 0 0 0 2px ${accentColor}80`, pointerEvents:'none' }} />}
+                      {isSelected && imageValid && <div style={{ position:'absolute', inset:0, borderRadius:4, boxShadow:`inset 0 0 0 2px rgba(${accentColorRgb},0.5)`, pointerEvents:'none' }} />}
                     </div>
                   ) : (
-                    <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:el.is_background?12:6, border:`1.5px dashed ${isLocked?'rgba(248,113,113,0.3)':isOccupied?`${tc}50`:el.is_background?'rgba(168,85,247,0.3)':`${tc}40`}`, background:isLocked?'rgba(248,113,113,0.03)':isOccupied?`${tc}05`:el.is_background?'rgba(168,85,247,0.03)':`${tc}05` }}>
+                    <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:el.is_background?12:6, border:`1.5px dashed ${isLocked?'rgba(248,113,113,0.3)':isOccupied?`rgba(${tcRgb},0.31)`:el.is_background?'rgba(168,85,247,0.3)':`rgba(${tcRgb},0.25)`}`, background:isLocked?'rgba(248,113,113,0.03)':isOccupied?`rgba(${tcRgb},0.02)`:el.is_background?'rgba(168,85,247,0.03)':`rgba(${tcRgb},0.02)` }}>
                       <span style={{ fontSize:el.is_background?20:14, marginBottom:4 }}>{isLocked?'🔒':isOccupied?'':el.is_background?'🖼':'✦'}</span>
-                      {isOccupied && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:`${tc}b0` }}><Countdown booking={activeBooking} /></span>}
+                      {isOccupied && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:`rgba(${tcRgb},0.69)` }}><Countdown booking={activeBooking} /></span>}
                     </div>
                   )}
 
@@ -875,12 +884,12 @@ function OverlayContent() {
                         <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'rgba(248,113,113,0.5)', padding:'3px 8px', border:'1px solid rgba(248,113,113,0.15)', borderRadius:20 }}>🔒 Locked</span>
                       ) : myBookingForSlot ? (
                         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
-                          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, padding:'3px 10px', borderRadius:20, border:'1px solid', ...(myIsExpiring?{color:'#facc15',borderColor:'rgba(234,179,8,0.3)',background:'rgba(234,179,8,0.08)'}:myBookingForSlot.status==='active'?{color:tc,borderColor:`${tc}50`,background:`${tc}12`}:myBookingForSlot.status==='approved_queued'?{color:tc,borderColor:`${tc}40`,background:`${tc}10`}:{color:'#555',borderColor:'#1c1c1c',background:'rgba(255,255,255,0.03)'}) }}>
+                          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, padding:'3px 10px', borderRadius:20, border:'1px solid', ...(myIsExpiring?{color:'#facc15',borderColor:'rgba(234,179,8,0.3)',background:'rgba(234,179,8,0.08)'}:myBookingForSlot.status==='active'?{color:tc,borderColor:`rgba(${tcRgb},0.31)`,background:`rgba(${tcRgb},0.07)`}:myBookingForSlot.status==='approved_queued'?{color:tc,borderColor:`rgba(${tcRgb},0.25)`,background:`rgba(${tcRgb},0.06)`}:{color:'var(--casi-text-muted)',borderColor:'var(--casi-border)',background:'rgba(255,255,255,0.03)'}) }}>
                             {myIsExpiring?'⚠ Expiring':myBookingForSlot.status==='active'?'● Your beam is live':myBookingForSlot.status==='approved_queued'?'⏳ Queued':'⌛ Pending'}
                           </span>
                           {showExtend && (
                             <button onClick={() => openSlot(el, false, true)}
-                              style={{ background:'#eab308', border:'none', borderRadius:20, padding:'4px 12px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:10, textTransform:'uppercase', color:'#050505', cursor:'pointer' }}>
+                              style={{ background:'#eab308', border:'none', borderRadius:20, padding:'4px 12px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:10, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer' }}>
                               Extend
                             </button>
                           )}
@@ -890,12 +899,12 @@ function OverlayContent() {
                         </div>
                       ) : isOccupied ? (
                         <button onClick={() => openSlot(el, true)}
-                          style={{ background:tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'#050505', cursor:'pointer' }}>
+                          style={{ background:tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer' }}>
                           Join queue{queueCount>0?` (${queueCount})`:''}
                         </button>
                       ) : !selectedSlot ? (
                         <button onClick={() => openSlot(el, false)}
-                          style={{ background:tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'#050505', cursor:'pointer', boxShadow:`0 4px 14px ${tc}30` }}>
+                          style={{ background:tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer', boxShadow:`0 4px 14px rgba(${tcRgb},0.19)` }}>
                           Rent this slot
                         </button>
                       ) : null}
@@ -908,7 +917,7 @@ function OverlayContent() {
 
           {/* BOOKING FORM */}
           {!isOBS && selectedSlot && (
-            <div className="bf" style={{ border:`1px solid ${accentColor}22` }}>
+            <div className="bf" style={{ border:`1px solid rgba(${accentColorRgb},0.13)` }}>
               <div className="bf-hdr">
                 <div>
                   <div className="bf-type" style={{ color:accentColor }}>{isExtend?'⏱ Extend slot':isQueue?'⏳ Join queue':'🎯 Rent slot'}</div>
@@ -922,7 +931,7 @@ function OverlayContent() {
                     <label className="bf-lbl">Image or GIF URL</label>
                     <input type="text" value={imageUrl} placeholder="https://your-image.png or .gif"
                       className="bf-inp" autoFocus={!isExtend}
-                      style={{ borderColor:imageValid?`${accentColor}50`:undefined }}
+                      style={{ borderColor:imageValid?`rgba(${accentColorRgb},0.31)`:undefined }}
                       onChange={(e) => { setImageUrl(e.target.value); setImageValid(false); }} />
                     {imageUrl && <img src={imageUrl} style={{ display:'none' }} alt="" onLoad={() => setImageValid(true)} onError={() => setImageValid(false)} />}
                     <div className="bf-hint" style={{ color:imageValid?accentColor:imageUrl?'#f87171':'#444' }}>
@@ -931,7 +940,7 @@ function OverlayContent() {
                   </div>
                   <div>
                     <label className="bf-lbl">Viewing as</label>
-                    <div style={{ display:'flex', alignItems:'center', gap:10, background:'#050505', border:'1px solid #1c1c1c', borderRadius:10, padding:'10px 14px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, background:'var(--casi-bg)', border:'1px solid var(--casi-border)', borderRadius:10, padding:'10px 14px' }}>
                       <span className="vdot" />
                       <span style={{ fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:14, flex:1 }}>@{savedViewerName}</span>
                       <button onClick={() => setShowChangeName(true)} style={{ background:'none', border:'none', fontFamily:"'DM Mono',monospace", fontSize:9, color:'#444', cursor:'pointer', textTransform:'uppercase', letterSpacing:1 }}>change</button>
@@ -950,7 +959,7 @@ function OverlayContent() {
                     <div className="dur-row">
                       {[15,30,60].filter(d=>!selectedSlot.max_duration_minutes||d<=selectedSlot.max_duration_minutes).map(d=>(
                         <button key={d} className="dur-btn"
-                          style={duration===d?{background:accentColor,borderColor:accentColor,color:'#050505',fontWeight:700}:{}}
+                          style={duration===d?{background:accentColor,borderColor:accentColor,color:'var(--casi-bg)',fontWeight:700}:{}}
                           onClick={() => setDurationClamped(d)}>{d}m</button>
                       ))}
                     </div>
@@ -972,9 +981,9 @@ function OverlayContent() {
   const wait = Math.round(remaining + queueMinutes);
   const ahead = queue.length;
   return (
-    <div style={{ background: 'rgba(245,130,32,0.06)', border: '1px solid rgba(245,130,32,0.15)', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: '#555', marginBottom: 4 }}>Estimated wait</div>
-      <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 15, fontWeight: 700, color: '#F58220' }}>~{wait} min</div>
+    <div style={{ background: `rgba(${tcRgb},0.06)`, border: `1px solid rgba(${tcRgb},0.15)`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 4 }}>Estimated wait</div>
+      <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 15, fontWeight: 700, color: 'var(--casi-accent)' }}>~{wait} min</div>
       <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', marginTop: 2 }}>{ahead} booking{ahead !== 1 ? 's' : ''} ahead of you</div>
     </div>
   );
@@ -987,7 +996,7 @@ function OverlayContent() {
                 <div style={{ display:'flex', gap:8 }}>
                   {/* ── Stripe ── */}
                   <button onClick={submitBooking} disabled={!imageValid||submitting} className="bf-sub"
-                    style={{ background:accentColor, color:'#050505', display:'flex', alignItems:'center', gap:7 }}>
+                    style={{ background:accentColor, color:'var(--casi-bg)', display:'flex', alignItems:'center', gap:7 }}>
                     {/* card icon */}
                     <svg width="14" height="11" viewBox="0 0 14 11" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <rect x="0.5" y="0.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeOpacity="0.6"/>
@@ -1034,9 +1043,9 @@ function OverlayContent() {
                   const priceColor       = isLocked?'#555':myBookingForSlot?'#555':tc;
                   return (
                     <button key={el.id} className={`slot-card ${myBookingForSlot||isLocked?'s-disabled':''}`}
-                      style={{ borderColor:isOccupied&&!myBookingForSlot&&!isLocked?`${tc}25`:!myBookingForSlot&&!isLocked?`${tc}18`:undefined }}
+                      style={{ borderColor:isOccupied&&!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.14)`:!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.09)`:undefined }}
                       onClick={() => !myBookingForSlot&&!isLocked&&openSlot(el,isOccupied)}>
-                      <div className="s-thumb" style={{ borderColor:isOccupied?`${tc}35`:`${tc}25` }}>
+                      <div className="s-thumb" style={{ borderColor:isOccupied?`rgba(${tcRgb},0.21)`:`rgba(${tcRgb},0.14)` }}>
                         {el.image_url?<img src={el.image_url} style={{ width:'100%',height:'100%',objectFit:'contain' }} alt="" />:<span>{isLocked?'🔒':el.is_background?'🖼':'✦'}</span>}
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
@@ -1051,7 +1060,7 @@ function OverlayContent() {
           )}
 
           {!isOBS && (
-            <div style={{ marginTop:36, paddingTop:20, borderTop:'1px solid #0d0d0d', textAlign:'center' }}>
+            <div style={{ marginTop:36, paddingTop:20, borderTop:'1px solid var(--casi-surface)', textAlign:'center' }}>
               <a href="/search" style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'#222', textDecoration:'none' }}>
                 Browse other streams →
               </a>

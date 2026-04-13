@@ -3,6 +3,17 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* ── Casi skin tokens ── defaults match Casi Dark, overridden by SkinProvider */
+  --casi-accent:      #F58220;
+  --casi-accent-rgb:  245, 130, 32;
+  --casi-accent2:     #06b6d4;
+  --casi-accent2-rgb: 6, 182, 212;
+  --casi-bg:          #050505;
+  --casi-surface:     #0d0d0d;
+  --casi-border:      #1c1c1c;
+  --casi-text:        #e8e8e8;
+  --casi-text-muted:  #555;
 }
 
 @theme inline {

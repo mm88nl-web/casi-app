@@ -3,9 +3,11 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Rnd } from 'react-rnd';
 import { useRouter } from 'next/navigation';
+import SkinProvider from '@/components/SkinProvider';
+import { SKINS } from '@/lib/skins';
 
 /* ── Logo ── */
-function Logo({ scale = 0.38, color = '#F58220', bg = '#050505' }: { scale?: number; color?: string; bg?: string }) {
+function Logo({ scale = 0.38, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width={400 * scale} height={200 * scale}>
       <g stroke={color} fill={color} strokeWidth="16" strokeLinecap="round">
@@ -50,9 +52,9 @@ function BeamTimer({ booking, onExpire }: { booking: any; onExpire: (b: any) => 
       display: 'inline-flex', alignItems: 'center', gap: 5,
       padding: '3px 10px', borderRadius: 20, fontSize: 11,
       fontFamily: "'DM Mono', monospace", fontWeight: 500,
-      background: isExpired ? 'rgba(239,68,68,0.12)' : isWarning ? 'rgba(234,179,8,0.12)' : 'rgba(6,182,212,0.10)',
-      color: isExpired ? '#f87171' : isWarning ? '#facc15' : '#06b6d4',
-      border: `1px solid ${isExpired ? 'rgba(239,68,68,0.3)' : isWarning ? 'rgba(234,179,8,0.3)' : 'rgba(6,182,212,0.2)'}`,
+      background: isExpired ? 'rgba(239,68,68,0.12)' : isWarning ? 'rgba(234,179,8,0.12)' : 'rgba(var(--casi-accent2-rgb),0.10)',
+      color: isExpired ? '#f87171' : isWarning ? '#facc15' : 'var(--casi-accent2)',
+      border: `1px solid ${isExpired ? 'rgba(239,68,68,0.3)' : isWarning ? 'rgba(234,179,8,0.3)' : 'rgba(var(--casi-accent2-rgb),0.2)'}`,
       animation: isWarning ? 'pulse 1.5s infinite' : 'none',
     }}>
       <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
@@ -95,31 +97,31 @@ function BackdropModal({ onConfirm, onClose }: {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 24 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: '#0d0d0d', border: '1px solid #222', borderRadius: 16, padding: 32, width: '100%', maxWidth: 380 }}>
-        <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: '#f0f0f0', marginBottom: 6 }}>Full Backdrop</h2>
-        <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555', marginBottom: 24, lineHeight: 1.6 }}>Full-screen slot. Viewers send their image — you approve before it goes live.</p>
+      <div style={{ background: 'var(--casi-surface)', border: '1px solid #222', borderRadius: 16, padding: 32, width: '100%', maxWidth: 380 }}>
+        <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: 'var(--casi-text)', marginBottom: 6 }}>Full Backdrop</h2>
+        <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 24, lineHeight: 1.6 }}>Full-screen slot. Viewers send their image — you approve before it goes live.</p>
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#555', marginBottom: 8 }}>Price</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 8 }}>Price</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#F58220', fontWeight: 800 }}>$</span>
+            <span style={{ color: 'var(--casi-accent)', fontWeight: 800 }}>$</span>
             <input type="number" min={1} value={price} onChange={(e) => setPrice(Math.max(1, parseInt(e.target.value) || 1))}
-              style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid #222', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: '#e8e8e8', outline: 'none', fontFamily: "'Syne', sans-serif" }} autoFocus />
+              style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid #222', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: 'var(--casi-text)', outline: 'none', fontFamily: "'Syne', sans-serif" }} autoFocus />
             <select value={unit} onChange={(e) => setUnit(e.target.value)}
-              style={{ background: '#0d0d0d', border: '1px solid #222', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#e8e8e8', outline: 'none', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+              style={{ background: 'var(--casi-surface)', border: '1px solid #222', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--casi-text)', outline: 'none', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
               <option value="min">/min</option>
               <option value="hr">/hr</option>
             </select>
           </div>
         </div>
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#555', marginBottom: 8 }}>Max duration (minutes, optional)</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 8 }}>Max duration (minutes, optional)</div>
           <input type="number" min={1} value={maxDuration} onChange={(e) => setMaxDuration(e.target.value)} placeholder="No limit"
-            style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid #222', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: '#e8e8e8', outline: 'none', fontFamily: "'Syne', sans-serif" }} />
+            style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid #222', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: 'var(--casi-text)', outline: 'none', fontFamily: "'Syne', sans-serif" }} />
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onClose} style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid #222', borderRadius: 8, padding: 12, color: '#888', fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, textTransform: 'uppercase', cursor: 'pointer' }}>Cancel</button>
           <button onClick={() => onConfirm(price, unit, maxDuration ? parseInt(maxDuration) : null)}
-            style={{ flex: 1, background: '#F58220', border: 'none', borderRadius: 8, padding: 12, color: '#050505', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', cursor: 'pointer' }}>Create Slot</button>
+            style={{ flex: 1, background: 'var(--casi-accent)', border: 'none', borderRadius: 8, padding: 12, color: 'var(--casi-bg)', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', cursor: 'pointer' }}>Create Slot</button>
         </div>
       </div>
     </div>
@@ -155,34 +157,34 @@ function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLo
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 250, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(2px)' }} onClick={onClose}>
-      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '90%', maxWidth: 500, background: '#0d0d0d', border: '1px solid #222', borderRadius: 16, overflow: 'hidden' }}
+      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '90%', maxWidth: 500, background: 'var(--casi-surface)', border: '1px solid #222', borderRadius: 16, overflow: 'hidden' }}
         onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #161616' }}>
           <div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#555', marginBottom: 4 }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 4 }}>
               {el.is_background ? 'Full Backdrop' : 'Beam Slot'}
               {el.locked && <span style={{ color: '#f87171', marginLeft: 10 }}>● Locked</span>}
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
         </div>
         <div style={{ padding: 24 }}>
 
           {/* Price editor */}
-          <div style={{ background: 'rgba(245,130,32,0.05)', border: '1px solid rgba(245,130,32,0.15)', borderRadius: 10, padding: 16, marginBottom: 16 }}>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#555', marginBottom: 10 }}>Price</div>
+          <div style={{ background: 'rgba(var(--casi-accent-rgb),0.05)', border: '1px solid rgba(var(--casi-accent-rgb),0.15)', borderRadius: 10, padding: 16, marginBottom: 16 }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 10 }}>Price</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ color: '#F58220', fontWeight: 800, fontSize: 16 }}>$</span>
+              <span style={{ color: 'var(--casi-accent)', fontWeight: 800, fontSize: 16 }}>$</span>
               <input type="number" min={0} value={editPrice}
                 onChange={(e) => setEditPrice(e.target.value)}
-                style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid #333', borderRadius: 8, padding: '10px 14px', fontSize: 16, color: '#e8e8e8', outline: 'none', fontFamily: "'DM Mono', monospace" }} />
+                style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid #333', borderRadius: 8, padding: '10px 14px', fontSize: 16, color: 'var(--casi-text)', outline: 'none', fontFamily: "'DM Mono', monospace" }} />
               <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)}
-                style={{ background: '#0d0d0d', border: '1px solid #333', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#e8e8e8', outline: 'none', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                style={{ background: 'var(--casi-surface)', border: '1px solid #333', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--casi-text)', outline: 'none', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
                 <option value="min">/min</option>
                 <option value="hr">/hr</option>
               </select>
               <button onClick={() => { onUpdatePrice(el.id, parseFloat(editPrice) || 0, editUnit); onClose(); }}
-                style={{ background: '#F58220', border: 'none', borderRadius: 8, padding: '10px 16px', color: '#050505', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', cursor: 'pointer' }}>
+                style={{ background: 'var(--casi-accent)', border: 'none', borderRadius: 8, padding: '10px 16px', color: 'var(--casi-bg)', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', cursor: 'pointer' }}>
                 Save
               </button>
             </div>
@@ -190,25 +192,25 @@ function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLo
 
           {/* Active booking */}
           {activeBooking ? (
-            <div style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.2)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+            <div style={{ background: 'rgba(var(--casi-accent2-rgb),0.06)', border: '1px solid rgba(var(--casi-accent2-rgb),0.2)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 8, border: '1px solid #222', overflow: 'hidden', background: '#050505', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 8, border: '1px solid #222', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {activeBooking.image_url && <img src={activeBooking.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" />}
                 </div>
                 <div>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, color: '#e8e8e8', fontSize: 14 }}>● {activeBooking.viewer_name}</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555' }}>{activeBooking.duration_minutes} min booked</div>
+                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, color: 'var(--casi-text)', fontSize: 14 }}>● {activeBooking.viewer_name}</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>{activeBooking.duration_minutes} min booked</div>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                {[['Time left', formatTime(seconds), '#06b6d4'], ['Earned', `$${earnedSoFar}`, '#4ade80'], ['Total', `$${totalValue}`, '#e8e8e8']].map(([l, v, c]) => (
+                {[['Time left', formatTime(seconds), 'var(--casi-accent2)'], ['Earned', `$${earnedSoFar}`, '#4ade80'], ['Total', `$${totalValue}`, 'var(--casi-text)']].map(([l, v, c]) => (
                   <div key={l} style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 8, padding: 10, textAlign: 'center' }}>
                     <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#444', marginBottom: 4 }}>{l}</div>
                     <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 15, fontWeight: 500, color: c }}>{v}</div>
                   </div>
                 ))}
               </div>
-              {activeBooking.message && <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, color: '#555', fontStyle: 'italic', marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)' }}>"{activeBooking.message}"</div>}
+              {activeBooking.message && <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, color: 'var(--casi-text-muted)', fontStyle: 'italic', marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)' }}>"{activeBooking.message}"</div>}
               <button onClick={() => onKick(activeBooking)} style={{ marginTop: 12, width: '100%', background: 'none', border: 'none', color: 'rgba(248,113,113,0.5)', fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, cursor: 'pointer', padding: '6px 0' }}>End early</button>
             </div>
           ) : (
@@ -220,15 +222,15 @@ function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLo
           {/* Queue */}
           {queueBookings.length > 0 && (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#555', marginBottom: 10 }}>{queueBookings.length} in queue</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 10 }}>{queueBookings.length} in queue</div>
               {queueBookings.map((b, idx) => (
-                <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(245,130,32,0.05)', border: '1px solid rgba(245,130,32,0.12)', borderRadius: 8, padding: '8px 12px', marginBottom: 6 }}>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(245,130,32,0.4)', minWidth: 20 }}>#{idx + 1}</span>
-                  <div style={{ width: 20, height: 20, borderRadius: 4, overflow: 'hidden', background: '#050505', flexShrink: 0 }}>
+                <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(var(--casi-accent-rgb),0.05)', border: '1px solid rgba(var(--casi-accent-rgb),0.12)', borderRadius: 8, padding: '8px 12px', marginBottom: 6 }}>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(var(--casi-accent-rgb),0.4)', minWidth: 20 }}>#{idx + 1}</span>
+                  <div style={{ width: 20, height: 20, borderRadius: 4, overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
                     {b.image_url && <img src={b.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" />}
                   </div>
-                  <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 600, color: '#e8e8e8', flex: 1 }}>{b.viewer_name}</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555' }}>{b.duration_minutes}m</span>
+                  <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 600, color: 'var(--casi-text)', flex: 1 }}>{b.viewer_name}</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>{b.duration_minutes}m</span>
                 </div>
               ))}
             </div>
@@ -238,8 +240,8 @@ function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLo
           <div style={{ paddingTop: 16, borderTop: '1px solid #161616', display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 600, color: '#e8e8e8', marginBottom: 2 }}>Lock slot</div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555' }}>No new requests. Current runs to end.</div>
+                <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 600, color: 'var(--casi-text)', marginBottom: 2 }}>Lock slot</div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>No new requests. Current runs to end.</div>
               </div>
               <button onClick={(e) => { e.stopPropagation(); onLockToggle(el.id, !el.locked); }}
                 style={{ position: 'relative', width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: el.locked ? '#f87171' : 'rgba(255,255,255,0.1)', transition: 'background .2s', flexShrink: 0 }}>
@@ -261,11 +263,11 @@ function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLo
 function SliderRow({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: '#555', width: 28, flexShrink: 0 }}>{label}</div>
+      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--casi-text-muted)', width: 28, flexShrink: 0 }}>{label}</div>
       <input type="range" min={min} max={max} step={1} value={Math.round(value)}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{ flex: 1, accentColor: '#F58220', cursor: 'pointer', height: 4 }} />
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#e8e8e8', width: 32, textAlign: 'right', flexShrink: 0 }}>{Math.round(value)}%</div>
+        style={{ flex: 1, accentColor: 'var(--casi-accent)', cursor: 'pointer', height: 4 }} />
+      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text)', width: 32, textAlign: 'right', flexShrink: 0 }}>{Math.round(value)}%</div>
     </div>
   );
 }
@@ -276,6 +278,8 @@ function SliderRow({ label, value, min, max, onChange }: { label: string; value:
 export default function AdminStudio() {
   const [view, setView] = useState<'studio' | 'requests' | 'settings'>('studio');
   const [profile, setProfile] = useState<any>(null);
+  const [activeSkin, setActiveSkin] = useState<string | null>(null);
+  const [savingSkin, setSavingSkin] = useState(false);
   const [elements, setElements] = useState<any[]>([]);
   const [pendingBookings, setPendingBookings] = useState<any[]>([]);
   const [queuedBookings, setQueuedBookings] = useState<any[]>([]);
@@ -303,6 +307,7 @@ export default function AdminStudio() {
       if (!user) { router.push('/login'); return; }
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(prof);
+      if (prof?.skin) setActiveSkin(prof.skin);
       const { data: els } = await supabase.from('overlay_elements').select('*').eq('profile_id', user.id);
       if (els) setElements(els);
       setIsReady(true);
@@ -561,9 +566,9 @@ export default function AdminStudio() {
   const selectedEl = elements.find(el => el.id === selectedSlotId) || null;
 
   if (!isReady || !profile) return (
-    <div style={{ minHeight: '100vh', background: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+    <div style={{ minHeight: '100vh', background: 'var(--casi-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
       <Logo scale={0.5} />
-      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: '#F58220', animation: 'pulse 1.5s infinite' }}>Loading studio…</span>
+      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--casi-accent)', animation: 'pulse 1.5s infinite' }}>Loading studio…</span>
     </div>
   );
 
@@ -581,53 +586,53 @@ export default function AdminStudio() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #050505; }
+        body { background: var(--casi-bg); }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
         @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:.2} }
 
-        .sw { min-height:100vh; background:#050505; color:#e8e8e8; font-family:'Syne',sans-serif; display:flex; flex-direction:column; }
+        .sw { min-height:100vh; background:var(--casi-bg); color:var(--casi-text); font-family:'Syne',sans-serif; display:flex; flex-direction:column; }
 
         /* NAV */
-        .top-nav { display:flex; align-items:center; justify-content:space-between; padding:0 32px; height:64px; flex-shrink:0; border-bottom:1px solid #111; background:rgba(5,5,5,0.96); backdrop-filter:blur(20px); position:sticky; top:0; z-index:100; }
+        .top-nav { display:flex; align-items:center; justify-content:space-between; padding:0 32px; height:64px; flex-shrink:0; border-bottom:1px solid rgba(var(--casi-accent-rgb),0.08); background:color-mix(in srgb, var(--casi-bg) 96%, transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:100; }
         .tnl { display:flex; align-items:center; gap:32px; }
         .nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
-        .nav-wm { font-size:20px; font-weight:800; color:#F58220; letter-spacing:-0.5px; }
+        .nav-wm { font-size:20px; font-weight:800; color:var(--casi-accent); letter-spacing:-0.5px; }
         .nav-tabs { display:flex; gap:4px; }
-        .nav-tab { font-family:'DM Mono',monospace; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; padding:7px 14px; border-radius:8px; border:none; background:none; color:#555; cursor:pointer; transition:all .2s; position:relative; }
-        .nav-tab:hover { color:#e8e8e8; background:rgba(255,255,255,0.04); }
-        .nav-tab.active { color:#F58220; background:rgba(245,130,32,0.08); }
-        .nav-badge { position:absolute; top:2px; right:2px; background:#F58220; color:#050505; font-size:9px; font-weight:800; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+        .nav-tab { font-family:'DM Mono',monospace; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; padding:7px 14px; border-radius:8px; border:none; background:none; color:var(--casi-text-muted); cursor:pointer; transition:all .2s; position:relative; }
+        .nav-tab:hover { color:var(--casi-text); background:rgba(255,255,255,0.04); }
+        .nav-tab.active { color:var(--casi-accent); background:rgba(var(--casi-accent-rgb),0.08); }
+        .nav-badge { position:absolute; top:2px; right:2px; background:var(--casi-accent); color:var(--casi-bg); font-size:9px; font-weight:800; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
         .tnr { display:flex; align-items:center; gap:12px; }
         .live-toggle { display:flex; align-items:center; gap:8px; padding:8px 16px; border-radius:8px; border:1px solid; cursor:pointer; font-family:'Syne',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; transition:all .2s; }
-        .lt-off { background:rgba(255,255,255,0.04); border-color:#222; color:#555; }
+        .lt-off { background:rgba(255,255,255,0.04); border-color:var(--casi-border); color:var(--casi-text-muted); }
         .lt-on  { background:rgba(239,68,68,0.12); border-color:rgba(239,68,68,0.35); color:#f87171; }
         .live-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
         .ld-off { background:#444; }
         .ld-on  { background:#f87171; animation:blink 1.5s infinite; }
         .btn-sm { font-family:'Syne',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; padding:8px 16px; border-radius:8px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
-        .b-orange  { background:#F58220; color:#050505; }
-        .b-orange:hover { background:#ff9030; }
-        .b-outline { background:rgba(255,255,255,0.04); color:#888; border:1px solid #222 !important; }
-        .b-outline:hover { background:rgba(255,255,255,0.08); color:#e8e8e8; }
+        .b-orange  { background:var(--casi-accent); color:var(--casi-bg); }
+        .b-orange:hover { filter:brightness(1.12); }
+        .b-outline { background:rgba(255,255,255,0.04); color:#888; border:1px solid var(--casi-border) !important; }
+        .b-outline:hover { background:rgba(255,255,255,0.08); color:var(--casi-text); }
         .b-danger  { background:rgba(248,113,113,0.08); color:#f87171; border:1px solid rgba(248,113,113,0.2) !important; }
         .b-danger:hover  { background:rgba(248,113,113,0.15); }
         .b-purple  { background:rgba(168,85,247,0.1); color:#c084fc; border:1px solid rgba(168,85,247,0.25) !important; }
         .b-purple:hover { background:rgba(168,85,247,0.18); }
 
         /* BEAMS BAR */
-        .beams-bar { display:flex; flex-wrap:wrap; gap:8px; padding:12px 32px; border-bottom:1px solid #0d0d0d; }
-        .beam-chip { display:flex; align-items:center; gap:10px; background:#0d0d0d; border:1px solid #1c1c1c; border-radius:10px; padding:8px 14px; cursor:pointer; transition:border-color .2s; }
-        .beam-chip:hover { border-color:rgba(245,130,32,0.3); }
+        .beams-bar { display:flex; flex-wrap:wrap; gap:8px; padding:12px 32px; border-bottom:1px solid var(--casi-surface); }
+        .beam-chip { display:flex; align-items:center; gap:10px; background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:10px; padding:8px 14px; cursor:pointer; transition:border-color .2s; }
+        .beam-chip:hover { border-color:rgba(var(--casi-accent-rgb),0.3); }
 
         /* STUDIO */
         .studio-body { flex:1; display:flex; flex-direction:column; padding:20px 32px 32px; gap:16px; overflow:auto; }
-        .canvas-wrap { position:relative; aspect-ratio:16/9; border-radius:12px; border:1px solid #1c1c1c; background:#080808; overflow:visible; }
+        .canvas-wrap { position:relative; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:#080808; overflow:visible; }
         .canvas-hint { text-align:center; font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:#1e1e1e; margin-top:10px; }
 
         /* ── SLIDER PANEL ── */
-        .slider-panel { background:#0a0a0a; border:1px solid rgba(245,130,32,0.2); border-radius:12px; padding:16px 20px; display:flex; flex-direction:column; gap:12px; animation:fadeIn .2s ease; }
+        .slider-panel { background:var(--casi-surface); border:1px solid rgba(var(--casi-accent-rgb),0.2); border-radius:12px; padding:16px 20px; display:flex; flex-direction:column; gap:12px; animation:fadeIn .2s ease; }
         .slider-panel-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
-        .slider-panel-title { font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:#F58220; }
+        .slider-panel-title { font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:var(--casi-accent); }
         @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
 
         /* REQUESTS */
@@ -635,44 +640,44 @@ export default function AdminStudio() {
         .sec-head { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
         .sec-head::before { content:''; display:block; width:16px; height:1px; background:currentColor; opacity:0.5; }
         .slot-type-badge { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1.5px; padding:2px 8px; border-radius:20px; border:1px solid; }
-        .badge-beam { color:#06b6d4; border-color:rgba(6,182,212,0.3); background:rgba(6,182,212,0.06); }
+        .badge-beam { color:var(--casi-accent2); border-color:rgba(var(--casi-accent2-rgb),0.3); background:rgba(var(--casi-accent2-rgb),0.06); }
         .badge-backdrop { color:#c084fc; border-color:rgba(192,132,252,0.3); background:rgba(168,85,247,0.06); }
-        .req-card { background:#0a0a0a; border:1px solid #1a1a1a; border-radius:14px; padding:20px; margin-bottom:10px; display:flex; gap:16px; align-items:flex-start; transition:border-color .2s; }
-        .req-card:hover { border-color:#2a2a2a; }
-        .req-thumb { width:72px; height:72px; border-radius:10px; border:1px solid #1c1c1c; overflow:hidden; background:#050505; flex-shrink:0; display:flex; align-items:center; justify-content:center; cursor:pointer; }
-        .req-thumb:hover { border-color:rgba(245,130,32,0.3); }
+        .req-card { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:14px; padding:20px; margin-bottom:10px; display:flex; gap:16px; align-items:flex-start; transition:border-color .2s; }
+        .req-card:hover { border-color:rgba(255,255,255,0.12); }
+        .req-thumb { width:72px; height:72px; border-radius:10px; border:1px solid var(--casi-border); overflow:hidden; background:var(--casi-bg); flex-shrink:0; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+        .req-thumb:hover { border-color:rgba(var(--casi-accent-rgb),0.3); }
         .req-info { flex:1; min-width:0; }
-        .req-name { font-size:17px; font-weight:700; color:#e8e8e8; margin-bottom:6px; }
+        .req-name { font-size:17px; font-weight:700; color:var(--casi-text); margin-bottom:6px; }
         .req-meta { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
         .tag { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; padding:3px 10px; border-radius:20px; border:1px solid; }
-        .t-orange { color:#F58220; background:rgba(245,130,32,0.08); border-color:rgba(245,130,32,0.2); }
+        .t-orange { color:var(--casi-accent); background:rgba(var(--casi-accent-rgb),0.08); border-color:rgba(var(--casi-accent-rgb),0.2); }
         .t-green  { color:#4ade80; background:rgba(74,222,128,0.08); border-color:rgba(74,222,128,0.2); }
-        .t-cyan   { color:#06b6d4; background:rgba(6,182,212,0.08); border-color:rgba(6,182,212,0.2); }
-        .t-dim    { color:rgba(245,130,32,0.6); background:rgba(245,130,32,0.05); border-color:rgba(245,130,32,0.12); }
-        .req-msg { font-size:13px; color:#555; font-style:italic; border-left:2px solid #1c1c1c; padding-left:10px; margin-top:6px; }
+        .t-cyan   { color:var(--casi-accent2); background:rgba(var(--casi-accent2-rgb),0.08); border-color:rgba(var(--casi-accent2-rgb),0.2); }
+        .t-dim    { color:rgba(var(--casi-accent-rgb),0.6); background:rgba(var(--casi-accent-rgb),0.05); border-color:rgba(var(--casi-accent-rgb),0.12); }
+        .req-msg { font-size:13px; color:var(--casi-text-muted); font-style:italic; border-left:2px solid var(--casi-border); padding-left:10px; margin-top:6px; }
         .req-actions { display:flex; flex-direction:column; gap:8px; flex-shrink:0; }
         .act-btn { font-family:'Syne',sans-serif; font-weight:800; font-size:12px; text-transform:uppercase; padding:10px 18px; border-radius:8px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
-        .c-active  { background:rgba(6,182,212,0.05);  border-color:rgba(6,182,212,0.2) !important; }
-        .c-queued  { background:rgba(245,130,32,0.04);  border-color:rgba(245,130,32,0.15) !important; }
+        .c-active  { background:rgba(var(--casi-accent2-rgb),0.05); border-color:rgba(var(--casi-accent2-rgb),0.2) !important; }
+        .c-queued  { background:rgba(var(--casi-accent-rgb),0.04); border-color:rgba(var(--casi-accent-rgb),0.15) !important; }
         .c-backdrop-active { background:rgba(168,85,247,0.05); border-color:rgba(168,85,247,0.2) !important; }
         .c-backdrop-queue  { background:rgba(168,85,247,0.03); border-color:rgba(168,85,247,0.12) !important; }
-        .sep { width:100%; height:1px; background:#0d0d0d; margin:24px 0; }
+        .sep { width:100%; height:1px; background:var(--casi-surface); margin:24px 0; }
 
         /* SETTINGS */
         .set-body { flex:1; padding:24px 32px; overflow:auto; max-width:680px; width:100%; margin:0 auto; display:flex; flex-direction:column; gap:12px; }
-        .set-card { background:#0a0a0a; border:1px solid #1a1a1a; border-radius:14px; padding:24px; }
-        .set-title { font-size:14px; font-weight:700; color:#e8e8e8; margin-bottom:4px; }
-        .set-sub   { font-family:'DM Mono',monospace; font-size:10px; color:#555; margin-bottom:16px; }
+        .set-card { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:14px; padding:24px; }
+        .set-title { font-size:14px; font-weight:700; color:var(--casi-text); margin-bottom:4px; }
+        .set-sub   { font-family:'DM Mono',monospace; font-size:10px; color:var(--casi-text-muted); margin-bottom:16px; }
         .code-row  { display:flex; align-items:center; gap:10px; }
-        .code-box  { flex:1; background:rgba(0,0,0,0.4); border:1px solid #161616; border-radius:8px; padding:10px 14px; font-family:'DM Mono',monospace; font-size:11px; color:#888; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .code-box  { flex:1; background:rgba(0,0,0,0.4); border:1px solid var(--casi-border); border-radius:8px; padding:10px 14px; font-family:'DM Mono',monospace; font-size:11px; color:#888; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
         /* MOBILE BOTTOM NAV */
         .bot-nav { display:none; }
 
         /* Range slider touch-friendly */
-        input[type=range] { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: #222; outline: none; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #F58220; cursor: pointer; border: 2px solid #050505; }
-        input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #F58220; cursor: pointer; border: 2px solid #050505; }
+        input[type=range] { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: var(--casi-border); outline: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--casi-accent); cursor: pointer; border: 2px solid var(--casi-bg); }
+        input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--casi-accent); cursor: pointer; border: 2px solid var(--casi-bg); }
 
         @media (max-width:768px) {
           .top-nav { padding:0 12px; height:52px; }
@@ -694,16 +699,17 @@ export default function AdminStudio() {
           .req-actions .act-btn { flex:1; text-align:center; }
           .bot-nav {
             display:flex; position:fixed; bottom:0; left:0; right:0; z-index:90;
-            background:rgba(5,5,5,0.97); border-top:1px solid #111;
+            background:color-mix(in srgb, var(--casi-bg) 97%, transparent); border-top:1px solid rgba(var(--casi-accent-rgb),0.08);
             padding:8px 0 env(safe-area-inset-bottom,8px);
           }
           .bot-tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 2px; border:none; background:none; cursor:pointer; position:relative; transition:color .2s; min-width:0; }
-          .bot-tab.active { color:#F58220; }
+          .bot-tab.active { color:var(--casi-accent); }
           .bot-tab:not(.active) { color:#444; }
-          .bot-badge { position:absolute; top:2px; right:calc(50% - 18px); background:#F58220; color:#050505; font-size:9px; font-weight:800; width:14px; height:14px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+          .bot-badge { position:absolute; top:2px; right:calc(50% - 18px); background:var(--casi-accent); color:var(--casi-bg); font-size:9px; font-weight:800; width:14px; height:14px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
         }
       `}</style>
 
+      <SkinProvider skin={activeSkin} themeColor={profile?.theme_color} />
       <div className="sw">
 
         {/* NAV */}
@@ -761,22 +767,22 @@ export default function AdminStudio() {
         {previewBooking && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 24 }}
             onClick={(e) => { if (e.target === e.currentTarget) setPreviewBooking(null); }}>
-            <div style={{ background: '#0d0d0d', border: '1px solid #222', borderRadius: 16, padding: 28, width: '100%', maxWidth: 520 }}>
+            <div style={{ background: 'var(--casi-surface)', border: '1px solid #222', borderRadius: 16, padding: 28, width: '100%', maxWidth: 520 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <div>
-                  <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 800, color: '#f0f0f0' }}>Review Request</h2>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: isBackdropBooking(previewBooking) ? '#c084fc' : '#06b6d4', marginTop: 4, letterSpacing: 1 }}>
+                  <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 800, color: 'var(--casi-text)' }}>Review Request</h2>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: isBackdropBooking(previewBooking) ? '#c084fc' : 'var(--casi-accent2)', marginTop: 4, letterSpacing: 1 }}>
                     {isBackdropBooking(previewBooking) ? '🖼 Full Backdrop' : '✦ Beam Slot'}
-                    {slotOccupiedForPreview && <span style={{ color: '#F58220', marginLeft: 8 }}>— slot occupied, will queue</span>}
+                    {slotOccupiedForPreview && <span style={{ color: 'var(--casi-accent)', marginLeft: 8 }}>— slot occupied, will queue</span>}
                   </div>
                 </div>
-                <button onClick={() => setPreviewBooking(null)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 18 }}>✕</button>
+                <button onClick={() => setPreviewBooking(null)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
               </div>
-              <div style={{ aspectRatio: '16/9', background: '#050505', border: '1px solid #1c1c1c', borderRadius: 10, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+              <div style={{ aspectRatio: '16/9', background: 'var(--casi-bg)', border: '1px solid #1c1c1c', borderRadius: 10, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
                 {previewBooking.image_url ? <img src={previewBooking.image_url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} alt="" /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#333' }}>No image</span>}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-                {[['From', previewBooking.viewer_name, '#e8e8e8'], ['Price', `$${previewBooking.price_value}/${previewBooking.price_unit}`, '#06b6d4'], ['Duration', `${previewBooking.duration_minutes} min`, '#e8e8e8'], ['Total', `$${calcTotal(previewBooking)}`, '#4ade80']].map(([l, v, c]) => (
+                {[['From', previewBooking.viewer_name, 'var(--casi-text)'], ['Price', `$${previewBooking.price_value}/${previewBooking.price_unit}`, 'var(--casi-accent2)'], ['Duration', `${previewBooking.duration_minutes} min`, 'var(--casi-text)'], ['Total', `$${calcTotal(previewBooking)}`, '#4ade80']].map(([l, v, c]) => (
                   <div key={l} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #161616', borderRadius: 8, padding: '10px 14px' }}>
                     <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#444', marginBottom: 4 }}>{l}</div>
                     <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 15, fontWeight: 700, color: c }}>{v}</div>
@@ -796,8 +802,8 @@ export default function AdminStudio() {
   className="act-btn"
   disabled={!isPaymentConfirmed(previewBooking)}
   style={{
-    background: !isPaymentConfirmed(previewBooking) ? '#1c1c1c' : slotOccupiedForPreview ? '#F58220' : '#06b6d4',
-    color: !isPaymentConfirmed(previewBooking) ? '#444' : '#050505',
+    background: !isPaymentConfirmed(previewBooking) ? 'var(--casi-border)' : slotOccupiedForPreview ? 'var(--casi-accent)' : 'var(--casi-accent2)',
+    color: !isPaymentConfirmed(previewBooking) ? '#444' : 'var(--casi-bg)',
     cursor: !isPaymentConfirmed(previewBooking) ? 'not-allowed' : 'pointer',
     flex: 1, border: 'none', borderRadius: 10, padding: 12, fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 13, textTransform: 'uppercase'
   }}
@@ -812,16 +818,16 @@ export default function AdminStudio() {
         {/* ── ONBOARDING BANNER ── */}
         {showBanner && view === 'studio' && (
           <div style={{
-            background: 'linear-gradient(135deg, rgba(245,130,32,0.07) 0%, rgba(6,182,212,0.05) 100%)',
-            borderBottom: '1px solid rgba(245,130,32,0.15)',
+            background: 'linear-gradient(135deg, rgba(var(--casi-accent-rgb),0.07) 0%, rgba(var(--casi-accent2-rgb),0.05) 100%)',
+            borderBottom: '1px solid rgba(var(--casi-accent-rgb),0.15)',
             padding: '0',
             position: 'relative',
           }}>
             {/* Header row */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px 0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#F58220' }}>
-                  ✦ Quick setup
+                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)' }}>
+                  ✦ Quick&nbsp;setup
                 </span>
                 <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333' }}>— 3 steps to go live</span>
               </div>
@@ -839,7 +845,7 @@ export default function AdminStudio() {
               {[
                 {
                   num: '01',
-                  color: '#F58220',
+                  color: 'var(--casi-accent)',
                   title: 'Add a beam slot',
                   body: 'Hit + Beam above to add a slot to your canvas. Drag it where you want it on screen, then set a price.',
                   action: (
@@ -849,7 +855,7 @@ export default function AdminStudio() {
                         const btn = document.querySelector('.banner-add-beam-trigger') as HTMLButtonElement;
                         if (btn) btn.click();
                       }}
-                      style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: '#F58220', border: 'none', borderRadius: 6, padding: '7px 14px', color: '#050505', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', letterSpacing: 0.3 }}>
+                      style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--casi-accent)', border: 'none', borderRadius: 6, padding: '7px 14px', color: 'var(--casi-bg)', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', letterSpacing: 0.3 }}>
                       + Add beam
                     </button>
                   ),
@@ -862,7 +868,7 @@ export default function AdminStudio() {
                   action: (
                     <button
                       onClick={() => setView('settings')}
-                      style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.25)', borderRadius: 6, padding: '7px 14px', color: '#06b6d4', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', letterSpacing: 0.3 }}>
+                      style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(var(--casi-accent2-rgb),0.1)', border: '1px solid rgba(var(--casi-accent2-rgb),0.25)', borderRadius: 6, padding: '7px 14px', color: 'var(--casi-accent2)', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', letterSpacing: 0.3 }}>
                       Get URL →
                     </button>
                   ),
@@ -885,10 +891,10 @@ export default function AdminStudio() {
                   display: 'flex', flexDirection: 'column',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, color: step.color, background: `${step.color}15`, border: `1px solid ${step.color}30`, borderRadius: 4, padding: '2px 6px' }}>{step.num}</span>
-                    <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 700, color: '#e8e8e8' }}>{step.title}</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, color: step.color, background: `${step.color}22`, border: `1px solid ${step.color}40`, borderRadius: 4, padding: '2px 6px' }}>{step.num}</span>
+                    <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 700, color: 'var(--casi-text)' }}>{step.title}</span>
                   </div>
-                  <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, lineHeight: 1.6, color: '#555', flex: 1 }}>{step.body}</p>
+                  <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, lineHeight: 1.6, color: 'var(--casi-text-muted)', flex: 1 }}>{step.body}</p>
                   {step.action}
                 </div>
               ))}
@@ -901,7 +907,7 @@ export default function AdminStudio() {
                 false, // OBS step — can't auto-detect
                 profile?.is_live,
               ].map((done, i) => (
-                <div key={i} style={{ height: 2, flex: 1, borderRadius: 1, background: done ? '#F58220' : '#1c1c1c', transition: 'background .4s' }} />
+                <div key={i} style={{ height: 2, flex: 1, borderRadius: 1, background: done ? 'var(--casi-accent)' : 'var(--casi-border)', transition: 'background .4s' }} />
               ))}
             </div>
           </div>
@@ -917,8 +923,8 @@ export default function AdminStudio() {
                 <div key={booking.id} className="beam-chip" onClick={() => setSelectedSlotId(booking.element_id)}>
                   {booking.image_url && <img src={booking.image_url} style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }} alt="" />}
                   <div>
-                    <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 600, color: '#e8e8e8' }}>{booking.viewer_name}</div>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: isBackdrop ? 'rgba(192,132,252,0.6)' : 'rgba(6,182,212,0.6)', letterSpacing: 1 }}>
+                    <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 600, color: 'var(--casi-text)' }}>{booking.viewer_name}</div>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: isBackdrop ? 'rgba(192,132,252,0.6)' : 'rgba(var(--casi-accent2-rgb),0.6)', letterSpacing: 1 }}>
                       {isBackdrop ? '🖼 backdrop' : '✦ beam'}{queueForSlot.length > 0 ? ` · +${queueForSlot.length} queued` : ''}
                     </div>
                   </div>
@@ -973,22 +979,22 @@ export default function AdminStudio() {
                     disableDragging={el.is_background} enableResizing={!el.is_background} bounds="parent"
                     style={{ zIndex: el.is_background ? 0 : (isSelected ? 40 : 30) }}>
                     <div
-                      style={{ position: 'relative', width: '100%', height: '100%', border: el.is_background ? 'none' : isSelected ? '2px solid #F58220' : '1.5px solid rgba(245,130,32,0.3)', borderRadius: el.is_background ? 0 : 6, opacity: el.locked ? 0.7 : 1 }}>
+                      style={{ position: 'relative', width: '100%', height: '100%', border: el.is_background ? 'none' : isSelected ? '2px solid var(--casi-accent)' : '1.5px solid rgba(var(--casi-accent-rgb),0.3)', borderRadius: el.is_background ? 0 : 6, opacity: el.locked ? 0.7 : 1 }}>
                       {!el.image_url ? (
-                        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(245,130,32,0.35)'}`, borderRadius: el.is_background ? 12 : 6, background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(245,130,32,0.04)' }}>
+                        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(var(--casi-accent-rgb),0.35)'}`, borderRadius: el.is_background ? 12 : 6, background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(var(--casi-accent-rgb),0.04)' }}>
                           {el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>}
                           <span style={{ fontSize: el.is_background ? 24 : 16, marginBottom: 4 }}>{el.is_background ? '🖼️' : '✦'}</span>
-                          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(245,130,32,0.6)' }}>
+                          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(var(--casi-accent-rgb),0.6)' }}>
                             {el.locked ? 'No requests' : el.is_background ? 'Backdrop' : 'Beam'}
                           </span>
-                          {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : '#F58220' }}>${el.price_value}/{el.price_unit}</span>}
+                          {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : 'var(--casi-accent)' }}>${el.price_value}/{el.price_unit}</span>}
                         </div>
                       ) : (
                         <img src={el.image_url} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'fill', pointerEvents: 'none' }} alt="" />
                       )}
                       {/* Selection glow */}
                       {isSelected && !el.is_background && (
-                        <div style={{ position: 'absolute', top: -2, left: -2, right: -2, bottom: -2, border: '2px solid #F58220', borderRadius: 8, pointerEvents: 'none', boxShadow: '0 0 0 3px rgba(245,130,32,0.15)' }} />
+                        <div style={{ position: 'absolute', top: -2, left: -2, right: -2, bottom: -2, border: '2px solid var(--casi-accent)', borderRadius: 8, pointerEvents: 'none', boxShadow: '0 0 0 3px rgba(var(--casi-accent-rgb),0.15)' }} />
                       )}
                       {/* Delete button — large touch target */}
                       {!el.is_background && (
@@ -1014,7 +1020,7 @@ export default function AdminStudio() {
                   </span>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => { setShowInfoPanel(true); }}
-                      style={{ background: 'rgba(245,130,32,0.08)', border: '1px solid rgba(245,130,32,0.2)', borderRadius: 8, color: '#F58220', fontFamily: "'DM Mono', monospace", fontSize: 11, padding: '8px 14px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>
+                      style={{ background: 'rgba(var(--casi-accent-rgb),0.08)', border: '1px solid rgba(var(--casi-accent-rgb),0.2)', borderRadius: 8, color: 'var(--casi-accent)', fontFamily: "'DM Mono', monospace", fontSize: 11, padding: '8px 14px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>
                       Info / Price
                     </button>
                     <button onClick={() => { setSelectedSlotId(null); setShowInfoPanel(false); }}
@@ -1050,30 +1056,30 @@ export default function AdminStudio() {
             {(activeBeams.length > 0 || approvedBeams.length > 0 || pendingBeams.length > 0 || queuedBeams.length > 0) && (
               <div style={{ marginBottom: 32 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 16, fontWeight: 800, color: '#e8e8e8', letterSpacing: -0.5 }}>Beam Slots</div>
+                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 16, fontWeight: 800, color: 'var(--casi-text)', letterSpacing: -0.5 }}>Beam Slots</div>
                   <span className="slot-type-badge badge-beam">✦ Beams</span>
                 </div>
 
                 {activeBeams.length > 0 && (
                   <div style={{ marginBottom: 20 }}>
-                    <div className="sec-head" style={{ color: '#06b6d4' }}>● Live — {activeBeams.length}</div>
+                    <div className="sec-head" style={{ color: 'var(--casi-accent2)' }}>● Live — {activeBeams.length}</div>
                     {activeBeams.map(booking => {
                       const queueForSlot = approvedBeams.filter(b => b.element_id === booking.element_id).sort((a, b) => new Date(a.approved_at).getTime() - new Date(b.approved_at).getTime());
                       return (
                         <div key={booking.id} className="req-card c-active">
-                          <div style={{ width: 64, height: 64, borderRadius: 10, border: '1px solid rgba(6,182,212,0.2)', overflow: 'hidden', background: '#050505', flexShrink: 0 }}>
+                          <div style={{ width: 64, height: 64, borderRadius: 10, border: '1px solid rgba(var(--casi-accent2-rgb),0.2)', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
                             {booking.image_url && <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" />}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: '#e8e8e8', marginBottom: 4 }}>{booking.viewer_name}</div>
-                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555', marginBottom: 6 }}>${booking.price_value}/{booking.price_unit} · {booking.duration_minutes} min</div>
+                            <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)', marginBottom: 4 }}>{booking.viewer_name}</div>
+                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 6 }}>${booking.price_value}/{booking.price_unit} · {booking.duration_minutes} min</div>
                             {booking.message && <div className="req-msg">"{booking.message}"</div>}
                             {queueForSlot.length > 0 && (
                               <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                                 {queueForSlot.map((next, idx) => (
                                   <div key={next.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'rgba(245,130,32,0.4)', minWidth: 20 }}>#{idx + 1}</span>
-                                    <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, color: 'rgba(245,130,32,0.7)' }}>{next.viewer_name}</span>
+                                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'rgba(var(--casi-accent-rgb),0.4)', minWidth: 20 }}>#{idx + 1}</span>
+                                    <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, color: 'rgba(var(--casi-accent-rgb),0.7)' }}>{next.viewer_name}</span>
                                     <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444' }}>{idx === 0 ? '— auto-starts next' : `pos #${idx + 1}`}</span>
                                   </div>
                                 ))}
@@ -1092,19 +1098,19 @@ export default function AdminStudio() {
 
                 {approvedBeams.length > 0 && (
   <div style={{ marginBottom: 20 }}>
-    <div className="sec-head" style={{ color: '#F58220' }}>⏳ Approved queue — {approvedBeams.length}</div>
+    <div className="sec-head" style={{ color: 'var(--casi-accent)' }}>⏳ Approved queue — {approvedBeams.length}</div>
     {approvedBeams.map(booking => (
       <div key={booking.id} className="req-card c-queued">
-        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 500, color: 'rgba(245,130,32,0.3)', minWidth: 28 }}>#{getQueuePosition(booking)}</span>
-        <div style={{ width: 52, height: 52, borderRadius: 8, border: '1px solid rgba(245,130,32,0.15)', overflow: 'hidden', background: '#050505', flexShrink: 0 }}>
+        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 500, color: 'rgba(var(--casi-accent-rgb),0.3)', minWidth: 28 }}>#{getQueuePosition(booking)}</span>
+        <div style={{ width: 52, height: 52, borderRadius: 8, border: '1px solid rgba(var(--casi-accent-rgb),0.15)', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
           {booking.image_url && <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" />}
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: '#e8e8e8', marginBottom: 3 }}>{booking.viewer_name}</div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>${booking.price_value}/{booking.price_unit} · {booking.duration_minutes} min</div>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: 'var(--casi-text)', marginBottom: 3 }}>{booking.viewer_name}</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>${booking.price_value}/{booking.price_unit} · {booking.duration_minutes} min</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(245,130,32,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(var(--casi-accent-rgb),0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>
             {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
           </span>
           <button onClick={async () => {
@@ -1128,7 +1134,7 @@ export default function AdminStudio() {
     .eq('id', booking.element_id);
   if (profile?.id) loadBookings(profile.id);
 }}
-  style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(6,182,212,0.6)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
+  style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(var(--casi-accent2-rgb),0.6)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
   Play Now
 </button>
 <button onClick={() => denyBooking(booking.id)}
@@ -1143,7 +1149,7 @@ export default function AdminStudio() {
 
                 {pendingBeams.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
-                    <div className="sec-head" style={{ color: '#555' }}>Pending — {pendingBeams.length}</div>
+                    <div className="sec-head" style={{ color: 'var(--casi-text-muted)' }}>Pending — {pendingBeams.length}</div>
                     {pendingBeams.map(booking => (
                       <div key={booking.id} className="req-card">
                         <button className="req-thumb" onClick={() => setPreviewBooking(booking)}>
@@ -1161,7 +1167,7 @@ export default function AdminStudio() {
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
                             disabled={!isPaymentConfirmed(booking)}
-                            style={{ background: !isPaymentConfirmed(booking) ? '#1c1c1c' : activeBookings.some(b => b.element_id === booking.element_id) ? '#F58220' : '#06b6d4', color: !isPaymentConfirmed(booking) ? '#444' : '#050505', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
+                            style={{ background: !isPaymentConfirmed(booking) ? 'var(--casi-border)' : activeBookings.some(b => b.element_id === booking.element_id) ? 'var(--casi-accent)' : 'var(--casi-accent2)', color: !isPaymentConfirmed(booking) ? '#444' : 'var(--casi-bg)', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
                             {!isPaymentConfirmed(booking) ? 'Awaiting payment' : activeBookings.some(b => b.element_id === booking.element_id) ? 'Queue' : 'Approve'}
                           </button>
                           <button onClick={() => denyBooking(booking.id, booking.payment_method)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
@@ -1173,9 +1179,9 @@ export default function AdminStudio() {
 
                 {queuedBeams.length > 0 && (
                   <div>
-                    <div className="sec-head" style={{ color: 'rgba(245,130,32,0.5)' }}>Wants next beam — {queuedBeams.length}</div>
+                    <div className="sec-head" style={{ color: 'rgba(var(--casi-accent-rgb),0.5)' }}>Wants next beam — {queuedBeams.length}</div>
                     {queuedBeams.map(booking => (
-                      <div key={booking.id} className="req-card" style={{ borderColor: 'rgba(245,130,32,0.12)', background: 'rgba(245,130,32,0.03)' }}>
+                      <div key={booking.id} className="req-card" style={{ borderColor: 'rgba(var(--casi-accent-rgb),0.12)', background: 'rgba(245,130,32,0.03)' }}>
                         <button className="req-thumb" onClick={() => setPreviewBooking(booking)}>
                           {booking.image_url ? <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
                         </button>
@@ -1190,7 +1196,7 @@ export default function AdminStudio() {
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
   disabled={!isPaymentConfirmed(booking)}
-  style={{ background: !isPaymentConfirmed(booking) ? '#1c1c1c' : '#F58220', color: !isPaymentConfirmed(booking) ? '#444' : '#050505', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
+  style={{ background: !isPaymentConfirmed(booking) ? 'var(--casi-border)' : 'var(--casi-accent)', color: !isPaymentConfirmed(booking) ? '#444' : 'var(--casi-bg)', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
   {!isPaymentConfirmed(booking) ? 'Awaiting payment' : 'Queue'}
 </button>
                           <button onClick={() => denyBooking(booking.id, booking.payment_method)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
@@ -1212,7 +1218,7 @@ export default function AdminStudio() {
             {(activeBackdrop.length > 0 || approvedBackdrop.length > 0 || pendingBackdrop.length > 0 || queuedBackdrop.length > 0) && (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 16, fontWeight: 800, color: '#e8e8e8', letterSpacing: -0.5 }}>Full Backdrop</div>
+                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 16, fontWeight: 800, color: 'var(--casi-text)', letterSpacing: -0.5 }}>Full Backdrop</div>
                   <span className="slot-type-badge badge-backdrop">🖼 Backdrop</span>
                 </div>
 
@@ -1221,12 +1227,12 @@ export default function AdminStudio() {
                     <div className="sec-head" style={{ color: '#c084fc' }}>● Live</div>
                     {activeBackdrop.map(booking => (
                       <div key={booking.id} className="req-card c-backdrop-active">
-                        <div style={{ width: 64, height: 64, borderRadius: 10, border: '1px solid rgba(192,132,252,0.2)', overflow: 'hidden', background: '#050505', flexShrink: 0 }}>
+                        <div style={{ width: 64, height: 64, borderRadius: 10, border: '1px solid rgba(192,132,252,0.2)', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
                           {booking.image_url && <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: '#e8e8e8', marginBottom: 4 }}>{booking.viewer_name}</div>
-                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555', marginBottom: 6 }}>${booking.price_value}/{booking.price_unit} · {booking.duration_minutes} min</div>
+                          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)', marginBottom: 4 }}>{booking.viewer_name}</div>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 6 }}>${booking.price_value}/{booking.price_unit} · {booking.duration_minutes} min</div>
                           {booking.message && <div className="req-msg">"{booking.message}"</div>}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
@@ -1244,12 +1250,12 @@ export default function AdminStudio() {
     {approvedBackdrop.map(booking => (
       <div key={booking.id} className="req-card c-backdrop-queue">
         <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 500, color: 'rgba(192,132,252,0.3)', minWidth: 28 }}>#{getQueuePosition(booking)}</span>
-        <div style={{ width: 52, height: 52, borderRadius: 8, border: '1px solid rgba(192,132,252,0.15)', overflow: 'hidden', background: '#050505', flexShrink: 0 }}>
+        <div style={{ width: 52, height: 52, borderRadius: 8, border: '1px solid rgba(192,132,252,0.15)', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
           {booking.image_url && <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />}
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: '#e8e8e8', marginBottom: 3 }}>{booking.viewer_name}</div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>${booking.price_value}/{booking.price_unit} · {booking.duration_minutes} min</div>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: 'var(--casi-text)', marginBottom: 3 }}>{booking.viewer_name}</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>${booking.price_value}/{booking.price_unit} · {booking.duration_minutes} min</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(192,132,252,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>
@@ -1276,7 +1282,7 @@ export default function AdminStudio() {
     .eq('id', booking.element_id);
   if (profile?.id) loadBookings(profile.id);
 }}
-  style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(6,182,212,0.6)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
+  style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(var(--casi-accent2-rgb),0.6)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
   Play Now
 </button>
 <button onClick={() => denyBooking(booking.id)}
@@ -1291,7 +1297,7 @@ export default function AdminStudio() {
 
                 {pendingBackdrop.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
-                    <div className="sec-head" style={{ color: '#555' }}>Pending — {pendingBackdrop.length}</div>
+                    <div className="sec-head" style={{ color: 'var(--casi-text-muted)' }}>Pending — {pendingBackdrop.length}</div>
                     {pendingBackdrop.map(booking => (
                       <div key={booking.id} className="req-card">
                         <button className="req-thumb" onClick={() => setPreviewBooking(booking)}>
@@ -1309,7 +1315,7 @@ export default function AdminStudio() {
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
                             disabled={!isPaymentConfirmed(booking)}
-                            style={{ background: !isPaymentConfirmed(booking) ? '#1c1c1c' : '#c084fc', color: !isPaymentConfirmed(booking) ? '#444' : '#050505', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
+                            style={{ background: !isPaymentConfirmed(booking) ? 'var(--casi-border)' : '#c084fc', color: !isPaymentConfirmed(booking) ? '#444' : 'var(--casi-bg)', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
                             {!isPaymentConfirmed(booking) ? 'Awaiting payment' : activeBookings.some(b => b.element_id === booking.element_id) ? 'Queue' : 'Approve'}
                           </button>
                           <button onClick={() => denyBooking(booking.id, booking.payment_method)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
@@ -1337,7 +1343,7 @@ export default function AdminStudio() {
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
   disabled={!isPaymentConfirmed(booking)}
-  style={{ background: !isPaymentConfirmed(booking) ? '#1c1c1c' : '#c084fc', color: !isPaymentConfirmed(booking) ? '#444' : '#050505', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
+  style={{ background: !isPaymentConfirmed(booking) ? 'var(--casi-border)' : '#c084fc', color: !isPaymentConfirmed(booking) ? '#444' : 'var(--casi-bg)', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
   {!isPaymentConfirmed(booking) ? 'Awaiting payment' : 'Queue'}
 </button>
                           <button onClick={() => denyBooking(booking.id, booking.payment_method)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
@@ -1361,17 +1367,63 @@ export default function AdminStudio() {
         {/* ── SETTINGS ── */}
         {view === 'settings' && (
           <div className="set-body">
+
+            {/* ── SKIN PICKER ── */}
+            <div className="set-card">
+              <div className="set-title">Studio skin</div>
+              <div className="set-sub">Changes the colour palette for your admin view and viewer overlay</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {SKINS.map(s => {
+                  const isActive = (activeSkin ?? 'casi-dark') === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => setActiveSkin(s.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        background: isActive ? `rgba(var(--casi-accent-rgb),0.1)` : 'rgba(255,255,255,0.03)',
+                        border: isActive ? '1px solid rgba(var(--casi-accent-rgb),0.4)' : '1px solid var(--casi-border)',
+                        borderRadius: 10, padding: '8px 12px', cursor: 'pointer', transition: 'all .15s',
+                      }}
+                    >
+                      {/* Mini palette swatch */}
+                      <div style={{ display: 'flex', gap: 2 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 2, background: s.accent }} />
+                        <div style={{ width: 10, height: 10, borderRadius: 2, background: s.accent2 }} />
+                        <div style={{ width: 10, height: 10, borderRadius: 2, background: s.bg, border: '1px solid rgba(255,255,255,0.1)' }} />
+                      </div>
+                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: isActive ? 'var(--casi-accent)' : 'var(--casi-text-muted)', letterSpacing: 0.5 }}>{s.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                onClick={async () => {
+                  if (!profile || savingSkin) return;
+                  setSavingSkin(true);
+                  await supabase.from('profiles').update({ skin: activeSkin }).eq('id', profile.id);
+                  setProfile((p: any) => ({ ...p, skin: activeSkin }));
+                  setSavingSkin(false);
+                }}
+                disabled={savingSkin || (activeSkin ?? 'casi-dark') === (profile?.skin ?? 'casi-dark')}
+                className="btn-sm b-orange"
+                style={{ minWidth: 120, opacity: savingSkin || (activeSkin ?? 'casi-dark') === (profile?.skin ?? 'casi-dark') ? 0.5 : 1 }}
+              >
+                {savingSkin ? 'Saving…' : 'Save skin'}
+              </button>
+            </div>
+
             <div className="set-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', border: '1px solid #222', overflow: 'hidden', background: '#0d0d0d', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', border: '1px solid #222', overflow: 'hidden', background: 'var(--casi-surface)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
                   {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : '👤'}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: '#e8e8e8' }}>{profile.display_name || profile.username}</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>@{profile.username}</div>
-                  {profile.bio && <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>{profile.bio}</div>}
+                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)' }}>{profile.display_name || profile.username}</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>@{profile.username}</div>
+                  {profile.bio && <div style={{ fontSize: 12, color: 'var(--casi-text-muted)', marginTop: 4 }}>{profile.bio}</div>}
                 </div>
-                <a href="/profile/edit" style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#F58220', textDecoration: 'none', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>Edit →</a>
+                <a href="/profile/edit" style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: 'var(--casi-accent)', textDecoration: 'none', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>Edit →</a>
               </div>
             </div>
             <div className="set-card">
@@ -1391,7 +1443,7 @@ export default function AdminStudio() {
                 {[['TOP', 'Casi Beams', '#06b6d4', 'floating overlay, transparent bg'], ['MID', 'Your Camera', '#444', 'with chroma key / bg removal'], ['BTM', 'Casi Backdrop', '#c084fc', 'full screen, transparent bg']].map(([pos, name, color, desc]) => (
                   <div key={pos} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid #0d0d0d', background: 'rgba(255,255,255,0.02)' }}>
                     <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color, background: `${color}15`, border: `1px solid ${color}30`, borderRadius: 4, padding: '2px 7px', letterSpacing: 1, flexShrink: 0 }}>{pos}</span>
-                    <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 600, fontSize: 13, color: '#e8e8e8' }}>{name}</span>
+                    <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 600, fontSize: 13, color: 'var(--casi-text)' }}>{name}</span>
                     <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginLeft: 'auto' }}>{desc}</span>
                   </div>
                 ))}
@@ -1410,7 +1462,7 @@ export default function AdminStudio() {
               ))}
               <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid #111', borderRadius: 8, padding: '10px 14px', marginTop: 8 }}>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginBottom: 4 }}>Custom CSS for both sources:</div>
-                <code style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>{"body { background-color: rgba(0,0,0,0); }"}</code>
+                <code style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>{"body { background-color: rgba(0,0,0,0); }"}</code>
               </div>
             </div>
           </div>
