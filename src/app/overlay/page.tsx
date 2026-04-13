@@ -547,12 +547,8 @@ function OverlayContent() {
       // Recover the signature from the wallet's most recent transaction.
       if (msg.includes('AlreadyProcessed')) {
         try {
-          const { Connection: Conn, PublicKey: PK } = await import('@solana/web3.js');
-          const recoveryConn = new Conn(RPC_DEVNET, 'confirmed');
-          const recent = await recoveryConn.getSignaturesForAddress(
-            new PK(publicKey.toBase58()),
-            { limit: 3 },
-          );
+          // connection and publicKey are already in scope from the pre-flight block above
+          const recent = await connection.getSignaturesForAddress(publicKey, { limit: 3 });
           const landed = recent.find(s => !s.err);
           if (landed) {
             await supabase.from('bookings')
