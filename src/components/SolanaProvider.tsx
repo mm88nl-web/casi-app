@@ -3,7 +3,12 @@
 import { useMemo, useEffect, type ReactNode } from 'react';
 import { ConnectionProvider, WalletProvider, useWallet } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { SolanaMobileWalletAdapter } from '@solana-mobile/wallet-adapter-mobile';
+import {
+  SolanaMobileWalletAdapter,
+  createDefaultAddressSelector,
+  createDefaultAuthorizationResultCache,
+  createDefaultWalletNotFoundHandler,
+} from '@solana-mobile/wallet-adapter-mobile';
 import { clusterApiUrl } from '@solana/web3.js';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
@@ -28,7 +33,11 @@ export default function SolanaProvider({ children }: { children: ReactNode }) {
   const wallets = useMemo(
     () => [
       new SolanaMobileWalletAdapter({
+        addressSelector: createDefaultAddressSelector(),
         appIdentity: { name: 'Casi', uri: 'https://casi.gg' },
+        authorizationResultCache: createDefaultAuthorizationResultCache(),
+        cluster: 'devnet',
+        onWalletNotFound: createDefaultWalletNotFoundHandler(),
       }),
     ],
     [],
