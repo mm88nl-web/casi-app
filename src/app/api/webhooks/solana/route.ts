@@ -13,6 +13,25 @@ const USDC_DEVNET_MINT      = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
 const OK = () => NextResponse.json({ ok: true });
 
 export async function POST(req: Request) {
+  // ── Signature verification ────────────────────────────────────────────────
+  // Helius sends the secret you configured in the webhook dashboard as the
+  // Authorization header.  If the env var is set we enforce it; if it isn't
+  // configured yet (e.g. during local dev) we let requests through with a
+  // warning so the rest of the pipeline can still be tested.
+  const webhookSecret = process.env.HELIUS_WEBHOOK_SECRET;
+  if (webhookSecret) {
+    const authHeader = req.headers.get('authorization') ?? '';
+    if (authHeader !== webhookSecret) {
+      console.warn('[solana webhook] rejected request — invalid authorization header');
+      // Return 200 so Helius doesn't exhaust retries on a mis-configured secret,
+      // but log the rejection so it's visible in server logs.
+      return OK();
+    }
+  } else {
+    console.warn('[solana webhook] HELIUS_WEBHOOK_SECRET not set — skipping auth check');
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   const body = await req.json().catch(() => null);
   if (!Array.isArray(body) || body.length === 0) return OK();
 

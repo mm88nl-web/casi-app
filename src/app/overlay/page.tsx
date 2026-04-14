@@ -115,14 +115,21 @@ function NameEntryScreen({ onConfirm, tc }: { onConfirm: (name: string) => void;
 
 type TxStatus = 'idle' | 'booking' | 'streaming' | 'waiting' | 'error';
 
-function SolanaConfirmModal({ slot, duration, estimatedCost, username, usdcBalance, txStatus, txError, submitting, onConfirm, onCancel }: {
+function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipientWallet, usdcBalance, txStatus, txError, txId, submitting, onConfirm, onCancel }: {
   slot: any; duration: number; estimatedCost: string; username: string;
-  usdcBalance: number | null; txStatus: TxStatus; txError: string | null;
+  recipientWallet: string | null; usdcBalance: number | null;
+  txStatus: TxStatus; txError: string | null; txId: string | null;
   submitting: boolean; onConfirm: () => void; onCancel: () => void;
 }) {
   const hasInsufficient = usdcBalance !== null && usdcBalance < parseFloat(estimatedCost);
   const inProgress = submitting && txStatus !== 'idle' && txStatus !== 'error';
   const stepIcon = (active: boolean, done: boolean) => done ? '✓' : active ? '⟳' : '○';
+  const shortWallet = recipientWallet
+    ? `${recipientWallet.slice(0, 4)}…${recipientWallet.slice(-4)}`
+    : null;
+  const solscanUrl = txId
+    ? `https://solscan.io/tx/${txId}?cluster=devnet`
+    : null;
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:"'DM Mono',monospace" }}>
@@ -136,6 +143,12 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, usdcBalan
               <span>{l}</span><span style={{ color:'#e8e8e8' }}>{v}</span>
             </div>
           ))}
+          {shortWallet && (
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666', marginBottom:6 }}>
+              <span>Recipient</span>
+              <span style={{ color:'#e8e8e8', fontFamily:"'DM Mono',monospace" }}>{shortWallet}</span>
+            </div>
+          )}
           <div style={{ borderTop:'1px solid #1c1c1c', margin:'10px 0' }} />
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666' }}>
             <span>Total</span>
@@ -151,11 +164,19 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, usdcBalan
           )}
         </div>
 
-        {/* Streamflow note */}
+        {/* Streamflow note + anti-phishing warning */}
         {!inProgress && txStatus !== 'waiting' && (
           <div style={{ fontSize:10, color:'#444', lineHeight:1.8, marginBottom:16 }}>
             Funds stream in real time via Streamflow.<br />
             Unused USDC returns if ended early.
+            {shortWallet && (
+              <>
+                <br />
+                <span style={{ color:'#facc15' }}>⚠ Verify recipient </span>
+                <span style={{ color:'#666' }}>{shortWallet}</span>
+                <span style={{ color:'#facc15' }}> in your wallet popup.</span>
+              </>
+            )}
           </div>
         )}
 
@@ -175,6 +196,12 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, usdcBalan
                   {stepIcon(step.active, step.done)}
                 </span>
                 {step.label}
+                {step.active && i === 2 && solscanUrl && (
+                  <a href={solscanUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ marginLeft:'auto', fontSize:10, color:'#9945FF', textDecoration:'none', opacity:0.8 }}>
+                    ↗ verify tx
+                  </a>
+                )}
               </div>
             ))}
           </div>
@@ -233,6 +260,7 @@ function OverlayContent() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [txStatus, setTxStatus]         = useState<TxStatus>('idle');
   const [txError, setTxError]           = useState<string|null>(null);
+  const [confirmedTxId, setConfirmedTxId] = useState<string|null>(null);
 
   // ── Wallet state ──────────────────────────────────────────────────────────
   const { connection: walletConn }      = useConnection();
@@ -698,6 +726,7 @@ function OverlayContent() {
       await supabase.from('bookings').update({ stream_id: metadataId, tx_signature: txId })
         .eq('id', newBooking.id);
 
+      setConfirmedTxId(txId);
       setTxStatus('waiting');
       showNotif('◎ Payment sent — awaiting streamer approval!', 'success');
       setShowConfirmModal(false);
@@ -1285,12 +1314,14 @@ function OverlayContent() {
           duration={duration}
           estimatedCost={estimatedCost}
           username={username}
+          recipientWallet={profile?.solana_wallet ?? null}
           usdcBalance={usdcBalance}
           txStatus={txStatus}
           txError={txError}
+          txId={confirmedTxId}
           submitting={submitting}
           onConfirm={submitSolanaBooking}
-          onCancel={() => { if (!submitting) { setShowConfirmModal(false); setTxStatus('idle'); setTxError(null); } }}
+          onCancel={() => { if (!submitting) { setShowConfirmModal(false); setTxStatus('idle'); setTxError(null); setConfirmedTxId(null); } }}
         />
       )}
     </>
