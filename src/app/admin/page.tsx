@@ -7,6 +7,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import { SKINS } from '@/lib/skins';
+import WalletNav from '@/components/WalletNav';
 
 /* ── Logo ── */
 function Logo({ scale = 0.38, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
@@ -833,10 +834,7 @@ export default function AdminStudio() {
                 <button onClick={clearAll} className="btn-sm b-danger studio-action-hide">Clear</button>
               </>
             )}
-            <a href={`/s/${profile.username}`} target="_blank" rel="noopener noreferrer"
-              style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444', textDecoration: 'none', letterSpacing: 1 }}>
-              @{profile.username}
-            </a>
+            <WalletNav />
           </div>
         </nav>
 

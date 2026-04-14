@@ -134,6 +134,15 @@ const CSS = `
     transition: background .15s;
   }
   .wn-disconnect:hover { background: rgba(248,113,113,0.06); }
+
+  /* ── Mobile: collapse to dot + address chip only ── */
+  @media (max-width: 768px) {
+    .wn-bals { display: none; }
+    .wn-devnet-label { display: none; }
+    .wn-devnet { padding: 8px 10px; }
+    .wn-key-btn { padding: 8px 10px; }
+    .wn-connect { padding: 7px 12px; font-size: 11px; }
+  }
 `;
 
 function truncate(pk: PublicKey): string {
