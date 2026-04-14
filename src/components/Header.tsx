@@ -2,10 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
-// NOTE: @privy-io/react-auth must be installed for WalletConnect to work:
-//   npm install @privy-io/react-auth
-// The balance display below works with Solana Wallet Adapter alone.
-import { WalletConnect } from 'bonk-ui-source/templates/components/wallet/components/wallet-connect';
+import { WalletConnect } from 'bonk-ui-source/components/wallet-connect';
 
 const USDC_DEVNET_MINT = '4zMMC9srt5Ri5X14xA64RMBuMBWFnG7u15Wp9xZ2GnN1';
 
