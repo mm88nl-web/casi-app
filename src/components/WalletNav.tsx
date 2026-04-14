@@ -142,7 +142,7 @@ function truncate(pk: PublicKey): string {
 }
 
 export default function WalletNav() {
-  const { connected, publicKey, disconnect } = useWallet();
+  const { connected, publicKey, disconnect, wallet, connect, connecting } = useWallet();
   const { connection } = useConnection();
   const { setVisible } = useWalletModal();
 
@@ -150,6 +150,28 @@ export default function WalletNav() {
   const [usdcBal, setUsdcBal] = useState<number | null>(null);
   const [dropOpen, setDropOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
+
+  // Only connect() after an explicit user click — Wallet Standard auto-registers
+  // Phantom into `wallet` on page load, but we must not auto-connect silently.
+  const userInitiatedConnect = useRef(false);
+  useEffect(() => {
+    if (wallet && !connected && !connecting && userInitiatedConnect.current) {
+      userInitiatedConnect.current = false;
+      connect().catch(() => {});
+    }
+  }, [wallet]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Single-action connect: if a wallet adapter is already selected (Phantom
+  // auto-registered via Wallet Standard) call connect() directly.
+  // Only open the picker modal when no wallet is pre-selected.
+  const openWalletModal = () => {
+    userInitiatedConnect.current = true;
+    if (wallet) {
+      connect().catch(() => {});
+    } else {
+      setVisible(true);
+    }
+  };
 
   // Fetch balances whenever wallet connects / pubkey changes
   useEffect(() => {
@@ -193,14 +215,19 @@ export default function WalletNav() {
     setDropOpen(false);
   };
 
-  /* ── Disconnected ── */
+  /* ── Disconnected / connecting ── */
   if (!connected || !publicKey) {
     return (
       <>
         <style>{CSS}</style>
-        <button className="wn-connect" onClick={() => setVisible(true)}>
+        <button
+          className="wn-connect"
+          onClick={openWalletModal}
+          disabled={connecting}
+          style={{ opacity: connecting ? 0.6 : 1, cursor: connecting ? 'not-allowed' : 'pointer' }}
+        >
           <span className="wn-connect-icon" />
-          Connect Wallet
+          {connecting ? 'Connecting…' : 'Connect Wallet'}
         </button>
       </>
     );
