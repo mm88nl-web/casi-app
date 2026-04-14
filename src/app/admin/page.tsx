@@ -603,25 +603,21 @@ export default function AdminStudio() {
 };
 
   const kickBeam = useCallback(async (booking: any) => {
-  setSelectedSlotId(null);
-  setShowInfoPanel(false);
-  if (booking.payment_method === 'solana') {
-    // Solana: just expire the booking — no Stripe proration
-    await supabase
-      .from('bookings')
-      .update({ status: 'expired' })
-      .eq('id', booking.id);
-    if (profile?.id) loadBookings(profile.id);
-  } else {
-    // Stripe: prorate, capture, auto-advance queue
-    await fetch('/api/stripe/end-early', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ booking_id: booking.id }),
-    });
-    if (profile?.id) loadBookings(profile.id);
-  }
-}, [profile?.id, loadBookings, supabase]);
+    setSelectedSlotId(null);
+    setShowInfoPanel(false);
+    if (booking.payment_method === 'solana') {
+      // expireBooking handles: status → expired, image clear, queue advance
+      await expireBooking(booking);
+    } else {
+      // Stripe: prorate via API, then clear image + advance queue
+      await fetch('/api/stripe/end-early', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: booking.id }),
+      });
+      await expireBooking(booking);
+    }
+  }, [expireBooking]);
 
   const copyUrl = (url: string, key: string) => {
     navigator.clipboard.writeText(url);

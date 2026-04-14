@@ -37,16 +37,22 @@ function formatTime(seconds: number): string {
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
-function Countdown({ booking, onWarning }: { booking: any; onWarning?: (s: number) => void }) {
+function Countdown({ booking, onWarning, onExpire }: { booking: any; onWarning?: (s: number) => void; onExpire?: () => void }) {
   const [seconds, setSeconds] = useState(getSecondsRemaining(booking));
+  const firedRef = useRef(false);
   useEffect(() => {
+    firedRef.current = false;
     const interval = setInterval(() => {
       const s = getSecondsRemaining(booking);
       setSeconds(s);
       if (onWarning) onWarning(s);
+      if (s <= 0 && onExpire && !firedRef.current) {
+        firedRef.current = true;
+        onExpire();
+      }
     }, 1000);
     return () => clearInterval(interval);
-  }, [booking, onWarning]);
+  }, [booking, onWarning, onExpire]);
   return <span>{formatTime(seconds)}</span>;
 }
 
@@ -306,6 +312,39 @@ function OverlayContent() {
   showNotif('Booking cancelled', 'warning');
   if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
 };
+
+  // Expires a booking from the viewer side (runs when countdown hits 0 or viewer
+  // ends early). Uses a conditional update so it's a no-op if admin already expired it.
+  const clientExpireBooking = useCallback(async (booking: any) => {
+    const { data } = await supabase
+      .from('bookings')
+      .update({ status: 'expired' })
+      .eq('id', booking.id)
+      .eq('status', 'active') // only proceed if still active
+      .select()
+      .single();
+
+    if (!data) return; // admin already handled it — realtime will refresh
+
+    if (booking.element_id) {
+      const { data: next } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('element_id', booking.element_id)
+        .eq('status', 'approved_queued')
+        .order('approved_at', { ascending: true })
+        .limit(1)
+        .single();
+
+      if (next) {
+        await supabase.from('bookings').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', next.id);
+        await supabase.from('overlay_elements').update({ image_url: next.image_url }).eq('id', next.element_id);
+      } else {
+        await supabase.from('overlay_elements').update({ image_url: '' }).eq('id', booking.element_id);
+      }
+    }
+    if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+  }, [supabase, profile?.id, loadData, savedViewerName]);
 
   const openSlot = (el: any, joinQueue: boolean, extend=false) => {
     setSelectedSlot(el); setIsQueue(joinQueue); setIsExtend(extend);
@@ -806,24 +845,29 @@ function OverlayContent() {
                       </span>
                       {isLive && activeBooking && (
                         <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, opacity:0.7 }}>
-                          <Countdown booking={activeBooking} onWarning={(s) => {
-                            if(s<=300&&s>0) setExpiringSoon(prev=>new Set(prev).add(booking.id));
-                            else if(s<=0) setExpiringSoon(prev=>{const n=new Set(prev);n.delete(booking.id);return n;});
-                          }} />
+                          <Countdown booking={activeBooking}
+                            onWarning={(s) => {
+                              if(s<=300&&s>0) setExpiringSoon(prev=>new Set(prev).add(booking.id));
+                              else if(s<=0) setExpiringSoon(prev=>{const n=new Set(prev);n.delete(booking.id);return n;});
+                            }}
+                            onExpire={() => clientExpireBooking(activeBooking)}
+                          />
                         </span>
                       )}
                       {isLive && (
   <button className="cancel-btn" onClick={async () => {
     if (booking.payment_method === 'solana') {
-      await cancelSolanaStream(booking);
+      await cancelSolanaStream(booking);          // cancel on-chain
+      await clientExpireBooking(activeBooking);   // clear slot + advance queue
+      showNotif('Beam ended — remaining USDC returned', 'warning');
     } else {
       await fetch('/api/stripe/end-early', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ booking_id: booking.id }),
       });
+      await clientExpireBooking(activeBooking);   // clear slot + advance queue
       showNotif('Beam ended — prorated refund issued', 'warning');
-      if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
     }
   }}>
     ✕ end early
@@ -870,7 +914,7 @@ function OverlayContent() {
                   ) : (
                     <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:el.is_background?12:6, border:`1.5px dashed ${isLocked?'rgba(248,113,113,0.3)':isOccupied?`rgba(${tcRgb},0.31)`:el.is_background?'rgba(168,85,247,0.3)':`rgba(${tcRgb},0.25)`}`, background:isLocked?'rgba(248,113,113,0.03)':isOccupied?`rgba(${tcRgb},0.02)`:el.is_background?'rgba(168,85,247,0.03)':`rgba(${tcRgb},0.02)` }}>
                       <span style={{ fontSize:el.is_background?20:14, marginBottom:4 }}>{isLocked?'🔒':isOccupied?'':el.is_background?'🖼':'✦'}</span>
-                      {isOccupied && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:`rgba(${tcRgb},0.69)` }}><Countdown booking={activeBooking} /></span>}
+                      {isOccupied && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:`rgba(${tcRgb},0.69)` }}><Countdown booking={activeBooking} onExpire={() => clientExpireBooking(activeBooking)} /></span>}
                     </div>
                   )}
 
