@@ -1,10 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { WalletConnect } from 'bonk-ui-source/components/wallet-connect';
 
-const USDC_DEVNET_MINT = '4zMMC9srt5Ri5X14xA64RMBuMBWFnG7u15Wp9xZ2GnN1';
+const USDC_DEVNET_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@400;500&display=swap');
@@ -125,8 +126,12 @@ function Logo({ scale = 0.18 }: { scale?: number }) {
 }
 
 export default function Header() {
+  const pathname = usePathname();
   const { connected, publicKey } = useWallet();
   const { connection } = useConnection();
+
+  // Overlay and OBS pages have their own full-screen nav — don't double up
+  if (pathname?.startsWith('/overlay') || pathname?.startsWith('/obs')) return null;
 
   const [solBal, setSolBal]   = useState<number | null>(null);
   const [usdcBal, setUsdcBal] = useState<number | null>(null);

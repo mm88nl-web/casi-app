@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 
@@ -113,6 +113,96 @@ function NameEntryScreen({ onConfirm, tc }: { onConfirm: (name: string) => void;
   );
 }
 
+type TxStatus = 'idle' | 'booking' | 'streaming' | 'waiting' | 'error';
+
+function SolanaConfirmModal({ slot, duration, estimatedCost, username, usdcBalance, txStatus, txError, submitting, onConfirm, onCancel }: {
+  slot: any; duration: number; estimatedCost: string; username: string;
+  usdcBalance: number | null; txStatus: TxStatus; txError: string | null;
+  submitting: boolean; onConfirm: () => void; onCancel: () => void;
+}) {
+  const hasInsufficient = usdcBalance !== null && usdcBalance < parseFloat(estimatedCost);
+  const inProgress = submitting && txStatus !== 'idle' && txStatus !== 'error';
+  const stepIcon = (active: boolean, done: boolean) => done ? '✓' : active ? '⟳' : '○';
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:"'DM Mono',monospace" }}>
+      <div style={{ background:'var(--casi-surface,#0d0d0d)', border:'1px solid rgba(153,69,255,0.35)', borderRadius:16, padding:28, width:'100%', maxWidth:380 }}>
+        <div style={{ fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'#9945FF', marginBottom:16 }}>Confirm your beam slot</div>
+
+        {/* Details receipt */}
+        <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:10, padding:'14px 16px', marginBottom:16 }}>
+          {[['Slot on', `@${username} (devnet)`], ['Duration', `${duration} min`], ['Rate', `$${slot.price_value}/${slot.price_unit}`]].map(([l, v]) => (
+            <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666', marginBottom:6 }}>
+              <span>{l}</span><span style={{ color:'#e8e8e8' }}>{v}</span>
+            </div>
+          ))}
+          <div style={{ borderTop:'1px solid #1c1c1c', margin:'10px 0' }} />
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666' }}>
+            <span>Total</span>
+            <span style={{ fontSize:18, fontWeight:800, color:'#9945FF' }}>{estimatedCost} USDC</span>
+          </div>
+          {usdcBalance !== null && (
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginTop:8 }}>
+              <span style={{ color:'#555' }}>Your balance</span>
+              <span style={{ color: hasInsufficient ? '#f87171' : '#6ee7b7' }}>
+                {usdcBalance.toFixed(2)} USDC{hasInsufficient ? ' — insufficient' : ''}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Streamflow note */}
+        {!inProgress && txStatus !== 'waiting' && (
+          <div style={{ fontSize:10, color:'#444', lineHeight:1.8, marginBottom:16 }}>
+            Funds stream in real time via Streamflow.<br />
+            Unused USDC returns if ended early.
+          </div>
+        )}
+
+        {/* TX status steps */}
+        {(inProgress || txStatus === 'waiting') && (
+          <div style={{ background:'rgba(255,255,255,0.02)', borderRadius:10, padding:'12px 14px', marginBottom:16 }}>
+            {[
+              { label: 'Booking created',             active: txStatus === 'booking',   done: txStatus !== 'booking' },
+              { label: 'Creating Streamflow stream…', active: txStatus === 'streaming', done: txStatus === 'waiting' },
+              { label: 'Waiting for admin approval',  active: txStatus === 'waiting',   done: false },
+            ].map((step, i) => (
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:10, fontSize:11,
+                color: step.done ? '#6ee7b7' : step.active ? '#9945FF' : '#444',
+                marginBottom: i < 2 ? 8 : 0 }}>
+                <span style={{ width:14, textAlign:'center', display:'inline-block',
+                  animation: step.active ? 'casi-blink 1.2s infinite' : 'none' }}>
+                  {stepIcon(step.active, step.done)}
+                </span>
+                {step.label}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Error */}
+        {txStatus === 'error' && txError && (
+          <div style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.2)', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:11, color:'#f87171' }}>
+            {txError}
+          </div>
+        )}
+
+        {/* Buttons */}
+        <div style={{ display:'flex', gap:10 }}>
+          <button onClick={onCancel} disabled={inProgress}
+            style={{ flex:1, background:'none', border:'1px solid #1c1c1c', borderRadius:10, padding:'12px 0', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:13, color: inProgress ? '#333' : '#555', cursor: inProgress ? 'not-allowed' : 'pointer' }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={inProgress || hasInsufficient}
+            style={{ flex:2, background: inProgress || hasInsufficient ? '#1c1c1c' : '#9945FF', border:'none', borderRadius:10, padding:'12px 0', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:13, color: inProgress || hasInsufficient ? '#444' : '#fff', cursor: inProgress || hasInsufficient ? 'not-allowed' : 'pointer' }}>
+            {inProgress ? 'Signing…' : txStatus === 'error' ? 'Retry →' : 'Confirm & Sign →'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OverlayContent() {
   const searchParams = useSearchParams();
   const username = searchParams.get('s') || '';
@@ -139,8 +229,13 @@ function OverlayContent() {
   const [submitting, setSubmitting]     = useState(false);
   const [cancelling, setCancelling]     = useState<string|null>(null);
   const [notification, setNotification] = useState<{text:string;type:string}|null>(null);
+  const [usdcBalance, setUsdcBalance]   = useState<number|null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [txStatus, setTxStatus]         = useState<TxStatus>('idle');
+  const [txError, setTxError]           = useState<string|null>(null);
 
   // ── Wallet state ──────────────────────────────────────────────────────────
+  const { connection: walletConn }      = useConnection();
   const { wallet, connected, connecting, connect, disconnect, publicKey, signTransaction, signAllTransactions } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
 
@@ -164,6 +259,22 @@ function OverlayContent() {
     }
   };
   // ─────────────────────────────────────────────────────────────────────────
+
+  // Proactively fetch USDC balance for live cost preview
+  useEffect(() => {
+    if (!publicKey) { setUsdcBalance(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { PublicKey: PK } = await import('@solana/web3.js');
+        const { value: accs } = await walletConn.getParsedTokenAccountsByOwner(
+          publicKey, { mint: new PK(USDC_DEVNET) }
+        );
+        if (!cancelled) setUsdcBalance(accs[0]?.account.data.parsed.info.tokenAmount.uiAmount ?? 0);
+      } catch { if (!cancelled) setUsdcBalance(null); }
+    })();
+    return () => { cancelled = true; };
+  }, [publicKey, walletConn]);
 
   const supabase = useRef(createClient()).current;
   const viewerNameRef = useRef('');
@@ -447,6 +558,8 @@ function OverlayContent() {
       return;
     }
     setSubmitting(true);
+    setTxStatus('booking');
+    setTxError(null);
 
     // Clean up any stale Solana-pending bookings that never got a stream
     await supabase.from('bookings').update({ status: 'denied' })
@@ -486,9 +599,12 @@ function OverlayContent() {
 
     if (insertError || !newBooking) {
       showNotif('Failed to create booking', 'error');
+      setTxStatus('error'); setTxError('Failed to create booking');
       setSubmitting(false);
       return;
     }
+
+    setTxStatus('streaming');
 
     try {
       // Dynamic import keeps Streamflow out of the initial bundle
@@ -582,7 +698,9 @@ function OverlayContent() {
       await supabase.from('bookings').update({ stream_id: metadataId, tx_signature: txId })
         .eq('id', newBooking.id);
 
+      setTxStatus('waiting');
       showNotif('◎ Payment sent — awaiting streamer approval!', 'success');
+      setShowConfirmModal(false);
       closeSlot();
       if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
     } catch (err: any) {
@@ -642,6 +760,7 @@ function OverlayContent() {
       }
 
       await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
+      setTxStatus('error'); setTxError(userMsg);
       showNotif(userMsg, 'denied');
     }
 
@@ -1016,6 +1135,36 @@ function OverlayContent() {
                   </div>
                 </div>
               </div>
+
+              {/* ── USDC cost preview ── */}
+              <div style={{ background:'rgba(153,69,255,0.05)', border:'1px solid rgba(153,69,255,0.2)', borderRadius:10, padding:'12px 14px', margin:'12px 0', fontFamily:"'DM Mono',monospace", fontSize:11 }}>
+                {[['Duration', `${duration} min`], ['Rate', `$${selectedSlot.price_value}/${selectedSlot.price_unit}`]].map(([l, v]) => (
+                  <div key={l} style={{ display:'flex', justifyContent:'space-between', color:'#555', marginBottom:5 }}>
+                    <span>{l}</span><span>{v}</span>
+                  </div>
+                ))}
+                <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid #1c1c1c', paddingTop:8, marginTop:4, fontSize:13, fontWeight:700, color:'#9945FF' }}>
+                  <span>Total</span><span>{estimatedCost} USDC</span>
+                </div>
+                {connected && usdcBalance !== null ? (
+                  <>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginTop:8, color:'#555' }}>
+                      <span>Your balance</span>
+                      <span style={{ color: usdcBalance < parseFloat(estimatedCost) ? '#f87171' : '#6ee7b7' }}>
+                        {usdcBalance.toFixed(2)} USDC
+                      </span>
+                    </div>
+                    {usdcBalance < parseFloat(estimatedCost) && (
+                      <div style={{ color:'#f87171', fontSize:10, marginTop:5, textAlign:'right' }}>⚠ Insufficient balance</div>
+                    )}
+                  </>
+                ) : connected ? (
+                  <div style={{ color:'#555', fontSize:10, marginTop:6 }}>Fetching balance…</div>
+                ) : (
+                  <div style={{ color:'#555', fontSize:10, marginTop:6 }}>Connect wallet to pay with USDC via Streamflow</div>
+                )}
+              </div>
+
 {isQueue && (() => {
   const active = activeBookings.find(b => b.element_id === selectedSlot?.id);
   if (!active) return null;
@@ -1058,7 +1207,7 @@ function OverlayContent() {
                       if (!connected) {
                         openWalletModal();
                       } else {
-                        submitSolanaBooking();
+                        setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
                       }
                     }}
                   >
@@ -1128,6 +1277,22 @@ function OverlayContent() {
           )}
         </main>
       </div>
+
+      {/* Solana confirmation modal */}
+      {showConfirmModal && selectedSlot && (
+        <SolanaConfirmModal
+          slot={selectedSlot}
+          duration={duration}
+          estimatedCost={estimatedCost}
+          username={username}
+          usdcBalance={usdcBalance}
+          txStatus={txStatus}
+          txError={txError}
+          submitting={submitting}
+          onConfirm={submitSolanaBooking}
+          onCancel={() => { if (!submitting) { setShowConfirmModal(false); setTxStatus('idle'); setTxError(null); } }}
+        />
+      )}
     </>
   );
 }
