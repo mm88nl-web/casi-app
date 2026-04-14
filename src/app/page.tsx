@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { useRouter } from 'next/navigation';
+import SearchDropdown from '@/components/SearchDropdown';
 
 function Logo({ scale = 1 }: { scale?: number }) {
   return (
@@ -18,11 +18,9 @@ function Logo({ scale = 1 }: { scale?: number }) {
 }
 
 export default function HomePage() {
-  const [liveCount, setLiveCount]       = useState(0);
-  const [streamerCount, setStreamerCount] = useState(0);
-  const [searchQuery, setSearchQuery]   = useState('');
+  const [liveCount, setLiveCount]         = useState(0);
+  const [streamerCount, setStreamerCount]  = useState(0);
   const supabase = createClient();
-  const router   = useRouter();
 
   useEffect(() => {
     const load = async () => {
@@ -33,11 +31,6 @@ export default function HomePage() {
     };
     load();
   }, [supabase]);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    router.push(searchQuery.trim() ? `/search?q=${encodeURIComponent(searchQuery.trim())}` : '/search');
-  };
 
   return (
     <>
@@ -134,33 +127,7 @@ export default function HomePage() {
           max-width: 500px; margin: 0 auto 40px;
         }
 
-        /* Search bar */
-        .search-form {
-          display: flex; gap: 0; max-width: 520px; margin: 0 auto 20px;
-          background: #0a0a0a; border: 1px solid #1c1c1c; border-radius: 12px;
-          overflow: hidden; transition: border-color .2s;
-        }
-        .search-form:focus-within { border-color: rgba(245,130,32,0.4); }
-        .search-input {
-          flex: 1; background: none; border: none; outline: none;
-          padding: 14px 18px; font-family: 'Syne', sans-serif; font-size: 15px;
-          color: #e8e8e8;
-        }
-        .search-input::placeholder { color: #333; }
-        .search-btn {
-          background: #F58220; border: none; padding: 0 20px;
-          font-family: 'Syne', sans-serif; font-weight: 800; font-size: 12px;
-          text-transform: uppercase; letter-spacing: 0.5px; color: #050505;
-          cursor: pointer; transition: background .2s; white-space: nowrap; flex-shrink: 0;
-        }
-        .search-btn:hover { background: #ff9f20; }
-
-        .search-hint {
-          font-family: 'DM Mono', monospace; font-size: 10px; color: #333;
-          letter-spacing: 1px; margin-bottom: 48px;
-        }
-        .search-hint a { color: #F58220; text-decoration: none; }
-        .search-hint a:hover { color: #ff9f20; }
+        /* search handled by SearchDropdown component */
 
         /* Live stats row */
         .stats-row {
@@ -326,12 +293,11 @@ export default function HomePage() {
           </a>
           <div className="casi-nav-right">
             {liveCount > 0 && (
-              <a href="/search" className="live-pill nav-live-hide">
+              <span className="live-pill nav-live-hide">
                 <span className="live-dot" />
                 {liveCount} live now
-              </a>
+              </span>
             )}
-            <a href="/search" className="nav-link">Browse</a>
             <a href="/login" className="btn-primary">Studio →</a>
           </div>
         </nav>
@@ -344,20 +310,9 @@ export default function HomePage() {
             Jump into any stream, rent a slot on screen, or just watch. No account needed to browse.
           </p>
 
-          {/* Search bar */}
-          <form className="search-form" onSubmit={handleSearch}>
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search for a streamer or channel…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              autoFocus
-            />
-            <button type="submit" className="search-btn">Search</button>
-          </form>
-          <div className="search-hint">
-            or <a href="/search">browse all streams →</a>
+          {/* Search with live dropdown */}
+          <div style={{ marginBottom: 40 }}>
+            <SearchDropdown />
           </div>
 
           {/* Stats */}
@@ -475,7 +430,6 @@ export default function HomePage() {
             <Logo scale={0.15} />
           </a>
           <div className="footer-links">
-            <a href="/search" className="nav-link">Find streams</a>
             <a href="/login?tab=signup" className="nav-link">Create studio</a>
             <a href="/login" className="nav-link">Sign in</a>
           </div>
