@@ -5,6 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
+import WalletNav from '@/components/WalletNav';
 
 // Module-level constant — accessible in every function including cancelSolanaStream
 // and the AlreadyProcessed catch block inside submitSolanaBooking.
@@ -264,7 +265,7 @@ function OverlayContent() {
 
   // ── Wallet state ──────────────────────────────────────────────────────────
   const { connection: walletConn }      = useConnection();
-  const { wallet, connected, connecting, connect, disconnect, publicKey, signTransaction, signAllTransactions } = useWallet();
+  const { wallet, connected, connecting, connect, publicKey, signTransaction, signAllTransactions } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
 
   // Only connect when the user explicitly clicked a Connect button.
@@ -920,25 +921,8 @@ function OverlayContent() {
               <span className="ov-wm">casi</span>
             </a>
             <div className="ov-nav-right">
-              {/* Wallet Connect Button */}
-              {connected && publicKey ? (
-                <button
-                  onClick={() => disconnect()}
-                  style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1.5, textTransform:'uppercase', background:'rgba(255,255,255,0.04)', border:'1px solid var(--casi-border)', borderRadius:20, padding:'5px 12px', color:'#888', cursor:'pointer', transition:'all .2s' }}
-                  onMouseEnter={e => { (e.target as HTMLButtonElement).style.color='#f87171'; (e.target as HTMLButtonElement).style.borderColor='rgba(248,113,113,0.3)'; }}
-                  onMouseLeave={e => { (e.target as HTMLButtonElement).style.color='#888'; (e.target as HTMLButtonElement).style.borderColor='var(--casi-border)'; }}
-                >
-                  {publicKey.toBase58().slice(0,4)}…{publicKey.toBase58().slice(-4)} ✕
-                </button>
-              ) : (
-                <button
-                  onClick={openWalletModal}
-                  disabled={connecting}
-                  style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1.5, textTransform:'uppercase', background:'rgba(153,69,255,0.1)', border:'1px solid rgba(153,69,255,0.3)', borderRadius:20, padding:'5px 12px', color:'#9945FF', cursor:connecting?'not-allowed':'pointer', transition:'all .2s', opacity:connecting?0.6:1 }}
-                >
-                  {connecting ? 'Connecting…' : 'Connect Wallet'}
-                </button>
-              )}
+              {/* Wallet balance row — devnet dot, SOL, USDC, pubkey, dropdown */}
+              <WalletNav />
               {notification && (
                 <div className="notif" style={
                   notification.type==='success' ? { background:`rgba(${tcRgb},0.09)`, border:`1px solid rgba(${tcRgb},0.25)`, color:tc } :

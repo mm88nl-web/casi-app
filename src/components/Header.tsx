@@ -130,9 +130,8 @@ export default function Header() {
   const { connected, publicKey } = useWallet();
   const { connection } = useConnection();
 
-  // Overlay and OBS pages have their own full-screen nav — don't double up
-  if (pathname?.startsWith('/overlay') || pathname?.startsWith('/obs')) return null;
-
+  // All hooks must be called unconditionally — React rules of hooks.
+  // The early return for non-admin pages happens below, after all hooks.
   const [solBal, setSolBal]   = useState<number | null>(null);
   const [usdcBal, setUsdcBal] = useState<number | null>(null);
 
@@ -160,6 +159,10 @@ export default function Header() {
     const interval = setInterval(fetchBalances, 30_000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [connected, publicKey, connection]);
+
+  // Only render on /admin — overlay and obs have their own nav,
+  // other pages (home, login, search, profile) have their own headers.
+  if (!pathname?.startsWith('/admin')) return null;
 
   const solStr  = solBal  !== null ? solBal.toFixed(3)  : null;
   const usdcStr = usdcBal !== null ? usdcBal.toFixed(2) : null;
