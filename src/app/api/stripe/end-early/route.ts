@@ -8,6 +8,17 @@ const supabase = createClient(
 );
 
 export async function POST(req: Request) {
+  // ── Auth: verify the caller is a logged-in streamer ──────────────────────
+  const token = req.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   const { booking_id } = await req.json();
 
   const { data: booking } = await supabase
@@ -19,6 +30,12 @@ export async function POST(req: Request) {
   if (!booking) {
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
+
+  // ── Ownership: caller must own the profile this booking belongs to ────────
+  if (booking.profile_id !== user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Prorated capture
   if (booking.payment_intent_id && booking.original_amount_cents && booking.started_at) {

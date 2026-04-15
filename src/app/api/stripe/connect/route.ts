@@ -8,13 +8,21 @@ const supabase = createClient(
 );
 
 export async function POST(req: Request) {
-  const { user_id } = await req.json();
+  // ── Auth: derive user identity from session token, never from request body ─
+  const token = req.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
-  // Check if streamer already has a Stripe account
   const { data: profile } = await supabase
     .from('profiles')
     .select('stripe_account_id, username')
-    .eq('id', user_id)
+    .eq('id', user.id)
     .single();
 
   let accountId = profile?.stripe_account_id;
@@ -33,7 +41,7 @@ export async function POST(req: Request) {
     await supabase
       .from('profiles')
       .update({ stripe_account_id: accountId })
-      .eq('id', user_id);
+      .eq('id', user.id);
   }
 
   // Create onboarding link

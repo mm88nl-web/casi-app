@@ -352,11 +352,14 @@ export default function AdminStudio() {
 
   const handleStripeConnect = async () => {
     setStripeLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/api/stripe/connect', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: user!.id }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify({}),
     });
     const { url } = await res.json();
     if (url) window.location.href = url;
@@ -625,14 +628,18 @@ export default function AdminStudio() {
       await expireBooking(booking);
     } else {
       // Stripe: prorate via API, then clear image + advance queue
+      const { data: { session } } = await supabase.auth.getSession();
       await fetch('/api/stripe/end-early', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
         body: JSON.stringify({ booking_id: booking.id }),
       });
       await expireBooking(booking);
     }
-  }, [expireBooking, publicKey, profile?.solana_wallet, wallet]);
+  }, [expireBooking, publicKey, profile?.solana_wallet, wallet, supabase]);
 
   const copyUrl = (url: string, key: string) => {
     navigator.clipboard.writeText(url);
@@ -1219,9 +1226,13 @@ export default function AdminStudio() {
   // End current active booking on this slot first
   const current = activeBookings.find(b => b.element_id === booking.element_id);
   if (current) {
+    const { data: { session: sess } } = await supabase.auth.getSession();
     await fetch('/api/stripe/end-early', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${sess?.access_token}`,
+      },
       body: JSON.stringify({ booking_id: current.id }),
     });
   }
@@ -1367,9 +1378,13 @@ export default function AdminStudio() {
   // End current active booking on this slot first
   const current = activeBookings.find(b => b.element_id === booking.element_id);
   if (current) {
+    const { data: { session: sess } } = await supabase.auth.getSession();
     await fetch('/api/stripe/end-early', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${sess?.access_token}`,
+      },
       body: JSON.stringify({ booking_id: current.id }),
     });
   }
