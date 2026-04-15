@@ -14,21 +14,20 @@ const OK = () => NextResponse.json({ ok: true });
 
 export async function POST(req: Request) {
   // ── Signature verification ────────────────────────────────────────────────
-  // Helius sends the secret you configured in the webhook dashboard as the
-  // Authorization header.  If the env var is set we enforce it; if it isn't
-  // configured yet (e.g. during local dev) we let requests through with a
-  // warning so the rest of the pipeline can still be tested.
+  // Helius sends the webhook secret you configured in the dashboard as the
+  // Authorization header value.  We always enforce it — a missing env var is
+  // a deployment misconfiguration that must be fixed, not silently bypassed.
+  // We still return 200 on failure so Helius doesn't exhaust retries and burn
+  // credits, but we bail out before touching the database.
   const webhookSecret = process.env.HELIUS_WEBHOOK_SECRET;
-  if (webhookSecret) {
-    const authHeader = req.headers.get('authorization') ?? '';
-    if (authHeader !== webhookSecret) {
-      console.warn('[solana webhook] rejected request — invalid authorization header');
-      // Return 200 so Helius doesn't exhaust retries on a mis-configured secret,
-      // but log the rejection so it's visible in server logs.
-      return OK();
-    }
-  } else {
-    console.warn('[solana webhook] HELIUS_WEBHOOK_SECRET not set — skipping auth check');
+  if (!webhookSecret) {
+    console.error('[solana webhook] HELIUS_WEBHOOK_SECRET is not set — dropping request without processing');
+    return OK();
+  }
+  const authHeader = req.headers.get('authorization') ?? '';
+  if (authHeader !== webhookSecret) {
+    console.warn('[solana webhook] rejected request — invalid authorization header');
+    return OK();
   }
   // ─────────────────────────────────────────────────────────────────────────
 
