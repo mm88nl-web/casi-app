@@ -1,0 +1,22 @@
+name: Stripe Janitor
+
+on:
+  schedule:
+    # Runs every 5 minutes (GitHub Actions minimum granularity)
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # allow manual trigger from GitHub UI
+
+jobs:
+  run-janitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Stripe Janitor endpoint
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/stripe-janitor")
+          echo "Response status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "Janitor returned non-200 status: $STATUS"
+            exit 1
+          fi
