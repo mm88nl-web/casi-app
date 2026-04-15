@@ -286,6 +286,133 @@ function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLo
   );
 }
 
+/* ── Inline beam control panel (D-pad + price + lock + delete + active strip) ── */
+function BeamCtrlPanel({ el, activeBooking, updateSlider, updateLayer, toggleLock, deleteLayer, kickBeam, onDone }: {
+  el: any; activeBooking: any | null;
+  updateSlider: (id: string, updates: any) => void;
+  updateLayer: (id: string, updates: any) => void;
+  toggleLock: (id: string, locked: boolean) => void;
+  deleteLayer: (id: string) => void;
+  kickBeam: (booking: any) => void;
+  onDone: () => void;
+}) {
+  const [editPrice, setEditPrice] = useState(String(el.price_value || 0));
+  const [editUnit, setEditUnit] = useState(el.price_unit || 'min');
+  const [liveSeconds, setLiveSeconds] = useState(activeBooking ? getSecondsRemaining(activeBooking) : 0);
+
+  // Sync price fields when a different element is selected
+  useEffect(() => { setEditPrice(String(el.price_value || 0)); setEditUnit(el.price_unit || 'min'); }, [el.id]);
+
+  // Live countdown for the active booking strip
+  useEffect(() => {
+    if (!activeBooking) return;
+    setLiveSeconds(getSecondsRemaining(activeBooking));
+    const iv = setInterval(() => setLiveSeconds(getSecondsRemaining(activeBooking)), 1000);
+    return () => clearInterval(iv);
+  }, [activeBooking?.id]);
+
+  const durMins = activeBooking ? Number(activeBooking.duration_minutes) : 0;
+  const elapsed = activeBooking ? Math.max(0, durMins * 60 - liveSeconds) : 0;
+  const earnedSoFar = activeBooking
+    ? activeBooking.price_unit === 'min'
+      ? ((elapsed / 60) * activeBooking.price_value).toFixed(2)
+      : ((elapsed / 3600) * activeBooking.price_value).toFixed(2)
+    : null;
+
+  return (
+    <div className="beam-ctrl">
+      {/* Header */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <span style={{ fontFamily:"'Syne',sans-serif", fontSize:13, fontWeight:700, color:'var(--casi-accent)' }}>✦ Beam</span>
+        <button onClick={onDone}
+          style={{ background:'rgba(255,255,255,0.04)', border:'1px solid #222', borderRadius:8, color:'#888', fontFamily:"'DM Mono',monospace", fontSize:11, padding:'8px 14px', cursor:'pointer', textTransform:'uppercase', letterSpacing:1 }}>
+          Done
+        </button>
+      </div>
+
+      {/* Coordinate readout */}
+      <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#444', letterSpacing:1 }}>
+        X {Math.round(el.pos_x)}% · Y {Math.round(el.pos_y)}% · W {Math.round(el.width)}% · H {Math.round(el.height)}%
+      </div>
+
+      {/* D-pad + size controls */}
+      <div style={{ display:'flex', alignItems:'center', gap:24, flexWrap:'wrap' }}>
+        {/* Position D-pad */}
+        <div>
+          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:2, textTransform:'uppercase', color:'#333', marginBottom:6 }}>Position</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,36px)', gridTemplateRows:'repeat(3,36px)', gap:4 }}>
+            <div /><button className="dpad-btn" onClick={() => updateSlider(el.id, { pos_y: Math.max(0, el.pos_y - 1) })}>↑</button><div />
+            <button className="dpad-btn" onClick={() => updateSlider(el.id, { pos_x: Math.max(0, el.pos_x - 1) })}>←</button>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, color:'#222', fontWeight:700 }}>✦</div>
+            <button className="dpad-btn" onClick={() => updateSlider(el.id, { pos_x: Math.min(80, el.pos_x + 1) })}>→</button>
+            <div /><button className="dpad-btn" onClick={() => updateSlider(el.id, { pos_y: Math.min(80, el.pos_y + 1) })}>↓</button><div />
+          </div>
+        </div>
+
+        {/* Size steppers */}
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:2, textTransform:'uppercase', color:'#333', marginBottom:2 }}>Size</div>
+          {[
+            { label:'W', field:'width',  min:5, max:60, val:el.width  },
+            { label:'H', field:'height', min:5, max:60, val:el.height },
+          ].map(({ label, field, min, max, val }) => (
+            <div key={field} style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#444', width:10 }}>{label}</span>
+              <button className="step-btn" onClick={() => updateSlider(el.id, { [field]: Math.max(min, val - 2) })}>−</button>
+              <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, color:'var(--casi-text)', width:34, textAlign:'center' }}>{Math.round(val)}%</span>
+              <button className="step-btn" onClick={() => updateSlider(el.id, { [field]: Math.min(max, val + 2) })}>+</button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Price + lock + delete row */}
+      <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:12, borderTop:'1px solid rgba(255,255,255,0.05)', flexWrap:'wrap' }}>
+        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1, textTransform:'uppercase', color:'#444', marginRight:2 }}>Price</span>
+        <span style={{ color:'var(--casi-accent)', fontWeight:800, fontSize:14 }}>$</span>
+        <input type="number" min={0} value={editPrice} onChange={(e) => setEditPrice(e.target.value)}
+          style={{ width:56, background:'rgba(255,255,255,0.06)', border:'1px solid #2a2a2a', borderRadius:7, padding:'5px 8px', fontSize:13, color:'var(--casi-text)', outline:'none', fontFamily:"'DM Mono',monospace", textAlign:'center' }} />
+        <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)}
+          style={{ background:'var(--casi-surface)', border:'1px solid #2a2a2a', borderRadius:7, padding:'5px 8px', fontSize:11, color:'var(--casi-text)', outline:'none', cursor:'pointer', fontFamily:"'DM Mono',monospace" }}>
+          <option value="min">/min</option>
+          <option value="hr">/hr</option>
+        </select>
+        <button onClick={() => updateLayer(el.id, { price_value: parseFloat(editPrice) || 0, price_unit: editUnit })}
+          style={{ background:'var(--casi-accent)', border:'none', borderRadius:7, padding:'5px 12px', color:'var(--casi-bg)', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:11, textTransform:'uppercase', cursor:'pointer' }}>
+          Save
+        </button>
+        {/* Lock toggle */}
+        <button onClick={() => toggleLock(el.id, !el.locked)}
+          style={{ marginLeft:'auto', background: el.locked ? 'rgba(248,113,113,0.1)' : 'rgba(255,255,255,0.04)', border:`1px solid ${el.locked ? 'rgba(248,113,113,0.3)' : '#222'}`, borderRadius:7, padding:'5px 10px', color: el.locked ? '#f87171' : '#555', fontFamily:"'DM Mono',monospace", fontSize:10, textTransform:'uppercase', letterSpacing:1, cursor:'pointer' }}>
+          {el.locked ? '🔒 Locked' : '🔓 Open'}
+        </button>
+        <button onClick={() => deleteLayer(el.id)}
+          style={{ background:'rgba(248,113,113,0.07)', border:'1px solid rgba(248,113,113,0.15)', borderRadius:7, padding:'5px 10px', color:'rgba(248,113,113,0.6)', fontFamily:"'DM Mono',monospace", fontSize:10, cursor:'pointer' }}>
+          ✕
+        </button>
+      </div>
+
+      {/* Active booking strip */}
+      {activeBooking && (
+        <div style={{ display:'flex', alignItems:'center', gap:10, background:'rgba(var(--casi-accent2-rgb),0.06)', border:'1px solid rgba(var(--casi-accent2-rgb),0.2)', borderRadius:8, padding:'8px 12px', flexWrap:'wrap' }}>
+          {activeBooking.image_url && (
+            <div style={{ width:24, height:24, borderRadius:4, overflow:'hidden', flexShrink:0 }}>
+              <img src={activeBooking.image_url} style={{ width:'100%', height:'100%', objectFit:'contain' }} alt="" />
+            </div>
+          )}
+          <span style={{ fontFamily:"'Syne',sans-serif", fontSize:12, fontWeight:700, color:'var(--casi-accent2)' }}>● {activeBooking.viewer_name}</span>
+          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#555' }}>{formatTime(liveSeconds)} left</span>
+          {earnedSoFar && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#4ade80' }}>${earnedSoFar} earned</span>}
+          <button onClick={() => kickBeam(activeBooking)}
+            style={{ marginLeft:'auto', background:'none', border:'none', color:'rgba(248,113,113,0.5)', fontFamily:"'DM Mono',monospace", fontSize:10, textTransform:'uppercase', letterSpacing:1, cursor:'pointer' }}>
+            End early
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 /* ══════════════════════════════════════════
    MAIN ADMIN PAGE
@@ -1148,67 +1275,23 @@ export default function AdminStudio() {
               })}
             </div>
 
-            {/* Beam control panel — D-pad + size steppers, replaces sliders */}
+            {/* Beam control panel — movement + price + live info, all inline */}
             {selectedEl && !selectedEl.is_background && (
-              <div className="beam-ctrl">
-                {/* Header */}
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                  <span style={{ fontFamily:"'Syne',sans-serif", fontSize:13, fontWeight:700, color:'var(--casi-accent)' }}>
-                    ✦ {selectedEl.price_value > 0 ? `$${selectedEl.price_value}/${selectedEl.price_unit}` : 'Beam'}
-                  </span>
-                  <div style={{ display:'flex', gap:8 }}>
-                    <button onClick={() => setShowInfoPanel(true)}
-                      style={{ background:'rgba(var(--casi-accent-rgb),0.08)', border:'1px solid rgba(var(--casi-accent-rgb),0.2)', borderRadius:8, color:'var(--casi-accent)', fontFamily:"'DM Mono',monospace", fontSize:11, padding:'8px 14px', cursor:'pointer', textTransform:'uppercase', letterSpacing:1 }}>
-                      Info / Price
-                    </button>
-                    <button onClick={() => { setSelectedSlotId(null); setShowInfoPanel(false); }}
-                      style={{ background:'rgba(255,255,255,0.04)', border:'1px solid #222', borderRadius:8, color:'#888', fontFamily:"'DM Mono',monospace", fontSize:11, padding:'8px 14px', cursor:'pointer', textTransform:'uppercase', letterSpacing:1 }}>
-                      Done
-                    </button>
-                  </div>
-                </div>
-
-                {/* Coordinate readout */}
-                <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#444', letterSpacing:1 }}>
-                  X {Math.round(selectedEl.pos_x)}% · Y {Math.round(selectedEl.pos_y)}% · W {Math.round(selectedEl.width)}% · H {Math.round(selectedEl.height)}%
-                </div>
-
-                {/* D-pad + size controls */}
-                <div style={{ display:'flex', alignItems:'center', gap:24, flexWrap:'wrap' }}>
-                  {/* Position D-pad */}
-                  <div>
-                    <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:2, textTransform:'uppercase', color:'#333', marginBottom:6 }}>Position</div>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3,36px)', gridTemplateRows:'repeat(3,36px)', gap:4 }}>
-                      <div /><button className="dpad-btn" onClick={() => updateSlider(selectedEl.id, { pos_y: Math.max(0, selectedEl.pos_y - 1) })}>↑</button><div />
-                      <button className="dpad-btn" onClick={() => updateSlider(selectedEl.id, { pos_x: Math.max(0, selectedEl.pos_x - 1) })}>←</button>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, color:'#222', fontWeight:700 }}>✦</div>
-                      <button className="dpad-btn" onClick={() => updateSlider(selectedEl.id, { pos_x: Math.min(80, selectedEl.pos_x + 1) })}>→</button>
-                      <div /><button className="dpad-btn" onClick={() => updateSlider(selectedEl.id, { pos_y: Math.min(80, selectedEl.pos_y + 1) })}>↓</button><div />
-                    </div>
-                  </div>
-
-                  {/* Size steppers */}
-                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                    <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:2, textTransform:'uppercase', color:'#333', marginBottom:2 }}>Size</div>
-                    {[
-                      { label:'W', field:'width',  min:5, max:60, val:selectedEl.width  },
-                      { label:'H', field:'height', min:5, max:60, val:selectedEl.height },
-                    ].map(({ label, field, min, max, val }) => (
-                      <div key={field} style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#444', width:10 }}>{label}</span>
-                        <button className="step-btn" onClick={() => updateSlider(selectedEl.id, { [field]: Math.max(min, val - 2) })}>−</button>
-                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, color:'var(--casi-text)', width:34, textAlign:'center' }}>{Math.round(val)}%</span>
-                        <button className="step-btn" onClick={() => updateSlider(selectedEl.id, { [field]: Math.min(max, val + 2) })}>+</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <BeamCtrlPanel
+                el={selectedEl}
+                activeBooking={activeBookings.find(b => b.element_id === selectedEl.id) || null}
+                updateSlider={updateSlider}
+                updateLayer={updateLayer}
+                toggleLock={toggleLock}
+                deleteLayer={deleteLayer}
+                kickBeam={kickBeam}
+                onDone={() => setSelectedSlotId(null)}
+              />
             )}
 
             <div className="canvas-hint">
               {selectedEl && !selectedEl.is_background
-                ? 'Drag beam to move · Use arrows to nudge · Info/Price for settings'
+                ? 'Drag beam to move · Use arrows to nudge · Edit price inline'
                 : 'Tap a beam to select · Drag to move · Resize from corners'}
             </div>
           </div>
