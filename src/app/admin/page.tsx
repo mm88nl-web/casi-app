@@ -30,7 +30,8 @@ const RPC_DEVNET = 'https://api.devnet.solana.com';
 function getSecondsRemaining(booking: any): number {
   if (!booking?.started_at || !booking?.duration_minutes) return 0;
   const started = new Date(booking.started_at).getTime();
-  const expiresAt = started + booking.duration_minutes * 60 * 1000;
+  // Explicit Number() coercion: Postgres NUMERIC columns return as strings via PostgREST
+  const expiresAt = started + Number(booking.duration_minutes) * 60 * 1000;
   return Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
 }
 function formatTime(seconds: number): string {
@@ -172,10 +173,11 @@ function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLo
     return () => clearInterval(interval);
   }, [activeBooking?.id]);
 
+  const durMins = activeBooking ? Number(activeBooking.duration_minutes) : 0;
   const totalValue = activeBooking ? (activeBooking.price_unit === 'min'
-    ? (activeBooking.price_value * activeBooking.duration_minutes).toFixed(0)
-    : (activeBooking.price_value * (activeBooking.duration_minutes / 60)).toFixed(2)) : null;
-  const elapsed = activeBooking ? Math.max(0, activeBooking.duration_minutes * 60 - seconds) : 0;
+    ? (activeBooking.price_value * durMins).toFixed(0)
+    : (activeBooking.price_value * (durMins / 60)).toFixed(2)) : null;
+  const elapsed = activeBooking ? Math.max(0, durMins * 60 - seconds) : 0;
   const earnedSoFar = activeBooking ? (activeBooking.price_unit === 'min'
     ? ((elapsed / 60) * activeBooking.price_value).toFixed(2)
     : ((elapsed / 3600) * activeBooking.price_value).toFixed(2)) : null;
@@ -469,16 +471,11 @@ export default function AdminStudio() {
   };
 
   const expireBooking = useCallback(async (booking: any) => {
-    // Stripe: capture payment via API (handles storage, DB, and queue server-side).
-    // We still run local cleanup below so React state stays in sync immediately.
-    if (booking.payment_intent_id && booking.payment_method !== 'solana') {
-      const { data: { session } } = await supabase.auth.getSession();
-      fetch('/api/stripe/end-early', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ booking_id: booking.id }),
-      }).catch((err: any) => console.error('[expireBooking] stripe capture failed:', err.message));
-    }
+    // Stripe capture for natural expiry is handled by the Vercel Cron janitor
+    // (/api/cron/stripe-janitor). We do NOT call the API here because a
+    // fire-and-forget fetch races with the queue-advance logic below:
+    // the API might start the next booking before our query runs, causing
+    // the else-branch to clear that booking's image_url.
 
     // Delete uploaded file from Supabase Storage before clearing the row
     if (booking.storage_path) {
@@ -679,8 +676,8 @@ export default function AdminStudio() {
   };
 
   const calcTotal = (booking: any) => booking.price_unit === 'min'
-    ? (booking.price_value * booking.duration_minutes).toFixed(0)
-    : (booking.price_value * (booking.duration_minutes / 60)).toFixed(2);
+    ? (booking.price_value * Number(booking.duration_minutes)).toFixed(0)
+    : (booking.price_value * (Number(booking.duration_minutes) / 60)).toFixed(2);
 
   const getQueuePosition = (booking: any) => {
     const q = approvedQueued.filter(b => b.element_id === booking.element_id)

@@ -29,7 +29,8 @@ function Logo({ scale = 0.32, color = 'var(--casi-accent)', bg = 'var(--casi-bg)
 function getSecondsRemaining(booking: any): number {
   if (!booking?.started_at || !booking?.duration_minutes) return 0;
   const started = new Date(booking.started_at).getTime();
-  const expiresAt = started + booking.duration_minutes * 60 * 1000;
+  // Explicit Number() coercion: Postgres NUMERIC columns return as strings via PostgREST
+  const expiresAt = started + Number(booking.duration_minutes) * 60 * 1000;
   return Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
 }
 function formatTime(seconds: number): string {
@@ -1374,7 +1375,7 @@ function OverlayContent() {
   if (!active) return null;
   const remaining = getSecondsRemaining(active) / 60;
   const queue = approvedQueuedBookings.filter(b => b.element_id === selectedSlot?.id);
-  const queueMinutes = queue.reduce((sum, b) => sum + b.duration_minutes, 0);
+  const queueMinutes = queue.reduce((sum, b) => sum + Number(b.duration_minutes), 0);
   const wait = Math.round(remaining + queueMinutes);
   const ahead = queue.length;
   return (

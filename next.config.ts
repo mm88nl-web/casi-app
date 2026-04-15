@@ -11,9 +11,11 @@ const nextConfig: NextConfig = {
           {
             key: 'Content-Security-Policy',
             value: [
-              // Only load scripts from our own origin.
-              // 'unsafe-eval' is added in dev for Next.js HMR — never in prod.
-              `script-src 'self'${isDev ? " 'unsafe-eval'" : ''}`,
+              // Next.js App Router injects inline chunk-loading scripts at build time.
+              // 'unsafe-inline' is required for hydration — without it React never attaches
+              // event handlers and all buttons are dead.  'self' still blocks external
+              // <script src="..."> injection from other origins.
+              `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
 
               // Inline styles are used throughout (CSS string pattern).
               // Google Fonts stylesheet is loaded via @import in Header.
