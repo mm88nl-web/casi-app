@@ -24,6 +24,8 @@ function Logo({ scale = 0.38, color = 'var(--casi-accent)', bg = 'var(--casi-bg)
   );
 }
 
+const RPC_DEVNET = 'https://api.devnet.solana.com';
+
 /* ── Helpers ── */
 function getSecondsRemaining(booking: any): number {
   if (!booking?.started_at || !booking?.duration_minutes) return 0;
@@ -450,7 +452,7 @@ export default function AdminStudio() {
   };
 
   const expireBooking = useCallback(async (booking: any) => {
-    await supabase.from('bookings').update({ status: 'expired' }).eq('id', booking.id);
+    await supabase.from('bookings').update({ status: 'expired', image_url: null }).eq('id', booking.id);
     if (booking.element_id) {
       const { data: next } = await supabase.from('bookings').select('*')
         .eq('element_id', booking.element_id).eq('status', 'approved_queued')
@@ -607,7 +609,19 @@ export default function AdminStudio() {
     setSelectedSlotId(null);
     setShowInfoPanel(false);
     if (booking.payment_method === 'solana') {
-      // expireBooking handles: status → expired, image clear, queue advance
+      // Cancel the on-chain Streamflow vesting stream so unvested USDC
+      // returns to the viewer. The admin wallet is the stream recipient
+      // (cancelableByRecipient: true) so it can sign the cancel tx.
+      if (booking.stream_id && publicKey && profile?.solana_wallet &&
+          publicKey.toBase58() === profile.solana_wallet) {
+        try {
+          const { SolanaStreamClient, ICluster } = await import('@streamflow/stream');
+          const client = new SolanaStreamClient(RPC_DEVNET, ICluster.Devnet);
+          await client.cancel({ id: booking.stream_id }, { invoker: (wallet as any)?.adapter ?? wallet });
+        } catch (err) {
+          console.error('[kickBeam] Streamflow cancel error:', err);
+        }
+      }
       await expireBooking(booking);
     } else {
       // Stripe: prorate via API, then clear image + advance queue
@@ -618,7 +632,7 @@ export default function AdminStudio() {
       });
       await expireBooking(booking);
     }
-  }, [expireBooking]);
+  }, [expireBooking, publicKey, profile?.solana_wallet, wallet]);
 
   const copyUrl = (url: string, key: string) => {
     navigator.clipboard.writeText(url);

@@ -6,6 +6,11 @@ import { PublicKey } from '@solana/web3.js';
 
 const USDC_DEVNET_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
 
+// Module-level refresh signal — allows any page (overlay, admin) to trigger
+// an immediate balance re-fetch without prop-drilling or React context.
+let _refreshFn: (() => void) | null = null;
+export function refreshWalletNav() { _refreshFn?.(); }
+
 const CSS = `
   .wn-connect {
     display: inline-flex; align-items: center; gap: 8px;
@@ -99,9 +104,9 @@ const CSS = `
   .wn-chevron.open { transform: rotate(180deg); }
 
   .wn-drop {
-    position: absolute; top: calc(100% + 6px); right: 0; min-width: 240px;
+    position: fixed; min-width: 240px;
     background: #0f0f0f; border: 1px solid #1a1a1a; border-radius: 12px;
-    overflow: hidden; z-index: 500;
+    overflow: hidden; z-index: 9999;
     box-shadow: 0 16px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03);
     animation: wn-drop-in .15s ease;
   }
@@ -155,10 +160,18 @@ export default function WalletNav() {
   const { connection } = useConnection();
   const { setVisible } = useWalletModal();
 
-  const [solBal, setSolBal]   = useState<number | null>(null);
-  const [usdcBal, setUsdcBal] = useState<number | null>(null);
-  const [dropOpen, setDropOpen] = useState(false);
+  const [solBal, setSolBal]     = useState<number | null>(null);
+  const [usdcBal, setUsdcBal]   = useState<number | null>(null);
+  const [dropOpen, setDropOpen]  = useState(false);
+  const [dropPos, setDropPos]    = useState<{ top: number; right: number }>({ top: 56, right: 12 });
+  const [refreshTick, setRefreshTick] = useState(0);
   const dropRef = useRef<HTMLDivElement>(null);
+
+  // Register the module-level refresh function so any page can trigger it
+  useEffect(() => {
+    _refreshFn = () => setRefreshTick(t => t + 1);
+    return () => { _refreshFn = null; };
+  }, []);
 
   // Only connect() after an explicit user click — Wallet Standard auto-registers
   // Phantom into `wallet` on page load, but we must not auto-connect silently.
@@ -182,21 +195,35 @@ export default function WalletNav() {
     }
   };
 
-  // Fetch balances whenever wallet connects / pubkey changes
+  // Compute dropdown viewport position when it opens — breaks out of any
+  // sticky/stacking context so z-index: 9999 is truly above everything.
+  const openDrop = () => {
+    if (dropRef.current) {
+      const rect = dropRef.current.getBoundingClientRect();
+      setDropPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    }
+    setDropOpen(o => !o);
+  };
+
+  // Fetch balances on connect, on publicKey change, on manual refresh tick,
+  // and every 10 s. Uses 'confirmed' commitment for ~2 s faster visibility
+  // vs the default 'finalized' (32 blocks).
   useEffect(() => {
     if (!connected || !publicKey) { setSolBal(null); setUsdcBal(null); return; }
     let cancelled = false;
 
     const fetchBalances = async () => {
       try {
-        const lamports = await connection.getBalance(publicKey);
+        const lamports = await connection.getBalance(publicKey, 'confirmed');
         if (!cancelled) setSolBal(lamports / 1e9);
       } catch { /* ignore */ }
 
       try {
-        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-          mint: new PublicKey(USDC_DEVNET_MINT),
-        });
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+          publicKey,
+          { mint: new PublicKey(USDC_DEVNET_MINT) },
+          'confirmed',
+        );
         const amount = tokenAccounts.value[0]
           ?.account.data.parsed.info.tokenAmount.uiAmount ?? 0;
         if (!cancelled) setUsdcBal(amount);
@@ -204,9 +231,9 @@ export default function WalletNav() {
     };
 
     fetchBalances();
-    const interval = setInterval(fetchBalances, 30_000);
+    const interval = setInterval(fetchBalances, 10_000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [connected, publicKey, connection]);
+  }, [connected, publicKey, connection, refreshTick]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -273,7 +300,7 @@ export default function WalletNav() {
         {/* Pubkey button */}
         <button
           className="wn-key-btn"
-          onClick={() => setDropOpen(o => !o)}
+          onClick={openDrop}
           aria-expanded={dropOpen}
         >
           {truncate(publicKey)}
@@ -282,7 +309,7 @@ export default function WalletNav() {
 
         {/* Dropdown */}
         {dropOpen && (
-          <div className="wn-drop">
+          <div className="wn-drop" style={{ top: dropPos.top, right: dropPos.right }}>
             <div className="wn-drop-addr">
               <span className="wn-drop-addr-label">Wallet address</span>
               {publicKey.toBase58()}

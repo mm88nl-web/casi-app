@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
-import WalletNav from '@/components/WalletNav';
+import WalletNav, { refreshWalletNav } from '@/components/WalletNav';
 
 // Module-level constant — accessible in every function including cancelSolanaStream
 // and the AlreadyProcessed catch block inside submitSolanaBooking.
@@ -728,6 +728,7 @@ function OverlayContent() {
         .eq('id', newBooking.id);
 
       setConfirmedTxId(txId);
+      refreshWalletNav(); // reflect new USDC balance immediately
       setTxStatus('waiting');
       showNotif('◎ Payment sent — awaiting streamer approval!', 'success');
       setShowConfirmModal(false);
@@ -810,6 +811,7 @@ function OverlayContent() {
     await supabase.from('bookings')
       .update({ status: 'denied', stream_id: null })
       .eq('id', booking.id);
+    refreshWalletNav(); // unvested USDC returned — update balance immediately
     showNotif('◎ Stream cancelled — unvested USDC returned to your wallet', 'warning');
     if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
   };
