@@ -139,7 +139,7 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
 
         {/* Details receipt */}
         <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:10, padding:'14px 16px', marginBottom:16 }}>
-          {[['Slot on', `@${username} (devnet)`], ['Duration', `${duration} min`], ['Rate', `$${slot.price_value}/${slot.price_unit}`]].map(([l, v]) => (
+          {[['Slot on', `@${username} (devnet)`], ['Duration', formatTime(Math.round(duration * 60))], ['Rate', `$${slot.price_value}/${slot.price_unit}`]].map(([l, v]) => (
             <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666', marginBottom:6 }}>
               <span>{l}</span><span style={{ color:'#e8e8e8' }}>{v}</span>
             </div>
@@ -253,7 +253,8 @@ function OverlayContent() {
   const [imageUrl, setImageUrl]         = useState('');
   const [imageValid, setImageValid]     = useState(false);
   const [message, setMessage]           = useState('');
-  const [duration, setDuration]         = useState(30);
+  // durationSeconds is the canonical unit; duration_minutes = durationSeconds / 60
+  const [durationSeconds, setDurationSeconds] = useState(60);
   const [submitting, setSubmitting]     = useState(false);
   const [cancelling, setCancelling]     = useState<string|null>(null);
   const [notification, setNotification] = useState<{text:string;type:string}|null>(null);
@@ -315,6 +316,7 @@ function OverlayContent() {
 
   const supabase = useRef(createClient()).current;
   const viewerNameRef = useRef('');
+  const lastRealtimeEventAt = useRef(Date.now());
 
   // Theme color tokens — CSS vars, set by SkinProvider
   const tc    = 'var(--casi-accent)';
@@ -377,11 +379,23 @@ function OverlayContent() {
         viewerNameRef.current = saved;
         await loadData(prof.id, saved);
         setLoading(false);
+        const bump = () => { lastRealtimeEventAt.current = Date.now(); };
         const channel = supabase.channel(`overlay_${prof.id}`)
-          .on('postgres_changes',{event:'*',schema:'public',table:'overlay_elements',filter:`profile_id=eq.${prof.id}`},()=>loadData(prof.id))
-          .on('postgres_changes',{event:'*',schema:'public',table:'bookings',filter:`profile_id=eq.${prof.id}`},()=>loadData(prof.id))
-          .subscribe();
-        cleanup = () => { supabase.removeChannel(channel); };
+          .on('postgres_changes',{event:'*',schema:'public',table:'overlay_elements',filter:`profile_id=eq.${prof.id}`},()=>{bump();loadData(prof.id);})
+          .on('postgres_changes',{event:'*',schema:'public',table:'bookings',filter:`profile_id=eq.${prof.id}`},()=>{bump();loadData(prof.id);})
+          .subscribe((status) => { if (status === 'SUBSCRIBED') bump(); });
+
+        // OBS heartbeat: if Realtime goes silent for 30 s, reload to reconnect
+        let watchdog: ReturnType<typeof setInterval>|undefined;
+        if (isOBS) {
+          watchdog = setInterval(() => {
+            if (Date.now() - lastRealtimeEventAt.current > 30_000) {
+              window.location.reload();
+            }
+          }, 30_000);
+        }
+
+        cleanup = () => { supabase.removeChannel(channel); if (watchdog) clearInterval(watchdog); };
       } else { setLoading(false); }
     };
     init();
@@ -521,7 +535,8 @@ function OverlayContent() {
     setImageUrl(''); setImageValid(false); setMessage('');
     setUploadedUrl(null); setUploadedPath(null); setUploadedFileType(null); setUploading(false);
     const maxDur = el.max_duration_minutes;
-    setDuration(maxDur ? Math.min(30,maxDur) : 30);
+    const defaultSec = maxDur ? Math.min(60, maxDur * 60) : 60;
+    setDurationSeconds(defaultSec);
     if (extend) {
       const myBooking = getMyBookingForSlot(el.id);
       if (myBooking?.image_url) { setImageUrl(myBooking.image_url); setImageValid(true); }
@@ -531,9 +546,9 @@ function OverlayContent() {
     setSelectedSlot(null); setIsExtend(false);
     setUploadedUrl(null); setUploadedPath(null); setUploadedFileType(null); setUploading(false);
   };
-  const setDurationClamped = (val: number) => {
-    const max = selectedSlot?.max_duration_minutes;
-    setDuration(max ? Math.min(val,max) : val);
+  const setDurationSecsClamped = (secs: number) => {
+    const maxSecs = selectedSlot?.max_duration_minutes ? selectedSlot.max_duration_minutes * 60 : Infinity;
+    setDurationSeconds(Math.max(30, Math.min(secs, maxSecs)));
   };
 
   const submitBooking = async () => {
@@ -578,7 +593,7 @@ function OverlayContent() {
     storage_path:  effectiveStoragePath,
     file_type:     effectiveFileType,
     message: isExtend ? `⏱ Extension request${message.trim() ? ' — ' + message.trim() : ''}` : (message.trim() || null),
-    duration_minutes: duration,
+    duration_minutes: durationSeconds / 60,
     price_value:   selectedSlot.price_value,
     price_unit:    selectedSlot.price_unit,
     status:        'pending',
@@ -661,7 +676,7 @@ function OverlayContent() {
       storage_path:  effectiveSolStoragePath,
       file_type:     effectiveSolFileType,
       message: isExtend ? `⏱ Extension request${message.trim() ? ' — ' + message.trim() : ''}` : (message.trim() || null),
-      duration_minutes: duration,
+      duration_minutes: durationSeconds / 60,
       price_value:   selectedSlot.price_value,
       price_unit:    selectedSlot.price_unit,
       status:        'pending',
@@ -685,9 +700,10 @@ function OverlayContent() {
       const { Connection, PublicKey }               = await import('@solana/web3.js');
 
       const usdcDecimals = 6;
+      const durationMinutes = durationSeconds / 60;
       const totalUsdc    = selectedSlot.price_unit === 'min'
-        ? selectedSlot.price_value * duration
-        : selectedSlot.price_value * (duration / 60);
+        ? selectedSlot.price_value * durationMinutes
+        : selectedSlot.price_value * (durationMinutes / 60);
 
       // ── Pre-flight: verify viewer has a USDC ATA with enough balance ──────
       const connection = new Connection(RPC_DEVNET);
@@ -741,6 +757,46 @@ function OverlayContent() {
       console.log('[solana] pre-flight passed — SOL:', (solLamports / 1e9).toFixed(4), 'USDC:', usdcBalance);
       // ─────────────────────────────────────────────────────────────────────
 
+      // ── Casi 5% platform fee ─────────────────────────────────────────────
+      // Transfer 5% of totalUsdc to the Casi fee wallet before creating the stream.
+      // The stream is created with the remaining 95%.
+      // If the fee transfer fails, we abort to protect the viewer's funds.
+      const casiFeeWallet = process.env.NEXT_PUBLIC_CASI_FEE_WALLET;
+      let streamAmount = totalUsdc;
+      if (casiFeeWallet) {
+        try {
+          const { Transaction } = await import('@solana/web3.js');
+          const { createTransferInstruction, getAssociatedTokenAddress } = await import('@solana/spl-token');
+          const mint = new PublicKey(USDC_DEVNET);
+          const feeWalletPk = new PublicKey(casiFeeWallet);
+          const feeAmountRaw = Math.round(totalUsdc * 0.05 * 10 ** usdcDecimals);
+          const viewerAta = tokenAccounts[0].pubkey;
+          const feeAta = await getAssociatedTokenAddress(mint, feeWalletPk);
+
+          const feeTx = new Transaction().add(
+            createTransferInstruction(viewerAta, feeAta, publicKey, feeAmountRaw),
+          );
+          feeTx.feePayer = publicKey;
+          feeTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+          const signedFeeTx = await (wallet.adapter as any).signTransaction(feeTx);
+          const feeTxId = await connection.sendRawTransaction(signedFeeTx.serialize());
+          await connection.confirmTransaction(feeTxId, 'confirmed');
+
+          streamAmount = totalUsdc * 0.95;
+          console.log('[solana] platform fee sent:', feeTxId, '| stream amount:', streamAmount.toFixed(4), 'USDC');
+        } catch (feeErr: any) {
+          console.error('[solana] platform fee tx failed:', feeErr.message);
+          showNotif('Platform fee transfer failed. Booking cancelled.', 'denied');
+          await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
+          setSubmitting(false);
+          return;
+        }
+      } else {
+        console.warn('[solana] NEXT_PUBLIC_CASI_FEE_WALLET not set — fee skipped (devnet only)');
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       const client = new SolanaStreamClient(RPC_DEVNET, ICluster.Devnet);
       // Add 30s buffer: by the time the tx is signed, propagated, and landed in
       // a block the on-chain clock will have advanced past "now".  Streamflow
@@ -751,9 +807,9 @@ function OverlayContent() {
           recipient:               profile.solana_wallet,
           tokenId:                 USDC_DEVNET,
           start:                   streamStart,
-          amount:                  getBN(totalUsdc, usdcDecimals),
+          amount:                  getBN(streamAmount, usdcDecimals),
           period:                  60,                                          // release every 60 s
-          amountPerPeriod:         getBN(totalUsdc / duration, usdcDecimals),  // per minute
+          amountPerPeriod:         getBN(streamAmount / durationMinutes, usdcDecimals),  // per minute
           cliff:                   streamStart,                                 // must equal start when cliffAmount=0
           cliffAmount:             getBN(0, usdcDecimals),
           cancelableBySender:      true,
@@ -863,8 +919,8 @@ function OverlayContent() {
 
   const estimatedCost = selectedSlot
     ? selectedSlot.price_unit==='min'
-      ? (selectedSlot.price_value * duration).toFixed(0)
-      : (selectedSlot.price_value * (duration/60)).toFixed(2)
+      ? (selectedSlot.price_value * (durationSeconds / 60)).toFixed(2)
+      : (selectedSlot.price_value * (durationSeconds / 3600)).toFixed(2)
     : '0';
 
   // True when the viewer has a valid image/video ready to submit.
@@ -1110,8 +1166,8 @@ function OverlayContent() {
                   {displayImage ? (
                     <div style={{ position:'relative', width:'100%', height:'100%' }}>
                       {displayFileType === 'video'
-                        ? <video src={displayImage} autoPlay loop muted playsInline style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'fill', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} />
-                        : <img src={displayImage} style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'fill', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} alt="" />
+                        ? <video key={displayImage} src={displayImage} autoPlay loop muted playsInline style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'fill', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} />
+                        : <img key={displayImage ?? 'empty'} src={displayImage} style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'fill', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} alt="" />
                       }
                       {viewerHasPreview && !isOBS && <div style={{ position:'absolute', inset:0, borderRadius:4, boxShadow:`inset 0 0 0 2px rgba(${accentColorRgb},0.5)`, pointerEvents:'none' }} />}
                     </div>
@@ -1240,20 +1296,40 @@ function OverlayContent() {
                 </div>
                 <div>
                   <div style={{ marginBottom:14 }}>
-                    <label className="bf-lbl">Duration{selectedSlot.max_duration_minutes?` — max ${selectedSlot.max_duration_minutes}m`:''}</label>
-                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <input type="number" min={1} max={selectedSlot.max_duration_minutes||480} value={duration}
-                        className="bf-inp" style={{ width:72 }}
-                        onChange={(e) => setDurationClamped(Math.max(1,parseInt(e.target.value)||1))} />
-                      <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, color:'#555' }}>min</span>
-                    </div>
-                    <div className="dur-row">
-                      {[15,30,60].filter(d=>!selectedSlot.max_duration_minutes||d<=selectedSlot.max_duration_minutes).map(d=>(
-                        <button key={d} className="dur-btn"
-                          style={duration===d?{background:accentColor,borderColor:accentColor,color:'var(--casi-bg)',fontWeight:700}:{}}
-                          onClick={() => setDurationClamped(d)}>{d}m</button>
-                      ))}
-                    </div>
+                    {(() => {
+                      const maxSecs = selectedSlot.max_duration_minutes ? selectedSlot.max_duration_minutes * 60 : null;
+                      const presets = [
+                        { label:'30s', secs:30 },
+                        { label:'1m',  secs:60 },
+                        { label:'2m',  secs:120 },
+                        { label:'5m',  secs:300 },
+                        { label:'10m', secs:600 },
+                        { label:'30m', secs:1800 },
+                      ].filter(p => !maxSecs || p.secs <= maxSecs);
+                      return (
+                        <>
+                          <label className="bf-lbl">Duration{maxSecs ? ` — max ${selectedSlot.max_duration_minutes}m` : ''}</label>
+                          {/* Stepper row */}
+                          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                            <button onClick={() => setDurationSecsClamped(durationSeconds - 5)}
+                              style={{ width:36, height:36, borderRadius:8, border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.04)', color:'var(--casi-text)', fontSize:15, cursor:'pointer', flexShrink:0 }}>−</button>
+                            <div style={{ flex:1, textAlign:'center', fontFamily:"'DM Mono',monospace", fontSize:20, fontWeight:700, color:'var(--casi-text)', letterSpacing:1 }}>
+                              {formatTime(durationSeconds)}
+                            </div>
+                            <button onClick={() => setDurationSecsClamped(durationSeconds + 5)}
+                              style={{ width:36, height:36, borderRadius:8, border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.04)', color:'var(--casi-text)', fontSize:15, cursor:'pointer', flexShrink:0 }}>+</button>
+                          </div>
+                          {/* Preset chips */}
+                          <div className="dur-row">
+                            {presets.map(p => (
+                              <button key={p.secs} className="dur-btn"
+                                style={durationSeconds===p.secs?{background:accentColor,borderColor:accentColor,color:'var(--casi-bg)',fontWeight:700}:{}}
+                                onClick={() => setDurationSecsClamped(p.secs)}>{p.label}</button>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                   <div>
                     <label className="bf-lbl">Message (optional)</label>
@@ -1266,7 +1342,7 @@ function OverlayContent() {
 
               {/* ── USDC cost preview ── */}
               <div style={{ background:'rgba(153,69,255,0.05)', border:'1px solid rgba(153,69,255,0.2)', borderRadius:10, padding:'12px 14px', margin:'12px 0', fontFamily:"'DM Mono',monospace", fontSize:11 }}>
-                {[['Duration', `${duration} min`], ['Rate', `$${selectedSlot.price_value}/${selectedSlot.price_unit}`]].map(([l, v]) => (
+                {[['Duration', formatTime(durationSeconds)], ['Rate', `$${selectedSlot.price_value}/${selectedSlot.price_unit}`]].map(([l, v]) => (
                   <div key={l} style={{ display:'flex', justifyContent:'space-between', color:'#555', marginBottom:5 }}>
                     <span>{l}</span><span>{v}</span>
                   </div>
@@ -1410,7 +1486,7 @@ function OverlayContent() {
       {showConfirmModal && selectedSlot && (
         <SolanaConfirmModal
           slot={selectedSlot}
-          duration={duration}
+          duration={durationSeconds / 60}
           estimatedCost={estimatedCost}
           username={username}
           recipientWallet={profile?.solana_wallet ?? null}
