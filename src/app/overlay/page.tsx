@@ -956,7 +956,7 @@ function OverlayContent() {
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         .ov { min-height:100vh; background:${isOBS?'transparent':'var(--casi-bg)'}; color:var(--casi-text); font-family:'Syne',sans-serif; }
 
-        .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid var(--casi-surface); background:color-mix(in srgb,var(--casi-bg) 94%,transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:50; }
+        .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid var(--casi-surface); background:color-mix(in srgb,var(--casi-bg) 94%,transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
         .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; }
         .ov-wm { font-size:18px; font-weight:800; color:var(--casi-accent); letter-spacing:-0.5px; }
         .ov-nav-right { display:flex; align-items:center; gap:10px; }
@@ -1327,6 +1327,27 @@ function OverlayContent() {
                                 style={durationSeconds===p.secs?{background:accentColor,borderColor:accentColor,color:'var(--casi-bg)',fontWeight:700}:{}}
                                 onClick={() => setDurationSecsClamped(p.secs)}>{p.label}</button>
                             ))}
+                          </div>
+                          {/* Custom duration input */}
+                          <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10 }}>
+                            <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1, color:'#555', textTransform:'uppercase' }}>Custom</span>
+                            <input
+                              type="number" min="0.5" step="0.5" placeholder="minutes"
+                              style={{ width:80, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:7, padding:'5px 8px', fontSize:12, color:'var(--casi-text)', fontFamily:"'DM Mono',monospace", outline:'none', textAlign:'center', MozAppearance:'textfield' } as React.CSSProperties}
+                              onFocus={(e) => e.target.style.borderColor='rgba(var(--casi-accent-rgb),0.38)'}
+                              onBlur={(e) => {
+                                e.target.style.borderColor='rgba(255,255,255,0.08)';
+                                const mins = parseFloat(e.target.value);
+                                if (!isNaN(mins) && mins > 0) { setDurationSecsClamped(Math.round(mins * 60)); e.target.value = ''; }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const mins = parseFloat((e.target as HTMLInputElement).value);
+                                  if (!isNaN(mins) && mins > 0) { setDurationSecsClamped(Math.round(mins * 60)); (e.target as HTMLInputElement).value = ''; }
+                                }
+                              }}
+                            />
+                            <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#555' }}>min</span>
                           </div>
                         </>
                       );
