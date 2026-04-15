@@ -304,6 +304,8 @@ export default function AdminStudio() {
   const [editBio, setEditBio] = useState('');
   const [editAvatar, setEditAvatar] = useState('');
   const [editAvatarValid, setEditAvatarValid] = useState(false);
+  const [previewBgUrl, setPreviewBgUrl] = useState<string|null>(null);
+  const [uploadingPreviewBg, setUploadingPreviewBg] = useState(false);
   const [editThemeColor, setEditThemeColor] = useState('#F58220');
   const [editCustomColor, setEditCustomColor] = useState('');
   const [editSaving, setEditSaving] = useState(false);
@@ -348,6 +350,22 @@ export default function AdminStudio() {
   const openWalletModal = () => {
     userInitiatedConnect.current = true;
     if (wallet) { connect().catch(() => {}); } else { setWalletModalVisible(true); }
+  };
+
+  const handlePreviewBgUpload = async (file: File) => {
+    if (!profile) return;
+    if (file.size > 5 * 1024 * 1024) return; // 5 MB guard
+    setUploadingPreviewBg(true);
+    const ext  = file.name.split('.').pop()?.toLowerCase() ?? 'png';
+    const path = `${profile.id}-preview.${ext}`;
+    const { error } = await supabase.storage.from('casi-media').upload(path, file, { upsert: true, contentType: file.type });
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from('casi-media').getPublicUrl(path);
+      await supabase.from('profiles').update({ preview_background_url: publicUrl }).eq('id', profile.id);
+      setPreviewBgUrl(publicUrl);
+      setProfile((p: any) => ({ ...p, preview_background_url: publicUrl }));
+    }
+    setUploadingPreviewBg(false);
   };
 
   const handleStripeConnect = async () => {
@@ -399,6 +417,7 @@ export default function AdminStudio() {
         if (prof.theme_color) setEditThemeColor(prof.theme_color);
         if (prof.stripe_account_id) setStripeConnected(true);
         if (prof.solana_wallet) setSolanaWallet(prof.solana_wallet);
+        if (prof.preview_background_url) setPreviewBgUrl(prof.preview_background_url);
       }
       const { data: els } = await supabase.from('overlay_elements').select('*').eq('profile_id', user.id);
       if (els) setElements(els);
@@ -455,6 +474,12 @@ export default function AdminStudio() {
   };
 
   const expireBooking = useCallback(async (booking: any) => {
+    // Delete uploaded file from Supabase Storage before clearing the row
+    if (booking.storage_path) {
+      await supabase.storage.from('beams').remove([booking.storage_path]).catch((err: any) => {
+        console.error('[expireBooking] storage delete failed:', err.message);
+      });
+    }
     await supabase.from('bookings').update({ status: 'expired', image_url: null }).eq('id', booking.id);
     if (booking.element_id) {
       const { data: next } = await supabase.from('bookings').select('*')
@@ -1592,6 +1617,30 @@ export default function AdminStudio() {
                         {editAvatarValid ? '✓ Image loaded' : 'Image not loading — check URL'}
                       </div>
                     )}
+                  </div>
+
+                  {/* Silhouette preview background */}
+                  <div>
+                    <label className="pe-lbl">
+                      Preview background
+                      <span style={{ fontFamily: 'inherit', letterSpacing: 0, textTransform: 'none', color: 'var(--casi-text-muted)', opacity: 0.6 }}> — OBS screenshot shown to viewers</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '10px 14px', cursor: uploadingPreviewBg ? 'wait' : 'pointer' }}>
+                      <input type="file" accept="image/*" style={{ display: 'none' }}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePreviewBgUpload(f); }} />
+                      {previewBgUrl
+                        ? <img src={previewBgUrl} style={{ width: 48, height: 27, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--casi-border)', flexShrink: 0 }} alt="" />
+                        : <div style={{ width: 48, height: 27, borderRadius: 4, border: '1px dashed var(--casi-border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>🖥</div>
+                      }
+                      <div>
+                        <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, color: previewBgUrl ? '#4ade80' : 'var(--casi-text)', marginBottom: 2 }}>
+                          {uploadingPreviewBg ? 'Uploading…' : previewBgUrl ? '✓ Preview set' : 'Upload screenshot'}
+                        </div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--casi-text-muted)' }}>
+                          {previewBgUrl ? 'Click to replace' : 'jpg · png · max 5 MB'}
+                        </div>
+                      </div>
+                    </label>
                   </div>
 
                   {/* Accent color */}

@@ -263,6 +263,14 @@ function OverlayContent() {
   const [txError, setTxError]           = useState<string|null>(null);
   const [confirmedTxId, setConfirmedTxId] = useState<string|null>(null);
 
+  // ── Beam media (upload or URL) ────────────────────────────────────────────
+  const [uploadMode, setUploadMode]         = useState<'url'|'upload'>('url');
+  const [uploadedUrl, setUploadedUrl]       = useState<string|null>(null);
+  const [uploadedPath, setUploadedPath]     = useState<string|null>(null);
+  const [uploadedFileType, setUploadedFileType] = useState<'image'|'video'|null>(null);
+  const [uploading, setUploading]           = useState(false);
+  // ─────────────────────────────────────────────────────────────────────────
+
   // ── Wallet state ──────────────────────────────────────────────────────────
   const { connection: walletConn }      = useConnection();
   const { wallet, connected, connecting, connect, publicKey, signTransaction, signAllTransactions } = useWallet();
@@ -486,9 +494,32 @@ function OverlayContent() {
     if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
   }, [supabase, profile?.id, loadData, savedViewerName]);
 
+  // Detect video vs image from a URL's path extension (no server round-trip).
+  const getUrlFileType = (url: string): 'image'|'video' => {
+    const path = url.toLowerCase().split('?')[0];
+    return /\.(mp4|webm|mov|ogv)$/.test(path) ? 'video' : 'image';
+  };
+
+  // Upload a viewer's file to the beams Storage bucket before payment.
+  const handleFileSelect = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) { showNotif('File too large — max 5 MB', 'denied'); return; }
+    const fileType: 'image'|'video' = file.type.startsWith('video/') ? 'video' : 'image';
+    const ext  = file.name.split('.').pop()?.toLowerCase() ?? 'bin';
+    const path = `${profile?.username ?? 'anon'}/${Date.now()}-${Math.random().toString(36).slice(2,7)}.${ext}`;
+    setUploading(true);
+    const { error: upErr } = await supabase.storage.from('beams').upload(path, file, { contentType: file.type });
+    if (upErr) { showNotif('Upload failed — try again', 'denied'); setUploading(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from('beams').getPublicUrl(path);
+    setUploadedUrl(publicUrl);
+    setUploadedPath(path);
+    setUploadedFileType(fileType);
+    setUploading(false);
+  };
+
   const openSlot = (el: any, joinQueue: boolean, extend=false) => {
     setSelectedSlot(el); setIsQueue(joinQueue); setIsExtend(extend);
     setImageUrl(''); setImageValid(false); setMessage('');
+    setUploadedUrl(null); setUploadedPath(null); setUploadedFileType(null); setUploading(false);
     const maxDur = el.max_duration_minutes;
     setDuration(maxDur ? Math.min(30,maxDur) : 30);
     if (extend) {
@@ -496,7 +527,10 @@ function OverlayContent() {
       if (myBooking?.image_url) { setImageUrl(myBooking.image_url); setImageValid(true); }
     }
   };
-  const closeSlot = () => { setSelectedSlot(null); setIsExtend(false); };
+  const closeSlot = () => {
+    setSelectedSlot(null); setIsExtend(false);
+    setUploadedUrl(null); setUploadedPath(null); setUploadedFileType(null); setUploading(false);
+  };
   const setDurationClamped = (val: number) => {
     const max = selectedSlot?.max_duration_minutes;
     setDuration(max ? Math.min(val,max) : val);
@@ -532,18 +566,23 @@ function OverlayContent() {
 }
 
   const currentQueue = queueCounts[selectedSlot.id] || 0;
+  const effectiveImageUrl   = uploadMode === 'upload' ? uploadedUrl  : imageUrl;
+  const effectiveStoragePath = uploadMode === 'upload' ? uploadedPath : null;
+  const effectiveFileType   = uploadMode === 'upload' ? uploadedFileType : (imageUrl ? getUrlFileType(imageUrl) : null);
 
   const { data: newBooking, error: insertError } = await supabase.from('bookings').insert({
-    profile_id: profile.id,
-    element_id: selectedSlot.id,
-    viewer_name: savedViewerName,
-    image_url: imageUrl,
+    profile_id:    profile.id,
+    element_id:    selectedSlot.id,
+    viewer_name:   savedViewerName,
+    image_url:     effectiveImageUrl,
+    storage_path:  effectiveStoragePath,
+    file_type:     effectiveFileType,
     message: isExtend ? `⏱ Extension request${message.trim() ? ' — ' + message.trim() : ''}` : (message.trim() || null),
     duration_minutes: duration,
-    price_value: selectedSlot.price_value,
-    price_unit: selectedSlot.price_unit,
-    status: 'pending',
-    is_queued: isQueue || isExtend,
+    price_value:   selectedSlot.price_value,
+    price_unit:    selectedSlot.price_unit,
+    status:        'pending',
+    is_queued:     isQueue || isExtend,
     queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
   }).select().single();
 
@@ -581,7 +620,10 @@ function OverlayContent() {
 
   // ── Solana / Streamflow booking ────────────────────────────────────────────
   const submitSolanaBooking = async () => {
-    if (!savedViewerName || !imageUrl || !selectedSlot || !publicKey || !wallet?.adapter) return;
+    const effectiveSolImageUrl    = uploadMode === 'upload' ? uploadedUrl    : imageUrl;
+    const effectiveSolStoragePath = uploadMode === 'upload' ? uploadedPath   : null;
+    const effectiveSolFileType    = uploadMode === 'upload' ? uploadedFileType : (imageUrl ? getUrlFileType(imageUrl) : null);
+    if (!savedViewerName || !effectiveSolImageUrl || !selectedSlot || !publicKey || !wallet?.adapter) return;
     if (!profile?.solana_wallet) {
       showNotif('This streamer has not linked a Solana wallet yet', 'denied');
       return;
@@ -612,17 +654,19 @@ function OverlayContent() {
 
     const currentQueue = queueCounts[selectedSlot.id] || 0;
     const { data: newBooking, error: insertError } = await supabase.from('bookings').insert({
-      profile_id: profile.id,
-      element_id: selectedSlot.id,
-      viewer_name: savedViewerName,
-      image_url: imageUrl,
+      profile_id:    profile.id,
+      element_id:    selectedSlot.id,
+      viewer_name:   savedViewerName,
+      image_url:     effectiveSolImageUrl,
+      storage_path:  effectiveSolStoragePath,
+      file_type:     effectiveSolFileType,
       message: isExtend ? `⏱ Extension request${message.trim() ? ' — ' + message.trim() : ''}` : (message.trim() || null),
       duration_minutes: duration,
-      price_value: selectedSlot.price_value,
-      price_unit: selectedSlot.price_unit,
-      status: 'pending',
+      price_value:   selectedSlot.price_value,
+      price_unit:    selectedSlot.price_unit,
+      status:        'pending',
       payment_method: 'solana',
-      is_queued: isQueue || isExtend,
+      is_queued:     isQueue || isExtend,
       queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
     }).select().single();
 
@@ -822,6 +866,11 @@ function OverlayContent() {
       ? (selectedSlot.price_value * duration).toFixed(0)
       : (selectedSlot.price_value * (duration/60)).toFixed(2)
     : '0';
+
+  // True when the viewer has a valid image/video ready to submit.
+  const canSubmit = uploadMode === 'upload'
+    ? !!uploadedUrl
+    : (!!imageUrl && imageUrl.startsWith('https://') && imageValid);
 
   // For booking form accent: extend=yellow, queue/rent=skin accent
   const accentColor    = isExtend ? '#eab308' : tc;
@@ -1027,6 +1076,14 @@ function OverlayContent() {
 
           {/* STREAM CANVAS */}
           <div className={isOBS ? '' : 'stream-canvas'} style={isOBS ? { position:'relative', width:'100vw', height:'100vh' } : {}}>
+            {/* Silhouette preview background — visible to viewers while booking, never in OBS */}
+            {!isOBS && selectedSlot && profile?.preview_background_url && (
+              <img
+                src={profile.preview_background_url}
+                style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', opacity:0.35, pointerEvents:'none', zIndex:5 }}
+                alt=""
+              />
+            )}
             {elements.map((el: any) => {
               const activeBooking   = getActiveBookingForSlot(el.id);
               const isOccupied      = !!activeBooking;
@@ -1035,15 +1092,28 @@ function OverlayContent() {
               const myBookingForSlot = getMyBookingForSlot(el.id);
               const myIsExpiring    = myBookingForSlot && expiringSoon.has(myBookingForSlot.id);
               const isLocked        = !!el.locked;
-              const displayImage    = (isSelected && imageValid && imageUrl) ? imageUrl : (el.image_url||null);
+              // Viewer has a preview ready (upload or validated URL)
+              const viewerHasPreview = isSelected && (
+                (uploadMode === 'upload' && !!uploadedUrl) ||
+                (uploadMode === 'url' && imageValid && !!imageUrl)
+              );
+              const displayImage: string|null = viewerHasPreview
+                ? (uploadMode === 'upload' ? uploadedUrl! : imageUrl)
+                : (el.image_url || null);
+              const displayFileType: 'image'|'video'|null = viewerHasPreview
+                ? (uploadMode === 'upload' ? uploadedFileType : getUrlFileType(imageUrl))
+                : (activeBooking?.file_type ?? null);
               const showExtend = myBookingForSlot?.status==='active' && expiringSoon.has(myBookingForSlot.id) && canExtend(el.id);
 
               return (
                 <div key={el.id} style={{ position:'absolute', left:`${el.pos_x}%`, top:`${el.pos_y}%`, width:`${el.width}%`, height:`${el.height}%`, zIndex:el.is_background?10:50, transition:'all 0.35s cubic-bezier(0.16,1,0.3,1)' }}>
                   {displayImage ? (
                     <div style={{ position:'relative', width:'100%', height:'100%' }}>
-                      <img src={displayImage} style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'fill', pointerEvents:'none' }} alt="" />
-                      {isSelected && imageValid && <div style={{ position:'absolute', inset:0, borderRadius:4, boxShadow:`inset 0 0 0 2px rgba(${accentColorRgb},0.5)`, pointerEvents:'none' }} />}
+                      {displayFileType === 'video'
+                        ? <video src={displayImage} autoPlay loop muted playsInline style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'fill', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} />
+                        : <img src={displayImage} style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'fill', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} alt="" />
+                      }
+                      {viewerHasPreview && !isOBS && <div style={{ position:'absolute', inset:0, borderRadius:4, boxShadow:`inset 0 0 0 2px rgba(${accentColorRgb},0.5)`, pointerEvents:'none' }} />}
                     </div>
                   ) : (
                     <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:el.is_background?12:6, border:`1.5px dashed ${isLocked?'rgba(248,113,113,0.3)':isOccupied?`rgba(${tcRgb},0.31)`:el.is_background?'rgba(168,85,247,0.3)':`rgba(${tcRgb},0.25)`}`, background:isLocked?'rgba(248,113,113,0.03)':isOccupied?`rgba(${tcRgb},0.02)`:el.is_background?'rgba(168,85,247,0.03)':`rgba(${tcRgb},0.02)` }}>
@@ -1106,15 +1176,58 @@ function OverlayContent() {
               <div className="bf-grid">
                 <div>
                   <div style={{ marginBottom:14 }}>
-                    <label className="bf-lbl">Image or GIF URL</label>
-                    <input type="text" value={imageUrl} placeholder="https://your-image.png or .gif"
-                      className="bf-inp" autoFocus={!isExtend}
-                      style={{ borderColor:imageValid?`rgba(${accentColorRgb},0.31)`:undefined }}
-                      onChange={(e) => { setImageUrl(e.target.value); setImageValid(false); }} />
-                    {imageUrl && <img src={imageUrl} style={{ display:'none' }} alt="" onLoad={() => setImageValid(true)} onError={() => setImageValid(false)} />}
-                    <div className="bf-hint" style={{ color:imageValid?accentColor:imageUrl?'#f87171':'#444' }}>
-                      {imageValid?'✓ Image loaded':imageUrl?'Image not loading — check URL':'Paste a direct image URL'}
+                    <label className="bf-lbl">Beam media</label>
+                    {/* Mode toggle */}
+                    <div style={{ display:'flex', gap:0, marginBottom:8, border:'1px solid var(--casi-border)', borderRadius:8, overflow:'hidden' }}>
+                      {(['upload','url'] as const).map(m => (
+                        <button key={m} onClick={() => setUploadMode(m)}
+                          style={{ flex:1, padding:'5px 0', background: uploadMode===m ? accentColor : 'transparent', color: uploadMode===m ? 'var(--casi-bg)' : '#555', border:'none', fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1, textTransform:'uppercase', cursor:'pointer', fontWeight: uploadMode===m ? 700 : 400 }}>
+                          {m === 'upload' ? '↑ Upload' : '⇥ Link'}
+                        </button>
+                      ))}
                     </div>
+
+                    {uploadMode === 'upload' ? (
+                      /* ── File upload mode ── */
+                      <div>
+                        <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, border:`1.5px dashed ${uploadedUrl ? `rgba(${accentColorRgb},0.4)` : 'var(--casi-border)'}`, borderRadius:8, padding:'18px 12px', cursor: uploading ? 'wait' : 'pointer', background: uploadedUrl ? `rgba(${accentColorRgb},0.04)` : 'transparent', transition:'border-color .15s' }}>
+                          <input type="file" accept="image/*,video/mp4,video/webm,video/quicktime" style={{ display:'none' }}
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
+                          <span style={{ fontSize:18 }}>{uploading ? '⟳' : uploadedUrl ? (uploadedFileType === 'video' ? '▶' : '🖼') : '↑'}</span>
+                          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color: uploadedUrl ? accentColor : '#555', letterSpacing:0.5, textAlign:'center' }}>
+                            {uploading ? 'Uploading…' : uploadedUrl ? `✓ ${uploadedFileType === 'video' ? 'Video' : 'Image'} ready` : 'Click to upload · max 5 MB'}
+                          </span>
+                          {!uploadedUrl && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'#444' }}>jpg · png · gif · webp · mp4 · webm</span>}
+                        </label>
+                        {uploadedUrl && (
+                          <button onClick={() => { setUploadedUrl(null); setUploadedPath(null); setUploadedFileType(null); }}
+                            style={{ background:'none', border:'none', fontFamily:"'DM Mono',monospace", fontSize:9, color:'#f87171', cursor:'pointer', marginTop:4 }}>
+                            ✕ Remove
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      /* ── URL link mode (HTTPS only) ── */
+                      <div>
+                        <input type="text" value={imageUrl} placeholder="https://your-image.png or .gif"
+                          className="bf-inp"
+                          style={{ borderColor: imageUrl ? (imageValid ? `rgba(${accentColorRgb},0.31)` : !imageUrl.startsWith('https://') ? '#f87171' : undefined) : undefined }}
+                          onChange={(e) => { setImageUrl(e.target.value); setImageValid(false); }} />
+                        {/* Hidden validators — img for images, video for video URLs */}
+                        {imageUrl && getUrlFileType(imageUrl) === 'image' && (
+                          <img src={imageUrl} style={{ display:'none' }} alt="" onLoad={() => setImageValid(true)} onError={() => setImageValid(false)} />
+                        )}
+                        {imageUrl && getUrlFileType(imageUrl) === 'video' && (
+                          <video src={imageUrl} style={{ display:'none' }} muted onLoadedMetadata={() => setImageValid(true)} onError={() => setImageValid(false)} />
+                        )}
+                        <div className="bf-hint" style={{ color: !imageUrl ? '#444' : !imageUrl.startsWith('https://') ? '#f87171' : imageValid ? accentColor : '#f87171' }}>
+                          {!imageUrl ? 'Paste a direct HTTPS image or GIF URL'
+                            : !imageUrl.startsWith('https://') ? '⚠ Only HTTPS URLs are accepted'
+                            : imageValid ? '✓ Media loaded'
+                            : 'Media not loading — check the URL'}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="bf-lbl">Viewing as</label>
@@ -1203,8 +1316,8 @@ function OverlayContent() {
                 </div>
                 <div style={{ display:'flex', gap:8 }}>
                   {/* ── Stripe ── */}
-                  <button onClick={submitBooking} disabled={!imageValid||submitting} className="bf-sub"
-                    style={{ background:accentColor, color:'var(--casi-bg)', display:'flex', alignItems:'center', gap:7 }}>
+                  <button onClick={submitBooking} disabled={!canSubmit||submitting} className="bf-sub"
+                    style={{ background:accentColor, color:'var(--casi-bg)', display:'flex', alignItems:'center', gap:7, opacity: (!canSubmit||submitting) ? 0.5 : 1 }}>
                     {/* card icon */}
                     <svg width="14" height="11" viewBox="0 0 14 11" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <rect x="0.5" y="0.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeOpacity="0.6"/>
@@ -1215,9 +1328,9 @@ function OverlayContent() {
                   </button>
                   {/* ── Solana / Streamflow ── */}
                   <button
-                    disabled={connecting || submitting}
+                    disabled={connecting || submitting || (connected && !canSubmit)}
                     className="bf-sub"
-                    style={{ background: connected ? '#9945FF' : 'rgba(153,69,255,0.12)', color: connected ? '#fff' : '#9945FF', border: connected ? 'none' : '1px solid rgba(153,69,255,0.35)', display:'flex', alignItems:'center', gap:7, opacity: (connecting||submitting) ? 0.6 : 1 }}
+                    style={{ background: connected ? '#9945FF' : 'rgba(153,69,255,0.12)', color: connected ? '#fff' : '#9945FF', border: connected ? 'none' : '1px solid rgba(153,69,255,0.35)', display:'flex', alignItems:'center', gap:7, opacity: (connecting||submitting||(connected&&!canSubmit)) ? 0.5 : 1 }}
                     onClick={() => {
                       if (!connected) {
                         openWalletModal();

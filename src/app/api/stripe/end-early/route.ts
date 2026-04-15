@@ -56,6 +56,14 @@ export async function POST(req: Request) {
     }
   }
 
+  // ── Delete uploaded beam file from storage (if any) ─────────────────────
+  if (booking.storage_path) {
+    await supabase.storage.from('beams').remove([booking.storage_path]).catch((err: any) => {
+      console.error('[end-early] storage delete failed:', err.message);
+    });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Set expired
   await supabase
     .from('bookings')
