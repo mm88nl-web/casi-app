@@ -125,9 +125,13 @@ if ! have avm; then
   ensure_path
   have avm || die "avm install failed."
 fi
-if avm list 2>/dev/null | grep -q "^${ANCHOR_VERSION}"; then
+# `avm list` prints all available versions; installed ones are marked
+# "(installed)" and the current one has "(default)". Match against installed
+# only so we don't skip the install on a fresh avm.
+if avm list 2>/dev/null | grep -E "^${ANCHOR_VERSION}\b" | grep -q "installed"; then
   ok "avm has anchor $ANCHOR_VERSION"
 else
+  echo "    compiling anchor from source — this takes 8-12 minutes..."
   avm install "$ANCHOR_VERSION"
 fi
 avm use "$ANCHOR_VERSION" >/dev/null
