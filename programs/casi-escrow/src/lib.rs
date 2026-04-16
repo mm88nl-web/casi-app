@@ -19,7 +19,7 @@ use anchor_spl::{
     },
 };
 
-declare_id!("CASIesCRow1111111111111111111111111111111111");
+declare_id!("Fg6PaFpoGXkYsidMpWxqSWlVGyUq2rbEoVtaXMa3MBA");
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -32,10 +32,11 @@ pub const ESCROW_SEED: &[u8] = b"casi-escrow";
 pub const FEE_BPS: u64 = 500;
 
 /// Hardcoded CASI fee wallet — receives FEE_BPS of every settled Flash/Beam.
-/// Replace with the real treasury pubkey before mainnet deploy.
+/// Placeholder is the System Program ID (all-1s); REPLACE with the real
+/// treasury pubkey before any deploy you intend to receive fees from.
 pub mod fee_wallet {
     use super::*;
-    declare_id!("CASIFeeWaLLet1111111111111111111111111111111");
+    declare_id!("11111111111111111111111111111111");
 }
 
 // ---------------------------------------------------------------------------

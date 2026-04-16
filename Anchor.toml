@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-casi_escrow = "CASIesCRow1111111111111111111111111111111111"
+casi_escrow = "Fg6PaFpoGXkYsidMpWxqSWlVGyUq2rbEoVtaXMa3MBA"
 
 [programs.mainnet]
 casi_escrow = "REPLACE_WITH_MAINNET_PROGRAM_ID"
@@ -19,7 +19,7 @@ cluster = "Devnet"
 wallet = "~/.config/solana/id.json"
 
 [programs.localnet]
-casi_escrow = "CASIesCRow1111111111111111111111111111111111"
+casi_escrow = "Fg6PaFpoGXkYsidMpWxqSWlVGyUq2rbEoVtaXMa3MBA"
 
 [scripts]
 test = "npx ts-mocha -p tests/tsconfig.json -t 1000000 tests/**/*.ts"

@@ -192,17 +192,28 @@ else
   ok "node_modules up-to-date (delete to force reinstall)"
 fi
 
-# --- 7. First build (generates IDL + keypair) ----------------------------
-step "Building Anchor program (pass 1 — generates keypair)"
-anchor build
-ok "built (target/deploy/casi_escrow-keypair.json generated)"
+# --- 7. Program keypair --------------------------------------------------
+# anchor build refuses to compile until lib.rs/Anchor.toml contain a valid
+# base58 program ID. Generate the deploy keypair up-front and sync its
+# pubkey into lib.rs + Anchor.toml + .env.local before the first build, so
+# we don't depend on whatever placeholder is committed in the repo.
+step "Generating program keypair"
+mkdir -p target/deploy
+PROGRAM_KEYPAIR="target/deploy/casi_escrow-keypair.json"
+if [ ! -f "$PROGRAM_KEYPAIR" ]; then
+  solana-keygen new --no-bip39-passphrase -s -o "$PROGRAM_KEYPAIR"
+  ok "generated $PROGRAM_KEYPAIR"
+else
+  ok "$PROGRAM_KEYPAIR already exists"
+fi
+PROGRAM_ID="$(solana address -k "$PROGRAM_KEYPAIR")"
+ok "program id: $PROGRAM_ID"
 
-# --- 8. Sync declare_id + Anchor.toml + .env.local -----------------------
 step "Syncing program ID into lib.rs / Anchor.toml / .env.local"
-node scripts/sync-program-id.mjs
+node scripts/sync-program-id.mjs --id "$PROGRAM_ID"
 
-# --- 9. Second build with correct declare_id! ----------------------------
-step "Building Anchor program (pass 2 — with real program ID)"
+# --- 8. Build ------------------------------------------------------------
+step "Building Anchor program"
 anchor build
 ok "built"
 
