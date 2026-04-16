@@ -55,11 +55,18 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 # Source cargo + solana into this shell after install, if not already on PATH
 ensure_path() {
-  [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env" || true
+  if [ -f "$HOME/.cargo/env" ]; then . "$HOME/.cargo/env"; fi
   local sol="$HOME/.local/share/solana/install/active_release/bin"
-  case ":$PATH:" in *":$sol:"*) ;; *) [ -d "$sol" ] && export PATH="$sol:$PATH" ;; esac
+  case ":$PATH:" in
+    *":$sol:"*) ;;
+    *) if [ -d "$sol" ]; then export PATH="$sol:$PATH"; fi ;;
+  esac
   local avm="$HOME/.avm/bin"
-  case ":$PATH:" in *":$avm:"*) ;; *) [ -d "$avm" ] && export PATH="$avm:$PATH" ;; esac
+  case ":$PATH:" in
+    *":$avm:"*) ;;
+    *) if [ -d "$avm" ]; then export PATH="$avm:$PATH"; fi ;;
+  esac
+  return 0
 }
 ensure_path
 
