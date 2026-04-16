@@ -501,5 +501,60 @@ describe("casi-escrow", () => {
       try { await settleBeam(ctx); } catch { failed = true; }
       expect(failed).to.equal(true);
     });
+
+    it("rejects third-party settle_beam before duration (anti-grief)", async () => {
+      const total = 5_000_000n;
+      const duration = 30n; // long enough that we never reach it
+
+      const ctx = await setupParties(total);
+      await initialize(ctx, total, duration, TYPE_BEAM);
+      await startBeam(ctx);
+
+      const griefer = Keypair.generate();
+      await airdrop(griefer.publicKey);
+
+      await expectError(settleBeam(ctx, griefer), "Unauthorized");
+    });
+
+    it("allows viewer to settle_beam early (accepts pro-rata split)", async () => {
+      const total = 10_000_000n;
+      const duration = 30n;
+
+      const ctx = await setupParties(total);
+      await initialize(ctx, total, duration, TYPE_BEAM);
+      const feeBefore = await balanceOf(feeWalletAta);
+      await startBeam(ctx);
+
+      // Viewer voluntarily ends early.
+      await sleep(1500);
+      await settleBeam(ctx, ctx.viewer);
+
+      // Conservation holds regardless of who called.
+      const streamerBal = await balanceOf(ctx.streamerAta);
+      const viewerBal   = await balanceOf(ctx.viewerAta);
+      const feeDelta    = (await balanceOf(feeWalletAta)) - feeBefore;
+      expect(streamerBal + viewerBal + feeDelta).to.equal(total);
+    });
+
+    it("allows anyone to settle_beam after duration elapses (crank)", async () => {
+      const total = 4_000_000n;
+      const duration = 1n;
+
+      const ctx = await setupParties(total);
+      await initialize(ctx, total, duration, TYPE_BEAM);
+      await startBeam(ctx);
+      await sleep(2000); // past duration
+
+      const cranker = Keypair.generate();
+      await airdrop(cranker.publicKey);
+
+      // Should succeed — elapsed >= duration, so permissionless crank works.
+      await settleBeam(ctx, cranker);
+
+      // Full vest expected.
+      const { streamerAmt } = flashSplit(total);
+      expect(await balanceOf(ctx.streamerAta)).to.equal(streamerAmt);
+      expect(await balanceOf(ctx.viewerAta)).to.equal(0n);
+    });
   });
 });

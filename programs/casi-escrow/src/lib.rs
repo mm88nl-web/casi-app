@@ -278,7 +278,12 @@ pub mod casi_escrow {
         Ok(())
     }
 
-    /// Permissionless Beam settlement — anyone may call once the stream is Active.
+    /// Beam settlement.
+    ///
+    /// * Before `duration` elapses: only `streamer` or `viewer` may call — either
+    ///   party can end the stream early and accept the pro-rata split.
+    /// * After `duration` elapses: permissionless (anyone may crank), so funds
+    ///   can always be released even if both parties go offline.
     ///
     /// Integer proration: vested = total × min(elapsed, duration) / duration.
     /// Fee is taken on vested portion only; remainder refunded to viewer.
@@ -306,6 +311,13 @@ pub mod casi_escrow {
         let bump     = ctx.accounts.escrow_state.bump;
 
         require!(duration > 0, CasiError::InvalidDuration);
+
+        // Anti-grief: before duration elapses, only the two parties that
+        // consented to this escrow may settle. After duration, permissionless.
+        let caller_key = ctx.accounts.caller.key();
+        let is_party   = caller_key == ctx.accounts.escrow_state.streamer
+                      || caller_key == ctx.accounts.escrow_state.viewer;
+        require!(is_party || elapsed >= duration, CasiError::Unauthorized);
 
         // Integer proration with u128 intermediate to eliminate overflow risk.
         // worst case: u64::MAX * u64::MAX = u128::MAX / 4, well within u128 range.
@@ -497,7 +509,8 @@ pub struct ApproveFlash<'info> {
     #[account(mut)]
     pub streamer: Signer<'info>,
 
-    /// CHECK: Viewer wallet — receives vault ATA rent on close.
+    /// CHECK: Viewer wallet — kept in the account list so clients can pass
+    /// the full party set for indexing/event-matching; not read on-chain.
     #[account(mut)]
     pub viewer: UncheckedAccount<'info>,
 
