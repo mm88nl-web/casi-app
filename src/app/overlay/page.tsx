@@ -264,8 +264,15 @@ function FlashFeed({ profileId }: { profileId: string }) {
         (payload) => {
           if (payload.new?.status === 'approved') {
             setItems(prev => {
-              const without = prev.filter(f => f.id !== payload.new.id);
-              return [...without, { ...payload.new, enteredAt: Date.now() }].slice(-5);
+              const n = payload.new as Record<string, unknown>;
+              const item: FlashItem = {
+                id:           n.id as string,
+                viewer_name:  n.viewer_name as string,
+                message:      n.message as string,
+                amount_cents: n.amount_cents as number,
+                enteredAt:    Date.now(),
+              };
+              return [...prev.filter(f => f.id !== item.id), item].slice(-5);
             });
           }
         })
