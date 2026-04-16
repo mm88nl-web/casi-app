@@ -53,8 +53,24 @@ export async function POST(req: Request) {
       } else {
         console.log('payment_intent_id saved to booking', booking_id);
       }
-    } else {
-      console.error('Missing booking_id or payment_intent_id', { booking_id, payment_intent_id });
+    }
+
+    // Flash checkout completion — store payment_intent_id so streamer can capture
+    const flash_id = session.metadata?.flash_id;
+    if (flash_id && payment_intent_id) {
+      const { error: flashErr } = await supabase
+        .from('flashes')
+        .update({ payment_intent_id })
+        .eq('id', flash_id);
+      if (flashErr) {
+        console.error('[webhook] Flash payment_intent update failed:', flashErr);
+      } else {
+        console.log('payment_intent_id saved to flash', flash_id);
+      }
+    }
+
+    if (!booking_id && !flash_id) {
+      console.error('Missing booking_id or flash_id in session metadata', session.metadata);
     }
   }
 

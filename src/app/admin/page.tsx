@@ -445,6 +445,7 @@ export default function AdminStudio() {
   const [queuedBookings, setQueuedBookings] = useState<any[]>([]);
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [approvedQueued, setApprovedQueued] = useState<any[]>([]);
+  const [pendingFlashes, setPendingFlashes] = useState<any[]>([]);
   const [isReady, setIsReady] = useState(false);
   const [saveStatus, setSaveStatus] = useState('Ready');
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -568,6 +569,16 @@ export default function AdminStudio() {
     setApprovedQueued(aq || []);
   }, [supabase]);
 
+  const loadFlashes = useCallback(async (profileId: string) => {
+    const { data } = await supabase
+      .from('flashes')
+      .select('*')
+      .eq('profile_id', profileId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    setPendingFlashes(data || []);
+  }, [supabase]);
+
   useEffect(() => {
     if (!profile?.id) return;
     loadBookings(profile.id);
@@ -576,6 +587,15 @@ export default function AdminStudio() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id, supabase, loadBookings]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    loadFlashes(profile.id);
+    const channel = supabase.channel(`admin_flashes_${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profile.id}` }, () => loadFlashes(profile.id))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profile?.id, supabase, loadFlashes]);
 
   /* ── FIX: callback ref so canvas dimensions fire on first mount ── */
   const setMonitorRef = useCallback((node: HTMLDivElement | null) => {
@@ -763,6 +783,26 @@ export default function AdminStudio() {
   setQueuedBookings(prev => prev.filter(b => b.id !== id));
 };
 
+  const approveFlash = async (flash: any) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    await fetch('/api/flashes/moderate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ flash_id: flash.id, action: 'approve' }),
+    });
+    setPendingFlashes(prev => prev.filter(f => f.id !== flash.id));
+  };
+
+  const denyFlash = async (flash: any) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    await fetch('/api/flashes/moderate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ flash_id: flash.id, action: 'deny' }),
+    });
+    setPendingFlashes(prev => prev.filter(f => f.id !== flash.id));
+  };
+
   const kickBeam = useCallback(async (booking: any) => {
     setSelectedSlotId(null);
     setShowInfoPanel(false);
@@ -817,7 +857,8 @@ export default function AdminStudio() {
     return el?.is_background ?? false;
   };
 
-  const totalPending = pendingBookings.length + queuedBookings.length;
+  const confirmedFlashes = pendingFlashes.filter(f => !!(f.payment_intent_id || f.tx_signature));
+  const totalPending = pendingBookings.length + queuedBookings.length + confirmedFlashes.length;
   const slotOccupiedForPreview = previewBooking ? activeBookings.some(b => b.element_id === previewBooking.element_id) : false;
   const backdropEl = elements.find(el => el.is_background);
   const hasBackdrop = !!backdropEl;
@@ -917,6 +958,9 @@ export default function AdminStudio() {
         .t-green  { color:#4ade80; background:rgba(74,222,128,0.08); border-color:rgba(74,222,128,0.2); }
         .t-cyan   { color:var(--casi-accent2); background:rgba(var(--casi-accent2-rgb),0.08); border-color:rgba(var(--casi-accent2-rgb),0.2); }
         .t-dim    { color:rgba(var(--casi-accent-rgb),0.6); background:rgba(var(--casi-accent-rgb),0.05); border-color:rgba(var(--casi-accent-rgb),0.12); }
+        .t-flash  { color:#facc15; background:rgba(250,204,21,0.08); border-color:rgba(250,204,21,0.2); }
+        .c-flash  { background:rgba(250,204,21,0.04); border-color:rgba(250,204,21,0.15) !important; }
+        .badge-flash { color:#facc15; border-color:rgba(250,204,21,0.3); background:rgba(250,204,21,0.06); }
         .req-msg { font-size:13px; color:var(--casi-text-muted); font-style:italic; border-left:2px solid var(--casi-border); padding-left:10px; margin-top:6px; }
         .req-actions { display:flex; flex-direction:column; gap:8px; flex-shrink:0; }
         .act-btn { font-family:'Syne',sans-serif; font-weight:800; font-size:12px; text-transform:uppercase; padding:10px 18px; border-radius:8px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
@@ -1300,6 +1344,49 @@ export default function AdminStudio() {
         {/* ── REQUESTS — separated by beam vs backdrop ── */}
         {view === 'requests' && (
           <div className="req-body">
+
+            {/* ── FLASH MESSAGES ── */}
+            {pendingFlashes.length > 0 && (
+              <div style={{ marginBottom: 32 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 16, fontWeight: 800, color: 'var(--casi-text)', letterSpacing: -0.5 }}>Flash Messages</div>
+                  <span className="slot-type-badge badge-flash">⚡ Flashes</span>
+                  {confirmedFlashes.length > 0 && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#4ade80' }}>{confirmedFlashes.length} paid</span>}
+                </div>
+                {pendingFlashes.map(flash => {
+                  const paid = !!(flash.payment_intent_id || flash.tx_signature);
+                  return (
+                    <div key={flash.id} className="req-card c-flash">
+                      <div style={{ fontSize: 28, flexShrink: 0, lineHeight: 1 }}>⚡</div>
+                      <div className="req-info">
+                        <div className="req-meta">
+                          <span className="req-name">{flash.viewer_name}</span>
+                          {paid
+                            ? <span className="tag t-green">✓ Paid</span>
+                            : <span className="tag t-dim">⌛ Awaiting payment</span>}
+                          <span className="tag t-flash">€{(flash.amount_cents / 100).toFixed(2)}</span>
+                          <span className="tag t-dim">{flash.payment_method}</span>
+                        </div>
+                        <div className="req-msg">"{flash.message}"</div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', marginTop: 6 }}>
+                          {new Date(flash.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                      <div className="req-actions">
+                        <button onClick={() => denyFlash(flash)} className="act-btn"
+                          style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171' }}>
+                          Deny
+                        </button>
+                        <button onClick={() => paid && approveFlash(flash)} disabled={!paid} className="act-btn"
+                          style={{ background: paid ? '#facc15' : 'var(--casi-border)', color: paid ? '#111' : '#444', cursor: paid ? 'pointer' : 'not-allowed', border: 'none' }}>
+                          {paid ? '⚡ Approve' : 'Awaiting…'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* BEAMS SECTION */}
             {(activeBeams.length > 0 || approvedBeams.length > 0 || pendingBeams.length > 0 || queuedBeams.length > 0) && (

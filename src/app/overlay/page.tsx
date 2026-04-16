@@ -232,6 +232,229 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
   );
 }
 
+/* ── Flash Feed (OBS overlay) ────────────────────────────────────────────── */
+type FlashItem = { id: string; viewer_name: string; message: string; amount_cents: number; enteredAt: number };
+
+function FlashFeed({ profileId }: { profileId: string }) {
+  const [items, setItems] = useState<FlashItem[]>([]);
+  const supabase = useRef(createClient()).current;
+  const DISPLAY_MS = 25_000;
+
+  // Hydrate with any flashes approved in the last DISPLAY_MS on mount
+  useEffect(() => {
+    const since = new Date(Date.now() - DISPLAY_MS).toISOString();
+    supabase
+      .from('flashes')
+      .select('id, viewer_name, message, amount_cents')
+      .eq('profile_id', profileId)
+      .eq('status', 'approved')
+      .gte('created_at', since)
+      .order('created_at', { ascending: true })
+      .limit(5)
+      .then(({ data }) => {
+        if (data?.length) setItems(data.map(f => ({ ...f, enteredAt: Date.now() })));
+      });
+  }, [profileId, supabase]);
+
+  // Real-time: listen for flashes being approved
+  useEffect(() => {
+    const channel = supabase
+      .channel(`flash_feed_${profileId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profileId}` },
+        (payload) => {
+          if (payload.new?.status === 'approved') {
+            setItems(prev => {
+              const without = prev.filter(f => f.id !== payload.new.id);
+              return [...without, { ...payload.new, enteredAt: Date.now() }].slice(-5);
+            });
+          }
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profileId, supabase]);
+
+  // Auto-expire items after DISPLAY_MS
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setItems(prev => prev.filter(f => Date.now() - f.enteredAt < DISPLAY_MS));
+    }, 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  if (!items.length) return null;
+
+  return (
+    <div style={{ position: 'absolute', bottom: 28, right: 28, width: 290, display: 'flex', flexDirection: 'column', gap: 10, zIndex: 200, pointerEvents: 'none' }}>
+      <style>{`@keyframes flashPop{from{opacity:0;transform:scale(0.82) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
+      {items.map(flash => (
+        <div key={flash.id} style={{ animation: 'flashPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          {/* Name + amount row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5, paddingLeft: 4 }}>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500, color: 'var(--casi-accent)', textShadow: '0 1px 6px rgba(0,0,0,0.9)', letterSpacing: 0.5 }}>
+              ⚡ {flash.viewer_name}
+            </span>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, background: 'rgba(var(--casi-accent-rgb),0.18)', color: 'var(--casi-accent)', border: '1px solid rgba(var(--casi-accent-rgb),0.35)', borderRadius: 20, padding: '1px 8px' }}>
+              €{(flash.amount_cents / 100).toFixed(2)}
+            </span>
+          </div>
+          {/* iMessage-style bubble */}
+          <div style={{ background: 'rgba(255,255,255,0.93)', borderRadius: '18px 18px 4px 18px', padding: '11px 15px', boxShadow: '0 6px 24px rgba(0,0,0,0.4)' }}>
+            <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 14, fontWeight: 600, color: '#0d0d0d', lineHeight: 1.45, margin: 0 }}>
+              {flash.message}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Send Flash Form (viewer) ─────────────────────────────────────────────── */
+function SendFlashSection({ profileId, username, viewerName, showNotif, profile }: {
+  profileId: string; username: string; viewerName: string;
+  showNotif: (text: string, type: string) => void;
+  profile: any;
+}) {
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState('');
+  const [amount, setAmount] = useState('5');
+  const [submitting, setSubmitting] = useState(false);
+  const [myFlash, setMyFlash] = useState<any>(null);
+  const supabase = useRef(createClient()).current;
+
+  // Track the most recent flash from this viewer so we can show live status
+  useEffect(() => {
+    if (!viewerName || !profileId) return;
+    const channel = supabase
+      .channel(`my_flashes_${profileId}_${viewerName}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profileId}` },
+        (payload) => {
+          if (payload.new?.viewer_name === viewerName) {
+            setMyFlash(payload.new);
+            if (payload.new.status === 'approved') showNotif('⚡ Your flash is live on stream!', 'success');
+            if (payload.new.status === 'denied')   showNotif('Flash was not approved — no charge.', 'denied');
+          }
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profileId, viewerName, supabase, showNotif]);
+
+  const amountCents = Math.round(parseFloat(amount || '0') * 100);
+  const canSend = amountCents >= 100 && !isNaN(amountCents) && message.trim().length > 0 && !submitting;
+
+  const sendFlash = async () => {
+    if (!canSend) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/flashes/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: profileId, viewer_name: viewerName, message: message.trim(), amount_cents: amountCents }),
+      });
+      const { checkout_url, error: apiErr } = await res.json();
+      if (apiErr) { showNotif(apiErr, 'denied'); setSubmitting(false); return; }
+      window.location.href = checkout_url;
+    } catch {
+      showNotif('Failed to send flash — please try again', 'denied');
+      setSubmitting(false);
+    }
+  };
+
+  const AMOUNT_PRESETS = [2, 5, 10, 20];
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      {!open ? (
+        <button onClick={() => setOpen(true)}
+          style={{ width: '100%', background: 'rgba(var(--casi-accent-rgb),0.06)', border: '1px solid rgba(var(--casi-accent-rgb),0.14)', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'background .2s' }}
+          onMouseOver={e => (e.currentTarget.style.background = 'rgba(var(--casi-accent-rgb),0.1)')}
+          onMouseOut={e => (e.currentTarget.style.background = 'rgba(var(--casi-accent-rgb),0.06)')}>
+          <span style={{ fontSize: 20 }}>⚡</span>
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, color: 'var(--casi-text)' }}>Send a Flash</div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)', marginTop: 2 }}>One-time paid message · shown live on stream</div>
+          </div>
+          <span style={{ marginLeft: 'auto', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>→</span>
+        </button>
+      ) : (
+        <div style={{ background: 'var(--casi-surface)', border: '1px solid rgba(var(--casi-accent-rgb),0.14)', borderRadius: 14, padding: 20, animation: 'fadeIn .25s ease' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)', marginBottom: 3 }}>⚡ Flash</div>
+              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 17, fontWeight: 800, color: 'var(--casi-text)' }}>Send a Flash</div>
+            </div>
+            <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
+          </div>
+
+          {/* Live status feedback */}
+          {myFlash?.status === 'approved' && (
+            <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4ade80' }}>
+              ✓ Your flash is live on stream!
+            </div>
+          )}
+          {myFlash?.status === 'denied' && (
+            <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#f87171' }}>
+              ✕ Flash was not approved — no charge.
+            </div>
+          )}
+          {myFlash?.status === 'pending' && (
+            <div style={{ background: 'rgba(var(--casi-accent-rgb),0.06)', border: '1px solid rgba(var(--casi-accent-rgb),0.18)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-accent)', animation: 'blink 2s infinite' }}>
+              ⌛ Flash sent — awaiting streamer approval
+            </div>
+          )}
+
+          {/* Message */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>Message</label>
+            <textarea value={message} onChange={e => setMessage(e.target.value)} maxLength={200} rows={3}
+              placeholder="Say something to the stream…"
+              className="bf-inp" style={{ resize: 'none' }} />
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#333', marginTop: 4, textAlign: 'right' }}>{message.length}/200</div>
+          </div>
+
+          {/* Amount */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>Amount</label>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              {AMOUNT_PRESETS.map(p => (
+                <button key={p} onClick={() => setAmount(String(p))}
+                  style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    ...(parseFloat(amount) === p
+                      ? { background: 'rgba(var(--casi-accent-rgb),0.12)', borderColor: 'rgba(var(--casi-accent-rgb),0.35)', color: 'var(--casi-accent)' }
+                      : { background: 'none', borderColor: 'var(--casi-border)', color: 'var(--casi-text-muted)' }) }}>
+                  €{p}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '10px 14px' }}>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: 'var(--casi-text-muted)' }}>€</span>
+              <input type="number" value={amount} min="1" step="1" onChange={e => setAmount(e.target.value)}
+                style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 17, fontWeight: 700, color: 'var(--casi-text)', fontFamily: "'Syne', sans-serif" }} />
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#333', whiteSpace: 'nowrap' }}>min €1</span>
+            </div>
+          </div>
+
+          {/* Submit */}
+          <button onClick={sendFlash} disabled={!canSend}
+            style={{ width: '100%', background: canSend ? 'var(--casi-accent)' : 'var(--casi-border)', border: 'none', borderRadius: 10, padding: '13px 0', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 14, textTransform: 'uppercase', letterSpacing: 0.3, color: canSend ? 'var(--casi-bg)' : '#444', cursor: canSend ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: 'all .2s' }}>
+            <svg width="14" height="11" viewBox="0 0 14 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0.5" y="0.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeOpacity="0.6"/>
+              <rect x="0" y="3" width="14" height="2.5" fill="currentColor" fillOpacity="0.5"/>
+              <rect x="2" y="7" width="4" height="1.5" rx="0.5" fill="currentColor"/>
+            </svg>
+            {submitting ? 'Redirecting…' : `Pay €${(amountCents / 100).toFixed(2)} & Flash`}
+          </button>
+
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#2a2a2a', textAlign: 'center', marginTop: 10, lineHeight: 1.7 }}>
+            Payment held until streamer approves · Fully refunded if denied
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OverlayContent() {
   const searchParams = useSearchParams();
   const username = searchParams.get('s') || '';
@@ -380,6 +603,17 @@ function OverlayContent() {
         viewerNameRef.current = saved;
         await loadData(prof.id, saved);
         setLoading(false);
+        // Show success notification when returning from Stripe flash checkout
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('flash_success') === '1') {
+            showNotif('⚡ Flash sent — awaiting streamer approval!', 'success');
+            params.delete('flash_success');
+            params.delete('flash_id');
+            const qs = params.toString();
+            window.history.replaceState({}, '', `${window.location.pathname}${qs ? '?' + qs : ''}`);
+          }
+        }
         const bump = () => { lastRealtimeEventAt.current = Date.now(); };
         const channel = supabase.channel(`overlay_${prof.id}`)
           .on('postgres_changes',{event:'*',schema:'public',table:'overlay_elements',filter:`profile_id=eq.${prof.id}`},()=>{bump();loadData(prof.id);})
@@ -1218,6 +1452,9 @@ function OverlayContent() {
                 </div>
               );
             })}
+
+            {/* Flash Feed — overlaid on canvas in OBS mode */}
+            {isOBS && profile?.id && <FlashFeed profileId={profile.id} />}
           </div>
 
           {/* BOOKING FORM */}
@@ -1476,6 +1713,17 @@ function OverlayContent() {
                 })}
               </div>
             </div>
+          )}
+
+          {/* FLASH FORM — visible to viewers when not booking a slot */}
+          {!isOBS && !selectedSlot && savedViewerName && profile?.id && profile?.stripe_account_id && (
+            <SendFlashSection
+              profileId={profile.id}
+              username={username}
+              viewerName={savedViewerName}
+              showNotif={showNotif}
+              profile={profile}
+            />
           )}
 
           {!isOBS && (
