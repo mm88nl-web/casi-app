@@ -21,6 +21,7 @@ export const CASI_ERROR_NAMES = [
   'NotActive',
   'WrongEscrowType',
   'InvalidFeeWallet',
+  'MathOverflow',
 ] as const;
 
 export type CasiErrorName = (typeof CASI_ERROR_NAMES)[number];
@@ -38,6 +39,7 @@ const FRIENDLY: Record<CasiErrorName, string> = {
   NotActive:         'This beam has not started yet.',
   WrongEscrowType:   'Wrong escrow type for this action.',
   InvalidFeeWallet:  'Fee wallet mismatch — please report this to CASI support.',
+  MathOverflow:      'Transaction amount is out of range — please try a smaller value.',
 };
 
 /**

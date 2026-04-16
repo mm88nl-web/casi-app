@@ -1,90 +1,81 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+/**
+ * Helius webhook for CASI on-chain events.
+ *
+ * Listens for transactions that invoke the CASI escrow program and logs
+ * booking / flash matches for observability. This is **not** the source of
+ * truth — the client already posts tx_signature + escrow_pda directly to
+ * /api/flashes/attach-escrow (flashes) or updates the booking row itself
+ * (beams) after signing. Helius arriving late or dropping a retry cannot
+ * break the flow.
+ *
+ * Configure the Helius webhook to deliver "enhanced" transactions filtered by
+ * account = NEXT_PUBLIC_CASI_PROGRAM_ID, and to include the header
+ * `authorization: <HELIUS_WEBHOOK_SECRET>`.
+ *
+ * Always returns 200 so Helius doesn't retry and burn credits.
+ */
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-const STREAMFLOW_PROGRAM_ID = 'strmRqUvRpeYvH9bZfBy86M8nmUqh5pGEF2p9Vv4v';
-const USDC_DEVNET_MINT      = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
-
-// Always return 200 — Helius retries on non-2xx which burns credits.
 const OK = () => NextResponse.json({ ok: true });
 
 export async function POST(req: Request) {
-  // ── Signature verification ────────────────────────────────────────────────
-  // Helius sends the webhook secret you configured in the dashboard as the
-  // Authorization header value.  We always enforce it — a missing env var is
-  // a deployment misconfiguration that must be fixed, not silently bypassed.
-  // We still return 200 on failure so Helius doesn't exhaust retries and burn
-  // credits, but we bail out before touching the database.
   const webhookSecret = process.env.HELIUS_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.error('[solana webhook] HELIUS_WEBHOOK_SECRET is not set — dropping request without processing');
+    console.error('[solana webhook] HELIUS_WEBHOOK_SECRET is not set — dropping request');
     return OK();
   }
   const authHeader = req.headers.get('authorization') ?? '';
   if (authHeader !== webhookSecret) {
-    console.warn('[solana webhook] rejected request — invalid authorization header');
+    console.warn('[solana webhook] rejected — invalid authorization header');
     return OK();
   }
-  // ─────────────────────────────────────────────────────────────────────────
+
+  // The program ID is configured at build-time (bundle) AND can be overridden
+  // per deploy via env. We accept the env-var to avoid a redeploy when the
+  // program ID changes between devnet / mainnet.
+  const CASI_PROGRAM_ID = process.env.NEXT_PUBLIC_CASI_PROGRAM_ID;
+  if (!CASI_PROGRAM_ID || CASI_PROGRAM_ID === '11111111111111111111111111111111') {
+    // Program not deployed yet — nothing to observe.
+    return OK();
+  }
 
   const body = await req.json().catch(() => null);
   if (!Array.isArray(body) || body.length === 0) return OK();
 
   for (const event of body) {
-    // ── Layer 1: is this a Streamflow USDC transfer? ──────────────────────
-    const isStreamflow = event.instructions?.some(
-      (ix: any) => ix.programId === STREAMFLOW_PROGRAM_ID,
-    );
-    const isUsdc = event.tokenTransfers?.some(
-      (t: any) => t.mint === USDC_DEVNET_MINT,
-    );
-    if (!isStreamflow || !isUsdc) continue;   // not our program — skip silently
+    const invokesCasi =
+      event.instructions?.some((ix: { programId?: string }) => ix.programId === CASI_PROGRAM_ID) ||
+      event.accountData?.some((a: { account?: string }) => a.account === CASI_PROGRAM_ID);
+    if (!invokesCasi) continue;
 
-    // ── Layer 2: does the receiver belong to one of our streamers? ────────
-    // Enhanced payload: tokenTransfers[].toUserAccount is the recipient wallet.
-    const receivers: string[] = (event.tokenTransfers ?? [])
-      .map((t: any) => t.toUserAccount)
-      .filter(Boolean);
-
-    if (receivers.length === 0) continue;
-
-    const { data: matchedProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .in('solana_wallet', receivers)
-      .maybeSingle();
-
-    if (!matchedProfile) {
-      // USDC Streamflow tx but receiver isn't one of our streamers — ignore
-      console.log('[solana webhook] no profile match for receivers', receivers);
-      continue;
-    }
-
-    // ── Layer 3: match the exact booking by tx_signature ──────────────────
-    const txSignature: string = event.signature;
+    const txSignature: string | undefined = event.signature;
     if (!txSignature) continue;
 
-    const { data: booking } = await supabase
-      .from('bookings')
-      .select('id')
-      .eq('tx_signature', txSignature)
-      .eq('status', 'pending')
-      .maybeSingle();
+    // Best-effort match against flashes and bookings by tx_signature. Nothing
+    // depends on this match — it's purely an observability aid for debugging
+    // flows where the client request to /api/flashes/attach-escrow or the
+    // booking update race failed.
+    const [flashMatch, bookingMatch] = await Promise.all([
+      supabase.from('flashes').select('id, status').eq('tx_signature', txSignature).maybeSingle(),
+      supabase.from('bookings').select('id, status').eq('tx_signature', txSignature).maybeSingle(),
+    ]);
 
-    if (!booking) {
-      console.warn('[solana webhook] tx matched a streamer but no pending booking:', txSignature);
-      continue;
+    if (flashMatch.data) {
+      console.log('[solana webhook] ✓ CASI tx matches flash', flashMatch.data.id, 'status:', flashMatch.data.status);
     }
-
-    // Payment confirmed on-chain. Leave status='pending' so the streamer
-    // reviews and approves via the admin dashboard (same UX as Stripe).
-    // The tx_signature already stored in the booking row is the payment proof
-    // that unlocks the admin Approve button.
-    console.log('[solana webhook] ✓ payment confirmed for booking', booking.id, 'tx:', txSignature);
+    if (bookingMatch.data) {
+      console.log('[solana webhook] ✓ CASI tx matches booking', bookingMatch.data.id, 'status:', bookingMatch.data.status);
+    }
+    if (!flashMatch.data && !bookingMatch.data) {
+      console.log('[solana webhook] CASI tx with no DB match:', txSignature);
+    }
   }
 
   return OK();

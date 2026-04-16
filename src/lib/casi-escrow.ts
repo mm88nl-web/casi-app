@@ -137,6 +137,17 @@ export interface InitFlashParams {
   tokenProgram?: PublicKey;
 }
 
+export interface InitBeamParams {
+  escrowId:  string;
+  streamer:  PublicKey;
+  /** USDC micro-units (1 USDC = 1_000_000). */
+  amountUsdc: number;
+  /** Beam duration in seconds (> 0). */
+  durationSecs: number;
+  usdcMint?:   PublicKey;
+  tokenProgram?: PublicKey;
+}
+
 export interface ModerateFlashParams {
   escrowId:    string;
   viewer:      PublicKey;
@@ -200,6 +211,47 @@ export class CasiEscrowClient {
 
     const sig = await (this.program.methods as any)
       .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(0), 0)
+      .accounts({
+        viewer,
+        streamer,
+        escrowState:          escrowPda,
+        vault,
+        viewerAta,
+        usdcMint,
+        tokenProgram,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram:          SystemProgram.programId,
+      })
+      .rpc();
+
+    return {
+      sig,
+      escrowPda:  escrowPda.toBase58(),
+      solscanUrl: solscanTxUrl(sig, this.cluster),
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // initialize_escrow  (Beam variant: duration_secs > 0, escrow_type_val = 1)
+  // -------------------------------------------------------------------------
+
+  async initializeBeam(params: InitBeamParams): Promise<InitFlashResult> {
+    const { escrowId, streamer, amountUsdc, durationSecs } = params;
+    if (!(durationSecs > 0)) {
+      throw new Error('durationSecs must be > 0 for Beam escrows');
+    }
+    const usdcMint     = params.usdcMint     ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
+
+    const escrowIdBytes = Array.from(uuidToBytes(escrowId));
+    const [escrowPda]   = deriveEscrowPda(escrowId);
+    const viewer        = this.wallet.publicKey;
+
+    const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer,   false, tokenProgram);
+    const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true, tokenProgram);
+
+    const sig = await (this.program.methods as any)
+      .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(durationSecs), 1)
       .accounts({
         viewer,
         streamer,

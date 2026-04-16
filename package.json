@@ -18,7 +18,6 @@
     "@coral-xyz/anchor": "^0.30.1",
     "@solana/spl-token": "^0.4.9",
     "@solana/web3.js": "^1.98.4",
-    "@streamflow/stream": "^11.3.1",
     "@stripe/stripe-js": "^9.1.0",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",

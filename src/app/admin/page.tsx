@@ -667,11 +667,17 @@ export default function AdminStudio() {
       const { data: next } = await supabase.from('bookings').select('*')
         .eq('element_id', booking.element_id).eq('status', 'approved_queued')
         .order('approved_at', { ascending: true }).limit(1).single();
-      if (next) {
+      // Solana beams require an explicit start_beam signature from the streamer,
+      // so we CANNOT auto-promote them from a timer / background context — the
+      // streamer's wallet may not be connected here. Leave the next booking in
+      // approved_queued; the admin UI renders a "Start Beam" action for it.
+      if (next && next.payment_method !== 'solana') {
         await supabase.from('bookings').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', next.id);
         await supabase.from('overlay_elements').update({ image_url: next.image_url }).eq('id', next.element_id);
         setElements(prev => prev.map(el => el.id === next.element_id ? { ...el, image_url: next.image_url } : el));
       } else {
+        // No eligible auto-promotable next booking → clear the slot. For a
+        // Solana next-up the streamer will click Start Beam manually.
         await supabase.from('overlay_elements').update({ image_url: '' }).eq('id', booking.element_id);
         setElements(prev => prev.map(el => el.id === booking.element_id ? { ...el, image_url: '' } : el));
       }
@@ -769,17 +775,58 @@ export default function AdminStudio() {
   // Payment is confirmed if Stripe PaymentIntent exists OR Solana tx_signature exists
   const isPaymentConfirmed = (b: any) => !!(b.payment_intent_id || b.tx_signature);
 
+  /**
+   * Fire `start_beam` on-chain for a Solana beam booking. The streamer must
+   * sign; the on-chain clock then drives the vesting schedule for settle_beam.
+   *
+   * Throws on wallet / signature errors so the caller can keep the booking in
+   * its current status and surface the failure to the streamer — we never
+   * want the DB to show "active" when the on-chain state is still "pending".
+   * No-op for non-Solana bookings.
+   */
+  const startSolanaBeamOnChain = async (booking: any) => {
+    if (booking.payment_method !== 'solana') return;
+    if (!booking.escrow_pda) {
+      console.warn('[startSolanaBeam] booking has no escrow_pda — skipping');
+      return;
+    }
+    const anchorWallet = buildAnchorWalletForEscrow();
+    if (!anchorWallet) {
+      openWalletModal();
+      throw new Error('Connect your streamer wallet');
+    }
+    if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
+      throw new Error('Connected wallet is not the streamer wallet on file');
+    }
+    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const client = new CasiEscrowClient(walletConnection, anchorWallet, 'devnet');
+    await client.startBeam({ escrowId: booking.id, streamer: publicKey! });
+  };
+
   const approveBooking = async (booking: any) => {
   setPreviewBooking(null);
   const slotOccupied = activeBookings.some(b => b.element_id === booking.element_id);
 
   if (slotOccupied || booking.is_queued) {
+    // Queued: the on-chain beam is NOT started yet — we start it only when
+    // the slot becomes live (via Play Now or auto-promotion). DB status just
+    // records that the streamer approved the request.
     await supabase
       .from('bookings')
       .update({ status: 'approved_queued', approved_at: new Date().toISOString() })
       .eq('id', booking.id);
   } else {
-    // Direct booking with payment already confirmed
+    // Direct booking: beam goes live immediately. For Solana we MUST fire
+    // start_beam on-chain before flipping DB status, so the vesting clock
+    // and the UI countdown stay in lockstep. If the chain call fails we
+    // bail out and leave the booking in 'pending' for retry.
+    try {
+      await startSolanaBeamOnChain(booking);
+    } catch (err: unknown) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showFlashToast(formatEscrowError(err), 'err');
+      return;
+    }
     await supabase
       .from('bookings')
       .update({ status: 'active', started_at: new Date().toISOString() })
@@ -801,7 +848,9 @@ export default function AdminStudio() {
   const denyBooking = async (id: string, paymentMethod?: string) => {
   setPreviewBooking(null);
   if (paymentMethod === 'solana') {
-    // Solana: just mark denied — Streamflow stream cancellation is viewer-side
+    // Solana: just mark denied in DB. The viewer's overlay subscribes to
+    // status changes and auto-calls cancel_escrow (reclaimSolanaEscrow) to
+    // pull funds back from the PDA — no on-chain action is required here.
     await supabase.from('bookings').update({ status: 'denied' }).eq('id', id);
   } else {
     // Stripe: void/refund PaymentIntent then mark denied
@@ -925,17 +974,30 @@ export default function AdminStudio() {
     setSelectedSlotId(null);
     setShowInfoPanel(false);
     if (booking.payment_method === 'solana') {
-      // Cancel the on-chain Streamflow vesting stream so unvested USDC
-      // returns to the viewer. The admin wallet is the stream recipient
-      // (cancelableByRecipient: true) so it can sign the cancel tx.
-      if (booking.stream_id && publicKey && profile?.solana_wallet &&
-          publicKey.toBase58() === profile.solana_wallet) {
+      // Settle the on-chain escrow: streamer receives the vested portion
+      // (minus 5 % fee), viewer receives the unvested portion as a refund.
+      // The vault ATA + EscrowState are closed in the same tx.
+      const canSettleOnChain =
+        booking.escrow_pda && booking.viewer_wallet && publicKey &&
+        profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet;
+
+      if (canSettleOnChain) {
         try {
-          const { SolanaStreamClient, ICluster } = await import('@streamflow/stream');
-          const client = new SolanaStreamClient(RPC_DEVNET, ICluster.Devnet);
-          await client.cancel({ id: booking.stream_id }, { invoker: (wallet as any)?.adapter ?? wallet });
+          const anchorWallet = buildAnchorWalletForEscrow();
+          if (!anchorWallet) throw new Error('Wallet not ready to sign');
+          const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+          const { PublicKey: PK }    = await import('@solana/web3.js');
+          const client = new CasiEscrowClient(walletConnection, anchorWallet, 'devnet');
+          await client.settleBeam({
+            escrowId: booking.id,
+            viewer:   new PK(booking.viewer_wallet),
+            streamer: publicKey!,
+          });
         } catch (err) {
-          console.error('[kickBeam] Streamflow cancel error:', err);
+          // Log and continue to expireBooking — DB still needs to advance
+          // the queue even if on-chain settle failed (e.g. already settled
+          // by viewer). The escrow_pda remains so the viewer can see it.
+          console.error('[kickBeam] settleBeam failed:', err);
         }
       }
       await expireBooking(booking);
@@ -952,7 +1014,7 @@ export default function AdminStudio() {
       });
       await expireBooking(booking);
     }
-  }, [expireBooking, publicKey, profile?.solana_wallet, wallet, supabase]);
+  }, [expireBooking, publicKey, profile?.solana_wallet, walletConnection, supabase]);
 
   const copyUrl = (url: string, key: string) => {
     navigator.clipboard.writeText(url);
@@ -1589,20 +1651,22 @@ export default function AdminStudio() {
             {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
           </span>
           <button onClick={async () => {
-  // End current active booking on this slot first
+  // End current active booking on this slot first — use kickBeam to route
+  // Solana beams through settle_beam and Stripe beams through the prorate API.
+  // kickBeam also calls expireBooking which advances the queue; since the
+  // next candidate on a Solana-rail slot is now intentionally NOT auto-promoted,
+  // we always finish by flipping THIS booking to active ourselves.
   const current = activeBookings.find(b => b.element_id === booking.element_id);
-  if (current) {
-    const { data: { session: sess } } = await supabase.auth.getSession();
-    await fetch('/api/stripe/end-early', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sess?.access_token}`,
-      },
-      body: JSON.stringify({ booking_id: current.id }),
-    });
+  if (current) await kickBeam(current);
+  // For Solana: start_beam must land on-chain before the DB shows active.
+  if (booking.payment_method === 'solana') {
+    try { await startSolanaBeamOnChain(booking); }
+    catch (err: unknown) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showFlashToast(formatEscrowError(err), 'err');
+      return;
+    }
   }
-  // Start this booking now
   await supabase
     .from('bookings')
     .update({ status: 'active', started_at: new Date().toISOString() })
@@ -1753,20 +1817,16 @@ export default function AdminStudio() {
             {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
           </span>
           <button onClick={async () => {
-  // End current active booking on this slot first
   const current = activeBookings.find(b => b.element_id === booking.element_id);
-  if (current) {
-    const { data: { session: sess } } = await supabase.auth.getSession();
-    await fetch('/api/stripe/end-early', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sess?.access_token}`,
-      },
-      body: JSON.stringify({ booking_id: current.id }),
-    });
+  if (current) await kickBeam(current);
+  if (booking.payment_method === 'solana') {
+    try { await startSolanaBeamOnChain(booking); }
+    catch (err: unknown) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showFlashToast(formatEscrowError(err), 'err');
+      return;
+    }
   }
-  // Start this booking now
   await supabase
     .from('bookings')
     .update({ status: 'active', started_at: new Date().toISOString() })
@@ -2049,7 +2109,7 @@ export default function AdminStudio() {
                           {solanaWallet ? `◎ ${solanaWallet.slice(0,6)}…${solanaWallet.slice(-4)}` : 'No wallet linked'}
                         </div>
                         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
-                          {solanaWallet ? 'Viewers can pay via Streamflow USDC' : 'Optional — Stripe works without this'}
+                          {solanaWallet ? 'Viewers can pay with USDC on-chain' : 'Optional — Stripe works without this'}
                         </div>
                       </div>
                       {walletConnected && publicKey ? (

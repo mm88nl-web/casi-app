@@ -177,10 +177,10 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
           )}
         </div>
 
-        {/* Streamflow note + anti-phishing warning */}
+        {/* CASI escrow note + anti-phishing warning */}
         {!inProgress && txStatus !== 'waiting' && (
           <div style={{ fontSize:10, color:'#444', lineHeight:1.8, marginBottom:16 }}>
-            Funds stream in real time via Streamflow.<br />
+            Funds held in CASI on-chain escrow and vest over the beam duration.<br />
             Unused USDC returns if ended early.
             {shortWallet && (
               <>
@@ -198,7 +198,7 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
           <div style={{ background:'rgba(255,255,255,0.02)', borderRadius:10, padding:'12px 14px', marginBottom:16 }}>
             {[
               { label: 'Booking created',             active: txStatus === 'booking',   done: txStatus !== 'booking' },
-              { label: 'Creating Streamflow stream…', active: txStatus === 'streaming', done: txStatus === 'waiting' },
+              { label: 'Funding CASI escrow…',        active: txStatus === 'streaming', done: txStatus === 'waiting' },
               { label: 'Waiting for admin approval',  active: txStatus === 'waiting',   done: false },
             ].map((step, i) => (
               <div key={i} style={{ display:'flex', alignItems:'center', gap:10, fontSize:11,
@@ -527,17 +527,19 @@ function OverlayContent() {
       if (!old) return;
       if (old.status === 'pending' && booking.status === 'denied') {
         showNotif('Your request was denied', 'denied');
-        // Auto-cancel the Streamflow stream so unvested USDC returns to viewer immediately
-        if (booking.payment_method === 'solana' && booking.stream_id) {
-          cancelSolanaStream(booking);
+        // Auto-reclaim the escrow so USDC returns to viewer immediately. Only
+        // runs if the beam was still Pending on-chain (streamer hadn't started
+        // it yet); if Active, the admin's kickBeam already settled on-chain
+        // and the PDA is gone, so we skip.
+        if (booking.payment_method === 'solana' && booking.escrow_pda) {
+          reclaimSolanaEscrow(booking);
         }
       }
       if (old.status === 'pending' && booking.status === 'active')          showNotif('Your beam is live! 🎉', 'success');
       if (old.status === 'pending' && booking.status === 'approved_queued') showNotif("Approved — you're in the queue!", 'queue');
-      // Admin kicked an active Solana beam — cancel on-chain so remaining USDC returns
-      if (old.status === 'active' && booking.status === 'expired' && booking.payment_method === 'solana' && booking.stream_id) {
-        cancelSolanaStream(booking);
-      }
+      // Admin kicked an active Solana beam: kickBeam already ran settle_beam
+      // on-chain, so the PDA is closed and the viewer's pro-rata refund has
+      // already landed. No client-side follow-up is needed.
     });
     prevMyBookingsRef.current = myBookings;
   }, [myBookings]);
@@ -755,7 +757,7 @@ function OverlayContent() {
   }
 };
 
-  // ── Solana / Streamflow booking ────────────────────────────────────────────
+  // ── Solana / CASI escrow booking ────────────────────────────────────────────
   const submitSolanaBooking = async () => {
     const effectiveSolImageUrl    = uploadMode === 'upload' ? uploadedUrl    : imageUrl;
     const effectiveSolStoragePath = uploadMode === 'upload' ? uploadedPath   : null;
@@ -778,7 +780,7 @@ function OverlayContent() {
     await supabase.from('bookings').update({ status: 'denied' })
       .eq('profile_id', profile.id).eq('element_id', selectedSlot.id)
       .eq('viewer_name', savedViewerName).eq('status', 'pending')
-      .eq('payment_method', 'solana').is('stream_id', null);
+      .eq('payment_method', 'solana').is('escrow_pda', null);
 
     // Duplicate check
     if (!isExtend) {
@@ -822,27 +824,25 @@ function OverlayContent() {
     setTxStatus('streaming');
 
     try {
-      // Dynamic import keeps Streamflow out of the initial bundle
-      const { SolanaStreamClient, getBN, ICluster } = await import('@streamflow/stream');
-      const { Connection, PublicKey }               = await import('@solana/web3.js');
+      const { Connection, PublicKey } = await import('@solana/web3.js');
 
-      const usdcDecimals = 6;
+      const usdcDecimals    = 6;
       const durationMinutes = durationSeconds / 60;
-      const totalUsdc    = selectedSlot.price_unit === 'min'
+      const totalUsdc       = selectedSlot.price_unit === 'min'
         ? selectedSlot.price_value * durationMinutes
         : selectedSlot.price_value * (durationMinutes / 60);
 
-      // ── Pre-flight: verify viewer has a USDC ATA with enough balance ──────
+      // ── Pre-flight: verify viewer has SOL + a USDC ATA with enough balance ──
       const connection = new Connection(RPC_DEVNET);
 
-      // 1. SOL balance — Streamflow creates escrow + metadata accounts on-chain.
-      //    Needs ~0.02 SOL for rent + fees. Without any SOL, simulation fails
-      //    with AccountNotFound (fee payer checked before program runs).
+      // SOL: initialize_escrow creates both the EscrowState PDA and a PDA-owned
+      // vault ATA (~2× rent) plus a signature fee. Empirically ~0.003 SOL on
+      // devnet — we require 0.01 for safety margin.
       const solLamports = await connection.getBalance(publicKey);
-      const MIN_SOL = 0.001 * 1e9; // 0.001 SOL minimum — Streamflow needs rent for escrow accounts
+      const MIN_SOL     = 0.01 * 1e9;
       if (solLamports < MIN_SOL) {
         showNotif(
-          `Need devnet SOL for fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.quicknode.com/solana/devnet`,
+          `Need devnet SOL for rent + fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.quicknode.com/solana/devnet`,
           'denied',
         );
         await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
@@ -850,14 +850,11 @@ function OverlayContent() {
         return;
       }
 
-      // 2. USDC ATA on devnet using the exact mint Streamflow uses.
-      //    Note: if Phantom is in Testnet Mode the 20 USDC shown is testnet —
-      //    switch Phantom back to Devnet and re-mint from spl-token-faucet.vercel.app
+      // USDC ATA balance check.
       const { value: tokenAccounts } = await connection.getParsedTokenAccountsByOwner(
         publicKey,
         { mint: new PublicKey(USDC_DEVNET) },
       );
-
       if (tokenAccounts.length === 0) {
         showNotif(
           'No devnet USDC found (mint 4zMMC9…DU). Switch Phantom to Devnet then mint at spl-token-faucet.vercel.app',
@@ -867,10 +864,8 @@ function OverlayContent() {
         setSubmitting(false);
         return;
       }
-
       const usdcBalance: number =
         tokenAccounts[0].account.data.parsed.info.tokenAmount.uiAmount ?? 0;
-
       if (usdcBalance < totalUsdc) {
         showNotif(
           `Insufficient USDC: you have ${usdcBalance.toFixed(2)}, need ${totalUsdc.toFixed(2)}`,
@@ -880,142 +875,62 @@ function OverlayContent() {
         setSubmitting(false);
         return;
       }
-
       console.log('[solana] pre-flight passed — SOL:', (solLamports / 1e9).toFixed(4), 'USDC:', usdcBalance);
-      // ─────────────────────────────────────────────────────────────────────
+      // ──────────────────────────────────────────────────────────────────────
 
-      // ── Casi 5% platform fee ─────────────────────────────────────────────
-      // Transfer 5% of totalUsdc to the Casi fee wallet before creating the stream.
-      // The stream is created with the remaining 95%.
-      // If the fee transfer fails, we abort to protect the viewer's funds.
-      const casiFeeWallet = process.env.NEXT_PUBLIC_CASI_FEE_WALLET;
-      let streamAmount = totalUsdc;
-      if (casiFeeWallet) {
-        try {
-          const { Transaction } = await import('@solana/web3.js');
-          const { createTransferInstruction, getAssociatedTokenAddress } = await import('@solana/spl-token');
-          const mint = new PublicKey(USDC_DEVNET);
-          const feeWalletPk = new PublicKey(casiFeeWallet);
-          const feeAmountRaw = Math.round(totalUsdc * 0.05 * 10 ** usdcDecimals);
-          const viewerAta = tokenAccounts[0].pubkey;
-          const feeAta = await getAssociatedTokenAddress(mint, feeWalletPk);
+      // Lock full amount in the CASI escrow PDA. The 5 % fee is deducted
+      // on-chain at settlement (approve_flash / settle_beam), never here —
+      // no separate fee transaction is required.
+      const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+      if (!signTransaction) throw new Error('Wallet missing signTransaction');
+      const anchorWallet = {
+        publicKey,
+        signTransaction,
+        signAllTransactions:
+          signAllTransactions ||
+          (async <T,>(txs: T[]) => {
+            const out: T[] = [];
+            for (const tx of txs) out.push((await signTransaction(tx as never)) as T);
+            return out;
+          }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
+      const client = new CasiEscrowClient(connection, anchorWallet, 'devnet');
 
-          const feeTx = new Transaction().add(
-            createTransferInstruction(viewerAta, feeAta, publicKey, feeAmountRaw),
-          );
-          feeTx.feePayer = publicKey;
-          feeTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+      const amountUsdcMicro = Math.round(totalUsdc * 10 ** usdcDecimals);
+      const durationSecsInt = Math.round(durationSeconds);
 
-          const signedFeeTx = await (wallet.adapter as any).signTransaction(feeTx);
-          const feeTxId = await connection.sendRawTransaction(signedFeeTx.serialize());
-          await connection.confirmTransaction(feeTxId, 'confirmed');
+      const { sig, escrowPda } = await client.initializeBeam({
+        escrowId:     newBooking.id,
+        streamer:     new PublicKey(profile.solana_wallet),
+        amountUsdc:   amountUsdcMicro,
+        durationSecs: durationSecsInt,
+      });
 
-          streamAmount = totalUsdc * 0.95;
-          console.log('[solana] platform fee sent:', feeTxId, '| stream amount:', streamAmount.toFixed(4), 'USDC');
-        } catch (feeErr: any) {
-          console.error('[solana] platform fee tx failed:', feeErr.message);
-          showNotif('Platform fee transfer failed. Booking cancelled.', 'denied');
-          await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
-          setSubmitting(false);
-          return;
-        }
-      } else {
-        console.warn('[solana] NEXT_PUBLIC_CASI_FEE_WALLET not set — fee skipped (devnet only)');
-      }
-      // ─────────────────────────────────────────────────────────────────────
+      // Persist on-chain state so the admin settle/cancel flows can rebuild
+      // the CPI accounts without re-fetching from chain.
+      await supabase.from('bookings').update({
+        tx_signature:  sig,
+        escrow_pda:    escrowPda,
+        viewer_wallet: publicKey.toBase58(),
+      }).eq('id', newBooking.id);
 
-      const client = new SolanaStreamClient(RPC_DEVNET, ICluster.Devnet);
-      // Add 30s buffer: by the time the tx is signed, propagated, and landed in
-      // a block the on-chain clock will have advanced past "now".  Streamflow
-      // rejects start timestamps that are already in the past (Custom error 112).
-      const streamStart = Math.floor(Date.now() / 1000) + 30;
-      const { txId, metadataId } = await client.create(
-        {
-          recipient:               profile.solana_wallet,
-          tokenId:                 USDC_DEVNET,
-          start:                   streamStart,
-          amount:                  getBN(streamAmount, usdcDecimals),
-          period:                  60,                                          // release every 60 s
-          amountPerPeriod:         getBN(streamAmount / durationMinutes, usdcDecimals),  // per minute
-          cliff:                   streamStart,                                 // must equal start when cliffAmount=0
-          cliffAmount:             getBN(0, usdcDecimals),
-          cancelableBySender:      true,
-          cancelableByRecipient:   true,   // allows streamer to cancel from admin if needed
-          transferableBySender:    false,
-          transferableByRecipient: false,
-          automaticWithdrawal:     true,
-          canTopup:                false,
-          name:                    `Casi Beam — ${savedViewerName}`,
-        },
-        { sender: wallet.adapter as any },
-      );
-
-      // Persist stream reference so the webhook and cancel flow can look it up
-      await supabase.from('bookings').update({ stream_id: metadataId, tx_signature: txId })
-        .eq('id', newBooking.id);
-
-      setConfirmedTxId(txId);
-      refreshWalletNav(); // reflect new USDC balance immediately
+      setConfirmedTxId(sig);
+      refreshWalletNav();
       setTxStatus('waiting');
-      showNotif('◎ Payment sent — awaiting streamer approval!', 'success');
+      showNotif('◎ Payment locked — awaiting streamer approval!', 'success');
       setShowConfirmModal(false);
       closeSlot();
       if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
-    } catch (err: any) {
-      // Extract simulation logs from SendTransactionError before logging
-      let simLogs: string[] = [];
-      if (typeof err?.getLogs === 'function') {
-        simLogs = await err.getLogs().catch(() => []);
-      }
-      console.error('Streamflow error:', err?.message, '\nSim logs:', simLogs);
+    } catch (err: unknown) {
+      const { formatEscrowError, isUserRejection } = await import('@/lib/casi-errors');
+      console.error('[solana beam] initializeBeam failed:', err);
 
-      const msg: string = err?.message ?? '';
-      const logs = simLogs.join(' ');
-
-      // ── AlreadyProcessed: tx landed but SDK timed out on confirmation ─────
-      // The stream IS created on-chain and USDC IS locked in escrow.
-      // Recover the signature from the wallet's most recent transaction.
-      if (msg.includes('AlreadyProcessed')) {
-        try {
-          // Connection is a dynamic import inside the try block — re-import here
-          const { Connection: RC } = await import('@solana/web3.js');
-          const recoveryConn = new RC(RPC_DEVNET, 'confirmed');
-          const recent = await recoveryConn.getSignaturesForAddress(publicKey, { limit: 3 });
-          const landed = recent.find(s => !s.err);
-          if (landed) {
-            await supabase.from('bookings')
-              .update({ tx_signature: landed.signature })
-              .eq('id', newBooking.id);
-            showNotif('◎ Payment sent — awaiting streamer approval!', 'success');
-            closeSlot();
-            if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
-            setSubmitting(false);
-            return;
-          }
-        } catch (recErr) {
-          console.error('[solana] AlreadyProcessed recovery failed', recErr);
-        }
-        // Recovery failed — warn user not to retry or they'll double-pay
-        showNotif('Payment likely went through — check your wallet before trying again', 'pending');
-        await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
-        setSubmitting(false);
-        return;
-      }
-
-      // Map other on-chain errors to actionable messages
-      let userMsg = 'Solana payment failed — please try again';
-
-      if (msg.includes('AccountNotFound') || logs.includes('AccountNotFound')) {
-        userMsg = 'USDC token account not found on devnet. Get USDC at spl-token-faucet.vercel.app';
-      } else if (msg.includes('Custom(112)') || logs.includes('timestamps are invalid') || logs.includes('Custom(112)')) {
-        userMsg = 'Stream timestamp error — please try again';
-      } else if (msg.includes('insufficient funds') || logs.includes('0x1')) {
-        userMsg = 'Insufficient USDC balance in your wallet';
-      } else if (msg.includes('User rejected') || msg.includes('rejected the request')) {
-        userMsg = 'Transaction rejected in wallet';
-      } else if (msg.includes('Blockhash not found')) {
-        userMsg = 'Transaction expired — please try again';
-      }
+      // Surface CasiError codes via the shared formatter; fall back to the
+      // generic "payment failed" message so the UI never shows raw RPC noise.
+      const userMsg = isUserRejection(err)
+        ? 'Transaction rejected in wallet'
+        : formatEscrowError(err);
 
       await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
       setTxStatus('error'); setTxError(userMsg);
@@ -1025,21 +940,81 @@ function OverlayContent() {
     setSubmitting(false);
   };
 
-  const cancelSolanaStream = async (booking: any) => {
-    if (!wallet?.adapter) return;
+  /**
+   * Build the CasiEscrowClient once — used by both the live-beam "end early"
+   * (settle_beam) and the denied-beam "recover USDC" (cancel_escrow) flows.
+   * Returns null if the wallet isn't ready to sign.
+   */
+  const buildViewerCasiClient = async () => {
+    if (!publicKey || !signTransaction) return null;
+    const { Connection } = await import('@solana/web3.js');
+    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const anchorWallet = {
+      publicKey,
+      signTransaction,
+      signAllTransactions:
+        signAllTransactions ||
+        (async <T,>(txs: T[]) => {
+          const out: T[] = [];
+          for (const tx of txs) out.push((await signTransaction(tx as never)) as T);
+          return out;
+        }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    return new CasiEscrowClient(new Connection(RPC_DEVNET), anchorWallet, 'devnet');
+  };
+
+  /**
+   * Settle a live Solana beam via `settle_beam`. On-chain integer proration
+   * pays the streamer the vested portion and refunds the viewer the rest.
+   * Called when the viewer clicks "end early" on an active beam.
+   */
+  const settleSolanaBeam = async (booking: any) => {
+    if (!booking.escrow_pda || !booking.viewer_wallet || !profile?.solana_wallet) return;
     try {
-      const { SolanaStreamClient, ICluster } = await import('@streamflow/stream');
-      const client = new SolanaStreamClient(RPC_DEVNET, ICluster.Devnet);
-      await client.cancel({ id: booking.stream_id }, { invoker: wallet.adapter as any });
+      const client = await buildViewerCasiClient();
+      if (!client) throw new Error('Wallet not ready to sign');
+      const { PublicKey: PK } = await import('@solana/web3.js');
+      await client.settleBeam({
+        escrowId: booking.id,
+        viewer:   new PK(booking.viewer_wallet),
+        streamer: new PK(profile.solana_wallet),
+      });
     } catch (err) {
-      console.error('Streamflow cancel error:', err);
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      console.error('[beam] settleBeam failed:', err);
+      showNotif(formatEscrowError(err), 'denied');
+      return;
     }
-    // Clear stream_id so the "recover USDC" button disappears and booking hides from view
+    refreshWalletNav();
+    showNotif('◎ Beam ended — refund returned to your wallet', 'warning');
+    if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+  };
+
+  /**
+   * Reclaim USDC from a pending / denied beam via `cancel_escrow`. Only works
+   * while the beam is in Pending status on-chain (streamer has not called
+   * start_beam). Called when the viewer clicks "recover USDC" on a denied
+   * booking whose PDA still holds funds.
+   */
+  const reclaimSolanaEscrow = async (booking: any) => {
+    if (!booking.escrow_pda) return;
+    try {
+      const client = await buildViewerCasiClient();
+      if (!client) throw new Error('Wallet not ready to sign');
+      await client.cancelEscrow({ escrowId: booking.id });
+    } catch (err) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      console.error('[beam] cancelEscrow failed:', err);
+      showNotif(formatEscrowError(err), 'denied');
+      return;
+    }
+    // PDA is closed — hide the booking from the viewer's list.
     await supabase.from('bookings')
-      .update({ status: 'denied', stream_id: null })
+      .update({ status: 'denied', escrow_pda: null })
       .eq('id', booking.id);
-    refreshWalletNav(); // unvested USDC returned — update balance immediately
-    showNotif('◎ Stream cancelled — unvested USDC returned to your wallet', 'warning');
+    refreshWalletNav();
+    showNotif('◎ USDC returned to your wallet', 'warning');
     if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
   };
   // ──────────────────────────────────────────────────────────────────────────
@@ -1058,10 +1033,10 @@ function OverlayContent() {
   // For booking form accent: extend=yellow, queue/rent=skin accent
   const accentColor    = isExtend ? '#eab308' : tc;
   const accentColorRgb = isExtend ? '234, 179, 8' : tcRgb;
-  // Keep denied Solana bookings visible if stream_id is set — viewer may need to
-  // manually cancel to recover unvested USDC (e.g. if wallet was disconnected at denial time)
+  // Keep denied Solana bookings visible if their escrow PDA still holds funds
+  // — the viewer may need to click "recover USDC" to reclaim from chain.
   const visibleMyBookings = myBookings.filter((b:any) =>
-    b.status !== 'denied' || (b.payment_method === 'solana' && b.stream_id),
+    b.status !== 'denied' || (b.payment_method === 'solana' && b.escrow_pda),
   );
 
   if (loading) return null;
@@ -1224,16 +1199,18 @@ function OverlayContent() {
                       {isLive && (
   <button className="cancel-btn" onClick={async () => {
     if (booking.payment_method === 'solana') {
-      await cancelSolanaStream(booking);          // cancel on-chain
+      // settle_beam pays streamer the vested portion on-chain and refunds
+      // the viewer the rest in a single tx. DB is updated after to advance
+      // the queue; settleSolanaBeam already surfaces its own toast on error.
+      await settleSolanaBeam(booking);
       await clientExpireBooking(activeBooking);   // clear slot + advance queue
-      showNotif('Beam ended — remaining USDC returned', 'warning');
     } else {
       await fetch('/api/stripe/end-early', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ booking_id: booking.id }),
       });
-      await clientExpireBooking(activeBooking);   // clear slot + advance queue
+      await clientExpireBooking(activeBooking);
       showNotif('Beam ended — prorated refund issued', 'warning');
     }
   }}>
@@ -1245,9 +1222,9 @@ function OverlayContent() {
                           {cancelling===booking.id?'…':'✕ cancel'}
                         </button>
                       )}
-                      {booking.status === 'denied' && booking.payment_method === 'solana' && booking.stream_id && (
+                      {booking.status === 'denied' && booking.payment_method === 'solana' && booking.escrow_pda && (
                         <button className="cancel-btn" style={{ color: '#c084fc', borderColor: 'rgba(192,132,252,0.3)' }}
-                          onClick={() => cancelSolanaStream(booking)}>
+                          onClick={() => reclaimSolanaEscrow(booking)}>
                           ◎ recover USDC
                         </button>
                       )}
@@ -1522,7 +1499,7 @@ function OverlayContent() {
                 ) : connected ? (
                   <div style={{ color:'#555', fontSize:10, marginTop:6 }}>Fetching balance…</div>
                 ) : (
-                  <div style={{ color:'#555', fontSize:10, marginTop:6 }}>Connect wallet to pay with USDC via Streamflow</div>
+                  <div style={{ color:'#555', fontSize:10, marginTop:6 }}>Connect wallet to pay with USDC on-chain</div>
                 )}
               </div>
               )}
@@ -1570,7 +1547,7 @@ function OverlayContent() {
                       )}
                       {submitting?'Sending…':isExtend?'Extend':isFreeSlot?'Send Free Request':isQueue?'Join Queue':'Send Request'}
                     </button>
-                    {/* ── Solana / Streamflow (hidden for free slots) ── */}
+                    {/* ── Solana / CASI escrow (hidden for free slots) ── */}
                     {!isFreeSlot && (
                       <button
                         disabled={connecting || submitting || (connected && !canSubmit)}
@@ -1655,7 +1632,7 @@ function OverlayContent() {
               </a>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:20 }}>
                 <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', color:'#888' }}>Powered by</span>
-                {/* Streamflow logo — keep SVG purple, no wrapper opacity */}
+                {/* CASI escrow — on-chain Solana program */}
                 <svg width="14" height="14" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <defs>
                     <linearGradient id="sf-grad" x1="0" y1="0" x2="1" y2="1">
@@ -1667,7 +1644,7 @@ function OverlayContent() {
                   <path d="M15 50 Q50 30 85 50 Q50 70 15 50Z" fill="url(#sf-grad)" opacity="0.75"/>
                   <path d="M15 70 Q50 50 85 70 Q50 90 15 70Z" fill="url(#sf-grad)" opacity="0.5"/>
                 </svg>
-                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', color:'#888' }}>Streamflow</span>
+                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', color:'#888' }}>Solana</span>
               </div>
             </div>
           )}

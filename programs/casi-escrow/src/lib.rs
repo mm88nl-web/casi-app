@@ -120,8 +120,10 @@ pub mod casi_escrow {
         let total = ctx.accounts.escrow_state.total_amount;
         let bump  = ctx.accounts.escrow_state.bump;
 
-        let fee          = total * FEE_BPS / 10_000;
-        let streamer_amt = total - fee;
+        // Use u128 for the intermediate product to eliminate any overflow risk
+        // on large USDC amounts. Division is exact on u128 -> u64 (bps ≤ 10_000).
+        let fee          = ((total as u128) * (FEE_BPS as u128) / 10_000) as u64;
+        let streamer_amt = total.checked_sub(fee).ok_or(CasiError::MathOverflow)?;
 
         let signer_seeds: &[&[u8]] = &[ESCROW_SEED, escrow_id.as_ref(), &[bump]];
         let signer = &[signer_seeds];
@@ -295,17 +297,23 @@ pub mod casi_escrow {
         );
 
         let now      = Clock::get()?.unix_timestamp;
-        let elapsed  = (now - ctx.accounts.escrow_state.start_timestamp).max(0) as u64;
+        let start_ts = ctx.accounts.escrow_state.start_timestamp;
+        // Sanity: `now` should never precede `start_ts` on a well-formed chain,
+        // but we clamp to 0 defensively (vesting clock can't run backwards).
+        let elapsed  = now.saturating_sub(start_ts).max(0) as u64;
         let duration = ctx.accounts.escrow_state.duration_secs;
         let total    = ctx.accounts.escrow_state.total_amount;
         let bump     = ctx.accounts.escrow_state.bump;
 
-        // Integer proration — no floating point on Solana
-        let vested_ticks  = elapsed.min(duration);
-        let gross_vested  = total.checked_mul(vested_ticks).unwrap().checked_div(duration).unwrap();
-        let refund        = total - gross_vested;
-        let fee           = gross_vested * FEE_BPS / 10_000;
-        let streamer_amt  = gross_vested - fee;
+        require!(duration > 0, CasiError::InvalidDuration);
+
+        // Integer proration with u128 intermediate to eliminate overflow risk.
+        // worst case: u64::MAX * u64::MAX = u128::MAX / 4, well within u128 range.
+        let vested_ticks = elapsed.min(duration);
+        let gross_vested = ((total as u128) * (vested_ticks as u128) / (duration as u128)) as u64;
+        let refund       = total.checked_sub(gross_vested).ok_or(CasiError::MathOverflow)?;
+        let fee          = ((gross_vested as u128) * (FEE_BPS as u128) / 10_000) as u64;
+        let streamer_amt = gross_vested.checked_sub(fee).ok_or(CasiError::MathOverflow)?;
 
         ctx.accounts.escrow_state.status = EscrowStatus::Settled;
 
@@ -804,4 +812,6 @@ pub enum CasiError {
     WrongEscrowType,
     #[msg("Fee wallet address does not match the hardcoded CASI treasury")]
     InvalidFeeWallet,
+    #[msg("Arithmetic overflow or underflow")]
+    MathOverflow,
 }

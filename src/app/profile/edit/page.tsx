@@ -408,7 +408,7 @@ export default function ProfileEditPage() {
                       : 'Connect a Solana wallet to accept SOL payments'}
                   </div>
                   <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#444' }}>
-                    {solanaWallet ? 'Viewers can pay via Streamflow USDC streams' : 'Optional — Stripe payments always work without this'}
+                    {solanaWallet ? 'Viewers can pay with USDC on-chain' : 'Optional — Stripe payments always work without this'}
                   </div>
                 </div>
                 {walletConnected && publicKey ? (

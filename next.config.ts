@@ -32,14 +32,14 @@ const nextConfig: NextConfig = {
               "media-src 'self' blob: https:",
 
               // Fetch / WebSocket: Supabase REST & Realtime, Solana RPC,
-              // Streamflow, Helius, Stripe.
+              // Helius, Stripe.
               "connect-src 'self' https: wss:",
 
               // Stripe Checkout is opened in a new tab (window.location.href),
               // but Stripe.js may render an iframe for some flows.
               "frame-src 'self' https://js.stripe.com https://connect.stripe.com",
 
-              // Web Workers spun up by wallet adapters / Streamflow.
+              // Web Workers spun up by wallet adapters.
               "worker-src 'self' blob:",
 
               // Block plugins (Flash, etc.) entirely.
