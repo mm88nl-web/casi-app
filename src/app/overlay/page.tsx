@@ -152,6 +152,16 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
             </div>
           )}
           <div style={{ borderTop:'1px solid #1c1c1c', margin:'10px 0' }} />
+          {/* Fee breakdown */}
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#555', marginBottom:5 }}>
+            <span>@{username} receives</span>
+            <span style={{ color:'#e8e8e8' }}>{(parseFloat(estimatedCost) * 0.95).toFixed(2)} USDC <span style={{ color:'#6ee7b7' }}>(95%)</span></span>
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#555', marginBottom:8 }}>
+            <span>CASI maintenance fee</span>
+            <span style={{ color:'#e8e8e8' }}>{(parseFloat(estimatedCost) * 0.05).toFixed(2)} USDC <span style={{ color:'#888' }}>(5%)</span></span>
+          </div>
+          <div style={{ borderTop:'1px solid #1a1a1a', margin:'6px 0 8px' }} />
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666' }}>
             <span>Total</span>
             <span style={{ fontSize:18, fontWeight:800, color:'#9945FF' }}>{estimatedCost} USDC</span>
@@ -233,7 +243,7 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
 }
 
 /* ── Flash Feed (OBS overlay) ────────────────────────────────────────────── */
-type FlashItem = { id: string; viewer_name: string; message: string; amount_cents: number; enteredAt: number };
+type FlashItem = { id: string; viewer_name: string; message: string; amount_cents: number; enteredAt: number; tx_signature?: string | null };
 
 function FlashFeed({ profileId }: { profileId: string }) {
   const [items, setItems] = useState<FlashItem[]>([]);
@@ -245,7 +255,7 @@ function FlashFeed({ profileId }: { profileId: string }) {
     const since = new Date(Date.now() - DISPLAY_MS).toISOString();
     supabase
       .from('flashes')
-      .select('id, viewer_name, message, amount_cents')
+      .select('id, viewer_name, message, amount_cents, tx_signature')
       .eq('profile_id', profileId)
       .eq('status', 'approved')
       .gte('created_at', since)
@@ -266,11 +276,12 @@ function FlashFeed({ profileId }: { profileId: string }) {
             setItems(prev => {
               const n = payload.new as Record<string, unknown>;
               const item: FlashItem = {
-                id:           n.id as string,
-                viewer_name:  n.viewer_name as string,
-                message:      n.message as string,
-                amount_cents: n.amount_cents as number,
-                enteredAt:    Date.now(),
+                id:            n.id as string,
+                viewer_name:   n.viewer_name as string,
+                message:       n.message as string,
+                amount_cents:  n.amount_cents as number,
+                tx_signature:  n.tx_signature as string | null | undefined,
+                enteredAt:     Date.now(),
               };
               return [...prev.filter(f => f.id !== item.id), item].slice(-5);
             });
@@ -309,6 +320,12 @@ function FlashFeed({ profileId }: { profileId: string }) {
             <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 14, fontWeight: 600, color: '#0d0d0d', lineHeight: 1.45, margin: 0 }}>
               {flash.message}
             </p>
+            {flash.tx_signature && (
+              <a href={`https://solscan.io/tx/${flash.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'inline-block', marginTop: 6, fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none', opacity: 0.7, pointerEvents: 'auto' }}>
+                ↗ verify on Solscan
+              </a>
+            )}
           </div>
         </div>
       ))}
@@ -396,12 +413,18 @@ function SendFlashSection({ profileId, username, viewerName, showNotif, profile 
 
           {/* Live status feedback */}
           {myFlash?.status === 'approved' && (
-            <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4ade80' }}>
+            <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4ade80', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
               ✓ Your flash is live on stream!
+              {myFlash.tx_signature && (
+                <a href={`https://solscan.io/tx/${myFlash.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'block', marginTop: 4, fontSize: 9, color: '#9945FF', textDecoration: 'none', opacity: 0.8 }}>
+                  ↗ verify on Solscan
+                </a>
+              )}
             </div>
           )}
           {myFlash?.status === 'denied' && (
-            <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#f87171' }}>
+            <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#f87171', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
               ✕ Flash was not approved — no charge.
             </div>
           )}
@@ -453,8 +476,9 @@ function SendFlashSection({ profileId, username, viewerName, showNotif, profile 
             {submitting ? 'Redirecting…' : `Pay €${(amountCents / 100).toFixed(2)} & Flash`}
           </button>
 
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#2a2a2a', textAlign: 'center', marginTop: 10, lineHeight: 1.7 }}>
-            Payment held until streamer approves · Fully refunded if denied
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#2a2a2a', textAlign: 'center', marginTop: 10, lineHeight: 1.9 }}>
+            Payment held until streamer approves · Fully refunded if denied<br />
+            <span style={{ color: '#444' }}>95% → @{username} · 5% CASI maintenance fee</span>
           </div>
         </div>
       )}
@@ -1193,15 +1217,16 @@ function OverlayContent() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:.2} }
-        @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes blink     { 0%,100%{opacity:1} 50%{opacity:.2} }
+        @keyframes fadeIn    { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes springPop { from{opacity:0;transform:scale(0.88) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
         .ov { min-height:100vh; background:${isOBS?'transparent':'var(--casi-bg)'}; color:var(--casi-text); font-family:'Syne',sans-serif; }
 
         .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid var(--casi-surface); background:color-mix(in srgb,var(--casi-bg) 94%,transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
         .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; }
         .ov-wm { font-size:18px; font-weight:800; color:var(--casi-accent); letter-spacing:-0.5px; }
         .ov-nav-right { display:flex; align-items:center; gap:10px; }
-        .notif { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:fadeIn .3s ease; white-space:nowrap; max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+        .notif { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:springPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
         .viewer-chip { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.04); border:1px solid var(--casi-border); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
         .viewer-chip:hover { border-color:#333; }
         .vdot { width:6px; height:6px; border-radius:50%; background:var(--casi-accent); animation:blink 1.5s infinite; flex-shrink:0; }

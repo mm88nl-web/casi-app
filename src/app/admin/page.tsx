@@ -1368,8 +1368,19 @@ export default function AdminStudio() {
                           <span className="tag t-dim">{flash.payment_method}</span>
                         </div>
                         <div className="req-msg">"{flash.message}"</div>
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', marginTop: 6 }}>
-                          {new Date(flash.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', marginTop: 6, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          <span>{new Date(flash.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          {paid && (
+                            <span style={{ color: '#4ade80' }}>
+                              You receive €{((flash.amount_cents / 100) * 0.95).toFixed(2)} · CASI fee €{((flash.amount_cents / 100) * 0.05).toFixed(2)}
+                            </span>
+                          )}
+                          {flash.tx_signature && (
+                            <a href={`https://solscan.io/tx/${flash.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                              style={{ color: '#9945FF', textDecoration: 'none', fontSize: 10 }}>
+                              ↗ Solscan
+                            </a>
+                          )}
                         </div>
                       </div>
                       <div className="req-actions">
@@ -1408,7 +1419,13 @@ export default function AdminStudio() {
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)', marginBottom: 4 }}>{booking.viewer_name}</div>
-                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 6 }}>${booking.price_value}/{booking.price_unit} · {fmtDuration(booking.duration_minutes)}</div>
+                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span>${booking.price_value}/{booking.price_unit} · {fmtDuration(booking.duration_minutes)}</span>
+                              {booking.tx_signature && (
+                                <a href={`https://solscan.io/tx/${booking.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                                  style={{ color: '#9945FF', textDecoration: 'none', fontSize: 10 }}>↗ Solscan</a>
+                              )}
+                            </div>
                             {booking.message && <div className="req-msg">"{booking.message}"</div>}
                             {queueForSlot.length > 0 && (
                               <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
@@ -1503,6 +1520,12 @@ export default function AdminStudio() {
                             <span className="tag t-cyan">{fmtDuration(booking.duration_minutes)}</span>
                           </div>
                           {booking.message && <div className="req-msg">"{booking.message}"</div>}
+                          {booking.tx_signature && (
+                            <div style={{ marginTop: 5 }}>
+                              <a href={`https://solscan.io/tx/${booking.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                                style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none' }}>↗ Solscan</a>
+                            </div>
+                          )}
                         </div>
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
@@ -1532,6 +1555,12 @@ export default function AdminStudio() {
                             <span className="tag t-green">${calcTotal(booking)} total</span>
                           </div>
                           {booking.message && <div className="req-msg">"{booking.message}"</div>}
+                          {booking.tx_signature && (
+                            <div style={{ marginTop: 5 }}>
+                              <a href={`https://solscan.io/tx/${booking.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                                style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none' }}>↗ Solscan</a>
+                            </div>
+                          )}
                         </div>
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
