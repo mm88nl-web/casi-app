@@ -19,6 +19,33 @@ function Logo({ scale = 0.32, color = '#F58220', bg = '#050505' }: { scale?: num
   );
 }
 
+function FreeToggleRow({
+  label, hint, checked, onChange, tc,
+}: { label: string; hint: string; checked: boolean; onChange: (v: boolean) => void; tc: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 10px' }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#e8e8e8', marginBottom: 2 }}>{label}</div>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', lineHeight: 1.5 }}>{hint}</div>
+      </div>
+      <button type="button" onClick={() => onChange(!checked)} role="switch" aria-checked={checked}
+        style={{
+          flexShrink: 0, width: 42, height: 24, borderRadius: 12,
+          background: checked ? tc : '#1c1c1c',
+          border: `1px solid ${checked ? tc : '#222'}`,
+          position: 'relative', cursor: 'pointer', transition: 'all .2s',
+        }}>
+        <span style={{
+          position: 'absolute', top: 2, left: checked ? 20 : 2,
+          width: 18, height: 18, borderRadius: '50%',
+          background: checked ? '#050505' : '#555',
+          transition: 'left .2s cubic-bezier(0.34,1.56,0.64,1)',
+        }} />
+      </button>
+    </div>
+  );
+}
+
 const THEME_PRESETS = [
   { name: 'Casi Orange',   color: '#F58220' },
   { name: 'Twitch Purple', color: '#9146FF' },
@@ -50,6 +77,8 @@ export default function ProfileEditPage() {
   const [solanaWallet, setSolanaWallet]       = useState('');
   const [savingWallet, setSavingWallet]       = useState(false);
   const [walletSaved, setWalletSaved]         = useState(false);
+  const [allowFreeFlashes, setAllowFreeFlashes] = useState(false);
+  const [allowFreeBeams, setAllowFreeBeams]     = useState(false);
 
   const { wallet, publicKey, connected: walletConnected, connecting: walletConnecting, connect } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
@@ -89,6 +118,8 @@ export default function ProfileEditPage() {
         if (prof.theme_color) setThemeColor(prof.theme_color);
         if (prof?.stripe_account_id) setStripeConnected(true);
         if (prof?.solana_wallet) setSolanaWallet(prof.solana_wallet);
+        setAllowFreeFlashes(!!prof.allow_free_flashes);
+        setAllowFreeBeams(!!prof.allow_free_beams);
       }
       setLoading(false);
     };
@@ -104,6 +135,8 @@ export default function ProfileEditPage() {
       bio: bio || null,
       avatar_url: avatarValid ? avatarUrl : null,
       theme_color: themeColor,
+      allow_free_flashes: allowFreeFlashes,
+      allow_free_beams: allowFreeBeams,
     }).eq('id', profile.id);
     setSaving(false);
     if (err) { setError(err.message); return; }
@@ -399,6 +432,29 @@ export default function ProfileEditPage() {
                 )}
               </div>
               <div className="pe-hint">Connect your wallet here, then click Save to link it to your profile.</div>
+            </div>
+
+            {/* ── FREE TIER TOGGLES ── */}
+            <div className="pe-field" style={{ marginTop: 8 }}>
+              <label className="pe-label">Free tier <span style={{ color:'#333', textTransform:'none', fontSize:9 }}>— let viewers interact without paying</span></label>
+              <div style={{ background:'#0a0a0a', border:'1px solid #1c1c1c', borderRadius:10, padding:'6px 8px' }}>
+                <FreeToggleRow
+                  label="Allow free Flashes"
+                  hint="Viewers can send chat messages without paying. Rate-limited to 1/minute per viewer."
+                  checked={allowFreeFlashes}
+                  onChange={setAllowFreeFlashes}
+                  tc={tc}
+                />
+                <div style={{ height: 1, background: '#151515', margin: '0 10px' }} />
+                <FreeToggleRow
+                  label="Allow free Beams"
+                  hint="Viewers can request beam slots without paying. You still approve each one."
+                  checked={allowFreeBeams}
+                  onChange={setAllowFreeBeams}
+                  tc={tc}
+                />
+              </div>
+              <div className="pe-hint">Useful for demos and cold-start engagement. Toggle off any time.</div>
             </div>
 
             {error && <div className="pe-error">{error}</div>}
