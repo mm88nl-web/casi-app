@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Rnd } from 'react-rnd';
 import { useRouter } from 'next/navigation';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import { SKINS } from '@/lib/skins';
@@ -446,6 +446,11 @@ export default function AdminStudio() {
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [approvedQueued, setApprovedQueued] = useState<any[]>([]);
   const [pendingFlashes, setPendingFlashes] = useState<any[]>([]);
+  const [flashToast, setFlashToast] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null);
+  const showFlashToast = (text: string, kind: 'ok' | 'err' = 'ok') => {
+    setFlashToast({ text, kind });
+    setTimeout(() => setFlashToast(null), 5000);
+  };
   const [isReady, setIsReady] = useState(false);
   const [saveStatus, setSaveStatus] = useState('Ready');
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -463,7 +468,8 @@ export default function AdminStudio() {
   const supabase = useRef(createClient()).current;
 
   // Wallet hooks
-  const { wallet, connected: walletConnected, connecting: walletConnecting, connect, publicKey } = useWallet();
+  const { wallet, connected: walletConnected, connecting: walletConnecting, connect, publicKey, signTransaction, signAllTransactions } = useWallet();
+  const { connection: walletConnection } = useConnection();
   const { setVisible: setWalletModalVisible } = useWalletModal();
   const userInitiatedConnect = useRef(false);
   useEffect(() => {
@@ -783,24 +789,110 @@ export default function AdminStudio() {
   setQueuedBookings(prev => prev.filter(b => b.id !== id));
 };
 
-  const approveFlash = async (flash: any) => {
+  /**
+   * Build an AnchorWallet adapter shim for the CasiEscrowClient from the
+   * currently connected wallet-adapter wallet. Returns null if the wallet
+   * isn't ready to sign.
+   */
+  const buildAnchorWalletForEscrow = () => {
+    if (!publicKey || !signTransaction) return null;
+    return {
+      publicKey,
+      signTransaction,
+      signAllTransactions:
+        signAllTransactions ||
+        (async (txs: any[]) => {
+          const out = [];
+          for (const tx of txs) out.push(await signTransaction(tx));
+          return out;
+        }),
+    } as any;
+  };
+
+  /**
+   * Moderate a flash on the Solana rail: viewer-funded escrow PDA is settled
+   * by calling `approve_flash` or `deny_flash` on-chain, then the streamer's
+   * session tells the DB (/api/flashes/moderate) to flip status after
+   * server-side tx verification.
+   */
+  const moderateSolanaFlash = async (flash: any, action: 'approve' | 'deny') => {
+    const anchorWallet = buildAnchorWalletForEscrow();
+    if (!anchorWallet) {
+      openWalletModal();
+      throw new Error('Connect your streamer wallet');
+    }
+    if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
+      throw new Error('Connected wallet is not the streamer wallet on file');
+    }
+    if (!flash.viewer_wallet || !flash.escrow_pda) {
+      throw new Error('Flash is missing on-chain metadata');
+    }
+
+    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const { PublicKey: PK }    = await import('@solana/web3.js');
+    const client = new CasiEscrowClient(walletConnection, anchorWallet, 'devnet');
+
+    const viewerPk   = new PK(flash.viewer_wallet);
+    const streamerPk = publicKey!;
+
+    const { sig } =
+      action === 'approve'
+        ? await client.approveFlash({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk })
+        : await client.denyFlash   ({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk });
+
     const { data: { session } } = await supabase.auth.getSession();
-    await fetch('/api/flashes/moderate', {
+    const res = await fetch('/api/flashes/moderate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ flash_id: flash.id, action: 'approve' }),
+      body: JSON.stringify({ flash_id: flash.id, action, tx_signature: sig }),
     });
-    setPendingFlashes(prev => prev.filter(f => f.id !== flash.id));
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json?.error) throw new Error(json?.error || 'Server verification failed');
+    return sig;
+  };
+
+  const approveFlash = async (flash: any) => {
+    try {
+      if (flash.payment_method === 'solana') {
+        const sig = await moderateSolanaFlash(flash, 'approve');
+        showFlashToast(`⚡ Approved on-chain · ${sig.slice(0, 8)}…`, 'ok');
+      } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/flashes/moderate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ flash_id: flash.id, action: 'approve' }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Approve failed');
+        showFlashToast('⚡ Flash approved', 'ok');
+      }
+      setPendingFlashes(prev => prev.filter(f => f.id !== flash.id));
+    } catch (err: unknown) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showFlashToast(formatEscrowError(err), 'err');
+    }
   };
 
   const denyFlash = async (flash: any) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    await fetch('/api/flashes/moderate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ flash_id: flash.id, action: 'deny' }),
-    });
-    setPendingFlashes(prev => prev.filter(f => f.id !== flash.id));
+    try {
+      if (flash.payment_method === 'solana') {
+        const sig = await moderateSolanaFlash(flash, 'deny');
+        showFlashToast(`✕ Denied & refunded · ${sig.slice(0, 8)}…`, 'ok');
+      } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/flashes/moderate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ flash_id: flash.id, action: 'deny' }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Deny failed');
+        showFlashToast('✕ Flash denied', 'ok');
+      }
+      setPendingFlashes(prev => prev.filter(f => f.id !== flash.id));
+    } catch (err: unknown) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showFlashToast(formatEscrowError(err), 'err');
+    }
   };
 
   const kickBeam = useCallback(async (booking: any) => {
@@ -889,6 +981,10 @@ export default function AdminStudio() {
         body { background: var(--casi-bg); }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
         @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:.2} }
+        @keyframes springPop { from{opacity:0;transform:scale(0.88) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+        .flash-toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:9999; padding:12px 20px; border-radius:10px; font-family:'DM Mono',monospace; font-size:11px; letter-spacing:1px; max-width:420px; animation:springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both; }
+        .flash-toast-ok  { background:rgba(74,222,128,0.1); border:1px solid rgba(74,222,128,0.3); color:#4ade80; }
+        .flash-toast-err { background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); color:#f87171; }
 
         .sw { min-height:100vh; background:var(--casi-bg); color:var(--casi-text); font-family:'Syne',sans-serif; display:flex; flex-direction:column; }
 
@@ -2049,6 +2145,12 @@ export default function AdminStudio() {
         </div>
 
       </div>
+
+      {flashToast && (
+        <div className={`flash-toast flash-toast-${flashToast.kind}`} role="status">
+          {flashToast.text}
+        </div>
+      )}
     </>
   );
 }

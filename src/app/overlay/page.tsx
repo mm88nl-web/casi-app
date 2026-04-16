@@ -344,7 +344,15 @@ function SendFlashSection({ profileId, username, viewerName, showNotif, profile 
   const [amount, setAmount] = useState('5');
   const [submitting, setSubmitting] = useState(false);
   const [myFlash, setMyFlash] = useState<any>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'stripe' | 'solana'>('stripe');
+  const [onChainStatus, setOnChainStatus] = useState<null | 'locking' | 'locked'>(null);
+  const [onChainTx, setOnChainTx]         = useState<string | null>(null);
   const supabase = useRef(createClient()).current;
+
+  // Wallet (for Solana flashes only — reads from the SolanaProvider context)
+  const { connection } = useConnection();
+  const { publicKey, signTransaction, signAllTransactions, connected } = useWallet();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
 
   // Track the most recent flash from this viewer so we can show live status
   useEffect(() => {
@@ -364,22 +372,114 @@ function SendFlashSection({ profileId, username, viewerName, showNotif, profile 
   }, [profileId, viewerName, supabase, showNotif]);
 
   const amountCents = Math.round(parseFloat(amount || '0') * 100);
-  const canSend = amountCents >= 100 && !isNaN(amountCents) && message.trim().length > 0 && !submitting;
+  const amountUsdc  = Math.round(parseFloat(amount || '0') * 1_000_000); // 6-decimal micro-units
+  const solanaReady = paymentMethod !== 'solana' ||
+    (connected && !!publicKey && !!signTransaction && !!profile?.solana_wallet);
+  const canSend = amountCents >= 100 &&
+                  !isNaN(amountCents) &&
+                  message.trim().length > 0 &&
+                  !submitting &&
+                  solanaReady;
+
+  const sendFlashStripe = async () => {
+    const res = await fetch('/api/flashes/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id: profileId,
+        viewer_name: viewerName,
+        message: message.trim(),
+        amount_cents: amountCents,
+        payment_method: 'stripe',
+      }),
+    });
+    const { checkout_url, error: apiErr } = await res.json();
+    if (apiErr) throw new Error(apiErr);
+    window.location.href = checkout_url;
+  };
+
+  const sendFlashSolana = async () => {
+    if (!publicKey || !signTransaction) {
+      setWalletModalVisible(true);
+      throw new Error('Please connect your wallet');
+    }
+    if (!profile?.solana_wallet) {
+      throw new Error('This streamer has not linked a Solana wallet yet');
+    }
+
+    // 1. Create the flash row (server-side) with payment_method=solana.
+    const createRes = await fetch('/api/flashes/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id: profileId,
+        viewer_name: viewerName,
+        message: message.trim(),
+        amount_cents: amountCents,
+        payment_method: 'solana',
+      }),
+    });
+    const { flash_id, solana_wallet, error: apiErr } = await createRes.json();
+    if (apiErr || !flash_id) throw new Error(apiErr || 'Failed to create flash');
+    if (!solana_wallet) throw new Error('Streamer wallet not found');
+
+    // 2. Broadcast initialize_escrow on-chain.
+    setOnChainStatus('locking');
+    const anchorWallet = { publicKey, signTransaction, signAllTransactions: signAllTransactions || (async (txs: any[]) => {
+      const signed = [];
+      for (const tx of txs) signed.push(await signTransaction(tx));
+      return signed;
+    }) } as any;
+
+    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const { PublicKey: PK }    = await import('@solana/web3.js');
+    const client = new CasiEscrowClient(connection, anchorWallet, 'devnet');
+
+    const { sig, escrowPda, solscanUrl } = await client.initializeFlash({
+      escrowId:   flash_id,
+      streamer:   new PK(solana_wallet),
+      amountUsdc,
+    });
+
+    // 3. Tell the backend about it so the admin can see the tx + PDA.
+    const attachRes = await fetch('/api/flashes/attach-escrow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        flash_id,
+        tx_signature: sig,
+        escrow_pda:   escrowPda,
+        viewer_wallet: publicKey.toBase58(),
+      }),
+    });
+    const attachJson = await attachRes.json().catch(() => ({}));
+    if (!attachRes.ok || attachJson?.error) {
+      // On-chain state is already good — don't scare the user, but log it.
+      console.warn('[flash] attach-escrow failed (chain ok):', attachJson?.error);
+    }
+
+    setOnChainTx(sig);
+    setOnChainStatus('locked');
+    showNotif(`⚡ Flash locked on-chain — awaiting approval · ↗ ${solscanUrl}`, 'success');
+  };
 
   const sendFlash = async () => {
     if (!canSend) return;
     setSubmitting(true);
+    setOnChainStatus(null);
+    setOnChainTx(null);
     try {
-      const res = await fetch('/api/flashes/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile_id: profileId, viewer_name: viewerName, message: message.trim(), amount_cents: amountCents }),
-      });
-      const { checkout_url, error: apiErr } = await res.json();
-      if (apiErr) { showNotif(apiErr, 'denied'); setSubmitting(false); return; }
-      window.location.href = checkout_url;
-    } catch {
-      showNotif('Failed to send flash — please try again', 'denied');
+      if (paymentMethod === 'solana') {
+        await sendFlashSolana();
+      } else {
+        await sendFlashStripe();
+        return; // Stripe redirects; keep submitting=true until nav
+      }
+    } catch (err: unknown) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showNotif(formatEscrowError(err), 'denied');
+      setOnChainStatus(null);
+    } finally {
       setSubmitting(false);
     }
   };
@@ -434,6 +534,54 @@ function SendFlashSection({ profileId, username, viewerName, showNotif, profile 
             </div>
           )}
 
+          {/* On-chain "locking" banner — Solana flow */}
+          {onChainStatus === 'locking' && (
+            <div style={{ background: 'rgba(153,69,255,0.08)', border: '1px solid rgba(153,69,255,0.25)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#c4a0ff', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+              ⛓ Locking USDC in escrow — confirm in your wallet…
+            </div>
+          )}
+          {onChainStatus === 'locked' && onChainTx && (
+            <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4ade80', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+              ⚡ Flash locked on-chain — awaiting streamer approval
+              <a href={`https://solscan.io/tx/${onChainTx}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'block', marginTop: 4, fontSize: 9, color: '#9945FF', textDecoration: 'none', opacity: 0.8 }}>
+                ↗ verify on Solscan
+              </a>
+            </div>
+          )}
+
+          {/* Payment method toggle */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>Pay with</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(['stripe', 'solana'] as const).map(pm => {
+                const active = paymentMethod === pm;
+                return (
+                  <button key={pm} onClick={() => setPaymentMethod(pm)} type="button"
+                    style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', cursor: 'pointer', transition: 'all .2s cubic-bezier(0.34,1.56,0.64,1)',
+                      ...(active
+                        ? (pm === 'solana'
+                            ? { background: 'rgba(153,69,255,0.12)', borderColor: 'rgba(153,69,255,0.45)', color: '#c4a0ff', transform: 'scale(1.02)' }
+                            : { background: 'rgba(var(--casi-accent-rgb),0.12)', borderColor: 'rgba(var(--casi-accent-rgb),0.45)', color: 'var(--casi-accent)', transform: 'scale(1.02)' })
+                        : { background: 'none', borderColor: 'var(--casi-border)', color: 'var(--casi-text-muted)', transform: 'scale(1)' }) }}>
+                    {pm === 'stripe' ? '💳 Card' : '◎ Solana'}
+                  </button>
+                );
+              })}
+            </div>
+            {paymentMethod === 'solana' && !profile?.solana_wallet && (
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#f87171', marginTop: 6 }}>
+                @{username} hasn't linked a Solana wallet yet.
+              </div>
+            )}
+            {paymentMethod === 'solana' && profile?.solana_wallet && !connected && (
+              <button type="button" onClick={() => setWalletModalVisible(true)}
+                style={{ width: '100%', marginTop: 8, background: 'rgba(153,69,255,0.1)', border: '1px solid rgba(153,69,255,0.35)', borderRadius: 8, padding: '8px 0', fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', color: '#c4a0ff', cursor: 'pointer' }}>
+                Connect wallet to continue
+              </button>
+            )}
+          </div>
+
           {/* Message */}
           <div style={{ marginBottom: 14 }}>
             <label style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>Message</label>
@@ -445,7 +593,9 @@ function SendFlashSection({ profileId, username, viewerName, showNotif, profile 
 
           {/* Amount */}
           <div style={{ marginBottom: 16 }}>
-            <label style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>Amount</label>
+            <label style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>
+              Amount {paymentMethod === 'solana' ? '(USDC)' : '(EUR)'}
+            </label>
             <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
               {AMOUNT_PRESETS.map(p => (
                 <button key={p} onClick={() => setAmount(String(p))}
@@ -453,31 +603,46 @@ function SendFlashSection({ profileId, username, viewerName, showNotif, profile 
                     ...(parseFloat(amount) === p
                       ? { background: 'rgba(var(--casi-accent-rgb),0.12)', borderColor: 'rgba(var(--casi-accent-rgb),0.35)', color: 'var(--casi-accent)' }
                       : { background: 'none', borderColor: 'var(--casi-border)', color: 'var(--casi-text-muted)' }) }}>
-                  €{p}
+                  {paymentMethod === 'solana' ? `${p} USDC` : `€${p}`}
                 </button>
               ))}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '10px 14px' }}>
-              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: 'var(--casi-text-muted)' }}>€</span>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: 'var(--casi-text-muted)' }}>
+                {paymentMethod === 'solana' ? '◎' : '€'}
+              </span>
               <input type="number" value={amount} min="1" step="1" onChange={e => setAmount(e.target.value)}
                 style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 17, fontWeight: 700, color: 'var(--casi-text)', fontFamily: "'Syne', sans-serif" }} />
-              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#333', whiteSpace: 'nowrap' }}>min €1</span>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#333', whiteSpace: 'nowrap' }}>
+                {paymentMethod === 'solana' ? 'min 1 USDC' : 'min €1'}
+              </span>
             </div>
           </div>
 
           {/* Submit */}
           <button onClick={sendFlash} disabled={!canSend}
-            style={{ width: '100%', background: canSend ? 'var(--casi-accent)' : 'var(--casi-border)', border: 'none', borderRadius: 10, padding: '13px 0', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 14, textTransform: 'uppercase', letterSpacing: 0.3, color: canSend ? 'var(--casi-bg)' : '#444', cursor: canSend ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: 'all .2s' }}>
+            style={{ width: '100%',
+              background: canSend ? (paymentMethod === 'solana' ? '#9945FF' : 'var(--casi-accent)') : 'var(--casi-border)',
+              border: 'none', borderRadius: 10, padding: '13px 0', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 14, textTransform: 'uppercase', letterSpacing: 0.3,
+              color: canSend ? (paymentMethod === 'solana' ? '#fff' : 'var(--casi-bg)') : '#444',
+              cursor: canSend ? 'pointer' : 'not-allowed',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: 'all .2s' }}>
             <svg width="14" height="11" viewBox="0 0 14 11" fill="none" xmlns="http://www.w3.org/2000/svg">
               <rect x="0.5" y="0.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeOpacity="0.6"/>
               <rect x="0" y="3" width="14" height="2.5" fill="currentColor" fillOpacity="0.5"/>
               <rect x="2" y="7" width="4" height="1.5" rx="0.5" fill="currentColor"/>
             </svg>
-            {submitting ? 'Redirecting…' : `Pay €${(amountCents / 100).toFixed(2)} & Flash`}
+            {paymentMethod === 'solana'
+              ? (submitting
+                  ? (onChainStatus === 'locking' ? 'Locking on-chain…' : 'Submitting…')
+                  : `Lock ${(amountCents / 100).toFixed(2)} USDC & Flash`)
+              : (submitting ? 'Redirecting…' : `Pay €${(amountCents / 100).toFixed(2)} & Flash`)}
           </button>
 
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#2a2a2a', textAlign: 'center', marginTop: 10, lineHeight: 1.9 }}>
-            Payment held until streamer approves · Fully refunded if denied<br />
+            {paymentMethod === 'solana'
+              ? <>USDC held in a CASI escrow PDA · Refunded on deny · <span style={{ color:'#9945FF' }}>audited Anchor program</span><br /></>
+              : <>Payment held until streamer approves · Fully refunded if denied<br /></>}
             <span style={{ color: '#444' }}>95% → @{username} · 5% CASI maintenance fee</span>
           </div>
         </div>

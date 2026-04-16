@@ -40,27 +40,41 @@ import type { AnchorWallet } from '@solana/wallet-adapter-react';
 import IDL from '@/idl/casi_escrow.json';
 
 // ---------------------------------------------------------------------------
-// Constants — update after program deploy
+// Constants — sourced from NEXT_PUBLIC_* env vars with safe devnet fallbacks.
+// Run `node scripts/sync-program-id.mjs` after `anchor deploy` to populate
+// NEXT_PUBLIC_CASI_PROGRAM_ID in .env.local from target/idl/casi_escrow.json.
 // ---------------------------------------------------------------------------
 
-/** CASI Escrow program ID — replace with output of `anchor deploy`. */
+// Valid base58 sentinel (all-zero 32-byte pubkey = SystemProgram). Used when
+// NEXT_PUBLIC_CASI_PROGRAM_ID / NEXT_PUBLIC_CASI_FEE_WALLET are unset — keeps
+// the module loadable during dev/build without crashing on base58 validation.
+// Replaced after `anchor deploy` via scripts/sync-program-id.mjs.
+const DEFAULT_PROGRAM_ID   = '11111111111111111111111111111111';
+const DEFAULT_FEE_WALLET   = '11111111111111111111111111111111';
+const DEFAULT_USDC_DEVNET  = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+const DEFAULT_USDC_MAINNET = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+
+/** CASI Escrow program ID. Override via NEXT_PUBLIC_CASI_PROGRAM_ID. */
 export const PROGRAM_ID = new PublicKey(
-  'CASIesCRow1111111111111111111111111111111111',
+  process.env.NEXT_PUBLIC_CASI_PROGRAM_ID || DEFAULT_PROGRAM_ID,
 );
 
-/** CASI treasury — receives 5 % of every settled Flash / Beam. */
+/** CASI treasury — receives 5 % of every settled Flash / Beam.
+ *  Override via NEXT_PUBLIC_CASI_FEE_WALLET. Must match `fee_wallet::ID`
+ *  declared in programs/casi-escrow/src/lib.rs, otherwise approve_flash /
+ *  settle_beam will error with `InvalidFeeWallet`. */
 export const CASI_FEE_WALLET = new PublicKey(
-  'CASIFeeWaLLet1111111111111111111111111111111',
+  process.env.NEXT_PUBLIC_CASI_FEE_WALLET || DEFAULT_FEE_WALLET,
 );
 
 /** Devnet USDC mint (Circle test token). */
 export const USDC_MINT_DEVNET = new PublicKey(
-  '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+  process.env.NEXT_PUBLIC_USDC_MINT_DEVNET || DEFAULT_USDC_DEVNET,
 );
 
 /** Mainnet USDC mint. */
 export const USDC_MINT_MAINNET = new PublicKey(
-  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  process.env.NEXT_PUBLIC_USDC_MINT_MAINNET || DEFAULT_USDC_MAINNET,
 );
 
 /** SPL Token program (default). Use TOKEN_2022_PROGRAM_ID for Token-2022 mints. */
