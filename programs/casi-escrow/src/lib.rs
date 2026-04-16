@@ -1,16 +1,38 @@
+//! CASI Escrow Program
+//!
+//! Follows the audited SPL escrow template from solana-developers/program-examples
+//! (tokens/escrow/anchor) — uses `anchor_spl::token_interface` for Token-2022
+//! compatibility, `transfer_checked` for all SPL transfers, `InterfaceAccount`
+//! for token accounts and mints, and `has_one` constraints for relationship checks.
+//!
+//! Two escrow types:
+//!   Flash — viewer locks USDC; streamer approves (funds released) or denies (refund).
+//!   Beam  — viewer locks USDC; streamer starts a time-stream; anyone settles with
+//!           integer proration after the duration elapses.
+
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{self, CloseAccount, Mint, Token, TokenAccount, Transfer},
+    token_interface::{
+        close_account, transfer_checked, CloseAccount, Mint, TokenAccount, TokenInterface,
+        TransferChecked,
+    },
 };
 
 declare_id!("CASIesCRow1111111111111111111111111111111111");
 
-/// Platform fee: 5% = 500 basis points.
-const CASI_FEE_BPS: u64 = 500;
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-/// Hardcoded CASI fee wallet (update before mainnet deploy).
-/// Replace with the actual CASI treasury pubkey.
+/// PDA seed prefix for all CASI escrow state accounts.
+pub const ESCROW_SEED: &[u8] = b"casi-escrow";
+
+/// Platform fee in basis points (5 % = 500 bps).
+pub const FEE_BPS: u64 = 500;
+
+/// Hardcoded CASI fee wallet — receives FEE_BPS of every settled Flash/Beam.
+/// Replace with the real treasury pubkey before mainnet deploy.
 pub mod fee_wallet {
     use super::*;
     declare_id!("CASIFeeWaLLet1111111111111111111111111111111");
@@ -24,12 +46,12 @@ pub mod fee_wallet {
 pub mod casi_escrow {
     use super::*;
 
-    /// Lock viewer USDC into a PDA vault.
+    /// Viewer locks USDC into a PDA-owned vault ATA.
     ///
-    /// - `escrow_id`: 32-byte UUID identifying this escrow (stored for PDA signing).
-    /// - `amount`:    USDC micro-units (6 decimal places, e.g. 1_000_000 = $1).
-    /// - `duration_secs`: 0 = Flash (instant one-shot); >0 = Beam (time-streamed).
-    /// - `escrow_type_val`: 0 = Flash, 1 = Beam.
+    /// * `escrow_id`       — 32-byte UUID; used as PDA seed and stored for signing.
+    /// * `amount`          — USDC micro-units (6 decimals; 1 USDC = 1_000_000).
+    /// * `duration_secs`   — 0 for Flash, > 0 for Beam.
+    /// * `escrow_type_val` — 0 = Flash, 1 = Beam.
     pub fn initialize_escrow(
         ctx: Context<InitializeEscrow>,
         escrow_id: [u8; 32],
@@ -44,35 +66,33 @@ pub mod casi_escrow {
             require!(duration_secs > 0, CasiError::InvalidDuration);
         }
 
-        let state = &mut ctx.accounts.escrow_state;
-        state.escrow_id = escrow_id;
-        state.viewer = ctx.accounts.viewer.key();
-        state.streamer = ctx.accounts.streamer.key();
-        state.usdc_mint = ctx.accounts.usdc_mint.key();
-        state.total_amount = amount;
-        state.duration_secs = duration_secs;
-        state.escrow_type = etype;
-        state.status = EscrowStatus::Pending;
-        state.start_timestamp = 0;
-        state.bump = ctx.bumps.escrow_state;
+        ctx.accounts.escrow_state.set_inner(EscrowState {
+            escrow_id,
+            viewer: ctx.accounts.viewer.key(),
+            streamer: ctx.accounts.streamer.key(),
+            usdc_mint: ctx.accounts.usdc_mint.key(),
+            total_amount: amount,
+            duration_secs,
+            escrow_type: etype,
+            status: EscrowStatus::Pending,
+            start_timestamp: 0,
+            bump: ctx.bumps.escrow_state,
+        });
 
-        // Transfer USDC from viewer → vault
-        token::transfer(
-            CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
-                Transfer {
-                    from: ctx.accounts.viewer_ata.to_account_info(),
-                    to: ctx.accounts.vault.to_account_info(),
-                    authority: ctx.accounts.viewer.to_account_info(),
-                },
-            ),
+        // Transfer USDC viewer → vault (transfer_checked requires mint + decimals)
+        transfer_tokens(
+            &ctx.accounts.viewer_ata,
+            &ctx.accounts.vault,
             amount,
+            &ctx.accounts.usdc_mint,
+            &ctx.accounts.viewer,
+            &ctx.accounts.token_program,
         )?;
 
         emit!(EscrowInitialized {
             escrow_id,
-            viewer: state.viewer,
-            streamer: state.streamer,
+            viewer: ctx.accounts.viewer.key(),
+            streamer: ctx.accounts.streamer.key(),
             amount,
             escrow_type_val,
         });
@@ -80,75 +100,62 @@ pub mod casi_escrow {
         Ok(())
     }
 
-    /// Streamer approves a Flash: releases 95% to streamer, 5% to CASI.
-    /// Vault and EscrowState accounts are closed; rent returned to streamer.
+    /// Streamer approves a Flash: 95 % → streamer ATA, 5 % → CASI fee ATA.
+    /// Vault + EscrowState are closed; rent returned to streamer.
     pub fn approve_flash(
         ctx: Context<ApproveFlash>,
         escrow_id: [u8; 32],
     ) -> Result<()> {
-        {
-            let state = &mut ctx.accounts.escrow_state;
-            require!(
-                state.streamer == ctx.accounts.streamer.key(),
-                CasiError::Unauthorized
-            );
-            require!(
-                state.status == EscrowStatus::Pending,
-                CasiError::AlreadySettled
-            );
-            require!(
-                state.escrow_type == EscrowType::Flash,
-                CasiError::WrongEscrowType
-            );
-            state.status = EscrowStatus::Settled;
-        }
+        require!(
+            ctx.accounts.escrow_state.status == EscrowStatus::Pending,
+            CasiError::AlreadySettled
+        );
+        require!(
+            ctx.accounts.escrow_state.escrow_type == EscrowType::Flash,
+            CasiError::WrongEscrowType
+        );
+
+        ctx.accounts.escrow_state.status = EscrowStatus::Settled;
 
         let total = ctx.accounts.escrow_state.total_amount;
-        let bump = ctx.accounts.escrow_state.bump;
-        let fee = total * CASI_FEE_BPS / 10_000;
+        let bump  = ctx.accounts.escrow_state.bump;
+
+        let fee          = total * FEE_BPS / 10_000;
         let streamer_amt = total - fee;
 
-        let seeds: &[&[u8]] = &[b"casi-escrow", escrow_id.as_ref(), &[bump]];
-        let signer = &[seeds];
+        let signer_seeds: &[&[u8]] = &[ESCROW_SEED, escrow_id.as_ref(), &[bump]];
+        let signer = &[signer_seeds];
 
-        token::transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                Transfer {
-                    from: ctx.accounts.vault.to_account_info(),
-                    to: ctx.accounts.streamer_ata.to_account_info(),
-                    authority: ctx.accounts.escrow_state.to_account_info(),
-                },
-                signer,
-            ),
+        // 95 % → streamer
+        pda_transfer_checked(
+            &ctx.accounts.vault,
+            &ctx.accounts.streamer_ata,
             streamer_amt,
-        )?;
-
-        token::transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                Transfer {
-                    from: ctx.accounts.vault.to_account_info(),
-                    to: ctx.accounts.fee_wallet_ata.to_account_info(),
-                    authority: ctx.accounts.escrow_state.to_account_info(),
-                },
-                signer,
-            ),
-            fee,
-        )?;
-
-        // Close vault → SOL rent back to streamer
-        token::close_account(CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            CloseAccount {
-                account: ctx.accounts.vault.to_account_info(),
-                destination: ctx.accounts.streamer.to_account_info(),
-                authority: ctx.accounts.escrow_state.to_account_info(),
-            },
+            &ctx.accounts.usdc_mint,
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
             signer,
-        ))?;
+        )?;
 
-        // (escrow_state closed by Anchor via `close = streamer` constraint)
+        // 5 % → CASI fee wallet
+        pda_transfer_checked(
+            &ctx.accounts.vault,
+            &ctx.accounts.fee_wallet_ata,
+            fee,
+            &ctx.accounts.usdc_mint,
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
+            signer,
+        )?;
+
+        // Close vault ATA → SOL rent to streamer
+        pda_close_account(
+            &ctx.accounts.vault,
+            ctx.accounts.streamer.to_account_info(),
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
+            signer,
+        )?;
 
         emit!(FlashSettled {
             escrow_id,
@@ -161,52 +168,43 @@ pub mod casi_escrow {
     }
 
     /// Streamer denies a Flash: full refund to viewer.
-    /// Vault and EscrowState are closed; rent returned to viewer.
+    /// Vault + EscrowState are closed; rent returned to viewer.
     pub fn deny_flash(
         ctx: Context<DenyFlash>,
         escrow_id: [u8; 32],
     ) -> Result<()> {
-        {
-            let state = &mut ctx.accounts.escrow_state;
-            require!(
-                state.streamer == ctx.accounts.streamer.key(),
-                CasiError::Unauthorized
-            );
-            require!(
-                state.status == EscrowStatus::Pending,
-                CasiError::AlreadySettled
-            );
-            state.status = EscrowStatus::Cancelled;
-        }
+        require!(
+            ctx.accounts.escrow_state.status == EscrowStatus::Pending,
+            CasiError::AlreadySettled
+        );
+
+        ctx.accounts.escrow_state.status = EscrowStatus::Cancelled;
 
         let total = ctx.accounts.escrow_state.total_amount;
-        let bump = ctx.accounts.escrow_state.bump;
+        let bump  = ctx.accounts.escrow_state.bump;
 
-        let seeds: &[&[u8]] = &[b"casi-escrow", escrow_id.as_ref(), &[bump]];
-        let signer = &[seeds];
+        let signer_seeds: &[&[u8]] = &[ESCROW_SEED, escrow_id.as_ref(), &[bump]];
+        let signer = &[signer_seeds];
 
-        token::transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                Transfer {
-                    from: ctx.accounts.vault.to_account_info(),
-                    to: ctx.accounts.viewer_ata.to_account_info(),
-                    authority: ctx.accounts.escrow_state.to_account_info(),
-                },
-                signer,
-            ),
+        // Full refund → viewer
+        pda_transfer_checked(
+            &ctx.accounts.vault,
+            &ctx.accounts.viewer_ata,
             total,
+            &ctx.accounts.usdc_mint,
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
+            signer,
         )?;
 
-        token::close_account(CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            CloseAccount {
-                account: ctx.accounts.vault.to_account_info(),
-                destination: ctx.accounts.viewer.to_account_info(),
-                authority: ctx.accounts.escrow_state.to_account_info(),
-            },
+        // Close vault ATA → SOL rent to viewer
+        pda_close_account(
+            &ctx.accounts.vault,
+            ctx.accounts.viewer.to_account_info(),
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
             signer,
-        ))?;
+        )?;
 
         emit!(FlashSettled {
             escrow_id,
@@ -218,184 +216,146 @@ pub mod casi_escrow {
         Ok(())
     }
 
-    /// Viewer cancels a pending escrow (before streamer acts).
-    /// Works for both Flash and Beam while status == Pending.
+    /// Viewer cancels a pending Flash or Beam before the streamer acts.
+    /// Full refund; vault + EscrowState closed; rent returned to viewer.
     pub fn cancel_escrow(
         ctx: Context<CancelEscrow>,
         escrow_id: [u8; 32],
     ) -> Result<()> {
-        {
-            let state = &mut ctx.accounts.escrow_state;
-            require!(
-                state.viewer == ctx.accounts.viewer.key(),
-                CasiError::Unauthorized
-            );
-            require!(
-                state.status == EscrowStatus::Pending,
-                CasiError::AlreadySettled
-            );
-            state.status = EscrowStatus::Cancelled;
-        }
+        require!(
+            ctx.accounts.escrow_state.status == EscrowStatus::Pending,
+            CasiError::AlreadySettled
+        );
+
+        ctx.accounts.escrow_state.status = EscrowStatus::Cancelled;
 
         let total = ctx.accounts.escrow_state.total_amount;
-        let bump = ctx.accounts.escrow_state.bump;
+        let bump  = ctx.accounts.escrow_state.bump;
 
-        let seeds: &[&[u8]] = &[b"casi-escrow", escrow_id.as_ref(), &[bump]];
-        let signer = &[seeds];
+        let signer_seeds: &[&[u8]] = &[ESCROW_SEED, escrow_id.as_ref(), &[bump]];
+        let signer = &[signer_seeds];
 
-        token::transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                Transfer {
-                    from: ctx.accounts.vault.to_account_info(),
-                    to: ctx.accounts.viewer_ata.to_account_info(),
-                    authority: ctx.accounts.escrow_state.to_account_info(),
-                },
-                signer,
-            ),
+        pda_transfer_checked(
+            &ctx.accounts.vault,
+            &ctx.accounts.viewer_ata,
             total,
+            &ctx.accounts.usdc_mint,
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
+            signer,
         )?;
 
-        token::close_account(CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            CloseAccount {
-                account: ctx.accounts.vault.to_account_info(),
-                destination: ctx.accounts.viewer.to_account_info(),
-                authority: ctx.accounts.escrow_state.to_account_info(),
-            },
+        pda_close_account(
+            &ctx.accounts.vault,
+            ctx.accounts.viewer.to_account_info(),
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
             signer,
-        ))?;
+        )?;
 
         Ok(())
     }
 
-    /// Streamer starts a Beam (approves streaming).
-    /// Sets start_timestamp to the current clock; status → Active.
+    /// Streamer starts a Beam: records `start_timestamp`, sets status → Active.
     pub fn start_beam(
         ctx: Context<StartBeam>,
         _escrow_id: [u8; 32],
     ) -> Result<()> {
-        let state = &mut ctx.accounts.escrow_state;
         require!(
-            state.streamer == ctx.accounts.streamer.key(),
-            CasiError::Unauthorized
-        );
-        require!(
-            state.status == EscrowStatus::Pending,
+            ctx.accounts.escrow_state.status == EscrowStatus::Pending,
             CasiError::AlreadySettled
         );
         require!(
-            state.escrow_type == EscrowType::Beam,
+            ctx.accounts.escrow_state.escrow_type == EscrowType::Beam,
             CasiError::WrongEscrowType
         );
-        require!(state.duration_secs > 0, CasiError::InvalidDuration);
 
-        state.status = EscrowStatus::Active;
-        state.start_timestamp = Clock::get()?.unix_timestamp;
+        ctx.accounts.escrow_state.status = EscrowStatus::Active;
+        ctx.accounts.escrow_state.start_timestamp = Clock::get()?.unix_timestamp;
 
         Ok(())
     }
 
-    /// Permissionless settle for a Beam.
-    /// Anyone can call once the stream has started (during or after).
-    /// Prorates vested amount by wall-clock time; sends to streamer (95%) and
-    /// CASI (5%); refunds unvested portion to viewer.
+    /// Permissionless Beam settlement — anyone may call once the stream is Active.
+    ///
+    /// Integer proration: vested = total × min(elapsed, duration) / duration.
+    /// Fee is taken on vested portion only; remainder refunded to viewer.
+    /// Vault + EscrowState closed; rent returned to streamer.
     pub fn settle_beam(
         ctx: Context<SettleBeam>,
         escrow_id: [u8; 32],
     ) -> Result<()> {
-        {
-            let state = &mut ctx.accounts.escrow_state;
-            require!(
-                state.status == EscrowStatus::Active,
-                CasiError::NotActive
-            );
-            require!(
-                state.escrow_type == EscrowType::Beam,
-                CasiError::WrongEscrowType
-            );
-        }
+        require!(
+            ctx.accounts.escrow_state.status == EscrowStatus::Active,
+            CasiError::NotActive
+        );
+        require!(
+            ctx.accounts.escrow_state.escrow_type == EscrowType::Beam,
+            CasiError::WrongEscrowType
+        );
 
-        let now = Clock::get()?.unix_timestamp;
-        let state = &mut ctx.accounts.escrow_state;
-        let elapsed = (now - state.start_timestamp).max(0) as u64;
-        let duration = state.duration_secs;
-        let total = state.total_amount;
-        let bump = state.bump;
+        let now      = Clock::get()?.unix_timestamp;
+        let elapsed  = (now - ctx.accounts.escrow_state.start_timestamp).max(0) as u64;
+        let duration = ctx.accounts.escrow_state.duration_secs;
+        let total    = ctx.accounts.escrow_state.total_amount;
+        let bump     = ctx.accounts.escrow_state.bump;
 
-        // Integer proration: vested = total * min(elapsed, duration) / duration
-        let vested_ticks = elapsed.min(duration);
-        let gross_vested = total
-            .checked_mul(vested_ticks)
-            .unwrap()
-            .checked_div(duration)
-            .unwrap();
-        let refund = total - gross_vested;
+        // Integer proration — no floating point on Solana
+        let vested_ticks  = elapsed.min(duration);
+        let gross_vested  = total.checked_mul(vested_ticks).unwrap().checked_div(duration).unwrap();
+        let refund        = total - gross_vested;
+        let fee           = gross_vested * FEE_BPS / 10_000;
+        let streamer_amt  = gross_vested - fee;
 
-        // 5% fee on vested portion only
-        let fee = gross_vested * CASI_FEE_BPS / 10_000;
-        let streamer_amt = gross_vested - fee;
+        ctx.accounts.escrow_state.status = EscrowStatus::Settled;
 
-        state.status = EscrowStatus::Settled;
-
-        let seeds: &[&[u8]] = &[b"casi-escrow", escrow_id.as_ref(), &[bump]];
-        let signer = &[seeds];
+        let signer_seeds: &[&[u8]] = &[ESCROW_SEED, escrow_id.as_ref(), &[bump]];
+        let signer = &[signer_seeds];
 
         if streamer_amt > 0 {
-            token::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.token_program.to_account_info(),
-                    Transfer {
-                        from: ctx.accounts.vault.to_account_info(),
-                        to: ctx.accounts.streamer_ata.to_account_info(),
-                        authority: ctx.accounts.escrow_state.to_account_info(),
-                    },
-                    signer,
-                ),
+            pda_transfer_checked(
+                &ctx.accounts.vault,
+                &ctx.accounts.streamer_ata,
                 streamer_amt,
+                &ctx.accounts.usdc_mint,
+                &ctx.accounts.escrow_state.to_account_info(),
+                &ctx.accounts.token_program,
+                signer,
             )?;
         }
 
         if fee > 0 {
-            token::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.token_program.to_account_info(),
-                    Transfer {
-                        from: ctx.accounts.vault.to_account_info(),
-                        to: ctx.accounts.fee_wallet_ata.to_account_info(),
-                        authority: ctx.accounts.escrow_state.to_account_info(),
-                    },
-                    signer,
-                ),
+            pda_transfer_checked(
+                &ctx.accounts.vault,
+                &ctx.accounts.fee_wallet_ata,
                 fee,
+                &ctx.accounts.usdc_mint,
+                &ctx.accounts.escrow_state.to_account_info(),
+                &ctx.accounts.token_program,
+                signer,
             )?;
         }
 
         if refund > 0 {
-            token::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.token_program.to_account_info(),
-                    Transfer {
-                        from: ctx.accounts.vault.to_account_info(),
-                        to: ctx.accounts.viewer_ata.to_account_info(),
-                        authority: ctx.accounts.escrow_state.to_account_info(),
-                    },
-                    signer,
-                ),
+            pda_transfer_checked(
+                &ctx.accounts.vault,
+                &ctx.accounts.viewer_ata,
                 refund,
+                &ctx.accounts.usdc_mint,
+                &ctx.accounts.escrow_state.to_account_info(),
+                &ctx.accounts.token_program,
+                signer,
             )?;
         }
 
-        // Close vault → SOL rent back to streamer
-        token::close_account(CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            CloseAccount {
-                account: ctx.accounts.vault.to_account_info(),
-                destination: ctx.accounts.streamer.to_account_info(),
-                authority: ctx.accounts.escrow_state.to_account_info(),
-            },
+        // Close vault ATA → SOL rent to streamer
+        pda_close_account(
+            &ctx.accounts.vault,
+            ctx.accounts.streamer.to_account_info(),
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
             signer,
-        ))?;
+        )?;
 
         emit!(BeamSettled {
             escrow_id,
@@ -409,6 +369,73 @@ pub mod casi_escrow {
 }
 
 // ---------------------------------------------------------------------------
+// Shared helpers (mirrors program-examples shared.rs pattern)
+// ---------------------------------------------------------------------------
+
+/// `transfer_checked` from a user-signed ATA (non-PDA).
+fn transfer_tokens<'info>(
+    from: &InterfaceAccount<'info, TokenAccount>,
+    to: &InterfaceAccount<'info, TokenAccount>,
+    amount: u64,
+    mint: &InterfaceAccount<'info, Mint>,
+    authority: &Signer<'info>,
+    token_program: &Interface<'info, TokenInterface>,
+) -> Result<()> {
+    let accounts = TransferChecked {
+        from:      from.to_account_info(),
+        mint:      mint.to_account_info(),
+        to:        to.to_account_info(),
+        authority: authority.to_account_info(),
+    };
+    transfer_checked(
+        CpiContext::new(token_program.to_account_info(), accounts),
+        amount,
+        mint.decimals,
+    )
+}
+
+/// `transfer_checked` signed by a PDA.
+fn pda_transfer_checked<'info>(
+    from: &InterfaceAccount<'info, TokenAccount>,
+    to: &InterfaceAccount<'info, TokenAccount>,
+    amount: u64,
+    mint: &InterfaceAccount<'info, Mint>,
+    authority: &AccountInfo<'info>,
+    token_program: &Interface<'info, TokenInterface>,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    let accounts = TransferChecked {
+        from:      from.to_account_info(),
+        mint:      mint.to_account_info(),
+        to:        to.to_account_info(),
+        authority: authority.clone(),
+    };
+    transfer_checked(
+        CpiContext::new_with_signer(token_program.to_account_info(), accounts, signer_seeds),
+        amount,
+        mint.decimals,
+    )
+}
+
+/// Close a token account signed by a PDA.
+fn pda_close_account<'info>(
+    account: &InterfaceAccount<'info, TokenAccount>,
+    destination: AccountInfo<'info>,
+    authority: &AccountInfo<'info>,
+    token_program: &Interface<'info, TokenInterface>,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    let accounts = CloseAccount {
+        account:     account.to_account_info(),
+        destination,
+        authority:   authority.clone(),
+    };
+    close_account(
+        CpiContext::new_with_signer(token_program.to_account_info(), accounts, signer_seeds),
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Account Contexts
 // ---------------------------------------------------------------------------
 
@@ -418,38 +445,42 @@ pub struct InitializeEscrow<'info> {
     #[account(mut)]
     pub viewer: Signer<'info>,
 
-    /// CHECK: Streamer pubkey — stored in escrow_state and verified on settle.
+    /// CHECK: Streamer wallet — stored in EscrowState, verified on settle/deny.
     pub streamer: UncheckedAccount<'info>,
 
     #[account(
         init,
-        payer = viewer,
-        space = 8 + EscrowState::INIT_SPACE,
-        seeds = [b"casi-escrow", escrow_id.as_ref()],
+        payer  = viewer,
+        space  = 8 + EscrowState::INIT_SPACE,
+        seeds  = [ESCROW_SEED, escrow_id.as_ref()],
         bump,
     )]
     pub escrow_state: Account<'info, EscrowState>,
 
-    /// PDA-owned USDC vault (ATA).
+    /// PDA-owned vault ATA — holds viewer's USDC during escrow.
     #[account(
         init,
-        payer = viewer,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = escrow_state,
+        payer  = viewer,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = escrow_state,
+        associated_token::token_program = token_program,
     )]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = viewer,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = viewer,
+        associated_token::token_program = token_program,
     )]
-    pub viewer_ata: Account<'info, TokenAccount>,
+    pub viewer_ata: InterfaceAccount<'info, TokenAccount>,
 
-    pub usdc_mint: Account<'info, Mint>,
-    pub token_program: Program<'info, Token>,
+    #[account(mint::token_program = token_program)]
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
+
+    pub token_program:            Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
+    pub system_program:           Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -458,55 +489,60 @@ pub struct ApproveFlash<'info> {
     #[account(mut)]
     pub streamer: Signer<'info>,
 
-    /// CHECK: Viewer SOL address — receives vault's ATA rent on close.
+    /// CHECK: Viewer wallet — receives vault ATA rent on close.
     #[account(mut)]
     pub viewer: UncheckedAccount<'info>,
 
     #[account(
         mut,
-        seeds = [b"casi-escrow", escrow_id.as_ref()],
-        bump = escrow_state.bump,
-        close = streamer,
+        seeds    = [ESCROW_SEED, escrow_id.as_ref()],
+        bump     = escrow_state.bump,
+        has_one  = streamer @ CasiError::Unauthorized,
+        close    = streamer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
 
     #[account(
         mut,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = escrow_state,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = escrow_state,
+        associated_token::token_program = token_program,
     )]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         init_if_needed,
-        payer = streamer,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = streamer,
+        payer  = streamer,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = streamer,
+        associated_token::token_program = token_program,
     )]
-    pub streamer_ata: Account<'info, TokenAccount>,
+    pub streamer_ata: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         init_if_needed,
-        payer = streamer,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = fee_wallet,
+        payer  = streamer,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = fee_wallet,
+        associated_token::token_program = token_program,
     )]
-    pub fee_wallet_ata: Account<'info, TokenAccount>,
+    pub fee_wallet_ata: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK: Hardcoded CASI fee wallet.
-    #[account(address = fee_wallet::ID)]
+    /// CHECK: Hardcoded CASI fee wallet — validated by address constraint.
+    #[account(address = fee_wallet::ID @ CasiError::InvalidFeeWallet)]
     pub fee_wallet: UncheckedAccount<'info>,
 
-    pub usdc_mint: Account<'info, Mint>,
-    pub token_program: Program<'info, Token>,
+    #[account(mint::token_program = token_program)]
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
+
+    pub token_program:            Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
+    pub system_program:           Program<'info, System>,
 }
 
 #[derive(Accounts)]
 #[instruction(escrow_id: [u8; 32])]
 pub struct DenyFlash<'info> {
-    /// CHECK: Streamer verifies themselves via escrow_state.streamer check in handler.
     pub streamer: Signer<'info>,
 
     #[account(mut)]
@@ -514,31 +550,37 @@ pub struct DenyFlash<'info> {
 
     #[account(
         mut,
-        seeds = [b"casi-escrow", escrow_id.as_ref()],
-        bump = escrow_state.bump,
-        close = viewer,
+        seeds   = [ESCROW_SEED, escrow_id.as_ref()],
+        bump    = escrow_state.bump,
+        has_one = streamer @ CasiError::Unauthorized,
+        has_one = viewer   @ CasiError::Unauthorized,
+        close   = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
 
     #[account(
         mut,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = escrow_state,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = escrow_state,
+        associated_token::token_program = token_program,
     )]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         init_if_needed,
-        payer = streamer,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = viewer,
+        payer  = streamer,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = viewer,
+        associated_token::token_program = token_program,
     )]
-    pub viewer_ata: Account<'info, TokenAccount>,
+    pub viewer_ata: InterfaceAccount<'info, TokenAccount>,
 
-    pub usdc_mint: Account<'info, Mint>,
-    pub token_program: Program<'info, Token>,
+    #[account(mint::token_program = token_program)]
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
+
+    pub token_program:            Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
+    pub system_program:           Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -549,30 +591,35 @@ pub struct CancelEscrow<'info> {
 
     #[account(
         mut,
-        seeds = [b"casi-escrow", escrow_id.as_ref()],
-        bump = escrow_state.bump,
-        close = viewer,
+        seeds   = [ESCROW_SEED, escrow_id.as_ref()],
+        bump    = escrow_state.bump,
+        has_one = viewer @ CasiError::Unauthorized,
+        close   = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
 
     #[account(
         mut,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = escrow_state,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = escrow_state,
+        associated_token::token_program = token_program,
     )]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = viewer,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = viewer,
+        associated_token::token_program = token_program,
     )]
-    pub viewer_ata: Account<'info, TokenAccount>,
+    pub viewer_ata: InterfaceAccount<'info, TokenAccount>,
 
-    pub usdc_mint: Account<'info, Mint>,
-    pub token_program: Program<'info, Token>,
+    #[account(mint::token_program = token_program)]
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
+
+    pub token_program:            Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
+    pub system_program:           Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -582,8 +629,9 @@ pub struct StartBeam<'info> {
 
     #[account(
         mut,
-        seeds = [b"casi-escrow", _escrow_id.as_ref()],
-        bump = escrow_state.bump,
+        seeds   = [ESCROW_SEED, _escrow_id.as_ref()],
+        bump    = escrow_state.bump,
+        has_one = streamer @ CasiError::Unauthorized,
     )]
     pub escrow_state: Account<'info, EscrowState>,
 }
@@ -591,7 +639,7 @@ pub struct StartBeam<'info> {
 #[derive(Accounts)]
 #[instruction(escrow_id: [u8; 32])]
 pub struct SettleBeam<'info> {
-    /// CHECK: Any caller may trigger settlement once the stream is Active.
+    /// CHECK: Any signer may trigger settlement once the Beam is Active.
     #[account(mut)]
     pub caller: Signer<'info>,
 
@@ -603,51 +651,59 @@ pub struct SettleBeam<'info> {
 
     #[account(
         mut,
-        seeds = [b"casi-escrow", escrow_id.as_ref()],
-        bump = escrow_state.bump,
-        close = streamer,
+        seeds   = [ESCROW_SEED, escrow_id.as_ref()],
+        bump    = escrow_state.bump,
+        has_one = streamer @ CasiError::Unauthorized,
+        has_one = viewer   @ CasiError::Unauthorized,
+        close   = streamer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
 
     #[account(
         mut,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = escrow_state,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = escrow_state,
+        associated_token::token_program = token_program,
     )]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         init_if_needed,
-        payer = caller,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = streamer,
+        payer  = caller,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = streamer,
+        associated_token::token_program = token_program,
     )]
-    pub streamer_ata: Account<'info, TokenAccount>,
+    pub streamer_ata: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         init_if_needed,
-        payer = caller,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = viewer,
+        payer  = caller,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = viewer,
+        associated_token::token_program = token_program,
     )]
-    pub viewer_ata: Account<'info, TokenAccount>,
+    pub viewer_ata: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         init_if_needed,
-        payer = caller,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = fee_wallet,
+        payer  = caller,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = fee_wallet,
+        associated_token::token_program = token_program,
     )]
-    pub fee_wallet_ata: Account<'info, TokenAccount>,
+    pub fee_wallet_ata: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK: Hardcoded CASI fee wallet.
-    #[account(address = fee_wallet::ID)]
+    /// CHECK: Hardcoded CASI fee wallet — validated by address constraint.
+    #[account(address = fee_wallet::ID @ CasiError::InvalidFeeWallet)]
     pub fee_wallet: UncheckedAccount<'info>,
 
-    pub usdc_mint: Account<'info, Mint>,
-    pub token_program: Program<'info, Token>,
+    #[account(mint::token_program = token_program)]
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
+
+    pub token_program:            Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
+    pub system_program:           Program<'info, System>,
 }
 
 // ---------------------------------------------------------------------------
@@ -657,26 +713,16 @@ pub struct SettleBeam<'info> {
 #[account]
 #[derive(InitSpace)]
 pub struct EscrowState {
-    /// The 32-byte UUID identifying this escrow (used as PDA seed).
-    pub escrow_id: [u8; 32],
-    /// Viewer who locked the funds.
-    pub viewer: Pubkey,
-    /// Streamer who will receive (or return) the funds.
-    pub streamer: Pubkey,
-    /// USDC mint address.
-    pub usdc_mint: Pubkey,
-    /// Total locked amount in USDC micro-units (6 decimals).
-    pub total_amount: u64,
-    /// Stream duration in seconds (0 for Flash, >0 for Beam).
-    pub duration_secs: u64,
-    /// Unix timestamp when the Beam started (0 until start_beam is called).
+    pub escrow_id:       [u8; 32],
+    pub viewer:          Pubkey,
+    pub streamer:        Pubkey,
+    pub usdc_mint:       Pubkey,
+    pub total_amount:    u64,
+    pub duration_secs:   u64,
     pub start_timestamp: i64,
-    /// Flash | Beam
-    pub escrow_type: EscrowType,
-    /// Pending | Active | Settled | Cancelled
-    pub status: EscrowStatus,
-    /// PDA bump seed.
-    pub bump: u8,
+    pub escrow_type:     EscrowType,
+    pub status:          EscrowStatus,
+    pub bump:            u8,
 }
 
 // ---------------------------------------------------------------------------
@@ -713,27 +759,27 @@ pub enum EscrowStatus {
 
 #[event]
 pub struct EscrowInitialized {
-    pub escrow_id: [u8; 32],
-    pub viewer: Pubkey,
-    pub streamer: Pubkey,
-    pub amount: u64,
+    pub escrow_id:      [u8; 32],
+    pub viewer:         Pubkey,
+    pub streamer:       Pubkey,
+    pub amount:         u64,
     pub escrow_type_val: u8,
 }
 
 #[event]
 pub struct FlashSettled {
-    pub escrow_id: [u8; 32],
+    pub escrow_id:      [u8; 32],
     pub streamer_amount: u64,
-    pub fee_amount: u64,
-    pub approved: bool,
+    pub fee_amount:     u64,
+    pub approved:       bool,
 }
 
 #[event]
 pub struct BeamSettled {
-    pub escrow_id: [u8; 32],
+    pub escrow_id:      [u8; 32],
     pub streamer_amount: u64,
-    pub fee_amount: u64,
-    pub viewer_refund: u64,
+    pub fee_amount:     u64,
+    pub viewer_refund:  u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -744,16 +790,18 @@ pub struct BeamSettled {
 pub enum CasiError {
     #[msg("Amount must be greater than zero")]
     InvalidAmount,
-    #[msg("Duration must be greater than zero for Beam escrows")]
+    #[msg("Duration must be > 0 for Beam escrows")]
     InvalidDuration,
-    #[msg("Invalid escrow type value — expected 0 (Flash) or 1 (Beam)")]
+    #[msg("Invalid escrow type — expected 0 (Flash) or 1 (Beam)")]
     InvalidEscrowType,
     #[msg("Caller is not the authorized party for this escrow")]
     Unauthorized,
-    #[msg("Escrow has already been settled or cancelled")]
+    #[msg("Escrow is not in Pending status")]
     AlreadySettled,
-    #[msg("Escrow is not in Active state")]
+    #[msg("Escrow is not in Active status")]
     NotActive,
-    #[msg("Instruction requires a different escrow type")]
+    #[msg("This instruction requires a different escrow type")]
     WrongEscrowType,
+    #[msg("Fee wallet address does not match the hardcoded CASI treasury")]
+    InvalidFeeWallet,
 }

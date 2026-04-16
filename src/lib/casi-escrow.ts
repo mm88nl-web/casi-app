@@ -2,15 +2,19 @@
  * casi-escrow.ts
  *
  * TypeScript client for the CASI Escrow Anchor program.
+ * Follows the audited solana-developers/program-examples token_interface pattern:
+ * - Uses TOKEN_PROGRAM_ID (SPL Token) by default; pass TOKEN_2022_PROGRAM_ID
+ *   for Token-2022 mints.
+ * - All transfers use transfer_checked (requires mint + decimals).
+ * - Vault is a PDA-owned ATA using anchor_spl associated_token::token_program.
  *
  * Usage:
  *   const client = new CasiEscrowClient(connection, wallet);
  *   const { sig, escrowPda } = await client.initializeFlash({
- *     escrowId, streamer, amountUsdc, viewerAta
+ *     escrowId, streamer, amountUsdc
  *   });
  *
- * Program ID and USDC mint are configured via constants below.
- * Update PROGRAM_ID after deploying to devnet/mainnet.
+ * Update PROGRAM_ID + CASI_FEE_WALLET after `anchor deploy`.
  */
 
 import {
@@ -28,6 +32,7 @@ import {
 } from '@solana/web3.js';
 import {
   TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
 } from '@solana/spl-token';
@@ -38,17 +43,17 @@ import IDL from '@/idl/casi_escrow.json';
 // Constants — update after program deploy
 // ---------------------------------------------------------------------------
 
-/** CASI Escrow program ID (devnet placeholder — replace after anchor deploy). */
+/** CASI Escrow program ID — replace with output of `anchor deploy`. */
 export const PROGRAM_ID = new PublicKey(
   'CASIesCRow1111111111111111111111111111111111',
 );
 
-/** CASI treasury fee wallet (receives 5% of each Flash/Beam). */
+/** CASI treasury — receives 5 % of every settled Flash / Beam. */
 export const CASI_FEE_WALLET = new PublicKey(
   'CASIFeeWaLLet1111111111111111111111111111111',
 );
 
-/** Devnet USDC mint (Circle Test Token). */
+/** Devnet USDC mint (Circle test token). */
 export const USDC_MINT_DEVNET = new PublicKey(
   '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
 );
@@ -58,13 +63,16 @@ export const USDC_MINT_MAINNET = new PublicKey(
   'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
 );
 
+/** SPL Token program (default). Use TOKEN_2022_PROGRAM_ID for Token-2022 mints. */
+export { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID };
+
 const ESCROW_SEED = Buffer.from('casi-escrow');
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Convert a UUID string to a 32-byte Uint8Array seed. */
+/** Convert a UUID string ("xxxxxxxx-xxxx-…") to a 32-byte Uint8Array seed. */
 export function uuidToBytes(uuid: string): Uint8Array {
   const hex = uuid.replace(/-/g, '');
   if (hex.length !== 32) throw new Error(`Invalid UUID: ${uuid}`);
@@ -75,151 +83,160 @@ export function uuidToBytes(uuid: string): Uint8Array {
   return bytes;
 }
 
-/** Derive the escrow PDA from a UUID string. */
+/** Derive the escrow PDA address from a UUID string or raw bytes. */
 export function deriveEscrowPda(
   escrowId: string | Uint8Array,
   programId: PublicKey = PROGRAM_ID,
 ): [PublicKey, number] {
   const idBytes =
     escrowId instanceof Uint8Array ? escrowId : uuidToBytes(escrowId);
-  return PublicKey.findProgramAddressSync(
-    [ESCROW_SEED, idBytes],
-    programId,
-  );
+  return PublicKey.findProgramAddressSync([ESCROW_SEED, idBytes], programId);
 }
 
-/** Solscan transaction URL (devnet or mainnet). */
-export function solscanTxUrl(sig: string, cluster: 'devnet' | 'mainnet-beta' = 'devnet'): string {
-  const q = cluster === 'devnet' ? '?cluster=devnet' : '';
-  return `https://solscan.io/tx/${sig}${q}`;
+/** Solscan transaction link. */
+export function solscanTxUrl(
+  sig: string,
+  cluster: 'devnet' | 'mainnet-beta' = 'devnet',
+): string {
+  return `https://solscan.io/tx/${sig}${cluster === 'devnet' ? '?cluster=devnet' : ''}`;
 }
 
-/** Solscan account URL. */
-export function solscanAccountUrl(pubkey: string, cluster: 'devnet' | 'mainnet-beta' = 'devnet'): string {
-  const q = cluster === 'devnet' ? '?cluster=devnet' : '';
-  return `https://solscan.io/account/${pubkey}${q}`;
+/** Solscan account link. */
+export function solscanAccountUrl(
+  pubkey: string,
+  cluster: 'devnet' | 'mainnet-beta' = 'devnet',
+): string {
+  return `https://solscan.io/account/${pubkey}${cluster === 'devnet' ? '?cluster=devnet' : ''}`;
+}
+
+// ---------------------------------------------------------------------------
+// Parameter types
+// ---------------------------------------------------------------------------
+
+export interface InitFlashParams {
+  escrowId:  string;
+  streamer:  PublicKey;
+  /** USDC micro-units (1 USDC = 1_000_000). */
+  amountUsdc: number;
+  usdcMint?:   PublicKey;
+  /** SPL Token or Token-2022 program ID. Defaults to TOKEN_PROGRAM_ID. */
+  tokenProgram?: PublicKey;
+}
+
+export interface ModerateFlashParams {
+  escrowId:    string;
+  viewer:      PublicKey;
+  streamer:    PublicKey;
+  usdcMint?:   PublicKey;
+  tokenProgram?: PublicKey;
+}
+
+export interface InitFlashResult {
+  sig:       string;
+  escrowPda: string;
+  solscanUrl: string;
 }
 
 // ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
 
-export interface InitFlashParams {
-  /** UUID string for this flash (from DB). */
-  escrowId: string;
-  /** Streamer's Solana wallet pubkey. */
-  streamer: PublicKey;
-  /** Amount in USDC micro-units (1 USDC = 1_000_000). */
-  amountUsdc: number;
-  /** USDC mint to use (defaults to devnet). */
-  usdcMint?: PublicKey;
-}
-
-export interface InitFlashResult {
-  /** Transaction signature. */
-  sig: string;
-  /** PDA address of the escrow account (base58). */
-  escrowPda: string;
-  /** Solscan link for the transaction. */
-  solscanUrl: string;
-}
-
-export interface ModerateFlashParams {
-  escrowId: string;
-  /** Viewer's Solana wallet pubkey (needed for deny/cancel). */
-  viewer: PublicKey;
-  /** Streamer's Solana wallet pubkey. */
-  streamer: PublicKey;
-  usdcMint?: PublicKey;
-}
-
 export class CasiEscrowClient {
   private program: Program;
-  private connection: Connection;
-  private wallet: AnchorWallet;
   private cluster: 'devnet' | 'mainnet-beta';
 
   constructor(
     connection: Connection,
     wallet: AnchorWallet,
     cluster: 'devnet' | 'mainnet-beta' = 'devnet',
-    confirmOpts: ConfirmOptions = { commitment: 'confirmed', preflightCommitment: 'confirmed' },
+    confirmOpts: ConfirmOptions = {
+      commitment: 'confirmed',
+      preflightCommitment: 'confirmed',
+    },
   ) {
-    this.connection = connection;
-    this.wallet = wallet;
     this.cluster = cluster;
-
     const provider = new AnchorProvider(connection, wallet, confirmOpts);
     setProvider(provider);
     this.program = new Program(IDL as Idl, provider);
   }
 
+  private get wallet() {
+    return (this.program.provider as AnchorProvider).wallet;
+  }
+
+  private defaultMint() {
+    return this.cluster === 'devnet' ? USDC_MINT_DEVNET : USDC_MINT_MAINNET;
+  }
+
   // -------------------------------------------------------------------------
-  // Flash — initialize (viewer locks funds)
+  // initialize_escrow  (Flash variant: duration_secs = 0, escrow_type_val = 0)
   // -------------------------------------------------------------------------
 
   async initializeFlash(params: InitFlashParams): Promise<InitFlashResult> {
     const { escrowId, streamer, amountUsdc } = params;
-    const usdcMint = params.usdcMint ?? (this.cluster === 'devnet' ? USDC_MINT_DEVNET : USDC_MINT_MAINNET);
+    const usdcMint    = params.usdcMint    ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
     const escrowIdBytes = Array.from(uuidToBytes(escrowId));
-    const [escrowPda] = deriveEscrowPda(escrowId);
-    const viewer = this.wallet.publicKey;
+    const [escrowPda]   = deriveEscrowPda(escrowId);
+    const viewer        = this.wallet.publicKey;
 
-    const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer);
-    const vault = getAssociatedTokenAddressSync(usdcMint, escrowPda, true);
+    const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer, false, tokenProgram);
+    const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true, tokenProgram);
 
     const sig = await (this.program.methods as any)
       .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(0), 0)
       .accounts({
         viewer,
         streamer,
-        escrowState: escrowPda,
+        escrowState:          escrowPda,
         vault,
         viewerAta,
         usdcMint,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        tokenProgram,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
+        systemProgram:          SystemProgram.programId,
       })
       .rpc();
 
     return {
       sig,
-      escrowPda: escrowPda.toBase58(),
+      escrowPda:  escrowPda.toBase58(),
       solscanUrl: solscanTxUrl(sig, this.cluster),
     };
   }
 
   // -------------------------------------------------------------------------
-  // Flash — streamer approves (releases 95% + 5% fee)
+  // approve_flash
   // -------------------------------------------------------------------------
 
-  async approveFlash(params: ModerateFlashParams): Promise<{ sig: string; solscanUrl: string }> {
+  async approveFlash(
+    params: ModerateFlashParams,
+  ): Promise<{ sig: string; solscanUrl: string }> {
     const { escrowId, viewer, streamer } = params;
-    const usdcMint = params.usdcMint ?? (this.cluster === 'devnet' ? USDC_MINT_DEVNET : USDC_MINT_MAINNET);
+    const usdcMint    = params.usdcMint    ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
-    const escrowIdBytes = Array.from(uuidToBytes(escrowId));
-    const [escrowPda] = deriveEscrowPda(escrowId);
-
-    const vault = getAssociatedTokenAddressSync(usdcMint, escrowPda, true);
-    const streamerAta = getAssociatedTokenAddressSync(usdcMint, streamer);
-    const feeWalletAta = getAssociatedTokenAddressSync(usdcMint, CASI_FEE_WALLET);
+    const escrowIdBytes  = Array.from(uuidToBytes(escrowId));
+    const [escrowPda]    = deriveEscrowPda(escrowId);
+    const vault          = getAssociatedTokenAddressSync(usdcMint, escrowPda,      true,  tokenProgram);
+    const streamerAta    = getAssociatedTokenAddressSync(usdcMint, streamer,        false, tokenProgram);
+    const feeWalletAta   = getAssociatedTokenAddressSync(usdcMint, CASI_FEE_WALLET, false, tokenProgram);
 
     const sig = await (this.program.methods as any)
       .approveFlash(escrowIdBytes)
       .accounts({
         streamer,
         viewer,
-        escrowState: escrowPda,
+        escrowState:          escrowPda,
         vault,
         streamerAta,
         feeWalletAta,
-        feeWallet: CASI_FEE_WALLET,
+        feeWallet:            CASI_FEE_WALLET,
         usdcMint,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        tokenProgram,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
+        systemProgram:          SystemProgram.programId,
       })
       .rpc();
 
@@ -227,31 +244,33 @@ export class CasiEscrowClient {
   }
 
   // -------------------------------------------------------------------------
-  // Flash — streamer denies (full refund to viewer)
+  // deny_flash
   // -------------------------------------------------------------------------
 
-  async denyFlash(params: ModerateFlashParams): Promise<{ sig: string; solscanUrl: string }> {
+  async denyFlash(
+    params: ModerateFlashParams,
+  ): Promise<{ sig: string; solscanUrl: string }> {
     const { escrowId, viewer, streamer } = params;
-    const usdcMint = params.usdcMint ?? (this.cluster === 'devnet' ? USDC_MINT_DEVNET : USDC_MINT_MAINNET);
+    const usdcMint    = params.usdcMint    ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
     const escrowIdBytes = Array.from(uuidToBytes(escrowId));
-    const [escrowPda] = deriveEscrowPda(escrowId);
-
-    const vault = getAssociatedTokenAddressSync(usdcMint, escrowPda, true);
-    const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer);
+    const [escrowPda]   = deriveEscrowPda(escrowId);
+    const vault         = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
+    const viewerAta     = getAssociatedTokenAddressSync(usdcMint, viewer,    false, tokenProgram);
 
     const sig = await (this.program.methods as any)
       .denyFlash(escrowIdBytes)
       .accounts({
         streamer,
         viewer,
-        escrowState: escrowPda,
+        escrowState:          escrowPda,
         vault,
         viewerAta,
         usdcMint,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        tokenProgram,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
+        systemProgram:          SystemProgram.programId,
       })
       .rpc();
 
@@ -259,31 +278,35 @@ export class CasiEscrowClient {
   }
 
   // -------------------------------------------------------------------------
-  // Flash / Beam — viewer cancels (before streamer acts)
+  // cancel_escrow  (viewer cancels before streamer acts)
   // -------------------------------------------------------------------------
 
-  async cancelEscrow(params: { escrowId: string; usdcMint?: PublicKey }): Promise<{ sig: string; solscanUrl: string }> {
+  async cancelEscrow(params: {
+    escrowId:    string;
+    usdcMint?:   PublicKey;
+    tokenProgram?: PublicKey;
+  }): Promise<{ sig: string; solscanUrl: string }> {
     const { escrowId } = params;
-    const usdcMint = params.usdcMint ?? (this.cluster === 'devnet' ? USDC_MINT_DEVNET : USDC_MINT_MAINNET);
+    const usdcMint    = params.usdcMint    ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
     const escrowIdBytes = Array.from(uuidToBytes(escrowId));
-    const [escrowPda] = deriveEscrowPda(escrowId);
-    const viewer = this.wallet.publicKey;
-
-    const vault = getAssociatedTokenAddressSync(usdcMint, escrowPda, true);
-    const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer);
+    const [escrowPda]   = deriveEscrowPda(escrowId);
+    const viewer        = this.wallet.publicKey;
+    const vault         = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
+    const viewerAta     = getAssociatedTokenAddressSync(usdcMint, viewer,    false, tokenProgram);
 
     const sig = await (this.program.methods as any)
       .cancelEscrow(escrowIdBytes)
       .accounts({
         viewer,
-        escrowState: escrowPda,
+        escrowState:          escrowPda,
         vault,
         viewerAta,
         usdcMint,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        tokenProgram,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
+        systemProgram:          SystemProgram.programId,
       })
       .rpc();
 
@@ -291,46 +314,48 @@ export class CasiEscrowClient {
   }
 
   // -------------------------------------------------------------------------
-  // Beam — streamer starts streaming (sets start_timestamp)
+  // start_beam  (streamer approves a Beam, sets start_timestamp on-chain)
   // -------------------------------------------------------------------------
 
-  async startBeam(params: { escrowId: string; streamer: PublicKey }): Promise<{ sig: string; solscanUrl: string }> {
+  async startBeam(params: {
+    escrowId: string;
+    streamer: PublicKey;
+  }): Promise<{ sig: string; solscanUrl: string }> {
     const { escrowId, streamer } = params;
     const escrowIdBytes = Array.from(uuidToBytes(escrowId));
-    const [escrowPda] = deriveEscrowPda(escrowId);
+    const [escrowPda]   = deriveEscrowPda(escrowId);
 
     const sig = await (this.program.methods as any)
       .startBeam(escrowIdBytes)
-      .accounts({
-        streamer,
-        escrowState: escrowPda,
-      })
+      .accounts({ streamer, escrowState: escrowPda })
       .rpc();
 
     return { sig, solscanUrl: solscanTxUrl(sig, this.cluster) };
   }
 
   // -------------------------------------------------------------------------
-  // Beam — permissionless settle (anyone can call)
+  // settle_beam  (permissionless; anyone may call after stream starts)
   // -------------------------------------------------------------------------
 
   async settleBeam(params: {
-    escrowId: string;
-    viewer: PublicKey;
-    streamer: PublicKey;
-    usdcMint?: PublicKey;
+    escrowId:    string;
+    viewer:      PublicKey;
+    streamer:    PublicKey;
+    usdcMint?:   PublicKey;
+    tokenProgram?: PublicKey;
   }): Promise<{ sig: string; solscanUrl: string }> {
     const { escrowId, viewer, streamer } = params;
-    const usdcMint = params.usdcMint ?? (this.cluster === 'devnet' ? USDC_MINT_DEVNET : USDC_MINT_MAINNET);
+    const usdcMint    = params.usdcMint    ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
     const escrowIdBytes = Array.from(uuidToBytes(escrowId));
-    const [escrowPda] = deriveEscrowPda(escrowId);
-    const caller = this.wallet.publicKey;
+    const [escrowPda]   = deriveEscrowPda(escrowId);
+    const caller        = this.wallet.publicKey;
 
-    const vault = getAssociatedTokenAddressSync(usdcMint, escrowPda, true);
-    const streamerAta = getAssociatedTokenAddressSync(usdcMint, streamer);
-    const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer);
-    const feeWalletAta = getAssociatedTokenAddressSync(usdcMint, CASI_FEE_WALLET);
+    const vault         = getAssociatedTokenAddressSync(usdcMint, escrowPda,      true,  tokenProgram);
+    const streamerAta   = getAssociatedTokenAddressSync(usdcMint, streamer,        false, tokenProgram);
+    const viewerAta     = getAssociatedTokenAddressSync(usdcMint, viewer,          false, tokenProgram);
+    const feeWalletAta  = getAssociatedTokenAddressSync(usdcMint, CASI_FEE_WALLET, false, tokenProgram);
 
     const sig = await (this.program.methods as any)
       .settleBeam(escrowIdBytes)
@@ -338,16 +363,16 @@ export class CasiEscrowClient {
         caller,
         streamer,
         viewer,
-        escrowState: escrowPda,
+        escrowState:          escrowPda,
         vault,
         streamerAta,
         viewerAta,
         feeWalletAta,
-        feeWallet: CASI_FEE_WALLET,
+        feeWallet:            CASI_FEE_WALLET,
         usdcMint,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        tokenProgram,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
+        systemProgram:          SystemProgram.programId,
       })
       .rpc();
 
