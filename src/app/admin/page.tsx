@@ -127,13 +127,19 @@ function BackdropModal({ onConfirm, onClose }: {
         <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: 'var(--casi-text)', marginBottom: 6 }}>Full Backdrop</h2>
         <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 24, lineHeight: 1.6 }}>Full-screen slot. Viewers send their image — you approve before it goes live.</p>
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 8 }}>Price</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Price</span>
+            <button type="button" onClick={() => setPrice(0)}
+              style={{ background: price === 0 ? 'rgba(74,222,128,0.14)' : 'rgba(255,255,255,0.04)', border: `1px solid ${price === 0 ? 'rgba(74,222,128,0.4)' : '#222'}`, borderRadius: 6, padding: '3px 10px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: price === 0 ? '#4ade80' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
+              {price === 0 ? '★ Free slot' : '★ Make free'}
+            </button>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: 'var(--casi-accent)', fontWeight: 800 }}>$</span>
-            <input type="number" min={1} value={price} onChange={(e) => setPrice(Math.max(1, parseInt(e.target.value) || 1))}
-              style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid #222', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: 'var(--casi-text)', outline: 'none', fontFamily: "'Syne', sans-serif" }} autoFocus />
-            <select value={unit} onChange={(e) => setUnit(e.target.value)}
-              style={{ background: 'var(--casi-surface)', border: '1px solid #222', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--casi-text)', outline: 'none', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+            <span style={{ color: price === 0 ? '#4ade80' : 'var(--casi-accent)', fontWeight: 800 }}>$</span>
+            <input type="number" min={0} value={price} onChange={(e) => setPrice(Math.max(0, parseInt(e.target.value) || 0))}
+              style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: `1px solid ${price === 0 ? 'rgba(74,222,128,0.3)' : '#222'}`, borderRadius: 8, padding: '10px 14px', fontSize: 14, color: 'var(--casi-text)', outline: 'none', fontFamily: "'Syne', sans-serif" }} autoFocus />
+            <select value={unit} onChange={(e) => setUnit(e.target.value)} disabled={price === 0}
+              style={{ background: 'var(--casi-surface)', border: '1px solid #222', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--casi-text)', outline: 'none', cursor: price === 0 ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono', monospace", opacity: price === 0 ? 0.4 : 1 }}>
               <option value="min">/min</option>
               <option value="hr">/hr</option>
             </select>
@@ -198,24 +204,35 @@ function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLo
         <div style={{ padding: 24 }}>
 
           {/* Price editor */}
-          <div style={{ background: 'rgba(var(--casi-accent-rgb),0.05)', border: '1px solid rgba(var(--casi-accent-rgb),0.15)', borderRadius: 10, padding: 16, marginBottom: 16 }}>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 10 }}>Price</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ color: 'var(--casi-accent)', fontWeight: 800, fontSize: 16 }}>$</span>
-              <input type="number" min={0} value={editPrice}
-                onChange={(e) => setEditPrice(e.target.value)}
-                style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid #333', borderRadius: 8, padding: '10px 14px', fontSize: 16, color: 'var(--casi-text)', outline: 'none', fontFamily: "'DM Mono', monospace" }} />
-              <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)}
-                style={{ background: 'var(--casi-surface)', border: '1px solid #333', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--casi-text)', outline: 'none', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
-                <option value="min">/min</option>
-                <option value="hr">/hr</option>
-              </select>
-              <button onClick={() => { onUpdatePrice(el.id, parseFloat(editPrice) || 0, editUnit); onClose(); }}
-                style={{ background: 'var(--casi-accent)', border: 'none', borderRadius: 8, padding: '10px 16px', color: 'var(--casi-bg)', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', cursor: 'pointer' }}>
-                Save
-              </button>
+          {(() => {
+            const isFree = parseFloat(editPrice) === 0;
+            return (
+            <div style={{ background: isFree ? 'rgba(74,222,128,0.05)' : 'rgba(var(--casi-accent-rgb),0.05)', border: `1px solid ${isFree ? 'rgba(74,222,128,0.2)' : 'rgba(var(--casi-accent-rgb),0.15)'}`, borderRadius: 10, padding: 16, marginBottom: 16, transition: 'background .15s, border-color .15s' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)' }}>Price</div>
+                <button type="button" onClick={() => setEditPrice('0')}
+                  style={{ background: isFree ? 'rgba(74,222,128,0.14)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isFree ? 'rgba(74,222,128,0.4)' : '#222'}`, borderRadius: 6, padding: '3px 10px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: isFree ? '#4ade80' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
+                  {isFree ? '★ Free slot' : '★ Make free'}
+                </button>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ color: isFree ? '#4ade80' : 'var(--casi-accent)', fontWeight: 800, fontSize: 16 }}>$</span>
+                <input type="number" min={0} value={editPrice}
+                  onChange={(e) => setEditPrice(e.target.value)}
+                  style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: `1px solid ${isFree ? 'rgba(74,222,128,0.3)' : '#333'}`, borderRadius: 8, padding: '10px 14px', fontSize: 16, color: 'var(--casi-text)', outline: 'none', fontFamily: "'DM Mono', monospace" }} />
+                <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)} disabled={isFree}
+                  style={{ background: 'var(--casi-surface)', border: '1px solid #333', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--casi-text)', outline: 'none', cursor: isFree ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono', monospace", opacity: isFree ? 0.4 : 1 }}>
+                  <option value="min">/min</option>
+                  <option value="hr">/hr</option>
+                </select>
+                <button onClick={() => { onUpdatePrice(el.id, parseFloat(editPrice) || 0, editUnit); onClose(); }}
+                  style={{ background: isFree ? '#4ade80' : 'var(--casi-accent)', border: 'none', borderRadius: 8, padding: '10px 16px', color: 'var(--casi-bg)', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', cursor: 'pointer' }}>
+                  Save
+                </button>
+              </div>
             </div>
-          </div>
+            );
+          })()}
 
           {/* Active booking */}
           {activeBooking ? (
@@ -367,18 +384,25 @@ function BeamCtrlPanel({ el, activeBooking, updateSlider, updateLayer, toggleLoc
       </div>
 
       {/* Price + lock + delete row */}
+      {(() => {
+        const beamFree = parseFloat(editPrice) === 0;
+        return (
       <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:12, borderTop:'1px solid rgba(255,255,255,0.05)', flexWrap:'wrap' }}>
         <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1, textTransform:'uppercase', color:'#444', marginRight:2 }}>Price</span>
-        <span style={{ color:'var(--casi-accent)', fontWeight:800, fontSize:14 }}>$</span>
+        <span style={{ color: beamFree ? '#4ade80' : 'var(--casi-accent)', fontWeight:800, fontSize:14 }}>$</span>
         <input type="number" min={0} value={editPrice} onChange={(e) => setEditPrice(e.target.value)}
-          style={{ width:56, background:'rgba(255,255,255,0.06)', border:'1px solid #2a2a2a', borderRadius:7, padding:'5px 8px', fontSize:13, color:'var(--casi-text)', outline:'none', fontFamily:"'DM Mono',monospace", textAlign:'center' }} />
-        <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)}
-          style={{ background:'var(--casi-surface)', border:'1px solid #2a2a2a', borderRadius:7, padding:'5px 8px', fontSize:11, color:'var(--casi-text)', outline:'none', cursor:'pointer', fontFamily:"'DM Mono',monospace" }}>
+          style={{ width:56, background:'rgba(255,255,255,0.06)', border:`1px solid ${beamFree ? 'rgba(74,222,128,0.3)' : '#2a2a2a'}`, borderRadius:7, padding:'5px 8px', fontSize:13, color:'var(--casi-text)', outline:'none', fontFamily:"'DM Mono',monospace", textAlign:'center' }} />
+        <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)} disabled={beamFree}
+          style={{ background:'var(--casi-surface)', border:'1px solid #2a2a2a', borderRadius:7, padding:'5px 8px', fontSize:11, color:'var(--casi-text)', outline:'none', cursor: beamFree ? 'not-allowed' : 'pointer', fontFamily:"'DM Mono',monospace", opacity: beamFree ? 0.4 : 1 }}>
           <option value="min">/min</option>
           <option value="hr">/hr</option>
         </select>
+        <button type="button" onClick={() => setEditPrice('0')}
+          style={{ background: beamFree ? 'rgba(74,222,128,0.14)' : 'rgba(255,255,255,0.04)', border: `1px solid ${beamFree ? 'rgba(74,222,128,0.4)' : '#222'}`, borderRadius: 6, padding: '5px 10px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: beamFree ? '#4ade80' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
+          {beamFree ? '★ Free' : '★ Make free'}
+        </button>
         <button onClick={() => updateLayer(el.id, { price_value: parseFloat(editPrice) || 0, price_unit: editUnit })}
-          style={{ background:'var(--casi-accent)', border:'none', borderRadius:7, padding:'5px 12px', color:'var(--casi-bg)', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:11, textTransform:'uppercase', cursor:'pointer' }}>
+          style={{ background: beamFree ? '#4ade80' : 'var(--casi-accent)', border:'none', borderRadius:7, padding:'5px 12px', color:'var(--casi-bg)', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:11, textTransform:'uppercase', cursor:'pointer' }}>
           Save
         </button>
         {/* Lock toggle */}
@@ -391,6 +415,8 @@ function BeamCtrlPanel({ el, activeBooking, updateSlider, updateLayer, toggleLoc
           ✕
         </button>
       </div>
+        );
+      })()}
 
       {/* Active booking strip */}
       {activeBooking && (

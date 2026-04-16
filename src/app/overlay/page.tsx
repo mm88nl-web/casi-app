@@ -455,8 +455,8 @@ function OverlayContent() {
       supabase.from('bookings').select('*').eq('profile_id', profId).eq('status','approved_queued').order('approved_at',{ascending:true}),
       supabase.from('bookings').select('element_id').eq('profile_id', profId).eq('status','pending'),
     ]);
-    // Filter out beams with no price on viewer overlay
-    setElements((els||[]).filter((el:any) => el.is_background || el.price_value > 0));
+    // Viewer overlay: show backdrops + any slot with a defined price (0 == free).
+    setElements((els||[]).filter((el:any) => el.is_background || el.price_value >= 0));
     setActiveBookings(active||[]);
     setApprovedQueuedBookings(aq||[]);
     const counts: Record<string,number> = {};
@@ -700,6 +700,8 @@ function OverlayContent() {
   const effectiveStoragePath = uploadMode === 'upload' ? uploadedPath : null;
   const effectiveFileType   = uploadMode === 'upload' ? uploadedFileType : (imageUrl ? getUrlFileType(imageUrl) : null);
 
+  const isFreeSlot = Number(selectedSlot.price_value) === 0;
+
   const { data: newBooking, error: insertError } = await supabase.from('bookings').insert({
     profile_id:    profile.id,
     element_id:    selectedSlot.id,
@@ -712,6 +714,7 @@ function OverlayContent() {
     price_value:   selectedSlot.price_value,
     price_unit:    selectedSlot.price_unit,
     status:        'pending',
+    payment_method: isFreeSlot ? 'free' : 'stripe',
     is_queued:     isQueue || isExtend,
     queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
   }).select().single();
@@ -723,28 +726,32 @@ function OverlayContent() {
     return;
   }
 
-  if (false) {
-  // extend now pays via Stripe like direct bookings
-} else {
-    try {
-      const res = await fetch('/api/stripe/authorize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ booking_id: newBooking.id }),
-      });
-      const json = await res.json();
-      if (json.checkout_url) {
-        window.location.href = json.checkout_url;
-      } else {
-        console.error('Stripe error:', json.error);
-        showNotif(json.error || 'Payment failed to initialize', 'error');
-        setSubmitting(false);
-      }
-    } catch (err) {
-      console.error('Authorize fetch failed:', err);
-      showNotif('Server error. Please try again.', 'error');
+  // Free slot — no payment, just queue for streamer approval and close the form.
+  if (isFreeSlot) {
+    showNotif('★ Free request sent — awaiting streamer approval', 'success');
+    setSubmitting(false);
+    closeSlot();
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/stripe/authorize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_id: newBooking.id }),
+    });
+    const json = await res.json();
+    if (json.checkout_url) {
+      window.location.href = json.checkout_url;
+    } else {
+      console.error('Stripe error:', json.error);
+      showNotif(json.error || 'Payment failed to initialize', 'error');
       setSubmitting(false);
     }
+  } catch (err) {
+    console.error('Authorize fetch failed:', err);
+    showNotif('Server error. Please try again.', 'error');
+    setSubmitting(false);
   }
 };
 
@@ -754,6 +761,11 @@ function OverlayContent() {
     const effectiveSolStoragePath = uploadMode === 'upload' ? uploadedPath   : null;
     const effectiveSolFileType    = uploadMode === 'upload' ? uploadedFileType : (imageUrl ? getUrlFileType(imageUrl) : null);
     if (!savedViewerName || !effectiveSolImageUrl || !selectedSlot || !publicKey || !wallet?.adapter) return;
+    if (Number(selectedSlot.price_value) === 0) {
+      // Free slots go through submitBooking, not the Solana rail.
+      showNotif('This slot is free — use “Send Free Request” instead', 'warning');
+      return;
+    }
     if (!profile?.solana_wallet) {
       showNotif('This streamer has not linked a Solana wallet yet', 'denied');
       return;
@@ -1294,10 +1306,12 @@ function OverlayContent() {
                     </div>
                   )}
 
-                  {el.price_value > 0 && !isOBS && (
+                  {el.price_value >= 0 && !isOBS && (
                     <div style={{ position:'absolute', bottom:el.is_background?12:-54, left:'50%', transform:'translateX(-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:5, zIndex:100, whiteSpace:'nowrap' }}>
-                      <div style={{ background:'rgba(5,5,5,0.92)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:20, padding:'3px 10px', display:'flex', alignItems:'center', gap:5 }}>
-                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:500, color:tc }}>${el.price_value}/{el.price_unit}</span>
+                      <div style={{ background:'rgba(5,5,5,0.92)', border:`1px solid ${Number(el.price_value)===0?'rgba(74,222,128,0.35)':'rgba(255,255,255,0.08)'}`, borderRadius:20, padding:'3px 10px', display:'flex', alignItems:'center', gap:5 }}>
+                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:500, color: Number(el.price_value)===0 ? '#4ade80' : tc }}>
+                          {Number(el.price_value)===0 ? '★ Free' : `$${el.price_value}/${el.price_unit}`}
+                        </span>
                         {el.max_duration_minutes && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'#444' }}>· max {el.max_duration_minutes}m</span>}
                       </div>
                       {isLocked ? (
@@ -1324,8 +1338,8 @@ function OverlayContent() {
                         </button>
                       ) : !selectedSlot ? (
                         <button onClick={() => openSlot(el, false)}
-                          style={{ background:tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer', boxShadow:`0 4px 14px rgba(${tcRgb},0.19)` }}>
-                          Rent this slot
+                          style={{ background: Number(el.price_value)===0 ? '#4ade80' : tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer', boxShadow: Number(el.price_value)===0 ? '0 4px 14px rgba(74,222,128,0.19)' : `0 4px 14px rgba(${tcRgb},0.19)` }}>
+                          {Number(el.price_value)===0 ? 'Claim free slot' : 'Rent this slot'}
                         </button>
                       ) : null}
                     </div>
@@ -1344,7 +1358,9 @@ function OverlayContent() {
               <div className="bf-hdr">
                 <div>
                   <div className="bf-type" style={{ color:accentColor }}>{isExtend?'⏱ Extend slot':isQueue?'⏳ Join queue':'🎯 Rent slot'}</div>
-                  <div className="bf-price" style={{ color:accentColor }}>${selectedSlot.price_value}/{selectedSlot.price_unit}</div>
+                  <div className="bf-price" style={{ color: Number(selectedSlot.price_value)===0 ? '#4ade80' : accentColor }}>
+                    {Number(selectedSlot.price_value)===0 ? '★ Free' : `$${selectedSlot.price_value}/${selectedSlot.price_unit}`}
+                  </div>
                 </div>
                 <button className="bf-x" onClick={closeSlot}>✕</button>
               </div>
@@ -1480,7 +1496,8 @@ function OverlayContent() {
                 </div>
               </div>
 
-              {/* ── USDC cost preview ── */}
+              {/* ── USDC cost preview (paid slots only) ── */}
+              {Number(selectedSlot.price_value) > 0 && (
               <div style={{ background:'rgba(153,69,255,0.05)', border:'1px solid rgba(153,69,255,0.2)', borderRadius:10, padding:'12px 14px', margin:'12px 0', fontFamily:"'DM Mono',monospace", fontSize:11 }}>
                 {[['Duration', formatTime(durationSeconds)], ['Rate', `$${selectedSlot.price_value}/${selectedSlot.price_unit}`]].map(([l, v]) => (
                   <div key={l} style={{ display:'flex', justifyContent:'space-between', color:'#555', marginBottom:5 }}>
@@ -1508,6 +1525,7 @@ function OverlayContent() {
                   <div style={{ color:'#555', fontSize:10, marginTop:6 }}>Connect wallet to pay with USDC via Streamflow</div>
                 )}
               </div>
+              )}
 
 {isQueue && (() => {
   const active = activeBookings.find(b => b.element_id === selectedSlot?.id);
@@ -1525,69 +1543,91 @@ function OverlayContent() {
     </div>
   );
 })()}
-              <div className="bf-footer">
-                <div>
-                  <div className="bf-cost-lbl">Estimated cost</div>
-                  <div className="bf-cost-val" style={{ color:accentColor }}>${estimatedCost}</div>
+              {(() => {
+                const isFreeSlot = Number(selectedSlot.price_value) === 0;
+                return (
+                <div className="bf-footer">
+                  <div>
+                    <div className="bf-cost-lbl">{isFreeSlot ? 'Cost' : 'Estimated cost'}</div>
+                    <div className="bf-cost-val" style={{ color: isFreeSlot ? '#4ade80' : accentColor }}>
+                      {isFreeSlot ? 'Free' : `$${estimatedCost}`}
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', justifyContent:'flex-end' }}>
+                    {/* ── Stripe / Free ── */}
+                    <button onClick={submitBooking} disabled={!canSubmit||submitting} className="bf-sub"
+                      style={{ background: isFreeSlot ? '#4ade80' : accentColor, color:'var(--casi-bg)', display:'flex', alignItems:'center', gap:7, opacity: (!canSubmit||submitting) ? 0.5 : 1 }}>
+                      {isFreeSlot ? (
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6.5 1l1.545 3.13L11.5 4.635 9 7.073l.59 3.442L6.5 8.89 3.41 10.515 4 7.073 1.5 4.635l3.455-.505L6.5 1z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/>
+                        </svg>
+                      ) : (
+                        <svg width="14" height="11" viewBox="0 0 14 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <rect x="0.5" y="0.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeOpacity="0.6"/>
+                          <rect x="0" y="3" width="14" height="2.5" fill="currentColor" fillOpacity="0.5"/>
+                          <rect x="2" y="7" width="4" height="1.5" rx="0.5" fill="currentColor"/>
+                        </svg>
+                      )}
+                      {submitting?'Sending…':isExtend?'Extend':isFreeSlot?'Send Free Request':isQueue?'Join Queue':'Send Request'}
+                    </button>
+                    {/* ── Solana / Streamflow (hidden for free slots) ── */}
+                    {!isFreeSlot && (
+                      <button
+                        disabled={connecting || submitting || (connected && !canSubmit)}
+                        className="bf-sub"
+                        style={{ background: connected ? '#9945FF' : 'rgba(153,69,255,0.12)', color: connected ? '#fff' : '#9945FF', border: connected ? 'none' : '1px solid rgba(153,69,255,0.35)', display:'flex', alignItems:'center', gap:7, opacity: (connecting||submitting||(connected&&!canSubmit)) ? 0.5 : 1 }}
+                        onClick={() => {
+                          if (!connected) {
+                            openWalletModal();
+                          } else {
+                            setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
+                          }
+                        }}
+                      >
+                        <svg width="13" height="11" viewBox="0 0 13 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M1.5 8.5h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33 8.87c-.14-.14-.04-.37.17-.37ZM1.5 0h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33.37C1.19.23 1.29 0 1.5 0ZM11.67 4.37 10.58 5.5H1.82c-.21 0-.31-.23-.17-.37l1.1-1.1c.1-.1.23-.16.38-.16h8.37c.21 0 .31.23.17.37Z" fill="currentColor"/>
+                        </svg>
+                        {connecting ? 'Connecting…' : connected ? 'Pay with SOL' : 'Connect & Pay SOL'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div style={{ display:'flex', gap:8 }}>
-                  {/* ── Stripe ── */}
-                  <button onClick={submitBooking} disabled={!canSubmit||submitting} className="bf-sub"
-                    style={{ background:accentColor, color:'var(--casi-bg)', display:'flex', alignItems:'center', gap:7, opacity: (!canSubmit||submitting) ? 0.5 : 1 }}>
-                    {/* card icon */}
-                    <svg width="14" height="11" viewBox="0 0 14 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect x="0.5" y="0.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeOpacity="0.6"/>
-                      <rect x="0" y="3" width="14" height="2.5" fill="currentColor" fillOpacity="0.5"/>
-                      <rect x="2" y="7" width="4" height="1.5" rx="0.5" fill="currentColor"/>
-                    </svg>
-                    {submitting?'Sending…':isExtend?'Extend':isQueue?'Join Queue':'Send Request'}
-                  </button>
-                  {/* ── Solana / Streamflow ── */}
-                  <button
-                    disabled={connecting || submitting || (connected && !canSubmit)}
-                    className="bf-sub"
-                    style={{ background: connected ? '#9945FF' : 'rgba(153,69,255,0.12)', color: connected ? '#fff' : '#9945FF', border: connected ? 'none' : '1px solid rgba(153,69,255,0.35)', display:'flex', alignItems:'center', gap:7, opacity: (connecting||submitting||(connected&&!canSubmit)) ? 0.5 : 1 }}
-                    onClick={() => {
-                      if (!connected) {
-                        openWalletModal();
-                      } else {
-                        setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
-                      }
-                    }}
-                  >
-                    {/* Solana ◎ mark */}
-                    <svg width="13" height="11" viewBox="0 0 13 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M1.5 8.5h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33 8.87c-.14-.14-.04-.37.17-.37ZM1.5 0h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33.37C1.19.23 1.29 0 1.5 0ZM11.67 4.37 10.58 5.5H1.82c-.21 0-.31-.23-.17-.37l1.1-1.1c.1-.1.23-.16.38-.16h8.37c.21 0 .31.23.17.37Z" fill="currentColor"/>
-                    </svg>
-                    {connecting ? 'Connecting…' : connected ? 'Pay with SOL' : 'Connect & Pay SOL'}
-                  </button>
-                </div>
-              </div>
+                );
+              })()}
             </div>
           )}
 
           {/* SLOTS LIST */}
-          {!isOBS && !selectedSlot && elements.filter((el:any)=>el.price_value>0).length>0 && (
+          {!isOBS && !selectedSlot && elements.filter((el:any)=>el.price_value>=0).length>0 && (
             <div className="slots-sec">
               <div className="slots-lbl">Available slots</div>
               <div className="slots-grid">
-                {elements.filter((el:any)=>el.price_value>0).map((el:any) => {
+                {elements.filter((el:any)=>el.price_value>=0).map((el:any) => {
                   const activeBooking    = getActiveBookingForSlot(el.id);
                   const isOccupied       = !!activeBooking;
                   const queueCount       = queueCounts[el.id]||0;
                   const myBookingForSlot = getMyBookingForSlot(el.id);
                   const isLocked         = !!el.locked;
-                  const priceColor       = isLocked?'#555':myBookingForSlot?'#555':tc;
+                  const isFree           = Number(el.price_value) === 0;
+                  const priceColor       = isLocked?'#555':myBookingForSlot?'#555':isFree?'#4ade80':tc;
                   return (
                     <button key={el.id} className={`slot-card ${myBookingForSlot||isLocked?'s-disabled':''}`}
-                      style={{ borderColor:isOccupied&&!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.14)`:!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.09)`:undefined }}
+                      style={{ borderColor:isFree?'rgba(74,222,128,0.22)':isOccupied&&!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.14)`:!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.09)`:undefined, position:'relative' }}
                       onClick={() => !myBookingForSlot&&!isLocked&&openSlot(el,isOccupied)}>
-                      <div className="s-thumb" style={{ borderColor:isOccupied?`rgba(${tcRgb},0.21)`:`rgba(${tcRgb},0.14)` }}>
+                      {isFree && !isLocked && (
+                        <span style={{ position:'absolute', top:8, right:8, background:'rgba(74,222,128,0.14)', border:'1px solid rgba(74,222,128,0.4)', color:'#4ade80', fontFamily:"'DM Mono', monospace", fontSize:8, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', padding:'2px 7px', borderRadius:4, pointerEvents:'none' }}>
+                          ★ Free
+                        </span>
+                      )}
+                      <div className="s-thumb" style={{ borderColor:isFree?'rgba(74,222,128,0.25)':isOccupied?`rgba(${tcRgb},0.21)`:`rgba(${tcRgb},0.14)` }}>
                         {el.image_url?<img src={el.image_url} style={{ width:'100%',height:'100%',objectFit:'contain' }} alt="" />:<span>{isLocked?'🔒':el.is_background?'🖼':'✦'}</span>}
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div className="s-type">{isLocked?'Locked':myBookingForSlot?myBookingForSlot.status.replace('_',' '):isOccupied?`In use${queueCount>0?` · ${queueCount} waiting`:''}`:el.is_background?'Full Backdrop':'Beam'}</div>
-                        <div className="s-price" style={{ color:priceColor }}>${el.price_value}/{el.price_unit}{el.max_duration_minutes?` · max ${el.max_duration_minutes}m`:''}</div>
+                        <div className="s-price" style={{ color:priceColor }}>
+                          {isFree ? 'Free' : `$${el.price_value}/${el.price_unit}`}
+                          {el.max_duration_minutes?` · max ${el.max_duration_minutes}m`:''}
+                        </div>
                       </div>
                     </button>
                   );
@@ -1596,8 +1636,9 @@ function OverlayContent() {
             </div>
           )}
 
-          {/* FLASH FORM — visible to viewers when not booking a slot */}
-          {!isOBS && !selectedSlot && savedViewerName && profile?.id && profile?.stripe_account_id && (
+          {/* FLASH FORM — shown when the streamer has at least one flash rail enabled */}
+          {!isOBS && !selectedSlot && savedViewerName && profile?.id &&
+            (profile?.stripe_account_id || profile?.allow_free_flashes || (profile?.solana_wallet && process.env.NEXT_PUBLIC_CASI_SOLANA_ENABLED === 'true')) && (
             <SendFlashSection
               profileId={profile.id}
               username={username}
