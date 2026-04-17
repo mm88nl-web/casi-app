@@ -678,7 +678,8 @@ function OverlayContent() {
   };
 
   const submitBooking = async () => {
-  if (!savedViewerName || !imageUrl || !selectedSlot) return;
+  const hasMedia = uploadMode === 'upload' ? !!uploadedUrl : !!imageUrl;
+  if (!savedViewerName || !hasMedia || !selectedSlot) return;
   setSubmitting(true);
 
   // Clean up any stale unpaid pending bookings for this slot+viewer
