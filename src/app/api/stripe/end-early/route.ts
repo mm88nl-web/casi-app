@@ -37,8 +37,16 @@ export async function POST(req: Request) {
   }
   // ─────────────────────────────────────────────────────────────────────────
 
+  // Need the streamer's connected account id for Direct-Charges PI calls.
+  const { data: bookingProfile } = await supabase
+    .from('profiles')
+    .select('stripe_account_id')
+    .eq('id', booking.profile_id)
+    .single();
+  const stripeAccount = bookingProfile?.stripe_account_id;
+
   // Prorated capture
-  if (booking.payment_intent_id && booking.original_amount_cents && booking.started_at) {
+  if (booking.payment_intent_id && booking.original_amount_cents && booking.started_at && stripeAccount) {
     const startedAt = new Date(booking.started_at).getTime();
     const now = Date.now();
     const actualMinutes = Math.max(1, (now - startedAt) / 1000 / 60);
@@ -47,9 +55,11 @@ export async function POST(req: Request) {
       booking.original_amount_cents
     );
     try {
-      await stripe.paymentIntents.capture(booking.payment_intent_id, {
-        amount_to_capture: captureAmount,
-      });
+      await stripe.paymentIntents.capture(
+        booking.payment_intent_id,
+        { amount_to_capture: captureAmount },
+        { stripeAccount },
+      );
       console.log('End early capture:', captureAmount, 'of', booking.original_amount_cents);
     } catch (err: any) {
       console.error('Stripe capture failed:', err.message);
@@ -81,13 +91,14 @@ export async function POST(req: Request) {
       .eq('is_queued', true);
 
     for (const ext of (pendingExtensions || [])) {
-      if (ext.payment_intent_id) {
+      if (ext.payment_intent_id && stripeAccount) {
         try {
-          const pi = await stripe.paymentIntents.retrieve(ext.payment_intent_id);
+          const opts = { stripeAccount };
+          const pi = await stripe.paymentIntents.retrieve(ext.payment_intent_id, undefined, opts);
           if (pi.status === 'requires_capture') {
-            await stripe.paymentIntents.cancel(ext.payment_intent_id);
+            await stripe.paymentIntents.cancel(ext.payment_intent_id, undefined, opts);
           } else if (pi.status === 'succeeded') {
-            await stripe.refunds.create({ payment_intent: ext.payment_intent_id });
+            await stripe.refunds.create({ payment_intent: ext.payment_intent_id }, opts);
           }
         } catch (err: any) {
           console.error('Extension cancel failed:', err.message);

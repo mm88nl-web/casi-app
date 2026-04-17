@@ -7,12 +7,30 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+/**
+ * Cancels (voids or refunds) a booking's PaymentIntent and marks it denied.
+ *
+ * Two caller types:
+ *   1. Streamer (admin page) — presents a Supabase bearer token. Allowed to
+ *      cancel any booking on their own profile.
+ *   2. Viewer (overlay page) — anonymous, but must echo back the booking's
+ *      viewer_name. This raises the bar beyond "enumerate booking_id and DoS
+ *      everyone's bookings". A future cancel_token on the booking row would
+ *      be stronger — tracked for the subscription refactor.
+ *
+ * Direct Charges note: PaymentIntents live on the streamer's connected
+ * account (see stripe/authorize/route.ts), so every Stripe call here must
+ * pass { stripeAccount } to target the right account.
+ */
 export async function POST(req: Request) {
-  const { booking_id } = await req.json();
+  const { booking_id, viewer_name: claimedViewerName } = await req.json();
+  if (!booking_id) {
+    return NextResponse.json({ error: 'booking_id required' }, { status: 400 });
+  }
 
   const { data: booking } = await supabase
     .from('bookings')
-    .select('payment_intent_id, status')
+    .select('id, profile_id, payment_intent_id, status, viewer_name')
     .eq('id', booking_id)
     .single();
 
@@ -20,17 +38,42 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
 
-  if (booking.payment_intent_id) {
-    const pi = await stripe.paymentIntents.retrieve(booking.payment_intent_id);
+  // ── Authz: streamer-token OR viewer_name match ──────────────────────────
+  const token = req.headers.get('authorization')?.replace('Bearer ', '');
+  let authorized = false;
 
-    if (pi.status === 'requires_capture') {
-      // Authorized but not captured — void it
-      await stripe.paymentIntents.cancel(booking.payment_intent_id);
-    } else if (pi.status === 'succeeded') {
-      // Already captured (end-early ran) — full refund
-      await stripe.refunds.create({ payment_intent: booking.payment_intent_id });
+  if (token) {
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (user && user.id === booking.profile_id) authorized = true;
+  }
+  if (!authorized && claimedViewerName && booking.viewer_name === claimedViewerName) {
+    authorized = true;
+  }
+  if (!authorized) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
+  // Need the streamer's connected account id to target their PaymentIntent.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('stripe_account_id')
+    .eq('id', booking.profile_id)
+    .single();
+
+  if (booking.payment_intent_id && profile?.stripe_account_id) {
+    const opts = { stripeAccount: profile.stripe_account_id };
+    try {
+      const pi = await stripe.paymentIntents.retrieve(booking.payment_intent_id, undefined, opts);
+      if (pi.status === 'requires_capture') {
+        await stripe.paymentIntents.cancel(booking.payment_intent_id, undefined, opts);
+      } else if (pi.status === 'succeeded') {
+        await stripe.refunds.create({ payment_intent: booking.payment_intent_id }, opts);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[stripe/cancel] stripe call failed:', message);
     }
-    // if already canceled, do nothing
   }
 
   await supabase

@@ -42,16 +42,34 @@ export async function GET(req: Request) {
     return now >= endsAt;
   });
 
+  // Look up connected-account ids in bulk so we can target Direct-Charges
+  // PaymentIntents on each streamer's account.
+  const profileIds = Array.from(new Set(overdue.map((b: { profile_id?: string }) => b.profile_id).filter(Boolean)));
+  const stripeAccountByProfile = new Map<string, string>();
+  if (profileIds.length) {
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, stripe_account_id')
+      .in('id', profileIds);
+    for (const p of profs || []) {
+      if (p.stripe_account_id) stripeAccountByProfile.set(p.id, p.stripe_account_id);
+    }
+  }
+
   let captured = 0;
   for (const booking of overdue) {
     try {
+      const stripeAccount = stripeAccountByProfile.get(booking.profile_id);
       // Capture the full amount (natural completion)
-      if (booking.original_amount_cents) {
-        const pi = await stripe.paymentIntents.retrieve(booking.payment_intent_id);
+      if (booking.original_amount_cents && stripeAccount) {
+        const opts = { stripeAccount };
+        const pi = await stripe.paymentIntents.retrieve(booking.payment_intent_id, undefined, opts);
         if (pi.status === 'requires_capture') {
-          await stripe.paymentIntents.capture(booking.payment_intent_id, {
-            amount_to_capture: booking.original_amount_cents,
-          });
+          await stripe.paymentIntents.capture(
+            booking.payment_intent_id,
+            { amount_to_capture: booking.original_amount_cents },
+            opts,
+          );
           captured++;
         }
       }

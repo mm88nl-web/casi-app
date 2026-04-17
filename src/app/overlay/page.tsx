@@ -584,11 +584,13 @@ function OverlayContent() {
 
   const cancelBooking = async (bookingId: string) => {
   setCancelling(bookingId);
-  // Call cancel API which handles both Stripe + DB
+  // Call cancel API which handles both Stripe + DB. Viewer is anonymous, so
+  // we echo back the stored viewer_name — the server checks it matches the
+  // booking row as a cheap ownership signal. See stripe/cancel/route.ts.
   await fetch('/api/stripe/cancel', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ booking_id: bookingId }),
+    body: JSON.stringify({ booking_id: bookingId, viewer_name: savedViewerName }),
   });
   setCancelling(null);
   showNotif('Booking cancelled', 'warning');

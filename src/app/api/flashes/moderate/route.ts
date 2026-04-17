@@ -15,6 +15,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Connection, PublicKey } from '@solana/web3.js';
+import { createHash } from 'node:crypto';
 import { stripe } from '@/lib/stripe';
 
 const supabase = createClient(
@@ -60,31 +61,75 @@ function deriveEscrowPda(flashId: string): PublicKey {
   return pda;
 }
 
+/** Anchor instruction discriminator: sha256("global:<ix_name>").slice(0, 8). */
+function anchorDiscriminator(name: string): Buffer {
+  return createHash('sha256').update(`global:${name}`).digest().subarray(0, 8);
+}
+const DISC_APPROVE = anchorDiscriminator('approve_flash');
+const DISC_DENY    = anchorDiscriminator('deny_flash');
+
 /**
- * Verify that a Solana tx signature corresponds to a successful CPI
- * into the CASI escrow program and touches the expected escrow PDA.
+ * Verify that a Solana tx signature is a successful invocation of the CASI
+ * escrow program, that the instruction matches the action the streamer
+ * claims to be taking (approve vs deny), that the expected escrow PDA is
+ * one of its accounts, and that the streamer's own wallet signed the tx.
+ *
+ * Without the discriminator + signer checks a viewer could submit any
+ * self-signed tx that merely touches the program and claim it's an approval.
+ *
  * Returns null on success, or an error string.
  */
 async function verifySolanaTx(
   signature: string,
   expectedEscrowPda: PublicKey,
+  action: 'approve' | 'deny',
+  expectedStreamerWallet: PublicKey,
 ): Promise<string | null> {
   const conn = new Connection(SOLANA_RPC, 'confirmed');
   const tx = await conn.getTransaction(signature, {
     commitment: 'confirmed',
     maxSupportedTransactionVersion: 0,
   });
-  if (!tx)                 return 'Transaction not found on-chain';
-  if (tx.meta?.err)        return `Transaction failed on-chain: ${JSON.stringify(tx.meta.err)}`;
+  if (!tx)          return 'Transaction not found on-chain';
+  if (tx.meta?.err) return `Transaction failed on-chain: ${JSON.stringify(tx.meta.err)}`;
 
   const message = tx.transaction.message;
-  const keys = 'staticAccountKeys' in message
+  const staticKeys: PublicKey[] = 'staticAccountKeys' in message
     ? message.staticAccountKeys
     : (message as any).accountKeys;
-  const touchesProgram = keys.some((k: PublicKey) => k.equals(getProgramId()));
-  const touchesPda     = keys.some((k: PublicKey) => k.equals(expectedEscrowPda));
-  if (!touchesProgram) return 'Transaction does not invoke the CASI escrow program';
-  if (!touchesPda)     return 'Transaction does not reference the expected escrow PDA';
+  const programId = getProgramId();
+  const programIdx = staticKeys.findIndex((k) => k.equals(programId));
+  if (programIdx < 0) return 'Transaction does not invoke the CASI escrow program';
+
+  // Signer check — streamer wallet must be in the tx's signer prefix.
+  const numSigners = message.header.numRequiredSignatures;
+  const signerKeys = staticKeys.slice(0, numSigners);
+  if (!signerKeys.some((k) => k.equals(expectedStreamerWallet))) {
+    return 'Transaction is not signed by the streamer';
+  }
+
+  // Scan compiled instructions for one that targets our program and matches
+  // the claimed action's discriminator. Use the `compiledInstructions`
+  // accessor so legacy + v0 messages behave uniformly (data as Uint8Array).
+  const expectedDisc = action === 'approve' ? DISC_APPROVE : DISC_DENY;
+  type CompiledIx = { programIdIndex: number; accountKeyIndexes: number[]; data: Uint8Array };
+  const compiled = (message as unknown as { compiledInstructions?: CompiledIx[] }).compiledInstructions;
+  if (!compiled || !Array.isArray(compiled)) {
+    return 'Unable to decode transaction instructions';
+  }
+
+  const pdaIdx = staticKeys.findIndex((k) => k.equals(expectedEscrowPda));
+  if (pdaIdx < 0) return 'Transaction does not reference the expected escrow PDA';
+
+  const matching = compiled.find((ix) => {
+    if (ix.programIdIndex !== programIdx) return false;
+    if (ix.data.length < 8) return false;
+    for (let i = 0; i < 8; i++) if (ix.data[i] !== expectedDisc[i]) return false;
+    return ix.accountKeyIndexes.includes(pdaIdx);
+  });
+  if (!matching) {
+    return `Transaction has no matching ${action}_flash instruction for this escrow`;
+  }
 
   return null;
 }
@@ -147,7 +192,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'escrow_pda mismatch' }, { status: 409 });
     }
 
-    const verifyErr = await verifySolanaTx(tx_signature, expectedPda);
+    // Need the streamer's linked wallet as the expected signer.
+    const { data: streamerProfile } = await supabase
+      .from('profiles')
+      .select('solana_wallet')
+      .eq('id', flash.profile_id)
+      .single();
+    if (!streamerProfile?.solana_wallet) {
+      return NextResponse.json({ error: 'Streamer has no Solana wallet linked' }, { status: 409 });
+    }
+    let expectedStreamerKey: PublicKey;
+    try {
+      expectedStreamerKey = new PublicKey(streamerProfile.solana_wallet);
+    } catch {
+      return NextResponse.json({ error: 'Invalid streamer wallet on file' }, { status: 500 });
+    }
+
+    const verifyErr = await verifySolanaTx(tx_signature, expectedPda, action, expectedStreamerKey);
     if (verifyErr) {
       console.error('[flashes/moderate] solana verify failed:', verifyErr);
       return NextResponse.json({ error: verifyErr }, { status: 400 });
@@ -166,13 +227,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true });
   }
 
-  // ── Stripe branch (unchanged) ──────────────────────────────────────────
+  // ── Stripe branch ──────────────────────────────────────────────────────
+  // Flash PaymentIntents live on the streamer's connected account (Direct
+  // Charges, see flashes/create/route.ts), so every PI call must target it.
+  const { data: stripeProfile } = await supabase
+    .from('profiles')
+    .select('stripe_account_id')
+    .eq('id', flash.profile_id)
+    .single();
+  const stripeAccount = stripeProfile?.stripe_account_id;
+
   if (action === 'approve') {
-    if (flash.payment_method === 'stripe' && flash.payment_intent_id) {
+    if (flash.payment_method === 'stripe' && flash.payment_intent_id && stripeAccount) {
       try {
-        const pi = await stripe.paymentIntents.retrieve(flash.payment_intent_id);
+        const opts = { stripeAccount };
+        const pi = await stripe.paymentIntents.retrieve(flash.payment_intent_id, undefined, opts);
         if (pi.status === 'requires_capture') {
-          await stripe.paymentIntents.capture(flash.payment_intent_id);
+          await stripe.paymentIntents.capture(flash.payment_intent_id, undefined, opts);
         }
       } catch (err: any) {
         console.error('[flashes/moderate] Stripe capture failed:', err.message);
@@ -184,13 +255,14 @@ export async function POST(req: Request) {
   }
 
   // action === 'deny'
-  if (flash.payment_method === 'stripe' && flash.payment_intent_id) {
+  if (flash.payment_method === 'stripe' && flash.payment_intent_id && stripeAccount) {
     try {
-      const pi = await stripe.paymentIntents.retrieve(flash.payment_intent_id);
+      const opts = { stripeAccount };
+      const pi = await stripe.paymentIntents.retrieve(flash.payment_intent_id, undefined, opts);
       if (pi.status === 'requires_capture') {
-        await stripe.paymentIntents.cancel(flash.payment_intent_id);
+        await stripe.paymentIntents.cancel(flash.payment_intent_id, undefined, opts);
       } else if (pi.status === 'succeeded') {
-        await stripe.refunds.create({ payment_intent: flash.payment_intent_id });
+        await stripe.refunds.create({ payment_intent: flash.payment_intent_id }, opts);
       }
     } catch (err: any) {
       console.error('[flashes/moderate] Stripe cancel/refund failed:', err.message);

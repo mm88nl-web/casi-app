@@ -35,8 +35,13 @@ export async function POST(req: Request) {
     const thinSession = event.data.object as any;
     const sessionId = thinSession.id;
 
-    // Fetch full session from Stripe to get metadata (handles Thin payload style)
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    // Under Direct Charges the session lives on the streamer's connected
+    // account. Connect-mode webhook events carry `account` — pass it when
+    // fetching the full session, otherwise Stripe 404s on the platform acct.
+    const connectedAccount = (event as { account?: string }).account;
+    const session = connectedAccount
+      ? await stripe.checkout.sessions.retrieve(sessionId, undefined, { stripeAccount: connectedAccount })
+      : await stripe.checkout.sessions.retrieve(sessionId);
     const booking_id = session.metadata?.booking_id;
     const payment_intent_id = session.payment_intent as string;
 

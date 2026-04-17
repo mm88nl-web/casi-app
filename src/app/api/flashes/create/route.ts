@@ -26,9 +26,18 @@ const FREE_FLASH_COOLDOWN_MS = 60_000;
 
 type PaymentMethod = 'stripe' | 'solana' | 'free';
 
+/**
+ * Returns the hop closest to our server (last entry in x-forwarded-for).
+ * A client CAN prepend x-forwarded-for, so trusting the first entry lets a
+ * viewer spoof a fresh IP per request and bypass the free-flash cooldown.
+ * Vercel/Cloudflare/nginx all append the real peer as the rightmost value.
+ */
 function getClientIp(req: Request): string {
   const fwd = req.headers.get('x-forwarded-for');
-  if (fwd) return fwd.split(',')[0].trim();
+  if (fwd) {
+    const last = fwd.split(',').pop()?.trim();
+    if (last) return last;
+  }
   return req.headers.get('x-real-ip') || 'unknown';
 }
 
@@ -170,36 +179,38 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Streamer has no Stripe account connected' }, { status: 400 });
   }
 
-  const platformFee = Math.round(amount_cents * 0.05);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   const truncatedMsg = message.trim().length > 100
     ? message.trim().slice(0, 97) + '…'
     : message.trim();
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'payment',
-    payment_intent_data: {
-      capture_method: 'manual',
-      application_fee_amount: platformFee,
-      transfer_data: { destination: profile.stripe_account_id },
-    },
-    line_items: [
-      {
-        price_data: {
-          currency: 'eur',
-          product_data: {
-            name: `⚡ Flash to @${profile.username}`,
-            description: truncatedMsg,
-          },
-          unit_amount: amount_cents,
-        },
-        quantity: 1,
+  // Direct Charge on the streamer's connected account, zero platform fee.
+  // SaaS tier is the revenue source — see stripe/authorize/route.ts.
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: 'payment',
+      payment_intent_data: {
+        capture_method: 'manual',
       },
-    ],
-    success_url: `${appUrl}/overlay?s=${profile.username}&flash_success=1&flash_id=${flash.id}`,
-    cancel_url:  `${appUrl}/overlay?s=${profile.username}&flash_cancelled=1&flash_id=${flash.id}`,
-    metadata: { flash_id: flash.id },
-  });
+      line_items: [
+        {
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: `⚡ Flash to @${profile.username}`,
+              description: truncatedMsg,
+            },
+            unit_amount: amount_cents,
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${appUrl}/overlay?s=${profile.username}&flash_success=1&flash_id=${flash.id}`,
+      cancel_url:  `${appUrl}/overlay?s=${profile.username}&flash_cancelled=1&flash_id=${flash.id}`,
+      metadata: { flash_id: flash.id },
+    },
+    { stripeAccount: profile.stripe_account_id },
+  );
 
   return NextResponse.json({ checkout_url: session.url, flash_id: flash.id });
 }
