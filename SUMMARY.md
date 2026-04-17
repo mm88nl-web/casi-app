@@ -1,22 +1,31 @@
 # CASI — Project Summary
 
 Snapshot for picking up across chat sessions. Reflects the repo at branch
-`claude/casi-project-summary-zJfeU` (parent: `bc89d6a`).
+`claude/casi-project-summary-zJfeU` (merged `VTbAu` + cherry-picked `b4969b2`).
 
 ## What it is
 
-Streamer monetisation platform. Streamers configure draggable "beam" slots on
-an OBS browser source. Viewers rent slots for a chosen duration to display
-an image or video, paying by Stripe card or Solana (USDC, Streamflow stream).
-Streamers approve/deny requests in a dashboard; payments capture / release
-over the booking duration.
+Streamer monetisation platform with three earn-surfaces, each on three rails:
+
+| Surface     | Stripe                         | Solana                          | Free                   |
+|-------------|--------------------------------|---------------------------------|------------------------|
+| **Flash**   | Checkout → manual capture      | `casi-escrow.initialize_flash`  | Direct insert, 1/min   |
+| **Beam**    | Checkout + proration           | `casi-escrow.initialize_beam`   | `price_value = 0` slot |
+| **Backdrop**| Checkout + proration           | `casi-escrow.initialize_beam`   | `price_value = 0` slot |
+
+(Backdrops are beams with `is_background = true` — same on-chain primitive.)
+
+Streamers approve/deny flashes and prorate-end beams in a dashboard. All
+Solana payments go through the in-house Anchor program `casi-escrow` — see
+`programs/casi-escrow/README.md` for the on-chain design, audit scope, and
+test coverage.
 
 ## Stack
 
 - Next.js 16.2.2 (App Router), React 19.2.4, TypeScript 5, Tailwind 4
 - Supabase (Postgres + RLS + Realtime + Storage)
 - Stripe (Connect + manual-capture PaymentIntents) — EUR
-- Solana web3.js + Wallet Adapter, Streamflow SDK, Helius webhooks — devnet USDC
+- Solana web3.js + Wallet Adapter + Anchor 0.30.1, `casi-escrow` on-chain program, Helius webhooks — devnet USDC
 - Vercel hosting; cron via GitHub Actions (Hobby tier killed Vercel cron)
 
 `AGENTS.md` warning: this Next.js version has breaking changes vs older docs —
@@ -36,6 +45,9 @@ read `node_modules/next/dist/docs/` before touching framework APIs.
 - `/v`, `/setup`, `/join` — legacy / orphaned, not linked from main flow
 
 ### API (`src/app/api/`)
+- `flashes/create` — create Flash row (Stripe: returns Checkout URL; Solana: returns `solana_wallet`; Free: rate-limited insert)
+- `flashes/attach-escrow` — after `initialize_flash` tx, viewer posts `escrow_pda + tx_signature + viewer_wallet`
+- `flashes/moderate` — streamer approves/denies: Stripe captures/refunds; Solana verifies on-chain `approve_flash`/`deny_flash` tx and flips status
 - `stripe/authorize` — create Checkout session (manual capture, 5% application_fee, transfer to Connect account)
 - `stripe/webhook` — persist `payment_intent_id` on `checkout.session.completed`
 - `stripe/cancel` — void if `requires_capture`, refund if `succeeded`
@@ -44,7 +56,7 @@ read `node_modules/next/dist/docs/` before touching framework APIs.
 - `stripe/approve-queue` — checkout for queued bookings
 - `cron/stripe-janitor` — bearer-auth'd: capture overdue actives, advance queue, delete storage files
 - `solana/sync-webhook` — register streamer wallet with Helius webhook account list
-- `webhooks/solana` — Helius-auth'd: match Streamflow USDC tx → log confirmation (does not auto-approve)
+- `webhooks/solana` — Helius-auth'd: match CASI escrow program tx → log confirmation (does not auto-approve — client is source of truth)
 - `webhooks/pumpfun` — observational logging only
 
 ## Domain model
@@ -64,9 +76,20 @@ Storage: `beams` bucket, public read, anon insert, 5MB cap, image/* + video/{mp4
 
 ## Payment flows
 
-**Stripe:** viewer → `authorize` → Checkout (manual capture) → webhook stores PI → streamer approves → cron captures at natural end OR `end-early` prorates. Cancel = void or refund based on PI status.
+**Stripe:** viewer → `authorize` → Checkout (manual capture) → webhook stores PI → streamer approves → cron captures at natural end OR `end-early` prorates (beams/backdrops only). Cancel = void or refund based on PI status.
 
-**Solana:** viewer connects wallet → preflight (≥0.001 SOL, USDC ≥ total) → 5% fee SPL transfer to `NEXT_PUBLIC_CASI_FEE_WALLET` → Streamflow stream (95% remainder, period 60s, `automaticWithdrawal: true`, both-sides cancellable) → persist `tx_signature` + `stream_id` → Helius webhook confirms → streamer manually approves. Recovery path for `AlreadyProcessed` scans last 3 wallet txs.
+**Solana:** viewer connects wallet → preflight (SOL ≥ 0.01, USDC ≥ total) →
+`initialize_flash` or `initialize_beam` on the casi-escrow program → full
+amount locked in PDA-owned vault (5% fee deducted on-chain at settlement, no
+separate fee transfer) → attach `escrow_pda + tx_signature + viewer_wallet`
+to DB → streamer calls `approve_flash` / `deny_flash` (flashes) or viewer /
+streamer calls `settle_beam` (beams) → on-chain integer proration pays the
+streamer (95%) and refunds the viewer (5% to treasury). Post-duration beam
+settlement is permissionless (liveness guarantee).
+
+**Free:** viewer sends with `payment_method: 'free'` (flashes rate-limited
+1/min via `free_flash_rate_limits` table) or books a slot whose
+`price_value = 0`. No payment path; admin still approves.
 
 ## Environment variables
 
@@ -96,14 +119,14 @@ Active themes: Solana stabilisation, OBS resilience, Stripe proration, UI polish
 
 ## Known gaps / loose ends
 
-- Solana hardcoded to **devnet** (USDC mint `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`); switch to mainnet not done
+- Solana defaults to **devnet** via `src/lib/solana-network.ts:NETWORK`. Flip to `'mainnet'` to switch USDC mint, wallet-adapter cluster, and Solscan cluster query in one line. Anchor program ID is cluster-specific (regenerate for mainnet deploy).
 - Stripe currency hardcoded **EUR** (`stripe/authorize/route.ts`)
+- `@streamflow/stream` dep is still in `package.json` but no code references it post-merge — remove in a follow-up once the escrow paths are smoke-tested
 - `expire-bookings` and `auto-expire` Edge Functions exist but are not the active cron path (GitHub Actions `stripe-janitor` is)
-- Extension-payment branch in `overlay/page.tsx:~612` gated behind `if (false)` — extensions now go through normal Stripe checkout
 - `/v`, `/setup`, `/join` pages orphaned; `bonk-ui-source/` checked in but unused (Privy remnants)
 - Admin canvas (drag/resize) not optimised for touch
 - Helius webhook uses single shared secret, no per-event signature
-- `AlreadyProcessed` recovery only scans last 3 wallet txs
+- Flash end-early proration not wired (flashes are one-shot tips by design; beams + backdrops have proration via `stripe/end-early`)
 
 ## Useful file paths
 
@@ -117,6 +140,12 @@ Active themes: Solana stabilisation, OBS resilience, Stripe proration, UI polish
 | Skins | `src/lib/skins.ts` |
 | Cron workflow | `.github/workflows/stripe-janitor.yml` |
 | CSP headers | `next.config.ts` |
-| Streamflow notes | `docs/streamflow_sdk.txt` |
+| Anchor program | `programs/casi-escrow/src/lib.rs` |
+| TS escrow client | `src/lib/casi-escrow.ts` |
+| Payment abstraction | `src/lib/payment-manager.ts` |
+| Network switch | `src/lib/solana-network.ts` |
+| Anchor tests | `tests/casi-escrow.ts` |
+| Program README | `programs/casi-escrow/README.md` |
+| Resurrection plan | `ESCROW_PLAN.md` (phase tracker) |
 | SIWS notes | `docs/solana_identity.txt` |
 | Helius notes | `docs/helius_webhooks.txt` |

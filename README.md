@@ -1,4 +1,15 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CASI
+
+A streamer monetization platform with three earn-surfaces — **flashes** (paid
+chat), **beams** (time-rented slot overlays), and **backdrops** (full-frame
+rentals) — each payable via Stripe (manual-capture + prorated refund), Solana
+USDC (via the in-house [casi-escrow](./programs/casi-escrow/README.md) Anchor
+program), or a free tier gated by the streamer.
+
+The Anchor program is Apache-2.0 and designed to be reusable by any Solana
+project that needs trust-minimised escrow with 95/5 settlement. See
+[`programs/casi-escrow/README.md`](./programs/casi-escrow/README.md) for the
+on-chain design, audit scope, test coverage, and error codes.
 
 ## Getting Started
 
