@@ -30,14 +30,14 @@ export const NETWORK: Network = 'devnet';
 
 export const IS_MAINNET = (NETWORK as Network) === 'mainnet';
 
-// RPC endpoint used by Connection + SolanaStreamClient. Override via env var
+// RPC endpoint used by the Anchor `Connection`. Override via env var
 // for paid providers (required on mainnet under real load).
 export const SOLANA_RPC: string =
   process.env.NEXT_PUBLIC_SOLANA_RPC ||
   (IS_MAINNET ? 'https://api.mainnet-beta.solana.com' : 'https://api.devnet.solana.com');
 
-// USDC mint addresses. Devnet uses a Streamflow-compatible test mint;
-// mainnet uses the canonical Circle-issued USDC mint.
+// USDC mint addresses. Devnet uses the standard test mint reachable from
+// spl-token-faucet.com; mainnet uses the canonical Circle-issued USDC mint.
 export const USDC_MINT: string = IS_MAINNET
   ? 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
   : '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
@@ -52,8 +52,3 @@ export const WALLET_ADAPTER_CLUSTER: 'devnet' | 'mainnet-beta' =
 export const EXPLORER_CLUSTER_QUERY: string = IS_MAINNET ? '' : '?cluster=devnet';
 
 export const NETWORK_LABEL: string = IS_MAINNET ? 'Mainnet' : 'Devnet';
-
-// String form of Streamflow cluster — callers map this to
-// ICluster.Mainnet / ICluster.Devnet at the dynamic-import site so we don't
-// pull @streamflow/stream into every bundle that imports this file.
-export const STREAMFLOW_CLUSTER: 'mainnet' | 'devnet' = IS_MAINNET ? 'mainnet' : 'devnet';

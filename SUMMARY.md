@@ -121,7 +121,6 @@ Active themes: Solana stabilisation, OBS resilience, Stripe proration, UI polish
 
 - Solana defaults to **devnet** via `src/lib/solana-network.ts:NETWORK`. Flip to `'mainnet'` to switch USDC mint, wallet-adapter cluster, and Solscan cluster query in one line. Anchor program ID is cluster-specific (regenerate for mainnet deploy).
 - Stripe currency hardcoded **EUR** (`stripe/authorize/route.ts`)
-- `@streamflow/stream` dep is still in `package.json` but no code references it post-merge — remove in a follow-up once the escrow paths are smoke-tested
 - `expire-bookings` and `auto-expire` Edge Functions exist but are not the active cron path (GitHub Actions `stripe-janitor` is)
 - `/v`, `/setup`, `/join` pages orphaned; `bonk-ui-source/` checked in but unused (Privy remnants)
 - Admin canvas (drag/resize) not optimised for touch
@@ -149,3 +148,4 @@ Active themes: Solana stabilisation, OBS resilience, Stripe proration, UI polish
 | Resurrection plan | `ESCROW_PLAN.md` (phase tracker) |
 | SIWS notes | `docs/solana_identity.txt` |
 | Helius notes | `docs/helius_webhooks.txt` |
+
