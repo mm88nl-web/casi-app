@@ -565,6 +565,7 @@ pub struct ApproveFlash<'info> {
 #[derive(Accounts)]
 #[instruction(escrow_id: [u8; 32])]
 pub struct DenyFlash<'info> {
+    #[account(mut)]
     pub streamer: Signer<'info>,
 
     #[account(mut)]
