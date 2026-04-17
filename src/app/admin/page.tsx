@@ -3,13 +3,13 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Rnd } from 'react-rnd';
 import { useRouter } from 'next/navigation';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import { SKINS } from '@/lib/skins';
 import WalletNav from '@/components/WalletNav';
 import ChatPanel from '@/components/ChatPanel';
-import { SOLANA_RPC, STREAMFLOW_CLUSTER } from '@/lib/solana-network';
+import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 
 /* ── Logo ── */
 function Logo({ scale = 0.38, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
@@ -127,13 +127,19 @@ function BackdropModal({ onConfirm, onClose }: {
         <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: 'var(--casi-text)', marginBottom: 6 }}>Full Backdrop</h2>
         <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 24, lineHeight: 1.6 }}>Full-screen slot. Viewers send their image — you approve before it goes live.</p>
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 8 }}>Price</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Price</span>
+            <button type="button" onClick={() => setPrice(0)}
+              style={{ background: price === 0 ? 'rgba(74,222,128,0.14)' : 'rgba(255,255,255,0.04)', border: `1px solid ${price === 0 ? 'rgba(74,222,128,0.4)' : '#222'}`, borderRadius: 6, padding: '3px 10px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: price === 0 ? '#4ade80' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
+              {price === 0 ? '★ Free slot' : '★ Make free'}
+            </button>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: 'var(--casi-accent)', fontWeight: 800 }}>$</span>
-            <input type="number" min={1} value={price} onChange={(e) => setPrice(Math.max(1, parseInt(e.target.value) || 1))}
-              style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid #222', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: 'var(--casi-text)', outline: 'none', fontFamily: "'Syne', sans-serif" }} autoFocus />
-            <select value={unit} onChange={(e) => setUnit(e.target.value)}
-              style={{ background: 'var(--casi-surface)', border: '1px solid #222', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--casi-text)', outline: 'none', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+            <span style={{ color: price === 0 ? '#4ade80' : 'var(--casi-accent)', fontWeight: 800 }}>$</span>
+            <input type="number" min={0} value={price} onChange={(e) => setPrice(Math.max(0, parseInt(e.target.value) || 0))}
+              style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: `1px solid ${price === 0 ? 'rgba(74,222,128,0.3)' : '#222'}`, borderRadius: 8, padding: '10px 14px', fontSize: 14, color: 'var(--casi-text)', outline: 'none', fontFamily: "'Syne', sans-serif" }} autoFocus />
+            <select value={unit} onChange={(e) => setUnit(e.target.value)} disabled={price === 0}
+              style={{ background: 'var(--casi-surface)', border: '1px solid #222', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--casi-text)', outline: 'none', cursor: price === 0 ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono', monospace", opacity: price === 0 ? 0.4 : 1 }}>
               <option value="min">/min</option>
               <option value="hr">/hr</option>
             </select>
@@ -198,24 +204,35 @@ function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLo
         <div style={{ padding: 24 }}>
 
           {/* Price editor */}
-          <div style={{ background: 'rgba(var(--casi-accent-rgb),0.05)', border: '1px solid rgba(var(--casi-accent-rgb),0.15)', borderRadius: 10, padding: 16, marginBottom: 16 }}>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 10 }}>Price</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ color: 'var(--casi-accent)', fontWeight: 800, fontSize: 16 }}>$</span>
-              <input type="number" min={0} value={editPrice}
-                onChange={(e) => setEditPrice(e.target.value)}
-                style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid #333', borderRadius: 8, padding: '10px 14px', fontSize: 16, color: 'var(--casi-text)', outline: 'none', fontFamily: "'DM Mono', monospace" }} />
-              <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)}
-                style={{ background: 'var(--casi-surface)', border: '1px solid #333', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--casi-text)', outline: 'none', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
-                <option value="min">/min</option>
-                <option value="hr">/hr</option>
-              </select>
-              <button onClick={() => { onUpdatePrice(el.id, parseFloat(editPrice) || 0, editUnit); onClose(); }}
-                style={{ background: 'var(--casi-accent)', border: 'none', borderRadius: 8, padding: '10px 16px', color: 'var(--casi-bg)', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', cursor: 'pointer' }}>
-                Save
-              </button>
+          {(() => {
+            const isFree = parseFloat(editPrice) === 0;
+            return (
+            <div style={{ background: isFree ? 'rgba(74,222,128,0.05)' : 'rgba(var(--casi-accent-rgb),0.05)', border: `1px solid ${isFree ? 'rgba(74,222,128,0.2)' : 'rgba(var(--casi-accent-rgb),0.15)'}`, borderRadius: 10, padding: 16, marginBottom: 16, transition: 'background .15s, border-color .15s' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)' }}>Price</div>
+                <button type="button" onClick={() => setEditPrice('0')}
+                  style={{ background: isFree ? 'rgba(74,222,128,0.14)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isFree ? 'rgba(74,222,128,0.4)' : '#222'}`, borderRadius: 6, padding: '3px 10px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: isFree ? '#4ade80' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
+                  {isFree ? '★ Free slot' : '★ Make free'}
+                </button>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ color: isFree ? '#4ade80' : 'var(--casi-accent)', fontWeight: 800, fontSize: 16 }}>$</span>
+                <input type="number" min={0} value={editPrice}
+                  onChange={(e) => setEditPrice(e.target.value)}
+                  style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: `1px solid ${isFree ? 'rgba(74,222,128,0.3)' : '#333'}`, borderRadius: 8, padding: '10px 14px', fontSize: 16, color: 'var(--casi-text)', outline: 'none', fontFamily: "'DM Mono', monospace" }} />
+                <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)} disabled={isFree}
+                  style={{ background: 'var(--casi-surface)', border: '1px solid #333', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--casi-text)', outline: 'none', cursor: isFree ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono', monospace", opacity: isFree ? 0.4 : 1 }}>
+                  <option value="min">/min</option>
+                  <option value="hr">/hr</option>
+                </select>
+                <button onClick={() => { onUpdatePrice(el.id, parseFloat(editPrice) || 0, editUnit); onClose(); }}
+                  style={{ background: isFree ? '#4ade80' : 'var(--casi-accent)', border: 'none', borderRadius: 8, padding: '10px 16px', color: 'var(--casi-bg)', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', cursor: 'pointer' }}>
+                  Save
+                </button>
+              </div>
             </div>
-          </div>
+            );
+          })()}
 
           {/* Active booking */}
           {activeBooking ? (
@@ -367,18 +384,25 @@ function BeamCtrlPanel({ el, activeBooking, updateSlider, updateLayer, toggleLoc
       </div>
 
       {/* Price + lock + delete row */}
+      {(() => {
+        const beamFree = parseFloat(editPrice) === 0;
+        return (
       <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:12, borderTop:'1px solid rgba(255,255,255,0.05)', flexWrap:'wrap' }}>
         <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1, textTransform:'uppercase', color:'#444', marginRight:2 }}>Price</span>
-        <span style={{ color:'var(--casi-accent)', fontWeight:800, fontSize:14 }}>$</span>
+        <span style={{ color: beamFree ? '#4ade80' : 'var(--casi-accent)', fontWeight:800, fontSize:14 }}>$</span>
         <input type="number" min={0} value={editPrice} onChange={(e) => setEditPrice(e.target.value)}
-          style={{ width:56, background:'rgba(255,255,255,0.06)', border:'1px solid #2a2a2a', borderRadius:7, padding:'5px 8px', fontSize:13, color:'var(--casi-text)', outline:'none', fontFamily:"'DM Mono',monospace", textAlign:'center' }} />
-        <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)}
-          style={{ background:'var(--casi-surface)', border:'1px solid #2a2a2a', borderRadius:7, padding:'5px 8px', fontSize:11, color:'var(--casi-text)', outline:'none', cursor:'pointer', fontFamily:"'DM Mono',monospace" }}>
+          style={{ width:56, background:'rgba(255,255,255,0.06)', border:`1px solid ${beamFree ? 'rgba(74,222,128,0.3)' : '#2a2a2a'}`, borderRadius:7, padding:'5px 8px', fontSize:13, color:'var(--casi-text)', outline:'none', fontFamily:"'DM Mono',monospace", textAlign:'center' }} />
+        <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)} disabled={beamFree}
+          style={{ background:'var(--casi-surface)', border:'1px solid #2a2a2a', borderRadius:7, padding:'5px 8px', fontSize:11, color:'var(--casi-text)', outline:'none', cursor: beamFree ? 'not-allowed' : 'pointer', fontFamily:"'DM Mono',monospace", opacity: beamFree ? 0.4 : 1 }}>
           <option value="min">/min</option>
           <option value="hr">/hr</option>
         </select>
+        <button type="button" onClick={() => setEditPrice('0')}
+          style={{ background: beamFree ? 'rgba(74,222,128,0.14)' : 'rgba(255,255,255,0.04)', border: `1px solid ${beamFree ? 'rgba(74,222,128,0.4)' : '#222'}`, borderRadius: 6, padding: '5px 10px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: beamFree ? '#4ade80' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
+          {beamFree ? '★ Free' : '★ Make free'}
+        </button>
         <button onClick={() => updateLayer(el.id, { price_value: parseFloat(editPrice) || 0, price_unit: editUnit })}
-          style={{ background:'var(--casi-accent)', border:'none', borderRadius:7, padding:'5px 12px', color:'var(--casi-bg)', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:11, textTransform:'uppercase', cursor:'pointer' }}>
+          style={{ background: beamFree ? '#4ade80' : 'var(--casi-accent)', border:'none', borderRadius:7, padding:'5px 12px', color:'var(--casi-bg)', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:11, textTransform:'uppercase', cursor:'pointer' }}>
           Save
         </button>
         {/* Lock toggle */}
@@ -391,6 +415,8 @@ function BeamCtrlPanel({ el, activeBooking, updateSlider, updateLayer, toggleLoc
           ✕
         </button>
       </div>
+        );
+      })()}
 
       {/* Active booking strip */}
       {activeBooking && (
@@ -445,6 +471,12 @@ export default function AdminStudio() {
   const [queuedBookings, setQueuedBookings] = useState<any[]>([]);
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [approvedQueued, setApprovedQueued] = useState<any[]>([]);
+  const [pendingFlashes, setPendingFlashes] = useState<any[]>([]);
+  const [flashToast, setFlashToast] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null);
+  const showFlashToast = (text: string, kind: 'ok' | 'err' = 'ok') => {
+    setFlashToast({ text, kind });
+    setTimeout(() => setFlashToast(null), 5000);
+  };
   const [isReady, setIsReady] = useState(false);
   const [saveStatus, setSaveStatus] = useState('Ready');
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -462,7 +494,8 @@ export default function AdminStudio() {
   const supabase = useRef(createClient()).current;
 
   // Wallet hooks
-  const { wallet, connected: walletConnected, connecting: walletConnecting, connect, publicKey } = useWallet();
+  const { wallet, connected: walletConnected, connecting: walletConnecting, connect, publicKey, signTransaction, signAllTransactions } = useWallet();
+  const { connection: walletConnection } = useConnection();
   const { setVisible: setWalletModalVisible } = useWalletModal();
   const userInitiatedConnect = useRef(false);
   useEffect(() => {
@@ -568,6 +601,16 @@ export default function AdminStudio() {
     setApprovedQueued(aq || []);
   }, [supabase]);
 
+  const loadFlashes = useCallback(async (profileId: string) => {
+    const { data } = await supabase
+      .from('flashes')
+      .select('*')
+      .eq('profile_id', profileId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    setPendingFlashes(data || []);
+  }, [supabase]);
+
   useEffect(() => {
     if (!profile?.id) return;
     loadBookings(profile.id);
@@ -576,6 +619,15 @@ export default function AdminStudio() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id, supabase, loadBookings]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    loadFlashes(profile.id);
+    const channel = supabase.channel(`admin_flashes_${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profile.id}` }, () => loadFlashes(profile.id))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profile?.id, supabase, loadFlashes]);
 
   /* ── FIX: callback ref so canvas dimensions fire on first mount ── */
   const setMonitorRef = useCallback((node: HTMLDivElement | null) => {
@@ -615,11 +667,17 @@ export default function AdminStudio() {
       const { data: next } = await supabase.from('bookings').select('*')
         .eq('element_id', booking.element_id).eq('status', 'approved_queued')
         .order('approved_at', { ascending: true }).limit(1).single();
-      if (next) {
+      // Solana beams require an explicit start_beam signature from the streamer,
+      // so we CANNOT auto-promote them from a timer / background context — the
+      // streamer's wallet may not be connected here. Leave the next booking in
+      // approved_queued; the admin UI renders a "Start Beam" action for it.
+      if (next && next.payment_method !== 'solana') {
         await supabase.from('bookings').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', next.id);
         await supabase.from('overlay_elements').update({ image_url: next.image_url }).eq('id', next.element_id);
         setElements(prev => prev.map(el => el.id === next.element_id ? { ...el, image_url: next.image_url } : el));
       } else {
+        // No eligible auto-promotable next booking → clear the slot. For a
+        // Solana next-up the streamer will click Start Beam manually.
         await supabase.from('overlay_elements').update({ image_url: '' }).eq('id', booking.element_id);
         setElements(prev => prev.map(el => el.id === booking.element_id ? { ...el, image_url: '' } : el));
       }
@@ -717,17 +775,58 @@ export default function AdminStudio() {
   // Payment is confirmed if Stripe PaymentIntent exists OR Solana tx_signature exists
   const isPaymentConfirmed = (b: any) => !!(b.payment_intent_id || b.tx_signature);
 
+  /**
+   * Fire `start_beam` on-chain for a Solana beam booking. The streamer must
+   * sign; the on-chain clock then drives the vesting schedule for settle_beam.
+   *
+   * Throws on wallet / signature errors so the caller can keep the booking in
+   * its current status and surface the failure to the streamer — we never
+   * want the DB to show "active" when the on-chain state is still "pending".
+   * No-op for non-Solana bookings.
+   */
+  const startSolanaBeamOnChain = async (booking: any) => {
+    if (booking.payment_method !== 'solana') return;
+    if (!booking.escrow_pda) {
+      console.warn('[startSolanaBeam] booking has no escrow_pda — skipping');
+      return;
+    }
+    const anchorWallet = buildAnchorWalletForEscrow();
+    if (!anchorWallet) {
+      openWalletModal();
+      throw new Error('Connect your streamer wallet');
+    }
+    if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
+      throw new Error('Connected wallet is not the streamer wallet on file');
+    }
+    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
+    await client.startBeam({ escrowId: booking.id, streamer: publicKey! });
+  };
+
   const approveBooking = async (booking: any) => {
   setPreviewBooking(null);
   const slotOccupied = activeBookings.some(b => b.element_id === booking.element_id);
 
   if (slotOccupied || booking.is_queued) {
+    // Queued: the on-chain beam is NOT started yet — we start it only when
+    // the slot becomes live (via Play Now or auto-promotion). DB status just
+    // records that the streamer approved the request.
     await supabase
       .from('bookings')
       .update({ status: 'approved_queued', approved_at: new Date().toISOString() })
       .eq('id', booking.id);
   } else {
-    // Direct booking with payment already confirmed
+    // Direct booking: beam goes live immediately. For Solana we MUST fire
+    // start_beam on-chain before flipping DB status, so the vesting clock
+    // and the UI countdown stay in lockstep. If the chain call fails we
+    // bail out and leave the booking in 'pending' for retry.
+    try {
+      await startSolanaBeamOnChain(booking);
+    } catch (err: unknown) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showFlashToast(formatEscrowError(err), 'err');
+      return;
+    }
     await supabase
       .from('bookings')
       .update({ status: 'active', started_at: new Date().toISOString() })
@@ -749,7 +848,9 @@ export default function AdminStudio() {
   const denyBooking = async (id: string, paymentMethod?: string) => {
   setPreviewBooking(null);
   if (paymentMethod === 'solana') {
-    // Solana: just mark denied — Streamflow stream cancellation is viewer-side
+    // Solana: just mark denied in DB. The viewer's overlay subscribes to
+    // status changes and auto-calls cancel_escrow (reclaimSolanaEscrow) to
+    // pull funds back from the PDA — no on-chain action is required here.
     await supabase.from('bookings').update({ status: 'denied' }).eq('id', id);
   } else {
     // Stripe: void/refund PaymentIntent then mark denied
@@ -763,21 +864,140 @@ export default function AdminStudio() {
   setQueuedBookings(prev => prev.filter(b => b.id !== id));
 };
 
+  /**
+   * Build an AnchorWallet adapter shim for the CasiEscrowClient from the
+   * currently connected wallet-adapter wallet. Returns null if the wallet
+   * isn't ready to sign.
+   */
+  const buildAnchorWalletForEscrow = () => {
+    if (!publicKey || !signTransaction) return null;
+    return {
+      publicKey,
+      signTransaction,
+      signAllTransactions:
+        signAllTransactions ||
+        (async (txs: any[]) => {
+          const out = [];
+          for (const tx of txs) out.push(await signTransaction(tx));
+          return out;
+        }),
+    } as any;
+  };
+
+  /**
+   * Moderate a flash on the Solana rail: viewer-funded escrow PDA is settled
+   * by calling `approve_flash` or `deny_flash` on-chain, then the streamer's
+   * session tells the DB (/api/flashes/moderate) to flip status after
+   * server-side tx verification.
+   */
+  const moderateSolanaFlash = async (flash: any, action: 'approve' | 'deny') => {
+    const anchorWallet = buildAnchorWalletForEscrow();
+    if (!anchorWallet) {
+      openWalletModal();
+      throw new Error('Connect your streamer wallet');
+    }
+    if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
+      throw new Error('Connected wallet is not the streamer wallet on file');
+    }
+    if (!flash.viewer_wallet || !flash.escrow_pda) {
+      throw new Error('Flash is missing on-chain metadata');
+    }
+
+    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const { PublicKey: PK }    = await import('@solana/web3.js');
+    const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
+
+    const viewerPk   = new PK(flash.viewer_wallet);
+    const streamerPk = publicKey!;
+
+    const { sig } =
+      action === 'approve'
+        ? await client.approveFlash({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk })
+        : await client.denyFlash   ({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk });
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/flashes/moderate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ flash_id: flash.id, action, tx_signature: sig }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json?.error) throw new Error(json?.error || 'Server verification failed');
+    return sig;
+  };
+
+  const approveFlash = async (flash: any) => {
+    try {
+      if (flash.payment_method === 'solana') {
+        const sig = await moderateSolanaFlash(flash, 'approve');
+        showFlashToast(`⚡ Approved on-chain · ${sig.slice(0, 8)}…`, 'ok');
+      } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/flashes/moderate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ flash_id: flash.id, action: 'approve' }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Approve failed');
+        showFlashToast('⚡ Flash approved', 'ok');
+      }
+      setPendingFlashes(prev => prev.filter(f => f.id !== flash.id));
+    } catch (err: unknown) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showFlashToast(formatEscrowError(err), 'err');
+    }
+  };
+
+  const denyFlash = async (flash: any) => {
+    try {
+      if (flash.payment_method === 'solana') {
+        const sig = await moderateSolanaFlash(flash, 'deny');
+        showFlashToast(`✕ Denied & refunded · ${sig.slice(0, 8)}…`, 'ok');
+      } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/flashes/moderate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ flash_id: flash.id, action: 'deny' }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Deny failed');
+        showFlashToast('✕ Flash denied', 'ok');
+      }
+      setPendingFlashes(prev => prev.filter(f => f.id !== flash.id));
+    } catch (err: unknown) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showFlashToast(formatEscrowError(err), 'err');
+    }
+  };
+
   const kickBeam = useCallback(async (booking: any) => {
     setSelectedSlotId(null);
     setShowInfoPanel(false);
     if (booking.payment_method === 'solana') {
-      // Cancel the on-chain Streamflow vesting stream so unvested USDC
-      // returns to the viewer. The admin wallet is the stream recipient
-      // (cancelableByRecipient: true) so it can sign the cancel tx.
-      if (booking.stream_id && publicKey && profile?.solana_wallet &&
-          publicKey.toBase58() === profile.solana_wallet) {
+      // Settle the on-chain escrow: streamer receives the vested portion
+      // (minus 5 % fee), viewer receives the unvested portion as a refund.
+      // The vault ATA + EscrowState are closed in the same tx.
+      const canSettleOnChain =
+        booking.escrow_pda && booking.viewer_wallet && publicKey &&
+        profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet;
+
+      if (canSettleOnChain) {
         try {
-          const { SolanaStreamClient, ICluster } = await import('@streamflow/stream');
-          const client = new SolanaStreamClient(SOLANA_RPC, STREAMFLOW_CLUSTER === 'mainnet' ? ICluster.Mainnet : ICluster.Devnet);
-          await client.cancel({ id: booking.stream_id }, { invoker: (wallet as any)?.adapter ?? wallet });
+          const anchorWallet = buildAnchorWalletForEscrow();
+          if (!anchorWallet) throw new Error('Wallet not ready to sign');
+          const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+          const { PublicKey: PK }    = await import('@solana/web3.js');
+          const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
+          await client.settleBeam({
+            escrowId: booking.id,
+            viewer:   new PK(booking.viewer_wallet),
+            streamer: publicKey!,
+          });
         } catch (err) {
-          console.error('[kickBeam] Streamflow cancel error:', err);
+          // Log and continue to expireBooking — DB still needs to advance
+          // the queue even if on-chain settle failed (e.g. already settled
+          // by viewer). The escrow_pda remains so the viewer can see it.
+          console.error('[kickBeam] settleBeam failed:', err);
         }
       }
       await expireBooking(booking);
@@ -794,7 +1014,7 @@ export default function AdminStudio() {
       });
       await expireBooking(booking);
     }
-  }, [expireBooking, publicKey, profile?.solana_wallet, wallet, supabase]);
+  }, [expireBooking, publicKey, profile?.solana_wallet, walletConnection, supabase]);
 
   const copyUrl = (url: string, key: string) => {
     navigator.clipboard.writeText(url);
@@ -817,7 +1037,8 @@ export default function AdminStudio() {
     return el?.is_background ?? false;
   };
 
-  const totalPending = pendingBookings.length + queuedBookings.length;
+  const confirmedFlashes = pendingFlashes.filter(f => !!(f.payment_intent_id || f.tx_signature));
+  const totalPending = pendingBookings.length + queuedBookings.length + confirmedFlashes.length;
   const slotOccupiedForPreview = previewBooking ? activeBookings.some(b => b.element_id === previewBooking.element_id) : false;
   const backdropEl = elements.find(el => el.is_background);
   const hasBackdrop = !!backdropEl;
@@ -848,6 +1069,10 @@ export default function AdminStudio() {
         body { background: var(--casi-bg); }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
         @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:.2} }
+        @keyframes springPop { from{opacity:0;transform:scale(0.88) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+        .flash-toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:9999; padding:12px 20px; border-radius:10px; font-family:'DM Mono',monospace; font-size:11px; letter-spacing:1px; max-width:420px; animation:springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both; }
+        .flash-toast-ok  { background:rgba(74,222,128,0.1); border:1px solid rgba(74,222,128,0.3); color:#4ade80; }
+        .flash-toast-err { background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); color:#f87171; }
 
         .sw { min-height:100vh; background:var(--casi-bg); color:var(--casi-text); font-family:'Syne',sans-serif; display:flex; flex-direction:column; }
 
@@ -917,6 +1142,9 @@ export default function AdminStudio() {
         .t-green  { color:#4ade80; background:rgba(74,222,128,0.08); border-color:rgba(74,222,128,0.2); }
         .t-cyan   { color:var(--casi-accent2); background:rgba(var(--casi-accent2-rgb),0.08); border-color:rgba(var(--casi-accent2-rgb),0.2); }
         .t-dim    { color:rgba(var(--casi-accent-rgb),0.6); background:rgba(var(--casi-accent-rgb),0.05); border-color:rgba(var(--casi-accent-rgb),0.12); }
+        .t-flash  { color:#facc15; background:rgba(250,204,21,0.08); border-color:rgba(250,204,21,0.2); }
+        .c-flash  { background:rgba(250,204,21,0.04); border-color:rgba(250,204,21,0.15) !important; }
+        .badge-flash { color:#facc15; border-color:rgba(250,204,21,0.3); background:rgba(250,204,21,0.06); }
         .req-msg { font-size:13px; color:var(--casi-text-muted); font-style:italic; border-left:2px solid var(--casi-border); padding-left:10px; margin-top:6px; }
         .req-actions { display:flex; flex-direction:column; gap:8px; flex-shrink:0; }
         .act-btn { font-family:'Syne',sans-serif; font-weight:800; font-size:12px; text-transform:uppercase; padding:10px 18px; border-radius:8px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
@@ -1301,6 +1529,60 @@ export default function AdminStudio() {
         {view === 'requests' && (
           <div className="req-body">
 
+            {/* ── FLASH MESSAGES ── */}
+            {pendingFlashes.length > 0 && (
+              <div style={{ marginBottom: 32 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 16, fontWeight: 800, color: 'var(--casi-text)', letterSpacing: -0.5 }}>Flash Messages</div>
+                  <span className="slot-type-badge badge-flash">⚡ Flashes</span>
+                  {confirmedFlashes.length > 0 && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#4ade80' }}>{confirmedFlashes.length} paid</span>}
+                </div>
+                {pendingFlashes.map(flash => {
+                  const paid = !!(flash.payment_intent_id || flash.tx_signature);
+                  return (
+                    <div key={flash.id} className="req-card c-flash">
+                      <div style={{ fontSize: 28, flexShrink: 0, lineHeight: 1 }}>⚡</div>
+                      <div className="req-info">
+                        <div className="req-meta">
+                          <span className="req-name">{flash.viewer_name}</span>
+                          {paid
+                            ? <span className="tag t-green">✓ Paid</span>
+                            : <span className="tag t-dim">⌛ Awaiting payment</span>}
+                          <span className="tag t-flash">€{(flash.amount_cents / 100).toFixed(2)}</span>
+                          <span className="tag t-dim">{flash.payment_method}</span>
+                        </div>
+                        <div className="req-msg">"{flash.message}"</div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', marginTop: 6, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          <span>{new Date(flash.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          {paid && (
+                            <span style={{ color: '#4ade80' }}>
+                              You receive €{((flash.amount_cents / 100) * 0.95).toFixed(2)} · CASI fee €{((flash.amount_cents / 100) * 0.05).toFixed(2)}
+                            </span>
+                          )}
+                          {flash.tx_signature && (
+                            <a href={`https://solscan.io/tx/${flash.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                              style={{ color: '#9945FF', textDecoration: 'none', fontSize: 10 }}>
+                              ↗ Solscan
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <div className="req-actions">
+                        <button onClick={() => denyFlash(flash)} className="act-btn"
+                          style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171' }}>
+                          Deny
+                        </button>
+                        <button onClick={() => paid && approveFlash(flash)} disabled={!paid} className="act-btn"
+                          style={{ background: paid ? '#facc15' : 'var(--casi-border)', color: paid ? '#111' : '#444', cursor: paid ? 'pointer' : 'not-allowed', border: 'none' }}>
+                          {paid ? '⚡ Approve' : 'Awaiting…'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* BEAMS SECTION */}
             {(activeBeams.length > 0 || approvedBeams.length > 0 || pendingBeams.length > 0 || queuedBeams.length > 0) && (
               <div style={{ marginBottom: 32 }}>
@@ -1321,7 +1603,13 @@ export default function AdminStudio() {
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)', marginBottom: 4 }}>{booking.viewer_name}</div>
-                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 6 }}>${booking.price_value}/{booking.price_unit} · {fmtDuration(booking.duration_minutes)}</div>
+                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span>${booking.price_value}/{booking.price_unit} · {fmtDuration(booking.duration_minutes)}</span>
+                              {booking.tx_signature && (
+                                <a href={`https://solscan.io/tx/${booking.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                                  style={{ color: '#9945FF', textDecoration: 'none', fontSize: 10 }}>↗ Solscan</a>
+                              )}
+                            </div>
                             {booking.message && <div className="req-msg">"{booking.message}"</div>}
                             {queueForSlot.length > 0 && (
                               <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
@@ -1363,20 +1651,22 @@ export default function AdminStudio() {
             {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
           </span>
           <button onClick={async () => {
-  // End current active booking on this slot first
+  // End current active booking on this slot first — use kickBeam to route
+  // Solana beams through settle_beam and Stripe beams through the prorate API.
+  // kickBeam also calls expireBooking which advances the queue; since the
+  // next candidate on a Solana-rail slot is now intentionally NOT auto-promoted,
+  // we always finish by flipping THIS booking to active ourselves.
   const current = activeBookings.find(b => b.element_id === booking.element_id);
-  if (current) {
-    const { data: { session: sess } } = await supabase.auth.getSession();
-    await fetch('/api/stripe/end-early', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sess?.access_token}`,
-      },
-      body: JSON.stringify({ booking_id: current.id }),
-    });
+  if (current) await kickBeam(current);
+  // For Solana: start_beam must land on-chain before the DB shows active.
+  if (booking.payment_method === 'solana') {
+    try { await startSolanaBeamOnChain(booking); }
+    catch (err: unknown) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showFlashToast(formatEscrowError(err), 'err');
+      return;
+    }
   }
-  // Start this booking now
   await supabase
     .from('bookings')
     .update({ status: 'active', started_at: new Date().toISOString() })
@@ -1416,6 +1706,12 @@ export default function AdminStudio() {
                             <span className="tag t-cyan">{fmtDuration(booking.duration_minutes)}</span>
                           </div>
                           {booking.message && <div className="req-msg">"{booking.message}"</div>}
+                          {booking.tx_signature && (
+                            <div style={{ marginTop: 5 }}>
+                              <a href={`https://solscan.io/tx/${booking.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                                style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none' }}>↗ Solscan</a>
+                            </div>
+                          )}
                         </div>
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
@@ -1445,6 +1741,12 @@ export default function AdminStudio() {
                             <span className="tag t-green">${calcTotal(booking)} total</span>
                           </div>
                           {booking.message && <div className="req-msg">"{booking.message}"</div>}
+                          {booking.tx_signature && (
+                            <div style={{ marginTop: 5 }}>
+                              <a href={`https://solscan.io/tx/${booking.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                                style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none' }}>↗ Solscan</a>
+                            </div>
+                          )}
                         </div>
                         <div className="req-actions">
                           <button onClick={() => approveBooking(booking)} className="act-btn"
@@ -1515,20 +1817,16 @@ export default function AdminStudio() {
             {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
           </span>
           <button onClick={async () => {
-  // End current active booking on this slot first
   const current = activeBookings.find(b => b.element_id === booking.element_id);
-  if (current) {
-    const { data: { session: sess } } = await supabase.auth.getSession();
-    await fetch('/api/stripe/end-early', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sess?.access_token}`,
-      },
-      body: JSON.stringify({ booking_id: current.id }),
-    });
+  if (current) await kickBeam(current);
+  if (booking.payment_method === 'solana') {
+    try { await startSolanaBeamOnChain(booking); }
+    catch (err: unknown) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showFlashToast(formatEscrowError(err), 'err');
+      return;
+    }
   }
-  // Start this booking now
   await supabase
     .from('bookings')
     .update({ status: 'active', started_at: new Date().toISOString() })
@@ -1824,7 +2122,7 @@ export default function AdminStudio() {
                           {solanaWallet ? `◎ ${solanaWallet.slice(0,6)}…${solanaWallet.slice(-4)}` : 'No wallet linked'}
                         </div>
                         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
-                          {solanaWallet ? 'Viewers can pay via Streamflow USDC' : 'Optional — Stripe works without this'}
+                          {solanaWallet ? 'Viewers can pay with USDC on-chain' : 'Optional — Stripe works without this'}
                         </div>
                       </div>
                       {walletConnected && publicKey ? (
@@ -1946,6 +2244,12 @@ export default function AdminStudio() {
         </div>
 
       </div>
+
+      {flashToast && (
+        <div className={`flash-toast flash-toast-${flashToast.kind}`} role="status">
+          {flashToast.text}
+        </div>
+      )}
     </>
   );
 }

@@ -19,6 +19,28 @@ function Logo({ scale = 0.32, color = '#F58220', bg = '#050505' }: { scale?: num
   );
 }
 
+function FreeToggle({
+  checked, onChange, tc,
+}: { checked: boolean; onChange: (v: boolean) => void; tc: string }) {
+  return (
+    <button type="button" onClick={() => onChange(!checked)} role="switch" aria-checked={checked}
+      style={{
+        flexShrink: 0, width: 44, height: 26, borderRadius: 13,
+        background: checked ? tc : '#1c1c1c',
+        border: `1px solid ${checked ? tc : '#222'}`,
+        boxShadow: checked ? `0 0 14px ${tc}40` : 'none',
+        position: 'relative', cursor: 'pointer', transition: 'all .2s', padding: 0,
+      }}>
+      <span style={{
+        position: 'absolute', top: 2, left: checked ? 20 : 2,
+        width: 20, height: 20, borderRadius: '50%',
+        background: checked ? '#050505' : '#555',
+        transition: 'left .25s cubic-bezier(0.34,1.56,0.64,1)',
+      }} />
+    </button>
+  );
+}
+
 const THEME_PRESETS = [
   { name: 'Casi Orange',   color: '#F58220' },
   { name: 'Twitch Purple', color: '#9146FF' },
@@ -50,6 +72,7 @@ export default function ProfileEditPage() {
   const [solanaWallet, setSolanaWallet]       = useState('');
   const [savingWallet, setSavingWallet]       = useState(false);
   const [walletSaved, setWalletSaved]         = useState(false);
+  const [allowFreeFlashes, setAllowFreeFlashes] = useState(false);
 
   const { wallet, publicKey, connected: walletConnected, connecting: walletConnecting, connect } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
@@ -89,6 +112,7 @@ export default function ProfileEditPage() {
         if (prof.theme_color) setThemeColor(prof.theme_color);
         if (prof?.stripe_account_id) setStripeConnected(true);
         if (prof?.solana_wallet) setSolanaWallet(prof.solana_wallet);
+        setAllowFreeFlashes(!!prof.allow_free_flashes);
       }
       setLoading(false);
     };
@@ -104,6 +128,7 @@ export default function ProfileEditPage() {
       bio: bio || null,
       avatar_url: avatarValid ? avatarUrl : null,
       theme_color: themeColor,
+      allow_free_flashes: allowFreeFlashes,
     }).eq('id', profile.id);
     setSaving(false);
     if (err) { setError(err.message); return; }
@@ -383,7 +408,7 @@ export default function ProfileEditPage() {
                       : 'Connect a Solana wallet to accept SOL payments'}
                   </div>
                   <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#444' }}>
-                    {solanaWallet ? 'Viewers can pay via Streamflow USDC streams' : 'Optional — Stripe payments always work without this'}
+                    {solanaWallet ? 'Viewers can pay with USDC on-chain' : 'Optional — Stripe payments always work without this'}
                   </div>
                 </div>
                 {walletConnected && publicKey ? (
@@ -399,6 +424,23 @@ export default function ProfileEditPage() {
                 )}
               </div>
               <div className="pe-hint">Connect your wallet here, then click Save to link it to your profile.</div>
+            </div>
+
+            {/* ── FREE TIER ── */}
+            <div className="pe-field" style={{ marginTop: 8 }}>
+              <label className="pe-label">Free tier <span style={{ color:'#333', textTransform:'none', fontSize:9 }}>— let viewers interact without paying</span></label>
+              <div style={{ background: '#0a0a0a', border: '1px solid #1c1c1c', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#e8e8e8', marginBottom: 3 }}>Allow free Flashes</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', lineHeight: 1.6 }}>
+                    Chat messages without payment · 1 per minute per viewer
+                  </div>
+                </div>
+                <FreeToggle checked={allowFreeFlashes} onChange={setAllowFreeFlashes} tc={tc} />
+              </div>
+              <div className="pe-hint">
+                For <strong style={{ color:'#666', fontWeight:600 }}>free Beams &amp; Backdrops</strong>, set the slot&apos;s price to <code style={{ background:'#111', padding:'1px 6px', borderRadius:4, fontSize:10, color:'#888' }}>0</code> in Studio. Each slot can be priced independently.
+              </div>
             </div>
 
             {error && <div className="pe-error">{error}</div>}

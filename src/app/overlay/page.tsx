@@ -7,13 +7,13 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import WalletNav, { refreshWalletNav } from '@/components/WalletNav';
 import ChatPanel from '@/components/ChatPanel';
+import SendFlashSection from '@/components/overlay/SendFlashSection';
 import {
   SOLANA_RPC,
   USDC_MINT,
-  STREAMFLOW_CLUSTER,
   EXPLORER_CLUSTER_QUERY,
   IS_MAINNET,
-  NETWORK_LABEL,
+  WALLET_ADAPTER_CLUSTER,
 } from '@/lib/solana-network';
 
 function Logo({ scale = 0.32, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
@@ -156,6 +156,16 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
             </div>
           )}
           <div style={{ borderTop:'1px solid #1c1c1c', margin:'10px 0' }} />
+          {/* Fee breakdown */}
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#555', marginBottom:5 }}>
+            <span>@{username} receives</span>
+            <span style={{ color:'#e8e8e8' }}>{(parseFloat(estimatedCost) * 0.95).toFixed(2)} USDC <span style={{ color:'#6ee7b7' }}>(95%)</span></span>
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#555', marginBottom:8 }}>
+            <span>CASI maintenance fee</span>
+            <span style={{ color:'#e8e8e8' }}>{(parseFloat(estimatedCost) * 0.05).toFixed(2)} USDC <span style={{ color:'#888' }}>(5%)</span></span>
+          </div>
+          <div style={{ borderTop:'1px solid #1a1a1a', margin:'6px 0 8px' }} />
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666' }}>
             <span>Total</span>
             <span style={{ fontSize:18, fontWeight:800, color:'#9945FF' }}>{estimatedCost} USDC</span>
@@ -170,10 +180,10 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
           )}
         </div>
 
-        {/* Streamflow note + anti-phishing warning */}
+        {/* CASI escrow note + anti-phishing warning */}
         {!inProgress && txStatus !== 'waiting' && (
           <div style={{ fontSize:10, color:'#444', lineHeight:1.8, marginBottom:16 }}>
-            Funds stream in real time via Streamflow.<br />
+            Funds held in CASI on-chain escrow and vest over the beam duration.<br />
             Unused USDC returns if ended early.
             {shortWallet && (
               <>
@@ -191,7 +201,7 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
           <div style={{ background:'rgba(255,255,255,0.02)', borderRadius:10, padding:'12px 14px', marginBottom:16 }}>
             {[
               { label: 'Booking created',             active: txStatus === 'booking',   done: txStatus !== 'booking' },
-              { label: 'Creating Streamflow stream…', active: txStatus === 'streaming', done: txStatus === 'waiting' },
+              { label: 'Funding CASI escrow…',        active: txStatus === 'streaming', done: txStatus === 'waiting' },
               { label: 'Waiting for admin approval',  active: txStatus === 'waiting',   done: false },
             ].map((step, i) => (
               <div key={i} style={{ display:'flex', alignItems:'center', gap:10, fontSize:11,
@@ -235,6 +245,98 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
     </div>
   );
 }
+
+/* ── Flash Feed (OBS overlay) ────────────────────────────────────────────── */
+type FlashItem = { id: string; viewer_name: string; message: string; amount_cents: number; enteredAt: number; tx_signature?: string | null };
+
+function FlashFeed({ profileId }: { profileId: string }) {
+  const [items, setItems] = useState<FlashItem[]>([]);
+  const supabase = useRef(createClient()).current;
+  const DISPLAY_MS = 25_000;
+
+  // Hydrate with any flashes approved in the last DISPLAY_MS on mount
+  useEffect(() => {
+    const since = new Date(Date.now() - DISPLAY_MS).toISOString();
+    supabase
+      .from('flashes')
+      .select('id, viewer_name, message, amount_cents, tx_signature')
+      .eq('profile_id', profileId)
+      .eq('status', 'approved')
+      .gte('created_at', since)
+      .order('created_at', { ascending: true })
+      .limit(5)
+      .then(({ data }) => {
+        if (data?.length) setItems(data.map(f => ({ ...f, enteredAt: Date.now() })));
+      });
+  }, [profileId, supabase]);
+
+  // Real-time: listen for flashes being approved
+  useEffect(() => {
+    const channel = supabase
+      .channel(`flash_feed_${profileId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profileId}` },
+        (payload) => {
+          if (payload.new?.status === 'approved') {
+            setItems(prev => {
+              const n = payload.new as Record<string, unknown>;
+              const item: FlashItem = {
+                id:            n.id as string,
+                viewer_name:   n.viewer_name as string,
+                message:       n.message as string,
+                amount_cents:  n.amount_cents as number,
+                tx_signature:  n.tx_signature as string | null | undefined,
+                enteredAt:     Date.now(),
+              };
+              return [...prev.filter(f => f.id !== item.id), item].slice(-5);
+            });
+          }
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profileId, supabase]);
+
+  // Auto-expire items after DISPLAY_MS
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setItems(prev => prev.filter(f => Date.now() - f.enteredAt < DISPLAY_MS));
+    }, 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  if (!items.length) return null;
+
+  return (
+    <div style={{ position: 'absolute', bottom: 28, right: 28, width: 290, display: 'flex', flexDirection: 'column', gap: 10, zIndex: 200, pointerEvents: 'none' }}>
+      <style>{`@keyframes flashPop{from{opacity:0;transform:scale(0.82) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
+      {items.map(flash => (
+        <div key={flash.id} style={{ animation: 'flashPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          {/* Name + amount row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5, paddingLeft: 4 }}>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500, color: 'var(--casi-accent)', textShadow: '0 1px 6px rgba(0,0,0,0.9)', letterSpacing: 0.5 }}>
+              ⚡ {flash.viewer_name}
+            </span>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, background: 'rgba(var(--casi-accent-rgb),0.18)', color: 'var(--casi-accent)', border: '1px solid rgba(var(--casi-accent-rgb),0.35)', borderRadius: 20, padding: '1px 8px' }}>
+              €{(flash.amount_cents / 100).toFixed(2)}
+            </span>
+          </div>
+          {/* iMessage-style bubble */}
+          <div style={{ background: 'rgba(255,255,255,0.93)', borderRadius: '18px 18px 4px 18px', padding: '11px 15px', boxShadow: '0 6px 24px rgba(0,0,0,0.4)' }}>
+            <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 14, fontWeight: 600, color: '#0d0d0d', lineHeight: 1.45, margin: 0 }}>
+              {flash.message}
+            </p>
+            {flash.tx_signature && (
+              <a href={`https://solscan.io/tx/${flash.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'inline-block', marginTop: 6, fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none', opacity: 0.7, pointerEvents: 'auto' }}>
+                ↗ verify on Solscan
+              </a>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 function OverlayContent() {
   const searchParams = useSearchParams();
@@ -356,8 +458,8 @@ function OverlayContent() {
       supabase.from('bookings').select('*').eq('profile_id', profId).eq('status','approved_queued').order('approved_at',{ascending:true}),
       supabase.from('bookings').select('element_id').eq('profile_id', profId).eq('status','pending'),
     ]);
-    // Filter out beams with no price on viewer overlay
-    setElements((els||[]).filter((el:any) => el.is_background || el.price_value > 0));
+    // Viewer overlay: show backdrops + any slot with a defined price (0 == free).
+    setElements((els||[]).filter((el:any) => el.is_background || el.price_value >= 0));
     setActiveBookings(active||[]);
     setApprovedQueuedBookings(aq||[]);
     const counts: Record<string,number> = {};
@@ -384,6 +486,17 @@ function OverlayContent() {
         viewerNameRef.current = saved;
         await loadData(prof.id, saved);
         setLoading(false);
+        // Show success notification when returning from Stripe flash checkout
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('flash_success') === '1') {
+            showNotif('⚡ Flash sent — awaiting streamer approval!', 'success');
+            params.delete('flash_success');
+            params.delete('flash_id');
+            const qs = params.toString();
+            window.history.replaceState({}, '', `${window.location.pathname}${qs ? '?' + qs : ''}`);
+          }
+        }
         const bump = () => { lastRealtimeEventAt.current = Date.now(); };
         const channel = supabase.channel(`overlay_${prof.id}`)
           .on('postgres_changes',{event:'*',schema:'public',table:'overlay_elements',filter:`profile_id=eq.${prof.id}`},()=>{bump();loadData(prof.id);})
@@ -417,17 +530,19 @@ function OverlayContent() {
       if (!old) return;
       if (old.status === 'pending' && booking.status === 'denied') {
         showNotif('Your request was denied', 'denied');
-        // Auto-cancel the Streamflow stream so unvested USDC returns to viewer immediately
-        if (booking.payment_method === 'solana' && booking.stream_id) {
-          cancelSolanaStream(booking);
+        // Auto-reclaim the escrow so USDC returns to viewer immediately. Only
+        // runs if the beam was still Pending on-chain (streamer hadn't started
+        // it yet); if Active, the admin's kickBeam already settled on-chain
+        // and the PDA is gone, so we skip.
+        if (booking.payment_method === 'solana' && booking.escrow_pda) {
+          reclaimSolanaEscrow(booking);
         }
       }
       if (old.status === 'pending' && booking.status === 'active')          showNotif('Your beam is live! 🎉', 'success');
       if (old.status === 'pending' && booking.status === 'approved_queued') showNotif("Approved — you're in the queue!", 'queue');
-      // Admin kicked an active Solana beam — cancel on-chain so remaining USDC returns
-      if (old.status === 'active' && booking.status === 'expired' && booking.payment_method === 'solana' && booking.stream_id) {
-        cancelSolanaStream(booking);
-      }
+      // Admin kicked an active Solana beam: kickBeam already ran settle_beam
+      // on-chain, so the PDA is closed and the viewer's pro-rata refund has
+      // already landed. No client-side follow-up is needed.
     });
     prevMyBookingsRef.current = myBookings;
   }, [myBookings]);
@@ -590,6 +705,8 @@ function OverlayContent() {
   const effectiveStoragePath = uploadMode === 'upload' ? uploadedPath : null;
   const effectiveFileType   = uploadMode === 'upload' ? uploadedFileType : (imageUrl ? getUrlFileType(imageUrl) : null);
 
+  const isFreeSlot = Number(selectedSlot.price_value) === 0;
+
   const { data: newBooking, error: insertError } = await supabase.from('bookings').insert({
     profile_id:    profile.id,
     element_id:    selectedSlot.id,
@@ -602,6 +719,7 @@ function OverlayContent() {
     price_value:   selectedSlot.price_value,
     price_unit:    selectedSlot.price_unit,
     status:        'pending',
+    payment_method: isFreeSlot ? 'free' : 'stripe',
     is_queued:     isQueue || isExtend,
     queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
   }).select().single();
@@ -613,37 +731,46 @@ function OverlayContent() {
     return;
   }
 
-  if (false) {
-  // extend now pays via Stripe like direct bookings
-} else {
-    try {
-      const res = await fetch('/api/stripe/authorize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ booking_id: newBooking.id }),
-      });
-      const json = await res.json();
-      if (json.checkout_url) {
-        window.location.href = json.checkout_url;
-      } else {
-        console.error('Stripe error:', json.error);
-        showNotif(json.error || 'Payment failed to initialize', 'error');
-        setSubmitting(false);
-      }
-    } catch (err) {
-      console.error('Authorize fetch failed:', err);
-      showNotif('Server error. Please try again.', 'error');
+  // Free slot — no payment, just queue for streamer approval and close the form.
+  if (isFreeSlot) {
+    showNotif('★ Free request sent — awaiting streamer approval', 'success');
+    setSubmitting(false);
+    closeSlot();
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/stripe/authorize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_id: newBooking.id }),
+    });
+    const json = await res.json();
+    if (json.checkout_url) {
+      window.location.href = json.checkout_url;
+    } else {
+      console.error('Stripe error:', json.error);
+      showNotif(json.error || 'Payment failed to initialize', 'error');
       setSubmitting(false);
     }
+  } catch (err) {
+    console.error('Authorize fetch failed:', err);
+    showNotif('Server error. Please try again.', 'error');
+    setSubmitting(false);
   }
 };
 
-  // ── Solana / Streamflow booking ────────────────────────────────────────────
+  // ── Solana / CASI escrow booking ────────────────────────────────────────────
   const submitSolanaBooking = async () => {
     const effectiveSolImageUrl    = uploadMode === 'upload' ? uploadedUrl    : imageUrl;
     const effectiveSolStoragePath = uploadMode === 'upload' ? uploadedPath   : null;
     const effectiveSolFileType    = uploadMode === 'upload' ? uploadedFileType : (imageUrl ? getUrlFileType(imageUrl) : null);
     if (!savedViewerName || !effectiveSolImageUrl || !selectedSlot || !publicKey || !wallet?.adapter) return;
+    if (Number(selectedSlot.price_value) === 0) {
+      // Free slots go through submitBooking, not the Solana rail.
+      showNotif('This slot is free — use “Send Free Request” instead', 'warning');
+      return;
+    }
     if (!profile?.solana_wallet) {
       showNotif('This streamer has not linked a Solana wallet yet', 'denied');
       return;
@@ -656,7 +783,7 @@ function OverlayContent() {
     await supabase.from('bookings').update({ status: 'denied' })
       .eq('profile_id', profile.id).eq('element_id', selectedSlot.id)
       .eq('viewer_name', savedViewerName).eq('status', 'pending')
-      .eq('payment_method', 'solana').is('stream_id', null);
+      .eq('payment_method', 'solana').is('escrow_pda', null);
 
     // Duplicate check
     if (!isExtend) {
@@ -700,29 +827,27 @@ function OverlayContent() {
     setTxStatus('streaming');
 
     try {
-      // Dynamic import keeps Streamflow out of the initial bundle
-      const { SolanaStreamClient, getBN, ICluster } = await import('@streamflow/stream');
-      const { Connection, PublicKey }               = await import('@solana/web3.js');
+      const { Connection, PublicKey } = await import('@solana/web3.js');
 
-      const usdcDecimals = 6;
+      const usdcDecimals    = 6;
       const durationMinutes = durationSeconds / 60;
-      const totalUsdc    = selectedSlot.price_unit === 'min'
+      const totalUsdc       = selectedSlot.price_unit === 'min'
         ? selectedSlot.price_value * durationMinutes
         : selectedSlot.price_value * (durationMinutes / 60);
 
-      // ── Pre-flight: verify viewer has a USDC ATA with enough balance ──────
+      // ── Pre-flight: verify viewer has SOL + a USDC ATA with enough balance ──
       const connection = new Connection(SOLANA_RPC);
 
-      // 1. SOL balance — Streamflow creates escrow + metadata accounts on-chain.
-      //    Needs ~0.02 SOL for rent + fees. Without any SOL, simulation fails
-      //    with AccountNotFound (fee payer checked before program runs).
+      // SOL: initialize_escrow creates both the EscrowState PDA and a PDA-owned
+      // vault ATA (~2× rent) plus a signature fee. Empirically ~0.003 SOL on
+      // devnet — we require 0.01 for safety margin.
       const solLamports = await connection.getBalance(publicKey);
-      const MIN_SOL = 0.001 * 1e9; // 0.001 SOL minimum — Streamflow needs rent for escrow accounts
+      const MIN_SOL     = 0.01 * 1e9;
       if (solLamports < MIN_SOL) {
         showNotif(
           IS_MAINNET
-            ? `Need SOL for fees. You have ${(solLamports / 1e9).toFixed(4)} SOL — top up your wallet and try again.`
-            : `Need devnet SOL for fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.quicknode.com/solana/devnet`,
+            ? `Need SOL for rent + fees. You have ${(solLamports / 1e9).toFixed(4)} SOL — top up your wallet and try again.`
+            : `Need devnet SOL for rent + fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.quicknode.com/solana/devnet`,
           'denied',
         );
         await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
@@ -730,14 +855,11 @@ function OverlayContent() {
         return;
       }
 
-      // 2. USDC ATA on devnet using the exact mint Streamflow uses.
-      //    Note: if Phantom is in Testnet Mode the 20 USDC shown is testnet —
-      //    switch Phantom back to Devnet and re-mint from spl-token-faucet.vercel.app
+      // USDC ATA balance check.
       const { value: tokenAccounts } = await connection.getParsedTokenAccountsByOwner(
         publicKey,
         { mint: new PublicKey(USDC_MINT) },
       );
-
       if (tokenAccounts.length === 0) {
         showNotif(
           IS_MAINNET
@@ -749,10 +871,8 @@ function OverlayContent() {
         setSubmitting(false);
         return;
       }
-
       const usdcBalance: number =
         tokenAccounts[0].account.data.parsed.info.tokenAmount.uiAmount ?? 0;
-
       if (usdcBalance < totalUsdc) {
         showNotif(
           `Insufficient USDC: you have ${usdcBalance.toFixed(2)}, need ${totalUsdc.toFixed(2)}`,
@@ -762,144 +882,62 @@ function OverlayContent() {
         setSubmitting(false);
         return;
       }
-
       console.log('[solana] pre-flight passed — SOL:', (solLamports / 1e9).toFixed(4), 'USDC:', usdcBalance);
-      // ─────────────────────────────────────────────────────────────────────
+      // ──────────────────────────────────────────────────────────────────────
 
-      // ── Casi 5% platform fee ─────────────────────────────────────────────
-      // Transfer 5% of totalUsdc to the Casi fee wallet before creating the stream.
-      // The stream is created with the remaining 95%.
-      // If the fee transfer fails, we abort to protect the viewer's funds.
-      const casiFeeWallet = process.env.NEXT_PUBLIC_CASI_FEE_WALLET;
-      let streamAmount = totalUsdc;
-      if (casiFeeWallet) {
-        try {
-          const { Transaction } = await import('@solana/web3.js');
-          const { createTransferInstruction, getAssociatedTokenAddress } = await import('@solana/spl-token');
-          const mint = new PublicKey(USDC_MINT);
-          const feeWalletPk = new PublicKey(casiFeeWallet);
-          const feeAmountRaw = Math.round(totalUsdc * 0.05 * 10 ** usdcDecimals);
-          const viewerAta = tokenAccounts[0].pubkey;
-          const feeAta = await getAssociatedTokenAddress(mint, feeWalletPk);
+      // Lock full amount in the CASI escrow PDA. The 5 % fee is deducted
+      // on-chain at settlement (approve_flash / settle_beam), never here —
+      // no separate fee transaction is required.
+      const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+      if (!signTransaction) throw new Error('Wallet missing signTransaction');
+      const anchorWallet = {
+        publicKey,
+        signTransaction,
+        signAllTransactions:
+          signAllTransactions ||
+          (async <T,>(txs: T[]) => {
+            const out: T[] = [];
+            for (const tx of txs) out.push((await signTransaction(tx as never)) as T);
+            return out;
+          }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
+      const client = new CasiEscrowClient(connection, anchorWallet, WALLET_ADAPTER_CLUSTER);
 
-          const feeTx = new Transaction().add(
-            createTransferInstruction(viewerAta, feeAta, publicKey, feeAmountRaw),
-          );
-          feeTx.feePayer = publicKey;
-          feeTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+      const amountUsdcMicro = Math.round(totalUsdc * 10 ** usdcDecimals);
+      const durationSecsInt = Math.round(durationSeconds);
 
-          const signedFeeTx = await (wallet.adapter as any).signTransaction(feeTx);
-          const feeTxId = await connection.sendRawTransaction(signedFeeTx.serialize());
-          await connection.confirmTransaction(feeTxId, 'confirmed');
+      const { sig, escrowPda } = await client.initializeBeam({
+        escrowId:     newBooking.id,
+        streamer:     new PublicKey(profile.solana_wallet),
+        amountUsdc:   amountUsdcMicro,
+        durationSecs: durationSecsInt,
+      });
 
-          streamAmount = totalUsdc * 0.95;
-          console.log('[solana] platform fee sent:', feeTxId, '| stream amount:', streamAmount.toFixed(4), 'USDC');
-        } catch (feeErr: any) {
-          console.error('[solana] platform fee tx failed:', feeErr.message);
-          showNotif('Platform fee transfer failed. Booking cancelled.', 'denied');
-          await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
-          setSubmitting(false);
-          return;
-        }
-      } else {
-        console.warn(`[solana] NEXT_PUBLIC_CASI_FEE_WALLET not set — fee skipped (${IS_MAINNET ? 'mainnet' : 'devnet'})`);
-      }
-      // ─────────────────────────────────────────────────────────────────────
+      // Persist on-chain state so the admin settle/cancel flows can rebuild
+      // the CPI accounts without re-fetching from chain.
+      await supabase.from('bookings').update({
+        tx_signature:  sig,
+        escrow_pda:    escrowPda,
+        viewer_wallet: publicKey.toBase58(),
+      }).eq('id', newBooking.id);
 
-      const client = new SolanaStreamClient(SOLANA_RPC, STREAMFLOW_CLUSTER === 'mainnet' ? ICluster.Mainnet : ICluster.Devnet);
-      // Add 30s buffer: by the time the tx is signed, propagated, and landed in
-      // a block the on-chain clock will have advanced past "now".  Streamflow
-      // rejects start timestamps that are already in the past (Custom error 112).
-      const streamStart = Math.floor(Date.now() / 1000) + 30;
-      const { txId, metadataId } = await client.create(
-        {
-          recipient:               profile.solana_wallet,
-          tokenId:                 USDC_MINT,
-          start:                   streamStart,
-          amount:                  getBN(streamAmount, usdcDecimals),
-          period:                  60,                                          // release every 60 s
-          amountPerPeriod:         getBN(streamAmount / durationMinutes, usdcDecimals),  // per minute
-          cliff:                   streamStart,                                 // must equal start when cliffAmount=0
-          cliffAmount:             getBN(0, usdcDecimals),
-          cancelableBySender:      true,
-          cancelableByRecipient:   true,   // allows streamer to cancel from admin if needed
-          transferableBySender:    false,
-          transferableByRecipient: false,
-          automaticWithdrawal:     true,
-          canTopup:                false,
-          name:                    `Casi Beam — ${savedViewerName}`,
-        },
-        { sender: wallet.adapter as any },
-      );
-
-      // Persist stream reference so the webhook and cancel flow can look it up
-      await supabase.from('bookings').update({ stream_id: metadataId, tx_signature: txId })
-        .eq('id', newBooking.id);
-
-      setConfirmedTxId(txId);
-      refreshWalletNav(); // reflect new USDC balance immediately
+      setConfirmedTxId(sig);
+      refreshWalletNav();
       setTxStatus('waiting');
-      showNotif('◎ Payment sent — awaiting streamer approval!', 'success');
+      showNotif('◎ Payment locked — awaiting streamer approval!', 'success');
       setShowConfirmModal(false);
       closeSlot();
       if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
-    } catch (err: any) {
-      // Extract simulation logs from SendTransactionError before logging
-      let simLogs: string[] = [];
-      if (typeof err?.getLogs === 'function') {
-        simLogs = await err.getLogs().catch(() => []);
-      }
-      console.error('Streamflow error:', err?.message, '\nSim logs:', simLogs);
+    } catch (err: unknown) {
+      const { formatEscrowError, isUserRejection } = await import('@/lib/casi-errors');
+      console.error('[solana beam] initializeBeam failed:', err);
 
-      const msg: string = err?.message ?? '';
-      const logs = simLogs.join(' ');
-
-      // ── AlreadyProcessed: tx landed but SDK timed out on confirmation ─────
-      // The stream IS created on-chain and USDC IS locked in escrow.
-      // Recover the signature from the wallet's most recent transaction.
-      if (msg.includes('AlreadyProcessed')) {
-        try {
-          // Connection is a dynamic import inside the try block — re-import here
-          const { Connection: RC } = await import('@solana/web3.js');
-          const recoveryConn = new RC(SOLANA_RPC, 'confirmed');
-          const recent = await recoveryConn.getSignaturesForAddress(publicKey, { limit: 3 });
-          const landed = recent.find(s => !s.err);
-          if (landed) {
-            await supabase.from('bookings')
-              .update({ tx_signature: landed.signature })
-              .eq('id', newBooking.id);
-            showNotif('◎ Payment sent — awaiting streamer approval!', 'success');
-            closeSlot();
-            if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
-            setSubmitting(false);
-            return;
-          }
-        } catch (recErr) {
-          console.error('[solana] AlreadyProcessed recovery failed', recErr);
-        }
-        // Recovery failed — warn user not to retry or they'll double-pay
-        showNotif('Payment likely went through — check your wallet before trying again', 'pending');
-        await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
-        setSubmitting(false);
-        return;
-      }
-
-      // Map other on-chain errors to actionable messages
-      let userMsg = 'Solana payment failed — please try again';
-
-      if (msg.includes('AccountNotFound') || logs.includes('AccountNotFound')) {
-        userMsg = IS_MAINNET
-          ? 'USDC token account not found. Buy or bridge USDC and try again.'
-          : 'USDC token account not found on devnet. Get USDC at spl-token-faucet.vercel.app';
-      } else if (msg.includes('Custom(112)') || logs.includes('timestamps are invalid') || logs.includes('Custom(112)')) {
-        userMsg = 'Stream timestamp error — please try again';
-      } else if (msg.includes('insufficient funds') || logs.includes('0x1')) {
-        userMsg = 'Insufficient USDC balance in your wallet';
-      } else if (msg.includes('User rejected') || msg.includes('rejected the request')) {
-        userMsg = 'Transaction rejected in wallet';
-      } else if (msg.includes('Blockhash not found')) {
-        userMsg = 'Transaction expired — please try again';
-      }
+      // Surface CasiError codes via the shared formatter; fall back to the
+      // generic "payment failed" message so the UI never shows raw RPC noise.
+      const userMsg = isUserRejection(err)
+        ? 'Transaction rejected in wallet'
+        : formatEscrowError(err);
 
       await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
       setTxStatus('error'); setTxError(userMsg);
@@ -909,21 +947,81 @@ function OverlayContent() {
     setSubmitting(false);
   };
 
-  const cancelSolanaStream = async (booking: any) => {
-    if (!wallet?.adapter) return;
+  /**
+   * Build the CasiEscrowClient once — used by both the live-beam "end early"
+   * (settle_beam) and the denied-beam "recover USDC" (cancel_escrow) flows.
+   * Returns null if the wallet isn't ready to sign.
+   */
+  const buildViewerCasiClient = async () => {
+    if (!publicKey || !signTransaction) return null;
+    const { Connection } = await import('@solana/web3.js');
+    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const anchorWallet = {
+      publicKey,
+      signTransaction,
+      signAllTransactions:
+        signAllTransactions ||
+        (async <T,>(txs: T[]) => {
+          const out: T[] = [];
+          for (const tx of txs) out.push((await signTransaction(tx as never)) as T);
+          return out;
+        }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    return new CasiEscrowClient(new Connection(SOLANA_RPC), anchorWallet, WALLET_ADAPTER_CLUSTER);
+  };
+
+  /**
+   * Settle a live Solana beam via `settle_beam`. On-chain integer proration
+   * pays the streamer the vested portion and refunds the viewer the rest.
+   * Called when the viewer clicks "end early" on an active beam.
+   */
+  const settleSolanaBeam = async (booking: any) => {
+    if (!booking.escrow_pda || !booking.viewer_wallet || !profile?.solana_wallet) return;
     try {
-      const { SolanaStreamClient, ICluster } = await import('@streamflow/stream');
-      const client = new SolanaStreamClient(SOLANA_RPC, STREAMFLOW_CLUSTER === 'mainnet' ? ICluster.Mainnet : ICluster.Devnet);
-      await client.cancel({ id: booking.stream_id }, { invoker: wallet.adapter as any });
+      const client = await buildViewerCasiClient();
+      if (!client) throw new Error('Wallet not ready to sign');
+      const { PublicKey: PK } = await import('@solana/web3.js');
+      await client.settleBeam({
+        escrowId: booking.id,
+        viewer:   new PK(booking.viewer_wallet),
+        streamer: new PK(profile.solana_wallet),
+      });
     } catch (err) {
-      console.error('Streamflow cancel error:', err);
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      console.error('[beam] settleBeam failed:', err);
+      showNotif(formatEscrowError(err), 'denied');
+      return;
     }
-    // Clear stream_id so the "recover USDC" button disappears and booking hides from view
+    refreshWalletNav();
+    showNotif('◎ Beam ended — refund returned to your wallet', 'warning');
+    if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+  };
+
+  /**
+   * Reclaim USDC from a pending / denied beam via `cancel_escrow`. Only works
+   * while the beam is in Pending status on-chain (streamer has not called
+   * start_beam). Called when the viewer clicks "recover USDC" on a denied
+   * booking whose PDA still holds funds.
+   */
+  const reclaimSolanaEscrow = async (booking: any) => {
+    if (!booking.escrow_pda) return;
+    try {
+      const client = await buildViewerCasiClient();
+      if (!client) throw new Error('Wallet not ready to sign');
+      await client.cancelEscrow({ escrowId: booking.id });
+    } catch (err) {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      console.error('[beam] cancelEscrow failed:', err);
+      showNotif(formatEscrowError(err), 'denied');
+      return;
+    }
+    // PDA is closed — hide the booking from the viewer's list.
     await supabase.from('bookings')
-      .update({ status: 'denied', stream_id: null })
+      .update({ status: 'denied', escrow_pda: null })
       .eq('id', booking.id);
-    refreshWalletNav(); // unvested USDC returned — update balance immediately
-    showNotif('◎ Stream cancelled — unvested USDC returned to your wallet', 'warning');
+    refreshWalletNav();
+    showNotif('◎ USDC returned to your wallet', 'warning');
     if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
   };
   // ──────────────────────────────────────────────────────────────────────────
@@ -942,10 +1040,10 @@ function OverlayContent() {
   // For booking form accent: extend=yellow, queue/rent=skin accent
   const accentColor    = isExtend ? '#eab308' : tc;
   const accentColorRgb = isExtend ? '234, 179, 8' : tcRgb;
-  // Keep denied Solana bookings visible if stream_id is set — viewer may need to
-  // manually cancel to recover unvested USDC (e.g. if wallet was disconnected at denial time)
+  // Keep denied Solana bookings visible if their escrow PDA still holds funds
+  // — the viewer may need to click "recover USDC" to reclaim from chain.
   const visibleMyBookings = myBookings.filter((b:any) =>
-    b.status !== 'denied' || (b.payment_method === 'solana' && b.stream_id),
+    b.status !== 'denied' || (b.payment_method === 'solana' && b.escrow_pda),
   );
 
   if (loading) return null;
@@ -962,15 +1060,16 @@ function OverlayContent() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:.2} }
-        @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes blink     { 0%,100%{opacity:1} 50%{opacity:.2} }
+        @keyframes fadeIn    { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes springPop { from{opacity:0;transform:scale(0.88) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
         .ov { min-height:100vh; background:${isOBS?'transparent':'var(--casi-bg)'}; color:var(--casi-text); font-family:'Syne',sans-serif; }
 
         .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid var(--casi-surface); background:color-mix(in srgb,var(--casi-bg) 94%,transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
         .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; }
         .ov-wm { font-size:18px; font-weight:800; color:var(--casi-accent); letter-spacing:-0.5px; }
         .ov-nav-right { display:flex; align-items:center; gap:10px; }
-        .notif { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:fadeIn .3s ease; white-space:nowrap; max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+        .notif { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:springPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
         .viewer-chip { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.04); border:1px solid var(--casi-border); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
         .viewer-chip:hover { border-color:#333; }
         .vdot { width:6px; height:6px; border-radius:50%; background:var(--casi-accent); animation:blink 1.5s infinite; flex-shrink:0; }
@@ -1107,16 +1206,18 @@ function OverlayContent() {
                       {isLive && (
   <button className="cancel-btn" onClick={async () => {
     if (booking.payment_method === 'solana') {
-      await cancelSolanaStream(booking);          // cancel on-chain
+      // settle_beam pays streamer the vested portion on-chain and refunds
+      // the viewer the rest in a single tx. DB is updated after to advance
+      // the queue; settleSolanaBeam already surfaces its own toast on error.
+      await settleSolanaBeam(booking);
       await clientExpireBooking(activeBooking);   // clear slot + advance queue
-      showNotif('Beam ended — remaining USDC returned', 'warning');
     } else {
       await fetch('/api/stripe/end-early', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ booking_id: booking.id }),
       });
-      await clientExpireBooking(activeBooking);   // clear slot + advance queue
+      await clientExpireBooking(activeBooking);
       showNotif('Beam ended — prorated refund issued', 'warning');
     }
   }}>
@@ -1128,9 +1229,9 @@ function OverlayContent() {
                           {cancelling===booking.id?'…':'✕ cancel'}
                         </button>
                       )}
-                      {booking.status === 'denied' && booking.payment_method === 'solana' && booking.stream_id && (
+                      {booking.status === 'denied' && booking.payment_method === 'solana' && booking.escrow_pda && (
                         <button className="cancel-btn" style={{ color: '#c084fc', borderColor: 'rgba(192,132,252,0.3)' }}
-                          onClick={() => cancelSolanaStream(booking)}>
+                          onClick={() => reclaimSolanaEscrow(booking)}>
                           ◎ recover USDC
                         </button>
                       )}
@@ -1189,10 +1290,12 @@ function OverlayContent() {
                     </div>
                   )}
 
-                  {el.price_value > 0 && !isOBS && (
+                  {el.price_value >= 0 && !isOBS && (
                     <div style={{ position:'absolute', bottom:el.is_background?12:-54, left:'50%', transform:'translateX(-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:5, zIndex:100, whiteSpace:'nowrap' }}>
-                      <div style={{ background:'rgba(5,5,5,0.92)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:20, padding:'3px 10px', display:'flex', alignItems:'center', gap:5 }}>
-                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:500, color:tc }}>${el.price_value}/{el.price_unit}</span>
+                      <div style={{ background:'rgba(5,5,5,0.92)', border:`1px solid ${Number(el.price_value)===0?'rgba(74,222,128,0.35)':'rgba(255,255,255,0.08)'}`, borderRadius:20, padding:'3px 10px', display:'flex', alignItems:'center', gap:5 }}>
+                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:500, color: Number(el.price_value)===0 ? '#4ade80' : tc }}>
+                          {Number(el.price_value)===0 ? '★ Free' : `$${el.price_value}/${el.price_unit}`}
+                        </span>
                         {el.max_duration_minutes && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'#444' }}>· max {el.max_duration_minutes}m</span>}
                       </div>
                       {isLocked ? (
@@ -1219,8 +1322,8 @@ function OverlayContent() {
                         </button>
                       ) : !selectedSlot ? (
                         <button onClick={() => openSlot(el, false)}
-                          style={{ background:tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer', boxShadow:`0 4px 14px rgba(${tcRgb},0.19)` }}>
-                          Rent this slot
+                          style={{ background: Number(el.price_value)===0 ? '#4ade80' : tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer', boxShadow: Number(el.price_value)===0 ? '0 4px 14px rgba(74,222,128,0.19)' : `0 4px 14px rgba(${tcRgb},0.19)` }}>
+                          {Number(el.price_value)===0 ? 'Claim free slot' : 'Rent this slot'}
                         </button>
                       ) : null}
                     </div>
@@ -1228,6 +1331,9 @@ function OverlayContent() {
                 </div>
               );
             })}
+
+            {/* Flash Feed — overlaid on canvas in OBS mode */}
+            {isOBS && profile?.id && <FlashFeed profileId={profile.id} />}
           </div>
 
           {/* BOOKING FORM */}
@@ -1236,7 +1342,9 @@ function OverlayContent() {
               <div className="bf-hdr">
                 <div>
                   <div className="bf-type" style={{ color:accentColor }}>{isExtend?'⏱ Extend slot':isQueue?'⏳ Join queue':'🎯 Rent slot'}</div>
-                  <div className="bf-price" style={{ color:accentColor }}>${selectedSlot.price_value}/{selectedSlot.price_unit}</div>
+                  <div className="bf-price" style={{ color: Number(selectedSlot.price_value)===0 ? '#4ade80' : accentColor }}>
+                    {Number(selectedSlot.price_value)===0 ? '★ Free' : `$${selectedSlot.price_value}/${selectedSlot.price_unit}`}
+                  </div>
                 </div>
                 <button className="bf-x" onClick={closeSlot}>✕</button>
               </div>
@@ -1372,7 +1480,8 @@ function OverlayContent() {
                 </div>
               </div>
 
-              {/* ── USDC cost preview ── */}
+              {/* ── USDC cost preview (paid slots only) ── */}
+              {Number(selectedSlot.price_value) > 0 && (
               <div style={{ background:'rgba(153,69,255,0.05)', border:'1px solid rgba(153,69,255,0.2)', borderRadius:10, padding:'12px 14px', margin:'12px 0', fontFamily:"'DM Mono',monospace", fontSize:11 }}>
                 {[['Duration', formatTime(durationSeconds)], ['Rate', `$${selectedSlot.price_value}/${selectedSlot.price_unit}`]].map(([l, v]) => (
                   <div key={l} style={{ display:'flex', justifyContent:'space-between', color:'#555', marginBottom:5 }}>
@@ -1397,9 +1506,10 @@ function OverlayContent() {
                 ) : connected ? (
                   <div style={{ color:'#555', fontSize:10, marginTop:6 }}>Fetching balance…</div>
                 ) : (
-                  <div style={{ color:'#555', fontSize:10, marginTop:6 }}>Connect wallet to pay with USDC via Streamflow</div>
+                  <div style={{ color:'#555', fontSize:10, marginTop:6 }}>Connect wallet to pay with USDC on-chain</div>
                 )}
               </div>
+              )}
 
 {isQueue && (() => {
   const active = activeBookings.find(b => b.element_id === selectedSlot?.id);
@@ -1417,75 +1527,109 @@ function OverlayContent() {
     </div>
   );
 })()}
-              <div className="bf-footer">
-                <div>
-                  <div className="bf-cost-lbl">Estimated cost</div>
-                  <div className="bf-cost-val" style={{ color:accentColor }}>${estimatedCost}</div>
+              {(() => {
+                const isFreeSlot = Number(selectedSlot.price_value) === 0;
+                return (
+                <div className="bf-footer">
+                  <div>
+                    <div className="bf-cost-lbl">{isFreeSlot ? 'Cost' : 'Estimated cost'}</div>
+                    <div className="bf-cost-val" style={{ color: isFreeSlot ? '#4ade80' : accentColor }}>
+                      {isFreeSlot ? 'Free' : `$${estimatedCost}`}
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', justifyContent:'flex-end' }}>
+                    {/* ── Stripe / Free ── */}
+                    <button onClick={submitBooking} disabled={!canSubmit||submitting} className="bf-sub"
+                      style={{ background: isFreeSlot ? '#4ade80' : accentColor, color:'var(--casi-bg)', display:'flex', alignItems:'center', gap:7, opacity: (!canSubmit||submitting) ? 0.5 : 1 }}>
+                      {isFreeSlot ? (
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6.5 1l1.545 3.13L11.5 4.635 9 7.073l.59 3.442L6.5 8.89 3.41 10.515 4 7.073 1.5 4.635l3.455-.505L6.5 1z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/>
+                        </svg>
+                      ) : (
+                        <svg width="14" height="11" viewBox="0 0 14 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <rect x="0.5" y="0.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeOpacity="0.6"/>
+                          <rect x="0" y="3" width="14" height="2.5" fill="currentColor" fillOpacity="0.5"/>
+                          <rect x="2" y="7" width="4" height="1.5" rx="0.5" fill="currentColor"/>
+                        </svg>
+                      )}
+                      {submitting?'Sending…':isExtend?'Extend':isFreeSlot?'Send Free Request':isQueue?'Join Queue':'Send Request'}
+                    </button>
+                    {/* ── Solana / CASI escrow (hidden for free slots) ── */}
+                    {!isFreeSlot && (
+                      <button
+                        disabled={connecting || submitting || (connected && !canSubmit)}
+                        className="bf-sub"
+                        style={{ background: connected ? '#9945FF' : 'rgba(153,69,255,0.12)', color: connected ? '#fff' : '#9945FF', border: connected ? 'none' : '1px solid rgba(153,69,255,0.35)', display:'flex', alignItems:'center', gap:7, opacity: (connecting||submitting||(connected&&!canSubmit)) ? 0.5 : 1 }}
+                        onClick={() => {
+                          if (!connected) {
+                            openWalletModal();
+                          } else {
+                            setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
+                          }
+                        }}
+                      >
+                        <svg width="13" height="11" viewBox="0 0 13 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M1.5 8.5h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33 8.87c-.14-.14-.04-.37.17-.37ZM1.5 0h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33.37C1.19.23 1.29 0 1.5 0ZM11.67 4.37 10.58 5.5H1.82c-.21 0-.31-.23-.17-.37l1.1-1.1c.1-.1.23-.16.38-.16h8.37c.21 0 .31.23.17.37Z" fill="currentColor"/>
+                        </svg>
+                        {connecting ? 'Connecting…' : connected ? 'Pay with SOL' : 'Connect & Pay SOL'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div style={{ display:'flex', gap:8 }}>
-                  {/* ── Stripe ── */}
-                  <button onClick={submitBooking} disabled={!canSubmit||submitting} className="bf-sub"
-                    style={{ background:accentColor, color:'var(--casi-bg)', display:'flex', alignItems:'center', gap:7, opacity: (!canSubmit||submitting) ? 0.5 : 1 }}>
-                    {/* card icon */}
-                    <svg width="14" height="11" viewBox="0 0 14 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect x="0.5" y="0.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeOpacity="0.6"/>
-                      <rect x="0" y="3" width="14" height="2.5" fill="currentColor" fillOpacity="0.5"/>
-                      <rect x="2" y="7" width="4" height="1.5" rx="0.5" fill="currentColor"/>
-                    </svg>
-                    {submitting?'Sending…':isExtend?'Extend':isQueue?'Join Queue':'Send Request'}
-                  </button>
-                  {/* ── Solana / Streamflow ── */}
-                  <button
-                    disabled={connecting || submitting || (connected && !canSubmit)}
-                    className="bf-sub"
-                    style={{ background: connected ? '#9945FF' : 'rgba(153,69,255,0.12)', color: connected ? '#fff' : '#9945FF', border: connected ? 'none' : '1px solid rgba(153,69,255,0.35)', display:'flex', alignItems:'center', gap:7, opacity: (connecting||submitting||(connected&&!canSubmit)) ? 0.5 : 1 }}
-                    onClick={() => {
-                      if (!connected) {
-                        openWalletModal();
-                      } else {
-                        setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
-                      }
-                    }}
-                  >
-                    {/* Solana ◎ mark */}
-                    <svg width="13" height="11" viewBox="0 0 13 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M1.5 8.5h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33 8.87c-.14-.14-.04-.37.17-.37ZM1.5 0h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33.37C1.19.23 1.29 0 1.5 0ZM11.67 4.37 10.58 5.5H1.82c-.21 0-.31-.23-.17-.37l1.1-1.1c.1-.1.23-.16.38-.16h8.37c.21 0 .31.23.17.37Z" fill="currentColor"/>
-                    </svg>
-                    {connecting ? 'Connecting…' : connected ? 'Pay with SOL' : 'Connect & Pay SOL'}
-                  </button>
-                </div>
-              </div>
+                );
+              })()}
             </div>
           )}
 
           {/* SLOTS LIST */}
-          {!isOBS && !selectedSlot && elements.filter((el:any)=>el.price_value>0).length>0 && (
+          {!isOBS && !selectedSlot && elements.filter((el:any)=>el.price_value>=0).length>0 && (
             <div className="slots-sec">
               <div className="slots-lbl">Available slots</div>
               <div className="slots-grid">
-                {elements.filter((el:any)=>el.price_value>0).map((el:any) => {
+                {elements.filter((el:any)=>el.price_value>=0).map((el:any) => {
                   const activeBooking    = getActiveBookingForSlot(el.id);
                   const isOccupied       = !!activeBooking;
                   const queueCount       = queueCounts[el.id]||0;
                   const myBookingForSlot = getMyBookingForSlot(el.id);
                   const isLocked         = !!el.locked;
-                  const priceColor       = isLocked?'#555':myBookingForSlot?'#555':tc;
+                  const isFree           = Number(el.price_value) === 0;
+                  const priceColor       = isLocked?'#555':myBookingForSlot?'#555':isFree?'#4ade80':tc;
                   return (
                     <button key={el.id} className={`slot-card ${myBookingForSlot||isLocked?'s-disabled':''}`}
-                      style={{ borderColor:isOccupied&&!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.14)`:!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.09)`:undefined }}
+                      style={{ borderColor:isFree?'rgba(74,222,128,0.22)':isOccupied&&!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.14)`:!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.09)`:undefined, position:'relative' }}
                       onClick={() => !myBookingForSlot&&!isLocked&&openSlot(el,isOccupied)}>
-                      <div className="s-thumb" style={{ borderColor:isOccupied?`rgba(${tcRgb},0.21)`:`rgba(${tcRgb},0.14)` }}>
+                      {isFree && !isLocked && (
+                        <span style={{ position:'absolute', top:8, right:8, background:'rgba(74,222,128,0.14)', border:'1px solid rgba(74,222,128,0.4)', color:'#4ade80', fontFamily:"'DM Mono', monospace", fontSize:8, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', padding:'2px 7px', borderRadius:4, pointerEvents:'none' }}>
+                          ★ Free
+                        </span>
+                      )}
+                      <div className="s-thumb" style={{ borderColor:isFree?'rgba(74,222,128,0.25)':isOccupied?`rgba(${tcRgb},0.21)`:`rgba(${tcRgb},0.14)` }}>
                         {el.image_url?<img src={el.image_url} style={{ width:'100%',height:'100%',objectFit:'contain' }} alt="" />:<span>{isLocked?'🔒':el.is_background?'🖼':'✦'}</span>}
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div className="s-type">{isLocked?'Locked':myBookingForSlot?myBookingForSlot.status.replace('_',' '):isOccupied?`In use${queueCount>0?` · ${queueCount} waiting`:''}`:el.is_background?'Full Backdrop':'Beam'}</div>
-                        <div className="s-price" style={{ color:priceColor }}>${el.price_value}/{el.price_unit}{el.max_duration_minutes?` · max ${el.max_duration_minutes}m`:''}</div>
+                        <div className="s-price" style={{ color:priceColor }}>
+                          {isFree ? 'Free' : `$${el.price_value}/${el.price_unit}`}
+                          {el.max_duration_minutes?` · max ${el.max_duration_minutes}m`:''}
+                        </div>
                       </div>
                     </button>
                   );
                 })}
               </div>
             </div>
+          )}
+
+          {/* FLASH FORM — shown when the streamer has at least one flash rail enabled */}
+          {!isOBS && !selectedSlot && savedViewerName && profile?.id &&
+            (profile?.stripe_account_id || profile?.allow_free_flashes || (profile?.solana_wallet && process.env.NEXT_PUBLIC_CASI_SOLANA_ENABLED === 'true')) && (
+            <SendFlashSection
+              profileId={profile.id}
+              username={username}
+              viewerName={savedViewerName}
+              showNotif={showNotif}
+              profile={profile}
+            />
           )}
 
           {!isOBS && profile?.id && (
@@ -1501,7 +1645,7 @@ function OverlayContent() {
               </a>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:20 }}>
                 <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', color:'#888' }}>Powered by</span>
-                {/* Streamflow logo — keep SVG purple, no wrapper opacity */}
+                {/* CASI escrow — on-chain Solana program */}
                 <svg width="14" height="14" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <defs>
                     <linearGradient id="sf-grad" x1="0" y1="0" x2="1" y2="1">
@@ -1513,7 +1657,7 @@ function OverlayContent() {
                   <path d="M15 50 Q50 30 85 50 Q50 70 15 50Z" fill="url(#sf-grad)" opacity="0.75"/>
                   <path d="M15 70 Q50 50 85 70 Q50 90 15 70Z" fill="url(#sf-grad)" opacity="0.5"/>
                 </svg>
-                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', color:'#888' }}>Streamflow</span>
+                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', color:'#888' }}>Solana</span>
               </div>
             </div>
           )}

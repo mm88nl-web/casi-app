@@ -1,0 +1,161 @@
+{
+  "address": "CASIesCRow1111111111111111111111111111111111",
+  "metadata": {
+    "name": "casi_escrow",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "CASI Escrow — Flash and Beam. Follows audited solana-developers/program-examples token_interface pattern."
+  },
+  "instructions": [
+    {
+      "name": "initialize_escrow",
+      "accounts": [
+        { "name": "viewer",                   "writable": true, "signer": true },
+        { "name": "streamer" },
+        { "name": "escrow_state",             "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "escrow_id" }] } },
+        { "name": "vault",                    "writable": true },
+        { "name": "viewer_ata",               "writable": true },
+        { "name": "usdc_mint" },
+        { "name": "token_program" },
+        { "name": "associated_token_program", "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bh6" },
+        { "name": "system_program",           "address": "11111111111111111111111111111111" }
+      ],
+      "args": [
+        { "name": "escrow_id",       "type": { "array": ["u8", 32] } },
+        { "name": "amount",          "type": "u64" },
+        { "name": "duration_secs",   "type": "u64" },
+        { "name": "escrow_type_val", "type": "u8" }
+      ]
+    },
+    {
+      "name": "approve_flash",
+      "accounts": [
+        { "name": "streamer",                 "writable": true, "signer": true },
+        { "name": "viewer",                   "writable": true },
+        { "name": "escrow_state",             "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "escrow_id" }] } },
+        { "name": "vault",                    "writable": true },
+        { "name": "streamer_ata",             "writable": true },
+        { "name": "fee_wallet_ata",           "writable": true },
+        { "name": "fee_wallet" },
+        { "name": "usdc_mint" },
+        { "name": "token_program" },
+        { "name": "associated_token_program", "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bh6" },
+        { "name": "system_program",           "address": "11111111111111111111111111111111" }
+      ],
+      "args": [
+        { "name": "escrow_id", "type": { "array": ["u8", 32] } }
+      ]
+    },
+    {
+      "name": "deny_flash",
+      "accounts": [
+        { "name": "streamer",                 "signer": true },
+        { "name": "viewer",                   "writable": true },
+        { "name": "escrow_state",             "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "escrow_id" }] } },
+        { "name": "vault",                    "writable": true },
+        { "name": "viewer_ata",               "writable": true },
+        { "name": "usdc_mint" },
+        { "name": "token_program" },
+        { "name": "associated_token_program", "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bh6" },
+        { "name": "system_program",           "address": "11111111111111111111111111111111" }
+      ],
+      "args": [
+        { "name": "escrow_id", "type": { "array": ["u8", 32] } }
+      ]
+    },
+    {
+      "name": "cancel_escrow",
+      "accounts": [
+        { "name": "viewer",                   "writable": true, "signer": true },
+        { "name": "escrow_state",             "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "escrow_id" }] } },
+        { "name": "vault",                    "writable": true },
+        { "name": "viewer_ata",               "writable": true },
+        { "name": "usdc_mint" },
+        { "name": "token_program" },
+        { "name": "associated_token_program", "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bh6" },
+        { "name": "system_program",           "address": "11111111111111111111111111111111" }
+      ],
+      "args": [
+        { "name": "escrow_id", "type": { "array": ["u8", 32] } }
+      ]
+    },
+    {
+      "name": "start_beam",
+      "accounts": [
+        { "name": "streamer",     "signer": true },
+        { "name": "escrow_state", "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "_escrow_id" }] } }
+      ],
+      "args": [
+        { "name": "_escrow_id", "type": { "array": ["u8", 32] } }
+      ]
+    },
+    {
+      "name": "settle_beam",
+      "accounts": [
+        { "name": "caller",                   "writable": true, "signer": true },
+        { "name": "streamer",                 "writable": true },
+        { "name": "viewer",                   "writable": true },
+        { "name": "escrow_state",             "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "escrow_id" }] } },
+        { "name": "vault",                    "writable": true },
+        { "name": "streamer_ata",             "writable": true },
+        { "name": "viewer_ata",               "writable": true },
+        { "name": "fee_wallet_ata",           "writable": true },
+        { "name": "fee_wallet" },
+        { "name": "usdc_mint" },
+        { "name": "token_program" },
+        { "name": "associated_token_program", "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bh6" },
+        { "name": "system_program",           "address": "11111111111111111111111111111111" }
+      ],
+      "args": [
+        { "name": "escrow_id", "type": { "array": ["u8", 32] } }
+      ]
+    }
+  ],
+  "accounts": [
+    { "name": "EscrowState", "discriminator": [0,0,0,0,0,0,0,0] }
+  ],
+  "events": [
+    { "name": "EscrowInitialized", "discriminator": [0,0,0,0,0,0,0,0] },
+    { "name": "FlashSettled",      "discriminator": [1,0,0,0,0,0,0,0] },
+    { "name": "BeamSettled",       "discriminator": [2,0,0,0,0,0,0,0] }
+  ],
+  "errors": [
+    { "code": 6000, "name": "InvalidAmount",    "msg": "Amount must be greater than zero" },
+    { "code": 6001, "name": "InvalidDuration",  "msg": "Duration must be > 0 for Beam escrows" },
+    { "code": 6002, "name": "InvalidEscrowType","msg": "Invalid escrow type — expected 0 (Flash) or 1 (Beam)" },
+    { "code": 6003, "name": "Unauthorized",     "msg": "Caller is not the authorized party for this escrow" },
+    { "code": 6004, "name": "AlreadySettled",   "msg": "Escrow is not in Pending status" },
+    { "code": 6005, "name": "NotActive",        "msg": "Escrow is not in Active status" },
+    { "code": 6006, "name": "WrongEscrowType",  "msg": "This instruction requires a different escrow type" },
+    { "code": 6007, "name": "InvalidFeeWallet", "msg": "Fee wallet address does not match the hardcoded CASI treasury" },
+    { "code": 6008, "name": "MathOverflow",     "msg": "Arithmetic overflow or underflow" }
+  ],
+  "types": [
+    {
+      "name": "EscrowState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "escrow_id",       "type": { "array": ["u8", 32] } },
+          { "name": "viewer",          "type": "pubkey" },
+          { "name": "streamer",        "type": "pubkey" },
+          { "name": "usdc_mint",       "type": "pubkey" },
+          { "name": "total_amount",    "type": "u64" },
+          { "name": "duration_secs",   "type": "u64" },
+          { "name": "start_timestamp", "type": "i64" },
+          { "name": "escrow_type",     "type": { "defined": { "name": "EscrowType" } } },
+          { "name": "status",          "type": { "defined": { "name": "EscrowStatus" } } },
+          { "name": "bump",            "type": "u8" }
+        ]
+      }
+    },
+    {
+      "name": "EscrowType",
+      "type": { "kind": "enum", "variants": [{ "name": "Flash" }, { "name": "Beam" }] }
+    },
+    {
+      "name": "EscrowStatus",
+      "type": { "kind": "enum", "variants": [{ "name": "Pending" }, { "name": "Active" }, { "name": "Settled" }, { "name": "Cancelled" }] }
+    }
+  ]
+}
