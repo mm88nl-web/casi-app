@@ -48,8 +48,8 @@ read `node_modules/next/dist/docs/` before touching framework APIs.
 - `flashes/create` — create Flash row (Stripe: returns Checkout URL; Solana: returns `solana_wallet`; Free: rate-limited insert)
 - `flashes/attach-escrow` — after `initialize_flash` tx, viewer posts `escrow_pda + tx_signature + viewer_wallet`
 - `flashes/moderate` — streamer approves/denies: Stripe captures/refunds; Solana verifies on-chain `approve_flash`/`deny_flash` tx and flips status
-- `stripe/authorize` — create Checkout session (manual capture, 5% application_fee, transfer to Connect account)
-- `stripe/webhook` — persist `payment_intent_id` on `checkout.session.completed`
+- `stripe/authorize` — create Checkout session on streamer's connected account (Direct Charges, manual capture, zero `application_fee_amount`)
+- `stripe/webhook` — persist `payment_intent_id` on `checkout.session.completed` (handles Connect-mode `account` header)
 - `stripe/cancel` — void if `requires_capture`, refund if `succeeded`
 - `stripe/connect` — Express onboarding link
 - `stripe/end-early` — proration capture (auth-checked: caller must own profile)
@@ -67,16 +67,18 @@ Three core tables (see `supabase/migrations/`):
 - **overlay_elements** — `profile_id`, percent-based `pos_x/y/width/height`, `price_value`, `price_unit` (`min`|`hr`), `max_duration_minutes`, `is_background`, `image_url`, `locked`
 - **bookings** — `profile_id`, `element_id`, `viewer_name`, `status` (`pending`|`approved_queued`|`active`|`expired`|`denied`), `image_url`, `storage_path`, `file_type`, `message`, `duration_minutes` (numeric), `price_value`, `price_unit`, `payment_method` (`stripe`|`solana`), `payment_intent_id`, `original_amount_cents`, `tx_signature`, `stream_id`, `started_at`, `approved_at`, `is_queued`, `queue_position`
 
-RLS (migration `20260414…`, hardened in `20260415…`):
+RLS (migration `20260414…`, hardened in `20260415…`, tightened in `20260418100000…`):
 - profiles: only owner can write (prevents `solana_wallet` hijack)
 - overlay_elements: owner-only writes, public reads
-- bookings: anon INSERT must have `status='pending'`; UPDATE allowed if `auth.uid IS NULL OR auth.uid = profile_id` (so viewers can cancel their own)
+- bookings INSERT (anon): `status='pending'` + server-managed columns (`payment_intent_id`, `original_amount_cents`, `started_at`, `approved_at`, `tx_signature`, `escrow_pda`) must all be NULL + `element_id` must resolve to an element owned by the claimed `profile_id`
+- bookings UPDATE: split — `authenticated` owner (via `auth.uid() = profile_id`) can mutate anything; `anon` role restricted to legitimate viewer transitions (USING `status IN (pending, active, approved_queued)` / WITH CHECK `status IN (pending, denied, active, expired)`)
+- Server routes use `SUPABASE_SERVICE_ROLE_KEY` and bypass RLS entirely
 
 Storage: `beams` bucket, public read, anon insert, 5MB cap, image/* + video/{mp4,webm,quicktime}.
 
 ## Payment flows
 
-**Stripe:** viewer → `authorize` → Checkout (manual capture) → webhook stores PI → streamer approves → cron captures at natural end OR `end-early` prorates (beams/backdrops only). Cancel = void or refund based on PI status.
+**Stripe:** viewer → `authorize` → Checkout **on streamer's connected account** (Direct Charges, manual capture, zero platform fee) → webhook stores PI (passes `stripeAccount` on retrieve so Connect events resolve) → streamer approves → cron captures at natural end OR `end-early` prorates (beams/backdrops only). Cancel = void or refund based on PI status. Server re-reads authoritative price from `overlay_elements` before creating the session — viewer cannot tamper `amount`.
 
 **Solana:** viewer connects wallet → preflight (SOL ≥ 0.01, USDC ≥ total) →
 `initialize_flash` or `initialize_beam` on the casi-escrow program → full
@@ -101,22 +103,26 @@ Server: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET
 
 `src/lib/skins.ts`: 6 presets (`casi-dark`, `void`, `neon`, `twitch`, `terminal`, `ember`, `chrome`) injected as CSS custom properties via `SkinProvider`. Streamer can override accent with custom hex.
 
-## Recent commits (top of branch)
+## Recent commits (top of branch `claude/add-handoff-docs-mFcF9`)
 
 ```
+14d0e59 fix(security): tighten bookings RLS — lock INSERT columns, split UPDATE
+480021e chore(web): update homepage platform-fee stat to 0%
+c72b806 fix(security): timing-safe compare on Helius webhook secret
+16df4bf refactor(stripe): switch to Connect Direct Charges with zero platform fee
+bfedf96 fix(payments): close amount-tampering hole in booking checkout
+8f058eb docs: update SUMMARY handoff + add INVESTOR_BRIEF
 d284786 fix(tests): import BN directly from bn.js
 50f20fe fix(tests): use System Program ID for FEE_WALLET placeholder
 c24bf04 fix(tests): use anchor.BN alias instead of named import
 741a71f chore(escrow): upgrade anchor 0.30.1 → 0.31.1
-50952c8 chore(escrow): bump rust pin to 1.86 — edition2024 needs 1.85+
-1262c05 fix(escrow): add idl-build feature for anchor IDL generation
-2b58fac fix(escrow): mark DenyFlash.streamer mutable (payer for init_if_needed)
-a655ee8 fix(escrow): use token_2022 feature instead of nonexistent token_interface
-35f8266 fix(escrow): valid-base58 placeholders so anchor build doesn't crash pre-sync
-661d828 chore: purge residual Streamflow references
 ```
 
-Active themes: Solana stabilisation (done — 19/19 tests passing), devnet deploy pending on faucet recovery, then end-to-end smoke test.
+Active themes: security audit hardening done at the web tier (amount
+tampering, fee extraction, Helius signature, RLS). Solana program still
+has a 5% settlement fee on-chain — `programs/casi-escrow/src/lib.rs`
+holds the math; stripping it is a pending task. Anchor 19/19 tests still
+pass; devnet deploy still blocked on faucet availability.
 
 ## Known gaps / loose ends
 
@@ -132,14 +138,29 @@ Active themes: Solana stabilisation (done — 19/19 tests passing), devnet deplo
 
 ## Handoff to next session
 
-Project state as of `d284786` (2026-04-17):
-- Anchor program builds + **all 19 tests pass** on local validator.
+Project state as of `14d0e59` (2026-04-17, branch `claude/add-handoff-docs-mFcF9`):
+- Anchor program builds + **all 19 tests pass** on local validator (state from `d284786`, nothing touched since).
 - Toolchain pinned: Rust 1.86 (`rust-toolchain.toml`), Anchor 0.31.1 (`Anchor.toml`, `scripts/setup-devnet.sh`).
 - `scripts/setup-devnet.sh --skip-airdrop --skip-deploy` builds + tests end-to-end on a clean machine.
-- **Next logical step: devnet deploy** once faucets recover, then end-to-end smoke test `/overlay` → `/admin` with a devnet wallet. After that: mainnet prep (see "Mainnet prep" below).
-- Branch history is clean. 6 `archive/*` branches on the remote preserve every commit from the 10 pre-merge dead branches.
+- Web-tier security audit hardening shipped in 5 commits since `8f058eb`:
+  - `bfedf96` fix(payments): close amount-tampering hole in booking checkout — server re-reads `price_value`/`price_unit` from `overlay_elements`, rejects client-supplied amounts that don't match
+  - `16df4bf` refactor(stripe): switch to Connect Direct Charges — `{ stripeAccount }` on every PI call, zero `application_fee_amount`, webhook passes account header on session retrieve
+  - `c72b806` fix(security): timing-safe compare on Helius webhook secret (`crypto.timingSafeEqual`, length-guarded)
+  - `480021e` chore(web): homepage hero stat 2–5% → 0%
+  - `14d0e59` fix(security): tighten bookings RLS — INSERT column whitelist + split UPDATE into `bookings_update_streamer` (auth) and `bookings_update_anon` (transition-restricted)
+- **Branches:**
+  - `claude/add-handoff-docs-mFcF9` → current, in sync with origin
+  - `claude/casi-project-summary-zJfeU` → lagging at `8f058eb` (merge/sync pending)
+  - 6 `archive/*` branches preserve pre-merge commit history
 
-Common pitfalls we hit (don't repeat):
+### Next-step options (pick one)
+
+1. **Subscription table + Stripe Billing route** — SaaS tier scaffold. `subscriptions` table (`profile_id`, `stripe_customer_id`, `stripe_subscription_id`, `plan`, `current_period_end`), `/api/stripe/subscribe` → Checkout in subscription mode, webhook listens for `customer.subscription.*`. No plans defined yet, just wire the rails.
+2. **Strip 5% settlement fee from Anchor escrow** — `programs/casi-escrow/src/lib.rs` still deducts 5% at `settle_beam` / `approve_flash`. Matches the on-chain side with the Stripe-tier change. Requires `anchor build` + test regen + re-deploy (devnet faucet permitting).
+3. **`bookings.cancel_token` column** — strong viewer-cancel auth. Current Stripe cancel URL uses session-less booking id. Add server-generated random token on INSERT, require it on `/api/stripe/cancel`, strip RLS UPDATE-to-denied anon path.
+4. **Sync sibling branch** — merge or cherry-pick the 5 security commits onto `claude/casi-project-summary-zJfeU` so both branches are coherent.
+
+### Common pitfalls we hit (don't repeat):
 1. Anchor 0.30.1 is incompatible with Rust ≥1.87 (`proc_macro2::Span::source_file()` removed). Do NOT try to pin Rust to 1.79 — dependency tree now needs edition2024 (1.85+). Stay on 0.31.1.
 2. `sync-program-id.mjs` mutates `Anchor.toml` and `lib.rs` — re-run after every pull that touches those files. `git checkout -- <file>` reverts the local edits before pulling.
 3. Placeholder pubkeys in `Anchor.toml`/`lib.rs` must be valid base58 (exclude `0`, `O`, `I`, `l`). The canonical dev placeholder is `11111111111111111111111111111111` (System Program).
