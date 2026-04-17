@@ -1319,7 +1319,7 @@ function OverlayContent() {
                       ) : !selectedSlot ? (
                         <button onClick={() => openSlot(el, false)}
                           style={{ background: Number(el.price_value)===0 ? '#4ade80' : tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer', boxShadow: Number(el.price_value)===0 ? '0 4px 14px rgba(74,222,128,0.19)' : `0 4px 14px rgba(${tcRgb},0.19)` }}>
-                          {Number(el.price_value)===0 ? 'Claim free slot' : 'Rent this slot'}
+                          {Number(el.price_value)===0 ? 'Claim free slot' : 'Tip for this slot'}
                         </button>
                       ) : null}
                     </div>
@@ -1337,7 +1337,7 @@ function OverlayContent() {
             <div className="bf" style={{ border:`1px solid rgba(${accentColorRgb},0.13)` }}>
               <div className="bf-hdr">
                 <div>
-                  <div className="bf-type" style={{ color:accentColor }}>{isExtend?'⏱ Extend slot':isQueue?'⏳ Join queue':'🎯 Rent slot'}</div>
+                  <div className="bf-type" style={{ color:accentColor }}>{isExtend?'⏱ Extend slot':isQueue?'⏳ Join queue':'🎯 Tip for slot'}</div>
                   <div className="bf-price" style={{ color: Number(selectedSlot.price_value)===0 ? '#4ade80' : accentColor }}>
                     {Number(selectedSlot.price_value)===0 ? '★ Free' : `$${selectedSlot.price_value}/${selectedSlot.price_unit}`}
                   </div>

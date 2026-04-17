@@ -489,6 +489,7 @@ export default function AdminStudio() {
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [togglingLive, setTogglingLive] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
+  const [sendingTestFlash, setSendingTestFlash] = useState(false);
   const dragStartPos = useRef<{x:number;y:number}|null>(null);
   const isDragging = useRef(false);
 
@@ -1033,6 +1034,37 @@ export default function AdminStudio() {
     setTimeout(() => setCopiedUrl(null), 2000);
   };
 
+  const sendTestFlash = async () => {
+    if (!profile || sendingTestFlash) return;
+    if (!profile.allow_free_flashes) {
+      showFlashToast('Enable free Flashes in your profile first, then try again.', 'err');
+      return;
+    }
+    setSendingTestFlash(true);
+    try {
+      const res = await fetch('/api/flashes/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: profile.id,
+          viewer_name: 'Test',
+          message: 'Test Flash from your admin panel ✦',
+          payment_method: 'free',
+        }),
+      });
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: 'Test failed' }));
+        showFlashToast(error || 'Test failed', 'err');
+      } else {
+        showFlashToast('Test Flash sent — approve it in Requests to see it fire on your overlay.', 'ok');
+      }
+    } catch {
+      showFlashToast('Test Flash failed — check your connection.', 'err');
+    } finally {
+      setSendingTestFlash(false);
+    }
+  };
+
   const calcTotal = (booking: any) => booking.price_unit === 'min'
     ? (booking.price_value * Number(booking.duration_minutes)).toFixed(0)
     : (booking.price_value * (Number(booking.duration_minutes) / 60)).toFixed(2);
@@ -1089,6 +1121,9 @@ export default function AdminStudio() {
 
         /* NAV */
         .util-bar { display:flex; align-items:center; justify-content:flex-end; gap:14px; padding:0 32px; height:32px; flex-shrink:0; background:rgba(0,0,0,0.25); border-bottom:1px solid rgba(var(--casi-accent-rgb),0.05); }
+        .vlink-strip { display:flex; align-items:center; gap:10px; padding:10px 32px; background:rgba(var(--casi-accent-rgb),0.03); border-bottom:1px solid rgba(var(--casi-accent-rgb),0.08); flex-shrink:0; flex-wrap:wrap; }
+        .vlink-lbl { font-family:'DM Mono',monospace; font-size:10px; color:var(--casi-text-muted); flex-shrink:0; letter-spacing:1px; text-transform:uppercase; }
+        .vlink-url { flex:1; min-width:200px; font-family:'DM Mono',monospace; font-size:11px; color:var(--casi-accent); background:rgba(0,0,0,0.3); border:1px solid rgba(var(--casi-accent-rgb),0.12); border-radius:6px; padding:6px 10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .save-status-txt { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; color:#333; }
         .top-nav { display:flex; align-items:center; justify-content:space-between; padding:0 32px; height:64px; flex-shrink:0; border-bottom:1px solid rgba(var(--casi-accent-rgb),0.08); background:color-mix(in srgb, var(--casi-bg) 96%, transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:100; }
         .tnl { display:flex; align-items:center; gap:32px; }
@@ -1190,6 +1225,9 @@ export default function AdminStudio() {
         @media (max-width:768px) {
           .util-bar { padding:0 12px; height:28px; }
           .top-nav { padding:0 12px; height:52px; }
+          .vlink-strip { padding:8px 12px; gap:8px; }
+          .vlink-lbl { display:none; }
+          .vlink-url { min-width:0; font-size:10px; padding:5px 8px; }
           .nav-tabs { display:none; }
           .save-status-txt { display:none; }
           .nav-username { display:none; }
@@ -1259,6 +1297,34 @@ export default function AdminStudio() {
             )}
           </div>
         </nav>
+
+        {/* VIEWER LINK STRIP — quick-access share + self-test in studio view */}
+        {view === 'studio' && (
+          <div className="vlink-strip">
+            <span className="vlink-lbl">Your viewer link</span>
+            <code className="vlink-url">{origin}/overlay?s={profile.username}</code>
+            <button
+              onClick={() => copyUrl(`${origin}/overlay?s=${profile.username}`, 'vlink')}
+              className="btn-sm b-outline"
+              style={{ border: '1px solid rgba(var(--casi-accent-rgb),0.25)', color: 'var(--casi-accent)' }}>
+              {copiedUrl === 'vlink' ? '✓ Copied' : 'Copy'}
+            </button>
+            <button
+              onClick={sendTestFlash}
+              disabled={sendingTestFlash}
+              className="btn-sm"
+              title={profile.allow_free_flashes ? 'Send a free test Flash to yourself to preview the overlay animation' : 'Enable free Flashes in your profile to test'}
+              style={{
+                background: 'rgba(var(--casi-accent2-rgb),0.1)',
+                color: 'var(--casi-accent2)',
+                border: '1px solid rgba(var(--casi-accent2-rgb),0.3)',
+                opacity: sendingTestFlash ? 0.6 : 1,
+                cursor: sendingTestFlash ? 'wait' : 'pointer',
+              }}>
+              {sendingTestFlash ? 'Sending…' : '⚡ Test Flash'}
+            </button>
+          </div>
+        )}
 
         {/* MODALS */}
         {showBackdropModal && <BackdropModal onConfirm={createFullBackdrop} onClose={() => setShowBackdropModal(false)} />}
@@ -1350,6 +1416,13 @@ export default function AdminStudio() {
               </button>
             </div>
 
+            {/* 3-surface explainer row */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '8px 24px 4px', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
+              <span><span style={{ color: '#facc15' }}>⚡ Flash</span> = one-shot popup message</span>
+              <span><span style={{ color: 'var(--casi-accent2)' }}>✦ Beam</span> = timed image/video in a slot</span>
+              <span><span style={{ color: '#c084fc' }}>🖼 Backdrop</span> = full-screen takeover</span>
+            </div>
+
             {/* Steps */}
             <div className="banner-steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, padding: '12px 24px 20px' }}>
               {[
@@ -1387,7 +1460,7 @@ export default function AdminStudio() {
                   num: '03',
                   color: '#4ade80',
                   title: 'Go live and share',
-                  body: 'Hit Go Live, copy your viewer link, and share it in your stream chat. Viewers can now rent your slots.',
+                  body: 'Hit Go Live, copy your viewer link, and share it in your stream chat. Viewers can now tip to display their image or video in your slots.',
                   action: (
                     <span style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', letterSpacing: 0.5 }}>
                       Use the Go Live button above ↑
@@ -1536,7 +1609,9 @@ export default function AdminStudio() {
             )}
 
             <div className="canvas-hint">
-              {selectedEl && !selectedEl.is_background
+              {elements.length === 0
+                ? 'No slots yet — hit + Beam above to let viewers tip to display an image or video here'
+                : selectedEl && !selectedEl.is_background
                 ? 'Drag beam to move · Use arrows to nudge · Edit price inline'
                 : 'Tap a beam to select · Drag to move · Resize from corners'}
             </div>
@@ -2244,6 +2319,16 @@ export default function AdminStudio() {
               <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid #111', borderRadius: 8, padding: '10px 14px', marginTop: 8 }}>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginBottom: 4 }}>Custom CSS for both sources:</div>
                 <code style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>{"body { background-color: rgba(0,0,0,0); }"}</code>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
+                <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid #111', borderRadius: 8, padding: '10px 14px' }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>Dimensions</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>1920 × 1080</div>
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid #111', borderRadius: 8, padding: '10px 14px' }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>Not updating?</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>Right-click source → Refresh cache</div>
+                </div>
               </div>
             </div>
           </div>

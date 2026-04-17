@@ -394,7 +394,7 @@ export default function ProfileEditPage() {
                   {stripeLoading ? 'Redirecting…' : stripeConnected ? '↗ Manage' : 'Connect →'}
                 </button>
               </div>
-              <div className="pe-hint">100% of every tip lands in your Stripe account — CASI takes no platform fee. Payouts go directly to your bank.</div>
+              <div className="pe-hint">Accept card tips in EUR. Stripe takes ~2.9% + €0.25 per tip — CASI takes 0%. Payouts go directly to your bank.</div>
             </div>
 
             {/* ── SOLANA WALLET ── */}
@@ -423,7 +423,7 @@ export default function ProfileEditPage() {
                   </button>
                 )}
               </div>
-              <div className="pe-hint">Connect your wallet here, then click Save to link it to your profile.</div>
+              <div className="pe-hint">Accept USDC tips on Solana. Near-zero fees, paid out on-chain instantly — CASI takes 0%. Connect your wallet here, then click Save to link it to your profile.</div>
             </div>
 
             {/* ── FREE TIER ── */}
