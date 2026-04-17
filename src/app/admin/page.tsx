@@ -1088,6 +1088,8 @@ export default function AdminStudio() {
         .sw { min-height:100vh; background:var(--casi-bg); color:var(--casi-text); font-family:'Syne',sans-serif; display:flex; flex-direction:column; }
 
         /* NAV */
+        .util-bar { display:flex; align-items:center; justify-content:flex-end; gap:14px; padding:0 32px; height:32px; flex-shrink:0; background:rgba(0,0,0,0.25); border-bottom:1px solid rgba(var(--casi-accent-rgb),0.05); }
+        .save-status-txt { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; color:#333; }
         .top-nav { display:flex; align-items:center; justify-content:space-between; padding:0 32px; height:64px; flex-shrink:0; border-bottom:1px solid rgba(var(--casi-accent-rgb),0.08); background:color-mix(in srgb, var(--casi-bg) 96%, transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:100; }
         .tnl { display:flex; align-items:center; gap:32px; }
         .nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
@@ -1186,6 +1188,7 @@ export default function AdminStudio() {
 
 
         @media (max-width:768px) {
+          .util-bar { padding:0 12px; height:28px; }
           .top-nav { padding:0 12px; height:52px; }
           .nav-tabs { display:none; }
           .save-status-txt { display:none; }
@@ -1218,6 +1221,12 @@ export default function AdminStudio() {
       <SkinProvider skin={activeSkin} themeColor={editThemeColor || profile?.theme_color} />
       <div className="sw">
 
+        {/* UTILITY BAR — wallet + save status, slim row above the main nav */}
+        <div className="util-bar">
+          <span className="save-status-txt">{saveStatus}</span>
+          <WalletNav />
+        </div>
+
         {/* NAV */}
         <nav className="top-nav">
           <div className="tnl">
@@ -1235,7 +1244,6 @@ export default function AdminStudio() {
             </div>
           </div>
           <div className="tnr">
-            <span className="save-status-txt" style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, color: '#333' }}>{saveStatus}</span>
             <button onClick={toggleLive} disabled={togglingLive} className={`live-toggle ${profile.is_live ? 'lt-on' : 'lt-off'}`}>
               <span className={`live-dot ${profile.is_live ? 'ld-on' : 'ld-off'}`} />
               {profile.is_live ? 'Live' : 'Go Live'}
@@ -1249,7 +1257,6 @@ export default function AdminStudio() {
                 <button onClick={clearAll} className="btn-sm b-danger studio-action-hide">Clear</button>
               </>
             )}
-            <WalletNav />
           </div>
         </nav>
 
