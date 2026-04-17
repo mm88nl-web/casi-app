@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { USDC_MINT } from '@/lib/solana-network';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
+// Streamflow uses the same program ID on devnet and mainnet, so no switch needed here.
 const STREAMFLOW_PROGRAM_ID = 'strmRqUvRpeYvH9bZfBy86M8nmUqh5pGEF2p9Vv4v';
-const USDC_DEVNET_MINT      = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
 
 // Always return 200 — Helius retries on non-2xx which burns credits.
 const OK = () => NextResponse.json({ ok: true });
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
       (ix: any) => ix.programId === STREAMFLOW_PROGRAM_ID,
     );
     const isUsdc = event.tokenTransfers?.some(
-      (t: any) => t.mint === USDC_DEVNET_MINT,
+      (t: any) => t.mint === USDC_MINT,
     );
     if (!isStreamflow || !isUsdc) continue;   // not our program — skip silently
 

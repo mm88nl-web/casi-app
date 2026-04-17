@@ -7,11 +7,14 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import WalletNav, { refreshWalletNav } from '@/components/WalletNav';
 import ChatPanel from '@/components/ChatPanel';
-
-// Module-level constant — accessible in every function including cancelSolanaStream
-// and the AlreadyProcessed catch block inside submitSolanaBooking.
-const RPC_DEVNET = 'https://api.devnet.solana.com';
-const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+import {
+  SOLANA_RPC,
+  USDC_MINT,
+  STREAMFLOW_CLUSTER,
+  EXPLORER_CLUSTER_QUERY,
+  IS_MAINNET,
+  NETWORK_LABEL,
+} from '@/lib/solana-network';
 
 function Logo({ scale = 0.32, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
   return (
@@ -131,7 +134,7 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
     ? `${recipientWallet.slice(0, 4)}…${recipientWallet.slice(-4)}`
     : null;
   const solscanUrl = txId
-    ? `https://solscan.io/tx/${txId}?cluster=devnet`
+    ? `https://solscan.io/tx/${txId}${EXPLORER_CLUSTER_QUERY}`
     : null;
 
   return (
@@ -141,7 +144,7 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
 
         {/* Details receipt */}
         <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:10, padding:'14px 16px', marginBottom:16 }}>
-          {[['Slot on', `@${username} (devnet)`], ['Duration', formatTime(Math.round(duration * 60))], ['Rate', `$${slot.price_value}/${slot.price_unit}`]].map(([l, v]) => (
+          {[['Slot on', `@${username}${IS_MAINNET ? '' : ' (devnet)'}`], ['Duration', formatTime(Math.round(duration * 60))], ['Rate', `$${slot.price_value}/${slot.price_unit}`]].map(([l, v]) => (
             <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666', marginBottom:6 }}>
               <span>{l}</span><span style={{ color:'#e8e8e8' }}>{v}</span>
             </div>
@@ -308,7 +311,7 @@ function OverlayContent() {
       try {
         const { PublicKey: PK } = await import('@solana/web3.js');
         const { value: accs } = await walletConn.getParsedTokenAccountsByOwner(
-          publicKey, { mint: new PK(USDC_DEVNET) }
+          publicKey, { mint: new PK(USDC_MINT) }
         );
         if (!cancelled) setUsdcBalance(accs[0]?.account.data.parsed.info.tokenAmount.uiAmount ?? 0);
       } catch { if (!cancelled) setUsdcBalance(null); }
@@ -708,7 +711,7 @@ function OverlayContent() {
         : selectedSlot.price_value * (durationMinutes / 60);
 
       // ── Pre-flight: verify viewer has a USDC ATA with enough balance ──────
-      const connection = new Connection(RPC_DEVNET);
+      const connection = new Connection(SOLANA_RPC);
 
       // 1. SOL balance — Streamflow creates escrow + metadata accounts on-chain.
       //    Needs ~0.02 SOL for rent + fees. Without any SOL, simulation fails
@@ -717,7 +720,9 @@ function OverlayContent() {
       const MIN_SOL = 0.001 * 1e9; // 0.001 SOL minimum — Streamflow needs rent for escrow accounts
       if (solLamports < MIN_SOL) {
         showNotif(
-          `Need devnet SOL for fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.quicknode.com/solana/devnet`,
+          IS_MAINNET
+            ? `Need SOL for fees. You have ${(solLamports / 1e9).toFixed(4)} SOL — top up your wallet and try again.`
+            : `Need devnet SOL for fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.quicknode.com/solana/devnet`,
           'denied',
         );
         await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
@@ -730,12 +735,14 @@ function OverlayContent() {
       //    switch Phantom back to Devnet and re-mint from spl-token-faucet.vercel.app
       const { value: tokenAccounts } = await connection.getParsedTokenAccountsByOwner(
         publicKey,
-        { mint: new PublicKey(USDC_DEVNET) },
+        { mint: new PublicKey(USDC_MINT) },
       );
 
       if (tokenAccounts.length === 0) {
         showNotif(
-          'No devnet USDC found (mint 4zMMC9…DU). Switch Phantom to Devnet then mint at spl-token-faucet.vercel.app',
+          IS_MAINNET
+            ? 'No USDC found in your wallet. Buy or bridge USDC and try again.'
+            : 'No devnet USDC found (mint 4zMMC9…DU). Switch Phantom to Devnet then mint at spl-token-faucet.vercel.app',
           'denied',
         );
         await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
@@ -769,7 +776,7 @@ function OverlayContent() {
         try {
           const { Transaction } = await import('@solana/web3.js');
           const { createTransferInstruction, getAssociatedTokenAddress } = await import('@solana/spl-token');
-          const mint = new PublicKey(USDC_DEVNET);
+          const mint = new PublicKey(USDC_MINT);
           const feeWalletPk = new PublicKey(casiFeeWallet);
           const feeAmountRaw = Math.round(totalUsdc * 0.05 * 10 ** usdcDecimals);
           const viewerAta = tokenAccounts[0].pubkey;
@@ -795,11 +802,11 @@ function OverlayContent() {
           return;
         }
       } else {
-        console.warn('[solana] NEXT_PUBLIC_CASI_FEE_WALLET not set — fee skipped (devnet only)');
+        console.warn(`[solana] NEXT_PUBLIC_CASI_FEE_WALLET not set — fee skipped (${IS_MAINNET ? 'mainnet' : 'devnet'})`);
       }
       // ─────────────────────────────────────────────────────────────────────
 
-      const client = new SolanaStreamClient(RPC_DEVNET, ICluster.Devnet);
+      const client = new SolanaStreamClient(SOLANA_RPC, STREAMFLOW_CLUSTER === 'mainnet' ? ICluster.Mainnet : ICluster.Devnet);
       // Add 30s buffer: by the time the tx is signed, propagated, and landed in
       // a block the on-chain clock will have advanced past "now".  Streamflow
       // rejects start timestamps that are already in the past (Custom error 112).
@@ -807,7 +814,7 @@ function OverlayContent() {
       const { txId, metadataId } = await client.create(
         {
           recipient:               profile.solana_wallet,
-          tokenId:                 USDC_DEVNET,
+          tokenId:                 USDC_MINT,
           start:                   streamStart,
           amount:                  getBN(streamAmount, usdcDecimals),
           period:                  60,                                          // release every 60 s
@@ -854,7 +861,7 @@ function OverlayContent() {
         try {
           // Connection is a dynamic import inside the try block — re-import here
           const { Connection: RC } = await import('@solana/web3.js');
-          const recoveryConn = new RC(RPC_DEVNET, 'confirmed');
+          const recoveryConn = new RC(SOLANA_RPC, 'confirmed');
           const recent = await recoveryConn.getSignaturesForAddress(publicKey, { limit: 3 });
           const landed = recent.find(s => !s.err);
           if (landed) {
@@ -881,7 +888,9 @@ function OverlayContent() {
       let userMsg = 'Solana payment failed — please try again';
 
       if (msg.includes('AccountNotFound') || logs.includes('AccountNotFound')) {
-        userMsg = 'USDC token account not found on devnet. Get USDC at spl-token-faucet.vercel.app';
+        userMsg = IS_MAINNET
+          ? 'USDC token account not found. Buy or bridge USDC and try again.'
+          : 'USDC token account not found on devnet. Get USDC at spl-token-faucet.vercel.app';
       } else if (msg.includes('Custom(112)') || logs.includes('timestamps are invalid') || logs.includes('Custom(112)')) {
         userMsg = 'Stream timestamp error — please try again';
       } else if (msg.includes('insufficient funds') || logs.includes('0x1')) {
@@ -904,7 +913,7 @@ function OverlayContent() {
     if (!wallet?.adapter) return;
     try {
       const { SolanaStreamClient, ICluster } = await import('@streamflow/stream');
-      const client = new SolanaStreamClient(RPC_DEVNET, ICluster.Devnet);
+      const client = new SolanaStreamClient(SOLANA_RPC, STREAMFLOW_CLUSTER === 'mainnet' ? ICluster.Mainnet : ICluster.Devnet);
       await client.cancel({ id: booking.stream_id }, { invoker: wallet.adapter as any });
     } catch (err) {
       console.error('Streamflow cancel error:', err);

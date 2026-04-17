@@ -3,8 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
-
-const USDC_DEVNET_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+import { USDC_MINT, NETWORK_LABEL } from '@/lib/solana-network';
 
 // Module-level refresh signal — allows any page (overlay, admin) to trigger
 // an immediate balance re-fetch without prop-drilling or React context.
@@ -221,7 +220,7 @@ export default function WalletNav() {
       try {
         const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
           publicKey,
-          { mint: new PublicKey(USDC_DEVNET_MINT) },
+          { mint: new PublicKey(USDC_MINT) },
           'confirmed',
         );
         const amount = tokenAccounts.value[0]
@@ -278,10 +277,10 @@ export default function WalletNav() {
       <style>{CSS}</style>
       <div className="wn-row" ref={dropRef}>
 
-        {/* Devnet indicator */}
+        {/* Network indicator */}
         <div className="wn-devnet">
           <span className="wn-devnet-dot" />
-          <span className="wn-devnet-label">Devnet</span>
+          <span className="wn-devnet-label">{NETWORK_LABEL}</span>
         </div>
 
         {/* Balances */}

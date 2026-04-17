@@ -9,6 +9,7 @@ import SkinProvider from '@/components/SkinProvider';
 import { SKINS } from '@/lib/skins';
 import WalletNav from '@/components/WalletNav';
 import ChatPanel from '@/components/ChatPanel';
+import { SOLANA_RPC, STREAMFLOW_CLUSTER } from '@/lib/solana-network';
 
 /* ── Logo ── */
 function Logo({ scale = 0.38, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
@@ -24,8 +25,6 @@ function Logo({ scale = 0.38, color = 'var(--casi-accent)', bg = 'var(--casi-bg)
     </svg>
   );
 }
-
-const RPC_DEVNET = 'https://api.devnet.solana.com';
 
 /* ── Helpers ── */
 function getSecondsRemaining(booking: any): number {
@@ -775,7 +774,7 @@ export default function AdminStudio() {
           publicKey.toBase58() === profile.solana_wallet) {
         try {
           const { SolanaStreamClient, ICluster } = await import('@streamflow/stream');
-          const client = new SolanaStreamClient(RPC_DEVNET, ICluster.Devnet);
+          const client = new SolanaStreamClient(SOLANA_RPC, STREAMFLOW_CLUSTER === 'mainnet' ? ICluster.Mainnet : ICluster.Devnet);
           await client.cancel({ id: booking.stream_id }, { invoker: (wallet as any)?.adapter ?? wallet });
         } catch (err) {
           console.error('[kickBeam] Streamflow cancel error:', err);

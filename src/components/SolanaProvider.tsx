@@ -9,8 +9,8 @@ import {
   createDefaultAuthorizationResultCache,
   createDefaultWalletNotFoundHandler,
 } from '@solana-mobile/wallet-adapter-mobile';
-import { clusterApiUrl } from '@solana/web3.js';
 import '@solana/wallet-adapter-react-ui/styles.css';
+import { SOLANA_RPC, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 
 /** Logs wallet state changes so you can see exactly where connection stalls. */
 function WalletDiagnostic() {
@@ -26,7 +26,7 @@ function WalletDiagnostic() {
 }
 
 export default function SolanaProvider({ children }: { children: ReactNode }) {
-  const endpoint = useMemo(() => clusterApiUrl('devnet'), []);
+  const endpoint = useMemo(() => SOLANA_RPC, []);
 
   // Only SolanaMobileWalletAdapter — Wallet Standard handles desktop
   // auto-discovery (Phantom, Solflare, etc.) without explicit imports.
@@ -36,7 +36,7 @@ export default function SolanaProvider({ children }: { children: ReactNode }) {
         addressSelector: createDefaultAddressSelector(),
         appIdentity: { name: 'Casi', uri: 'https://casi.gg' },
         authorizationResultCache: createDefaultAuthorizationResultCache(),
-        cluster: 'devnet',
+        cluster: WALLET_ADAPTER_CLUSTER,
         onWalletNotFound: createDefaultWalletNotFoundHandler(),
       }),
     ],
