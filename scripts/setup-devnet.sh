@@ -19,7 +19,7 @@
 set -euo pipefail
 
 # --- config --------------------------------------------------------------
-ANCHOR_VERSION="0.30.1"
+ANCHOR_VERSION="0.31.1"
 SOLANA_VERSION="stable"
 NODE_MIN_MAJOR=20
 MIN_DEVNET_SOL=3            # ask for airdrop until balance >= this
