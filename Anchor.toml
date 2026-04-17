@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-casi_escrow = "Fg6PaFpoGXkYsidMpWxqSWlVGyUq2rbEoVtaXMa3MBA"
+casi_escrow = "11111111111111111111111111111111"
 
 [programs.mainnet]
-casi_escrow = "REPLACE_WITH_MAINNET_PROGRAM_ID"
+casi_escrow = "11111111111111111111111111111111"
 
 [registry]
 url = "https://api.apr.dev"
@@ -19,7 +19,7 @@ cluster = "Devnet"
 wallet = "~/.config/solana/id.json"
 
 [programs.localnet]
-casi_escrow = "Fg6PaFpoGXkYsidMpWxqSWlVGyUq2rbEoVtaXMa3MBA"
+casi_escrow = "11111111111111111111111111111111"
 
 [scripts]
 test = "npx ts-mocha -p tests/tsconfig.json -t 1000000 tests/**/*.ts"

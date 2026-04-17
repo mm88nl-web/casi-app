@@ -65,7 +65,7 @@ async function readFileIfExists(path) {
 
 async function updateAnchorToml(id) {
   const src = await readFile(ANCHOR_TOML, 'utf8');
-  const re  = /(^\s*casi_escrow\s*=\s*")[^"]+(")/m;
+  const re  = /(^\s*casi_escrow\s*=\s*")[^"]+(")/gm;
   if (!re.test(src)) die('Could not locate `casi_escrow = "..."` in Anchor.toml.');
   const next = src.replace(re, `$1${id}$2`);
   if (next === src) return false;
