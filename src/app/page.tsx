@@ -335,7 +335,7 @@ export default function HomePage() {
               )}
               <div style={{ width: 1, height: 32, background: '#1c1c1c' }} />
               <div>
-                <div className="stat-num mono">2–5%</div>
+                <div className="stat-num mono">0%</div>
                 <div className="stat-label">Platform fee</div>
               </div>
             </div>
