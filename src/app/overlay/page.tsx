@@ -325,7 +325,7 @@ function FlashFeed({ profileId }: { profileId: string }) {
               {flash.message}
             </p>
             {flash.tx_signature && (
-              <a href={`https://solscan.io/tx/${flash.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+              <a href={`https://solscan.io/tx/${flash.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
                 style={{ display: 'inline-block', marginTop: 6, fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none', opacity: 0.7, pointerEvents: 'auto' }}>
                 ↗ verify on Solscan
               </a>

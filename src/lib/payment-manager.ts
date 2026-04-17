@@ -12,6 +12,7 @@
  */
 import type { Connection } from '@solana/web3.js';
 import type { WalletContextState } from '@solana/wallet-adapter-react';
+import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 
 export type PaymentMethod = 'stripe' | 'solana' | 'free';
 
@@ -124,7 +125,7 @@ async function sendFlashSolana(input: SendFlashInput): Promise<SendFlashResult> 
 
   const { CasiEscrowClient } = await import('@/lib/casi-escrow');
   const { PublicKey: PK }    = await import('@solana/web3.js');
-  const client = new CasiEscrowClient(solana.connection, anchorWallet, 'devnet');
+  const client = new CasiEscrowClient(solana.connection, anchorWallet, WALLET_ADAPTER_CLUSTER);
 
   const { sig, escrowPda, solscanUrl } = await client.initializeFlash({
     escrowId: flash_id,

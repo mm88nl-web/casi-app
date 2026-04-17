@@ -16,6 +16,7 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { createClient } from '@/utils/supabase/client';
 import { sendFlash, SOLANA_ENABLED, type PaymentMethod } from '@/lib/payment-manager';
+import { EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 
 // Minimal shape of the streamer profile we actually read.
 interface StreamerProfileLite {
@@ -177,7 +178,7 @@ export default function SendFlashSection({
             <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4ade80', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
               ✓ Your flash is live on stream!
               {myFlash.tx_signature && (
-                <a href={`https://solscan.io/tx/${myFlash.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                <a href={`https://solscan.io/tx/${myFlash.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
                   style={{ display: 'block', marginTop: 4, fontSize: 9, color: '#9945FF', textDecoration: 'none', opacity: 0.8 }}>
                   ↗ verify on Solscan
                 </a>
@@ -204,7 +205,7 @@ export default function SendFlashSection({
           {onChainStatus === 'locked' && onChainTx && (
             <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4ade80', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
               ⚡ Flash locked on-chain — awaiting streamer approval
-              <a href={`https://solscan.io/tx/${onChainTx}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+              <a href={`https://solscan.io/tx/${onChainTx}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
                 style={{ display: 'block', marginTop: 4, fontSize: 9, color: '#9945FF', textDecoration: 'none', opacity: 0.8 }}>
                 ↗ verify on Solscan
               </a>
