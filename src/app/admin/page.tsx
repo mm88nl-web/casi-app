@@ -9,7 +9,7 @@ import SkinProvider from '@/components/SkinProvider';
 import { SKINS } from '@/lib/skins';
 import WalletNav from '@/components/WalletNav';
 import ChatPanel from '@/components/ChatPanel';
-import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
+import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 
 /* ── Logo ── */
 function Logo({ scale = 0.38, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
@@ -472,6 +472,8 @@ export default function AdminStudio() {
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [approvedQueued, setApprovedQueued] = useState<any[]>([]);
   const [pendingFlashes, setPendingFlashes] = useState<any[]>([]);
+  // Keyed by flash id: true while the streamer is signing approve/deny on-chain.
+  const [settlingSolana, setSettlingSolana] = useState<Record<string, boolean>>({});
   const [flashToast, setFlashToast] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null);
   const showFlashToast = (text: string, kind: 'ok' | 'err' = 'ok') => {
     setFlashToast({ text, kind });
@@ -903,27 +905,32 @@ export default function AdminStudio() {
       throw new Error('Flash is missing on-chain metadata');
     }
 
-    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
-    const { PublicKey: PK }    = await import('@solana/web3.js');
-    const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
+    setSettlingSolana(prev => ({ ...prev, [flash.id]: true }));
+    try {
+      const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+      const { PublicKey: PK }    = await import('@solana/web3.js');
+      const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
 
-    const viewerPk   = new PK(flash.viewer_wallet);
-    const streamerPk = publicKey!;
+      const viewerPk   = new PK(flash.viewer_wallet);
+      const streamerPk = publicKey!;
 
-    const { sig } =
-      action === 'approve'
-        ? await client.approveFlash({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk })
-        : await client.denyFlash   ({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk });
+      const { sig } =
+        action === 'approve'
+          ? await client.approveFlash({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk })
+          : await client.denyFlash   ({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk });
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/flashes/moderate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ flash_id: flash.id, action, tx_signature: sig }),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || json?.error) throw new Error(json?.error || 'Server verification failed');
-    return sig;
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/flashes/moderate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ flash_id: flash.id, action, tx_signature: sig }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json?.error) throw new Error(json?.error || 'Server verification failed');
+      return sig;
+    } finally {
+      setSettlingSolana(prev => { const n = { ...prev }; delete n[flash.id]; return n; });
+    }
   };
 
   const approveFlash = async (flash: any) => {
@@ -1539,6 +1546,9 @@ export default function AdminStudio() {
                 </div>
                 {pendingFlashes.map(flash => {
                   const paid = !!(flash.payment_intent_id || flash.tx_signature);
+                  const isSolana = flash.payment_method === 'solana';
+                  const settling = !!settlingSolana[flash.id];
+                  const amountUsdc = isSolana ? (flash.amount_cents / 100).toFixed(2) : null;
                   return (
                     <div key={flash.id} className="req-card c-flash">
                       <div style={{ fontSize: 28, flexShrink: 0, lineHeight: 1 }}>⚡</div>
@@ -1546,9 +1556,11 @@ export default function AdminStudio() {
                         <div className="req-meta">
                           <span className="req-name">{flash.viewer_name}</span>
                           {paid
-                            ? <span className="tag t-green">✓ Paid</span>
+                            ? <span className="tag t-green">✓ {isSolana ? 'Escrowed' : 'Paid'}</span>
                             : <span className="tag t-dim">⌛ Awaiting payment</span>}
-                          <span className="tag t-flash">€{(flash.amount_cents / 100).toFixed(2)}</span>
+                          {isSolana
+                            ? <span className="tag" style={{ background: 'rgba(153,69,255,0.12)', color: '#9945FF', border: '1px solid rgba(153,69,255,0.3)' }}>◎ {amountUsdc} USDC</span>
+                            : <span className="tag t-flash">€{(flash.amount_cents / 100).toFixed(2)}</span>}
                           <span className="tag t-dim">{flash.payment_method}</span>
                         </div>
                         <div className="req-msg">"{flash.message}"</div>
@@ -1556,11 +1568,13 @@ export default function AdminStudio() {
                           <span>{new Date(flash.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           {paid && (
                             <span style={{ color: '#4ade80' }}>
-                              You receive €{((flash.amount_cents / 100) * 0.95).toFixed(2)} · CASI fee €{((flash.amount_cents / 100) * 0.05).toFixed(2)}
+                              {isSolana
+                                ? `◎ ${(parseFloat(amountUsdc!) * 0.95).toFixed(2)} USDC → you · 5% CASI fee`
+                                : `You receive €${((flash.amount_cents / 100) * 0.95).toFixed(2)} · CASI fee €${((flash.amount_cents / 100) * 0.05).toFixed(2)}`}
                             </span>
                           )}
                           {flash.tx_signature && (
-                            <a href={`https://solscan.io/tx/${flash.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                            <a href={`https://solscan.io/tx/${flash.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
                               style={{ color: '#9945FF', textDecoration: 'none', fontSize: 10 }}>
                               ↗ Solscan
                             </a>
@@ -1568,13 +1582,13 @@ export default function AdminStudio() {
                         </div>
                       </div>
                       <div className="req-actions">
-                        <button onClick={() => denyFlash(flash)} className="act-btn"
-                          style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171' }}>
-                          Deny
+                        <button onClick={() => denyFlash(flash)} disabled={settling} className="act-btn"
+                          style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', opacity: settling ? 0.5 : 1 }}>
+                          {isSolana && flash.escrow_pda ? '◎ Deny' : 'Deny'}
                         </button>
-                        <button onClick={() => paid && approveFlash(flash)} disabled={!paid} className="act-btn"
-                          style={{ background: paid ? '#facc15' : 'var(--casi-border)', color: paid ? '#111' : '#444', cursor: paid ? 'pointer' : 'not-allowed', border: 'none' }}>
-                          {paid ? '⚡ Approve' : 'Awaiting…'}
+                        <button onClick={() => paid && approveFlash(flash)} disabled={!paid || settling} className="act-btn"
+                          style={{ background: paid ? (isSolana ? '#9945FF' : '#facc15') : 'var(--casi-border)', color: paid ? (isSolana ? '#fff' : '#111') : '#444', cursor: paid && !settling ? 'pointer' : 'not-allowed', border: 'none', opacity: settling ? 0.7 : 1 }}>
+                          {settling ? '◎ Signing…' : paid ? (isSolana && flash.escrow_pda ? '◎ Approve' : '⚡ Approve') : 'Awaiting…'}
                         </button>
                       </div>
                     </div>
@@ -1606,7 +1620,7 @@ export default function AdminStudio() {
                             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                               <span>${booking.price_value}/{booking.price_unit} · {fmtDuration(booking.duration_minutes)}</span>
                               {booking.tx_signature && (
-                                <a href={`https://solscan.io/tx/${booking.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                                <a href={`https://solscan.io/tx/${booking.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
                                   style={{ color: '#9945FF', textDecoration: 'none', fontSize: 10 }}>↗ Solscan</a>
                               )}
                             </div>
@@ -1708,7 +1722,7 @@ export default function AdminStudio() {
                           {booking.message && <div className="req-msg">"{booking.message}"</div>}
                           {booking.tx_signature && (
                             <div style={{ marginTop: 5 }}>
-                              <a href={`https://solscan.io/tx/${booking.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                              <a href={`https://solscan.io/tx/${booking.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
                                 style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none' }}>↗ Solscan</a>
                             </div>
                           )}
@@ -1743,7 +1757,7 @@ export default function AdminStudio() {
                           {booking.message && <div className="req-msg">"{booking.message}"</div>}
                           {booking.tx_signature && (
                             <div style={{ marginTop: 5 }}>
-                              <a href={`https://solscan.io/tx/${booking.tx_signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                              <a href={`https://solscan.io/tx/${booking.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
                                 style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none' }}>↗ Solscan</a>
                             </div>
                           )}
