@@ -1,7 +1,34 @@
 # CASI — Project Summary
 
 Snapshot for picking up across chat sessions. Reflects the repo at branch
-`claude/casi-project-summary-zJfeU` (merged `VTbAu` + cherry-picked `b4969b2`).
+`claude/continue-casi-work-PvzRm` (HEAD = `c09b252` at time of writing).
+
+> ⚠️ **READ THIS FIRST** — every branch mistake in the 2026-04-17 session
+> came from assuming the working copy matched the remote. Before doing
+> ANYTHING else in a new chat:
+> ```
+> cd ~/casi-app
+> git fetch origin
+> git checkout claude/continue-casi-work-PvzRm
+> git pull
+> git branch --show-current    # MUST print claude/continue-casi-work-PvzRm
+> git log --oneline -3          # top commit should be c09b252 or later
+> grep -c 'pub mod fee_wallet' programs/casi-escrow/src/lib.rs   # must be 0
+> grep cluster Anchor.toml      # must say "Localnet"
+> ```
+> If any of those don't match, stop and fix before writing or deploying.
+
+## Current state (2026-04-17)
+
+- **Anchor program deployed to devnet**: `Dkai2s6Rwreyh51bajqLYMJdfHE6Gonwz9vFw6joUfRd`
+  (no-fee, 100% viewer→streamer payout)
+- **Dead program IDs on devnet** (do not redeploy to these — permanently retired via `solana program close`):
+  - `78bw5wjc3hdLYxf5kcMX1eSAvbtPyjvcYo2GZsJyzvYo` (deployed from wrong branch with fee code)
+  - `DqpeEBpVpPpEVNStq3iUgS6a4jFSsGpkusxYf1rrxTkC` (same)
+- **Deploy wallet**: `8TzUa1U5EEcWHBwbTDhNutyMj2NmTh2gsfcuvVYnGQUv` (upgrade authority)
+- **Production URL**: `https://www.casi.gg` (apex `casi.gg` → 307 redirects; always use the `www.` form in server-to-server calls)
+- **Admin header refactored**: utility bar (wallet pill + save status) above main nav (logo + tabs + Go Live + action buttons). No more horizontal overflow.
+- **Stripe Janitor GHA fixed**: GitHub `APP_URL` secret pointing at `https://www.casi.gg`, `CRON_SECRET` rotated + synced with Vercel Production env. Currently green, runs every 5 min.
 
 ## What it is
 
@@ -103,32 +130,30 @@ Server: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET
 
 `src/lib/skins.ts`: 6 presets (`casi-dark`, `void`, `neon`, `twitch`, `terminal`, `ember`, `chrome`) injected as CSS custom properties via `SkinProvider`. Streamer can override accent with custom hex.
 
-## Recent commits (top of branch `claude/add-handoff-docs-mFcF9`)
+## Recent commits (top of branch `claude/continue-casi-work-PvzRm`)
 
 ```
+c09b252 ui(admin): split header into utility bar + main nav
+e7d6e18 fix(anchor): default provider to Localnet, not Devnet
+900071b chore: gitignore rust build artifacts (target/, Cargo.lock)
+46fa5ab refactor(escrow): strip 5% platform fee — 100% viewer→streamer
+44ac5ba docs: refresh SUMMARY handoff with security-audit commits
 14d0e59 fix(security): tighten bookings RLS — lock INSERT columns, split UPDATE
 480021e chore(web): update homepage platform-fee stat to 0%
 c72b806 fix(security): timing-safe compare on Helius webhook secret
 16df4bf refactor(stripe): switch to Connect Direct Charges with zero platform fee
 bfedf96 fix(payments): close amount-tampering hole in booking checkout
-8f058eb docs: update SUMMARY handoff + add INVESTOR_BRIEF
-d284786 fix(tests): import BN directly from bn.js
-50f20fe fix(tests): use System Program ID for FEE_WALLET placeholder
-c24bf04 fix(tests): use anchor.BN alias instead of named import
-741a71f chore(escrow): upgrade anchor 0.30.1 → 0.31.1
 ```
 
-Active themes: security audit hardening done at the web tier (amount
-tampering, fee extraction, Helius signature, RLS). Solana program now
-matches: 5% settlement fee stripped from `programs/casi-escrow/src/lib.rs`,
-`fee_wallet` account + `FEE_BPS` constant + `InvalidFeeWallet` error all
-removed, streamer receives 100% of vested amount at settlement. Test suite
-rewritten to assert full payout. Devnet deploy still blocked on faucet
-availability.
+Active themes: web-tier security audit hardening + on-chain fee stripped +
+program live on devnet + admin header refactor + cron wired up. Fee-removal
+fully shipped: `fee_wallet` account, `FEE_BPS` constant, `InvalidFeeWallet`
+error all gone from `programs/casi-escrow/src/lib.rs`. Tests assert 100%
+payout. Program `Dkai2s6Rwreyh51bajqLYMJdfHE6Gonwz9vFw6joUfRd` deployed to
+devnet 2026-04-17; upgrade authority = `8TzUa1U5EEcWHBwbTDhNutyMj2NmTh2gsfcuvVYnGQUv`.
 
 ## Known gaps / loose ends
 
-- **Devnet deploy pending** — `anchor test --provider.cluster localnet` passes 19/19, but devnet deploy is blocked on faucet availability (all public devnet faucets dry as of 2026-04-17). Once SOL is available: `./scripts/setup-devnet.sh` runs the full pipeline. Program keypair already generated at `target/deploy/casi_escrow-keypair.json` (pubkey `5WtNmRzjpoY5g1eTAgv6FuR3n6bdYmd6pKjbkRAYKCQs`).
 - **Stack-frame warnings** — `ApproveFlash` + `SettleBeam` context structs exceed BPF's 4KB stack by ~800–1000 bytes. Builds succeed, tests pass, but edge-case UB possible. Fix: `Box<InterfaceAccount<...>>` around the biggest fields.
 - Solana defaults to **devnet** via `src/lib/solana-network.ts:NETWORK`. Flip to `'mainnet'` to switch USDC mint, wallet-adapter cluster, and Solscan cluster query in one line. Program must be re-deployed to mainnet (new program ID).
 - Stripe currency hardcoded **EUR** (`stripe/authorize/route.ts`)
@@ -140,34 +165,49 @@ availability.
 
 ## Handoff to next session
 
-Project state as of `14d0e59` (2026-04-17, branch `claude/add-handoff-docs-mFcF9`):
-- Anchor program builds + **all 19 tests pass** on local validator (state from `d284786`, nothing touched since).
-- Toolchain pinned: Rust 1.86 (`rust-toolchain.toml`), Anchor 0.31.1 (`Anchor.toml`, `scripts/setup-devnet.sh`).
-- `scripts/setup-devnet.sh --skip-airdrop --skip-deploy` builds + tests end-to-end on a clean machine.
-- Web-tier security audit hardening shipped in 5 commits since `8f058eb`:
-  - `bfedf96` fix(payments): close amount-tampering hole in booking checkout — server re-reads `price_value`/`price_unit` from `overlay_elements`, rejects client-supplied amounts that don't match
-  - `16df4bf` refactor(stripe): switch to Connect Direct Charges — `{ stripeAccount }` on every PI call, zero `application_fee_amount`, webhook passes account header on session retrieve
-  - `c72b806` fix(security): timing-safe compare on Helius webhook secret (`crypto.timingSafeEqual`, length-guarded)
-  - `480021e` chore(web): homepage hero stat 2–5% → 0%
-  - `14d0e59` fix(security): tighten bookings RLS — INSERT column whitelist + split UPDATE into `bookings_update_streamer` (auth) and `bookings_update_anon` (transition-restricted)
-- **Branches:**
-  - `claude/add-handoff-docs-mFcF9` → current, in sync with origin
-  - `claude/casi-project-summary-zJfeU` → lagging at `8f058eb` (merge/sync pending)
-  - 6 `archive/*` branches preserve pre-merge commit history
+Project state as of `c09b252` (2026-04-17, branch `claude/continue-casi-work-PvzRm`):
+- Anchor program builds + tests pass on local validator.
+- Program deployed to devnet at `Dkai2s6Rwreyh51bajqLYMJdfHE6Gonwz9vFw6joUfRd` (no-fee, 100% payout). Upgrade authority: `8TzUa1U5EEcWHBwbTDhNutyMj2NmTh2gsfcuvVYnGQUv`.
+- `Anchor.toml` [provider] cluster is now `Localnet` — keeps `anchor test` off real devnet. ALWAYS verify this is `Localnet` before running tests.
+- Stripe Janitor GHA green, runs every 5 min, pings `https://www.casi.gg/api/cron/stripe-janitor` with bearer token.
+- Admin header split into utility bar (wallet pill + save status) + main nav — no overflow on narrow viewports.
 
-### Next-step options (pick one)
+### Next task: onboarding UX polish (roadmap item 2)
 
-1. **Subscription table + Stripe Billing route** — SaaS tier scaffold. `subscriptions` table (`profile_id`, `stripe_customer_id`, `stripe_subscription_id`, `plan`, `current_period_end`), `/api/stripe/subscribe` → Checkout in subscription mode, webhook listens for `customer.subscription.*`. No plans defined yet, just wire the rails.
-2. **`bookings.cancel_token` column** — strong viewer-cancel auth. Current Stripe cancel URL uses session-less booking id. Add server-generated random token on INSERT, require it on `/api/stripe/cancel`, strip RLS UPDATE-to-denied anon path.
-3. **Sync sibling branch** — merge or cherry-pick the security commits onto `claude/casi-project-summary-zJfeU` so both branches are coherent.
-4. **Pick a new monetization model** — with platform fee at 0% (Stripe + Solana both), `INVESTOR_BRIEF.md` "Monetization" section needs a replacement story (SaaS subscription tier, premium features, optional tip?). Business decision, not code.
+Audit surfaced 6 gaps in the streamer-signup-through-first-tip path. All changes are copy + small UI, no schema/migration work:
+
+1. **"Your viewer link" card** at the top of `/admin` — show `https://www.casi.gg/overlay?s={username}` with one-click copy. Reduces "where do I send my viewers?" friction.
+   - File: `src/app/admin/page.tsx` (add card just under the `.util-bar`)
+
+2. **"Send test Flash" button** — free-tier self-send so streamers see the overlay animation before any viewer arrives. Hits existing `POST /api/flashes/create` with `payment_method: 'free'`.
+   - File: `src/app/admin/page.tsx` (button next to the new viewer-link card)
+
+3. **Terminology sweep** — "rent your slots" is opaque. Replace with "let viewers tip to display an image/video in this slot" in hover tooltips + empty-states on the admin canvas.
+   - Files: `src/app/admin/page.tsx`, `src/app/overlay/page.tsx`
+
+4. **OBS help panel** — collapsible `<details>` in admin Settings tab with the exact browser-source URL (`https://www.casi.gg/obs?s={username}&layer=beams`), recommended dimensions (1920×1080), and "refresh cache" note. Currently streamers have to guess.
+   - File: `src/app/admin/page.tsx` (Settings tab area)
+
+5. **Payment method hints** on `/profile/edit` — two lines next to each payment section:
+   - Stripe: "Accept card tips (EUR). Stripe takes ~2.9% + €0.25 per tip — CASI takes 0%."
+   - Solana: "Accept USDC tips on Solana. Near-zero fees, paid out on-chain instantly. CASI takes 0%."
+   - File: `src/app/profile/edit/page.tsx`
+
+6. **Beam-vs-Flash explainer** — inline banner on first admin load explaining the three surfaces (Flash = one-shot popup, Beam = timed display, Backdrop = background takeover). Dismissable via `localStorage`.
+   - File: `src/app/admin/page.tsx` (top banner, conditional on `!localStorage.getItem('casi-onboarding-seen')`)
+
+Scope is intentionally copy/UI only — no new routes, no schema changes, no payment-flow edits. Estimate: one focused session.
 
 ### Common pitfalls we hit (don't repeat):
-1. Anchor 0.30.1 is incompatible with Rust ≥1.87 (`proc_macro2::Span::source_file()` removed). Do NOT try to pin Rust to 1.79 — dependency tree now needs edition2024 (1.85+). Stay on 0.31.1.
-2. `sync-program-id.mjs` mutates `Anchor.toml` and `lib.rs` — re-run after every pull that touches those files. `git checkout -- <file>` reverts the local edits before pulling.
-3. Placeholder pubkeys in `Anchor.toml`/`lib.rs` must be valid base58 (exclude `0`, `O`, `I`, `l`). The canonical dev placeholder is `11111111111111111111111111111111` (System Program).
-4. `anchor test` reads `[provider] cluster` — use `--provider.cluster localnet` override or tests try to deploy to devnet and fail.
-5. `@coral-xyz/anchor` is CJS; under ts-mocha ESM loader, named imports (`import { BN }`) fail. Use `import BN from "bn.js"` directly.
+1. **Branch drift is the #1 footgun.** User's deploy box pulled from a stale branch twice this session, deploying fee code to devnet and burning ~2.5 SOL. ALWAYS run the verification block at the top of this file before deploying.
+2. **`anchor test` reads `[provider] cluster` from `Anchor.toml`.** If set to `Devnet`, tests burn real SOL. Current value is `Localnet` — leave it that way. Use `--provider.cluster devnet` as an explicit CLI override only for actual deploys.
+3. **`scripts/sync-program-id.mjs` mutates `Anchor.toml` and `lib.rs`.** Re-run after every pull that touches those files. `git checkout -- <file>` reverts local edits before pulling.
+4. **Apex `casi.gg` 307-redirects to `www.casi.gg`.** Server-to-server callers (GitHub Actions, webhooks) MUST use the `www.` form — `curl -L` strips `Authorization` across the host change. GitHub `APP_URL` secret = `https://www.casi.gg`.
+5. **`CRON_SECRET` must match between GitHub Secrets and Vercel env (all three scopes: Production/Preview/Development).** A mismatch returns 401 and the janitor workflow goes red.
+6. **Anchor 0.30.1 incompatible with Rust ≥1.87** (`proc_macro2::Span::source_file()` removed). Stay on 0.31.1. Do NOT pin Rust to 1.79 — dependency tree now needs edition2024 (1.85+).
+7. **Placeholder pubkeys** in `Anchor.toml`/`lib.rs` must be valid base58 (exclude `0`, `O`, `I`, `l`). Canonical dev placeholder is `11111111111111111111111111111111` (System Program).
+8. **`@coral-xyz/anchor` is CJS.** Under ts-mocha ESM loader, named imports (`import { BN }`) fail. Use `import BN from "bn.js"` directly.
+9. **Dead program IDs** (closed via `solana program close`, cannot redeploy): `78bw5wjc3hdLYxf5kcMX1eSAvbtPyjvcYo2GZsJyzvYo`, `DqpeEBpVpPpEVNStq3iUgS6a4jFSsGpkusxYf1rrxTkC`. Current live: `Dkai2s6Rwreyh51bajqLYMJdfHE6Gonwz9vFw6joUfRd`.
 
 ## Useful file paths
 
