@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { timingSafeEqual } from 'node:crypto';
 
 /**
  * Helius webhook for CASI on-chain events.
@@ -32,7 +33,12 @@ export async function POST(req: Request) {
     return OK();
   }
   const authHeader = req.headers.get('authorization') ?? '';
-  if (authHeader !== webhookSecret) {
+  // Constant-time compare: plain `!==` leaks secret bytes via timing to a
+  // remote attacker who can repeatedly probe the endpoint.
+  const a = Buffer.from(authHeader);
+  const b = Buffer.from(webhookSecret);
+  const valid = a.length === b.length && timingSafeEqual(a, b);
+  if (!valid) {
     console.warn('[solana webhook] rejected — invalid authorization header');
     return OK();
   }
