@@ -8,6 +8,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import { SKINS } from '@/lib/skins';
 import WalletNav from '@/components/WalletNav';
+import ChatPanel from '@/components/ChatPanel';
 
 /* ── Logo ── */
 function Logo({ scale = 0.38, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
@@ -418,7 +419,7 @@ function BeamCtrlPanel({ el, activeBooking, updateSlider, updateLayer, toggleLoc
    MAIN ADMIN PAGE
 ══════════════════════════════════════════ */
 export default function AdminStudio() {
-  const [view, setView] = useState<'studio' | 'requests' | 'settings'>('studio');
+  const [view, setView] = useState<'studio' | 'requests' | 'chat' | 'settings'>('studio');
   const [profile, setProfile] = useState<any>(null);
   const [activeSkin, setActiveSkin] = useState<string | null>(null);
   const [savingSkin, setSavingSkin] = useState(false);
@@ -987,7 +988,7 @@ export default function AdminStudio() {
               <span className="nav-wm">casi</span>
             </a>
             <div className="nav-tabs">
-              {(['studio', 'requests', 'settings'] as const).map(v => (
+              {(['studio', 'requests', 'chat', 'settings'] as const).map(v => (
                 <button key={v} onClick={() => setView(v)} className={`nav-tab ${view === v ? 'active' : ''}`}>
                   {v}
                   {v === 'requests' && totalPending > 0 && <span className="nav-badge">{totalPending}</span>}
@@ -1621,6 +1622,19 @@ export default function AdminStudio() {
           </div>
         )}
 
+        {/* ── CHAT ── */}
+        {view === 'chat' && profile?.id && (
+          <div className="set-body">
+            <div className="set-card">
+              <div className="set-title">Live chat</div>
+              <div className="set-sub" style={{ marginBottom: 12 }}>
+                Viewer messages update in real time. Click × to delete.
+              </div>
+              <ChatPanel profileId={profile.id} viewerName={null} isAdmin variant="compact" />
+            </div>
+          </div>
+        )}
+
         {/* ── SETTINGS ── */}
         {view === 'settings' && (
           <div className="set-body">
@@ -1915,10 +1929,10 @@ export default function AdminStudio() {
 
         {/* MOBILE BOTTOM NAV */}
         <div className="bot-nav">
-          {(['studio', 'requests', 'settings'] as const).map(v => (
+          {(['studio', 'requests', 'chat', 'settings'] as const).map(v => (
             <button key={v} onClick={() => setView(v)} className={`bot-tab ${view === v ? 'active' : ''}`}>
               {v === 'requests' && totalPending > 0 && <span className="bot-badge">{totalPending}</span>}
-              <span style={{ fontSize: 18 }}>{v === 'studio' ? '🎬' : v === 'requests' ? '📥' : '⚙️'}</span>
+              <span style={{ fontSize: 18 }}>{v === 'studio' ? '🎬' : v === 'requests' ? '📥' : v === 'chat' ? '💬' : '⚙️'}</span>
               <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{v}</span>
             </button>
           ))}

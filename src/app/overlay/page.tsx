@@ -6,6 +6,7 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import WalletNav, { refreshWalletNav } from '@/components/WalletNav';
+import ChatPanel from '@/components/ChatPanel';
 
 // Module-level constant — accessible in every function including cancelSolanaStream
 // and the AlreadyProcessed catch block inside submitSolanaBooking.
@@ -1475,6 +1476,12 @@ function OverlayContent() {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {!isOBS && profile?.id && (
+            <div style={{ marginTop:24 }}>
+              <ChatPanel profileId={profile.id} viewerName={savedViewerName || null} />
             </div>
           )}
 
