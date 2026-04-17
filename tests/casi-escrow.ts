@@ -34,7 +34,7 @@ import { randomBytes } from "crypto";
 
 // ---- constants mirrored from lib.rs -----------------------------------------
 const ESCROW_SEED = Buffer.from("casi-escrow");
-const FEE_WALLET  = new PublicKey("CASIFeeWaLLet1111111111111111111111111111111");
+const FEE_WALLET  = SystemProgram.programId; // matches declare_id!(fee_wallet) placeholder in lib.rs
 const FEE_BPS     = 500n;
 const USDC_DECIMALS = 6;
 
