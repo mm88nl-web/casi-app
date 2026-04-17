@@ -1609,7 +1609,7 @@ function OverlayContent() {
                           <rect x="2" y="7" width="4" height="1.5" rx="0.5" fill="currentColor"/>
                         </svg>
                       )}
-                      {submitting?'Sending…':isExtend?'Extend':isFreeSlot?'Send Free Request':isQueue?'Join Queue':'Send Request'}
+                      {submitting?'Sending…':isExtend?'Extend':isFreeSlot?(isQueue?'Join Free Queue':'Send Free Request'):isQueue?'Join Queue':'Send Request'}
                     </button>
                     {/* ── Solana / CASI escrow (hidden for free slots) ── */}
                     {!isFreeSlot && (

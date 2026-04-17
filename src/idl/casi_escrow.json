@@ -116,11 +116,6 @@
   "accounts": [
     { "name": "EscrowState", "discriminator": [0,0,0,0,0,0,0,0] }
   ],
-  "events": [
-    { "name": "EscrowInitialized", "discriminator": [0,0,0,0,0,0,0,0] },
-    { "name": "FlashSettled",      "discriminator": [1,0,0,0,0,0,0,0] },
-    { "name": "BeamSettled",       "discriminator": [2,0,0,0,0,0,0,0] }
-  ],
   "errors": [
     { "code": 6000, "name": "InvalidAmount",    "msg": "Amount must be greater than zero" },
     { "code": 6001, "name": "InvalidDuration",  "msg": "Duration must be > 0 for Beam escrows" },
