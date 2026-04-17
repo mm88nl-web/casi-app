@@ -9,6 +9,7 @@
   "instructions": [
     {
       "name": "initialize_escrow",
+      "discriminator": [243,160,77,153,11,92,48,209],
       "accounts": [
         { "name": "viewer",                   "writable": true, "signer": true },
         { "name": "streamer" },
@@ -29,6 +30,7 @@
     },
     {
       "name": "approve_flash",
+      "discriminator": [147,245,112,105,129,130,96,236],
       "accounts": [
         { "name": "streamer",                 "writable": true, "signer": true },
         { "name": "viewer",                   "writable": true },
@@ -46,6 +48,7 @@
     },
     {
       "name": "deny_flash",
+      "discriminator": [29,88,56,249,152,228,136,97],
       "accounts": [
         { "name": "streamer",                 "signer": true },
         { "name": "viewer",                   "writable": true },
@@ -63,6 +66,7 @@
     },
     {
       "name": "cancel_escrow",
+      "discriminator": [156,203,54,179,38,72,33,21],
       "accounts": [
         { "name": "viewer",                   "writable": true, "signer": true },
         { "name": "escrow_state",             "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "escrow_id" }] } },
@@ -79,6 +83,7 @@
     },
     {
       "name": "start_beam",
+      "discriminator": [187,39,92,123,231,162,107,84],
       "accounts": [
         { "name": "streamer",     "signer": true },
         { "name": "escrow_state", "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "_escrow_id" }] } }
@@ -89,6 +94,7 @@
     },
     {
       "name": "settle_beam",
+      "discriminator": [168,38,48,236,91,235,124,50],
       "accounts": [
         { "name": "caller",                   "writable": true, "signer": true },
         { "name": "streamer",                 "writable": true },

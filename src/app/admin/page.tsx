@@ -775,8 +775,11 @@ export default function AdminStudio() {
     await supabase.from('overlay_elements').update({ locked }).eq('id', id);
   }, [supabase]);
 
-  // Payment is confirmed if Stripe PaymentIntent exists OR Solana tx_signature exists
-  const isPaymentConfirmed = (b: any) => !!(b.payment_intent_id || b.tx_signature);
+  // Payment is confirmed if Stripe PaymentIntent exists, Solana tx_signature
+  // exists, or the booking is on the free tier (no payment required — just
+  // moderation approval).
+  const isPaymentConfirmed = (b: any) =>
+    !!(b.payment_intent_id || b.tx_signature || b.payment_method === 'free' || Number(b.price_value) === 0);
 
   /**
    * Fire `start_beam` on-chain for a Solana beam booking. The streamer must
@@ -1631,7 +1634,8 @@ export default function AdminStudio() {
                   {confirmedFlashes.length > 0 && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#4ade80' }}>{confirmedFlashes.length} paid</span>}
                 </div>
                 {pendingFlashes.map(flash => {
-                  const paid = !!(flash.payment_intent_id || flash.tx_signature);
+                  const isFree = flash.payment_method === 'free' || flash.amount_cents === 0;
+                  const paid = !!(flash.payment_intent_id || flash.tx_signature) || isFree;
                   const isSolana = flash.payment_method === 'solana';
                   const settling = !!settlingSolana[flash.id];
                   const amountUsdc = isSolana ? (flash.amount_cents / 100).toFixed(2) : null;
@@ -1641,12 +1645,14 @@ export default function AdminStudio() {
                       <div className="req-info">
                         <div className="req-meta">
                           <span className="req-name">{flash.viewer_name}</span>
-                          {paid
-                            ? <span className="tag t-green">✓ {isSolana ? 'Escrowed' : 'Paid'}</span>
-                            : <span className="tag t-dim">⌛ Awaiting payment</span>}
-                          {isSolana
+                          {isFree
+                            ? <span className="tag t-green">🆓 Free</span>
+                            : paid
+                              ? <span className="tag t-green">✓ {isSolana ? 'Escrowed' : 'Paid'}</span>
+                              : <span className="tag t-dim">⌛ Awaiting payment</span>}
+                          {!isFree && (isSolana
                             ? <span className="tag" style={{ background: 'rgba(153,69,255,0.12)', color: '#9945FF', border: '1px solid rgba(153,69,255,0.3)' }}>◎ {amountUsdc} USDC</span>
-                            : <span className="tag t-flash">${(flash.amount_cents / 100).toFixed(2)}</span>}
+                            : <span className="tag t-flash">${(flash.amount_cents / 100).toFixed(2)}</span>)}
                           <span className="tag t-dim">{flash.payment_method}</span>
                         </div>
                         <div className="req-msg">"{flash.message}"</div>
