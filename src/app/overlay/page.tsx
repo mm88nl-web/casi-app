@@ -1665,7 +1665,7 @@ function OverlayContent() {
                         {el.image_url?<img src={el.image_url} style={{ width:'100%',height:'100%',objectFit:'contain' }} alt="" />:<span>{isLocked?'🔒':el.is_background?'🖼':'✦'}</span>}
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
-                        <div className="s-type">{isLocked?'Locked':myBookingForSlot?myBookingForSlot.status.replace('_',' '):isOccupied?`In use${queueCount>0?` · ${queueCount} waiting`:''}`:el.is_background?'Full Backdrop':'Beam'}</div>
+                        <div className="s-type">{isLocked?'Locked':myBookingForSlot?String(myBookingForSlot.status||'pending').replace('_',' '):isOccupied?`In use${queueCount>0?` · ${queueCount} waiting`:''}`:el.is_background?'Full Backdrop':'Beam'}</div>
                         <div className="s-price" style={{ color:priceColor }}>
                           {isFree ? 'Free' : `$${el.price_value}/${el.price_unit}`}
                           {el.max_duration_minutes?` · max ${el.max_duration_minutes}m`:''}
