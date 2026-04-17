@@ -394,7 +394,7 @@ export default function ProfileEditPage() {
                   {stripeLoading ? 'Redirecting…' : stripeConnected ? '↗ Manage' : 'Connect →'}
                 </button>
               </div>
-              <div className="pe-hint">Casi takes a 5% platform fee. Payouts go directly to your bank.</div>
+              <div className="pe-hint">100% of every tip lands in your Stripe account — CASI takes no platform fee. Payouts go directly to your bank.</div>
             </div>
 
             {/* ── SOLANA WALLET ── */}

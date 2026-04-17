@@ -156,14 +156,9 @@ function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipient
             </div>
           )}
           <div style={{ borderTop:'1px solid #1c1c1c', margin:'10px 0' }} />
-          {/* Fee breakdown */}
-          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#555', marginBottom:5 }}>
-            <span>@{username} receives</span>
-            <span style={{ color:'#e8e8e8' }}>{(parseFloat(estimatedCost) * 0.95).toFixed(2)} USDC <span style={{ color:'#6ee7b7' }}>(95%)</span></span>
-          </div>
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#555', marginBottom:8 }}>
-            <span>CASI maintenance fee</span>
-            <span style={{ color:'#e8e8e8' }}>{(parseFloat(estimatedCost) * 0.05).toFixed(2)} USDC <span style={{ color:'#888' }}>(5%)</span></span>
+            <span>@{username} receives</span>
+            <span style={{ color:'#e8e8e8' }}>{parseFloat(estimatedCost).toFixed(2)} USDC <span style={{ color:'#6ee7b7' }}>(100%)</span></span>
           </div>
           <div style={{ borderTop:'1px solid #1a1a1a', margin:'6px 0 8px' }} />
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666' }}>
@@ -887,9 +882,8 @@ function OverlayContent() {
       console.log('[solana] pre-flight passed — SOL:', (solLamports / 1e9).toFixed(4), 'USDC:', usdcBalance);
       // ──────────────────────────────────────────────────────────────────────
 
-      // Lock full amount in the CASI escrow PDA. The 5 % fee is deducted
-      // on-chain at settlement (approve_flash / settle_beam), never here —
-      // no separate fee transaction is required.
+      // Lock full amount in the CASI escrow PDA. Settlement pays the
+      // streamer 100% of the vested portion with no platform fee deducted.
       const { CasiEscrowClient } = await import('@/lib/casi-escrow');
       if (!signTransaction) throw new Error('Wallet missing signTransaction');
       const anchorWallet = {

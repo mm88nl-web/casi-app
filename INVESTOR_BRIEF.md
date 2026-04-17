@@ -40,16 +40,18 @@ Each surface is payable via:
 - **Free** — rate-limited; streamer approves all.
 
 Streamers approve/deny flashes and prorate-end beams from a single dashboard.
-Revenue split is **95% streamer / 5% platform** on all paid surfaces — enforced
-on-chain for crypto, via Stripe `application_fee` for cards.
+Revenue split is currently **100% streamer / 0% platform** on all paid
+surfaces: Stripe uses Connect Direct Charges with a zero `application_fee`,
+and the Anchor program pays the streamer the full vested amount on
+settlement. See "Monetization" below — a commercial model is pending.
 
 ## Why it's defensible
 
 1. **On-chain trust primitive.** `casi-escrow` is an Apache-2.0 Anchor program
-   that enforces the 95/5 split, linear vesting on beams, and anti-grief rules
-   (only the two consenting parties can early-settle; after the beam duration
-   anyone can "crank" settlement, guaranteeing liveness). Reusable by any
-   Solana project that needs trust-minimised time-based payments.
+   that enforces linear vesting on beams and anti-grief rules (only the two
+   consenting parties can early-settle; after the beam duration anyone can
+   "crank" settlement, guaranteeing liveness). Reusable by any Solana project
+   that needs trust-minimised time-based payments.
 2. **Three-rail payment architecture.** Most competitors pick a tribe
    (Streamlabs = Stripe, Streamflow = Solana). CASI serves both, which means
    streamers don't alienate viewers on either side.
@@ -63,10 +65,10 @@ on-chain for crypto, via Stripe `application_fee` for cards.
 
 - **Frontend**: Next.js 16 App Router + React 19 + Supabase + Stripe Connect +
   Solana Wallet Adapter. Deployed on Vercel.
-- **Solana program**: `casi-escrow` (Apache-2.0, 700 lines Rust, Anchor 0.31.1).
-  **19/19 integration tests passing** against local validator. Covers audit-
-  sensitive surface: fee math, vesting cap, state machine transitions,
-  has_one / address constraints, anti-grief rules.
+- **Solana program**: `casi-escrow` (Apache-2.0, ~650 lines Rust, Anchor 0.31.1).
+  Integration tests run against a local validator and cover the audit-
+  sensitive surface: vesting cap, state machine transitions, has_one
+  constraints, anti-grief rules, 100% payout to streamer on settlement.
 - **Test suite**: `programs/casi-escrow/README.md` documents the audit scope
   and error codes. Every settled state change emits a typed event for off-
   chain indexers.
@@ -95,8 +97,6 @@ on-chain for crypto, via Stripe `application_fee` for cards.
       streamer approves from `/admin`, OBS source renders correctly.
 - [ ] Box large account contexts to fix stack-frame warnings in `ApproveFlash`
       + `SettleBeam` (known fix, ~30 LOC).
-- [ ] Replace `fee_wallet::ID` placeholder in `lib.rs:39` with real treasury
-      pubkey (Gnosis-safe-equivalent multisig recommended).
 
 ### Month 1 — mainnet + closed beta
 - [ ] Mainnet deploy: flip `src/lib/solana-network.ts:NETWORK` to `'mainnet'`,
@@ -122,8 +122,6 @@ on-chain for crypto, via Stripe `application_fee` for cards.
       CASI booking URLs.
 - [ ] SDK: `@casi/widget` — embeddable overlay for non-OBS use cases (web
       embeds, custom streaming clients).
-- [ ] Referral program: streamers earn 1% of fees from streamers they refer,
-      for life. Pays out on-chain via a separate `casi-referral` program.
 - [ ] Fiat off-ramp: auto-convert Solana USDC → EUR via Circle / Mural for
       streamers who don't want to manage crypto.
 
@@ -135,14 +133,26 @@ on-chain for crypto, via Stripe `application_fee` for cards.
 
 ## Monetization
 
-- **5% platform fee** on all paid surfaces, enforced on-chain for crypto and
-  via Stripe `application_fee` for cards. Free-tier flashes take no fee.
-- At scale: $1 ARPU/viewer × 1000 viewers/streamer × 100 streamers × 5% =
-  $5k/month baseline. 10× streamers = $50k/mo. 10× ARPU (higher-end
-  sponsorship beams) = $500k/mo.
-- **Gross margin ~90%** — only material costs are Stripe (2.9% + €0.25
-  passed through), Solana RPC (~$200/mo Helius paid), Vercel (~$100/mo),
-  Supabase (~$100/mo). No inventory, no servers.
+> **Commercial model: open question.** Platform fees on all paid surfaces
+> are currently **zero** — Stripe Connect Direct Charges pass 100% to the
+> streamer and the Anchor program pays the full settled amount. A separate
+> revenue stream is needed before launch. Candidates:
+>
+> - **SaaS subscription tier** — fixed monthly fee for streamers (unlocks
+>   higher booking volume, advanced analytics, custom skins, premium
+>   overlay templates). `subscriptions` table + `/api/stripe/subscribe` in
+>   Stripe Billing mode is the shortest path — rails not yet wired.
+> - **Optional tip surcharge** — viewer-facing toggle ("add 5% to support
+>   CASI"); preserves the 100% streamer headline while funding the platform.
+> - **Premium SKUs** — paid custom backdrops, per-stream promoted-placement
+>   auctions, multi-streamer collab rooms. Usage-metered rather than a
+>   blanket take rate.
+> - **Enterprise / agency plans** — bulk onboarding + dedicated support
+>   for talent networks, Twitch partner programs, esports orgs.
+>
+> Cost structure is unchanged: Stripe (2.9% + €0.25, paid by the streamer
+> via Connect), Solana RPC (~$200/mo Helius paid), Vercel (~$100/mo),
+> Supabase (~$100/mo). No inventory, no servers.
 
 ## Adjacent markets (primitive licensing)
 
@@ -178,9 +188,10 @@ That's a new building block.
 
 - **Solana network risk**: outages would pause crypto settlement (Stripe
   unaffected). Mitigated by fallback to free-tier / Stripe rails per streamer.
-- **Regulatory**: 5% platform fee on crypto could be treated as a VASP
-  activity in some jurisdictions. Incorporate in a crypto-friendly
-  jurisdiction; consult counsel before scaling.
+- **Regulatory**: non-custodial crypto rail (viewer → PDA vault → streamer,
+  platform never takes custody) and zero on-chain platform fee sidestep
+  most VASP classification triggers. A future monetization model that
+  takes a crypto cut would need counsel review before launch.
 - **Competition**: Streamlabs, Streamflow, Super Chat. CASI's angle is the
   paid-placement UX + on-chain escrow combo. Single-rail competitors don't
   address the full surface.

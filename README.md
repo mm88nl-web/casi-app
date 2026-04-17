@@ -7,7 +7,8 @@ USDC (via the in-house [casi-escrow](./programs/casi-escrow/README.md) Anchor
 program), or a free tier gated by the streamer.
 
 The Anchor program is Apache-2.0 and designed to be reusable by any Solana
-project that needs trust-minimised escrow with 95/5 settlement. See
+project that needs trust-minimised escrow with linear vesting and anti-grief
+settlement guarantees. See
 [`programs/casi-escrow/README.md`](./programs/casi-escrow/README.md) for the
 on-chain design, audit scope, test coverage, and error codes.
 

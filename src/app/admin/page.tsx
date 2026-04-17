@@ -985,9 +985,9 @@ export default function AdminStudio() {
     setSelectedSlotId(null);
     setShowInfoPanel(false);
     if (booking.payment_method === 'solana') {
-      // Settle the on-chain escrow: streamer receives the vested portion
-      // (minus 5 % fee), viewer receives the unvested portion as a refund.
-      // The vault ATA + EscrowState are closed in the same tx.
+      // Settle the on-chain escrow: streamer receives 100% of the vested
+      // portion, viewer receives the unvested portion as a refund. The
+      // vault ATA + EscrowState are closed in the same tx.
       const canSettleOnChain =
         booking.escrow_pda && booking.viewer_wallet && publicKey &&
         profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet;
@@ -1573,8 +1573,8 @@ export default function AdminStudio() {
                           {paid && (
                             <span style={{ color: '#4ade80' }}>
                               {isSolana
-                                ? `◎ ${(parseFloat(amountUsdc!) * 0.95).toFixed(2)} USDC → you · 5% CASI fee`
-                                : `You receive €${((flash.amount_cents / 100) * 0.95).toFixed(2)} · CASI fee €${((flash.amount_cents / 100) * 0.05).toFixed(2)}`}
+                                ? `◎ ${parseFloat(amountUsdc!).toFixed(2)} USDC → you · 100%`
+                                : `You receive €${(flash.amount_cents / 100).toFixed(2)} · 100%`}
                             </span>
                           )}
                           {flash.tx_signature && (
@@ -2128,7 +2128,7 @@ export default function AdminStudio() {
                         {stripeLoading ? 'Redirecting…' : stripeConnected ? '↗ Manage' : 'Connect →'}
                       </button>
                     </div>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>Casi takes a 5% platform fee. Payouts go directly to your bank.</div>
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>100% of every tip lands in your Stripe account — no platform fee. Payouts go directly to your bank.</div>
                   </div>
 
                   {/* Solana wallet */}

@@ -317,7 +317,7 @@ export default function SendFlashSection({
                 ? <>Free message · 1 per minute · streamer can deny or approve<br /></>
                 : <>Payment held until streamer approves · Fully refunded if denied<br /></>}
             {paymentMethod !== 'free' && (
-              <span style={{ color: '#444' }}>95% → @{username} · 5% CASI maintenance fee</span>
+              <span style={{ color: '#444' }}>100% → @{username} · no platform fee</span>
             )}
           </div>
         </div>

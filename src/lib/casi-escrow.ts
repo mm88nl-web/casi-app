@@ -14,7 +14,7 @@
  *     escrowId, streamer, amountUsdc
  *   });
  *
- * Update PROGRAM_ID + CASI_FEE_WALLET after `anchor deploy`.
+ * Update PROGRAM_ID after `anchor deploy`.
  */
 
 import {
@@ -46,25 +46,16 @@ import IDL from '@/idl/casi_escrow.json';
 // ---------------------------------------------------------------------------
 
 // Valid base58 sentinel (all-zero 32-byte pubkey = SystemProgram). Used when
-// NEXT_PUBLIC_CASI_PROGRAM_ID / NEXT_PUBLIC_CASI_FEE_WALLET are unset — keeps
-// the module loadable during dev/build without crashing on base58 validation.
-// Replaced after `anchor deploy` via scripts/sync-program-id.mjs.
+// NEXT_PUBLIC_CASI_PROGRAM_ID is unset — keeps the module loadable during
+// dev/build without crashing on base58 validation. Replaced after
+// `anchor deploy` via scripts/sync-program-id.mjs.
 const DEFAULT_PROGRAM_ID   = '11111111111111111111111111111111';
-const DEFAULT_FEE_WALLET   = '11111111111111111111111111111111';
 const DEFAULT_USDC_DEVNET  = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
 const DEFAULT_USDC_MAINNET = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 /** CASI Escrow program ID. Override via NEXT_PUBLIC_CASI_PROGRAM_ID. */
 export const PROGRAM_ID = new PublicKey(
   process.env.NEXT_PUBLIC_CASI_PROGRAM_ID || DEFAULT_PROGRAM_ID,
-);
-
-/** CASI treasury — receives 5 % of every settled Flash / Beam.
- *  Override via NEXT_PUBLIC_CASI_FEE_WALLET. Must match `fee_wallet::ID`
- *  declared in programs/casi-escrow/src/lib.rs, otherwise approve_flash /
- *  settle_beam will error with `InvalidFeeWallet`. */
-export const CASI_FEE_WALLET = new PublicKey(
-  process.env.NEXT_PUBLIC_CASI_FEE_WALLET || DEFAULT_FEE_WALLET,
 );
 
 /** Devnet USDC mint (Circle test token). */
@@ -285,9 +276,8 @@ export class CasiEscrowClient {
 
     const escrowIdBytes  = Array.from(uuidToBytes(escrowId));
     const [escrowPda]    = deriveEscrowPda(escrowId);
-    const vault          = getAssociatedTokenAddressSync(usdcMint, escrowPda,      true,  tokenProgram);
-    const streamerAta    = getAssociatedTokenAddressSync(usdcMint, streamer,        false, tokenProgram);
-    const feeWalletAta   = getAssociatedTokenAddressSync(usdcMint, CASI_FEE_WALLET, false, tokenProgram);
+    const vault          = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
+    const streamerAta    = getAssociatedTokenAddressSync(usdcMint, streamer,  false, tokenProgram);
 
     const sig = await (this.program.methods as any)
       .approveFlash(escrowIdBytes)
@@ -297,8 +287,6 @@ export class CasiEscrowClient {
         escrowState:          escrowPda,
         vault,
         streamerAta,
-        feeWalletAta,
-        feeWallet:            CASI_FEE_WALLET,
         usdcMint,
         tokenProgram,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -418,10 +406,9 @@ export class CasiEscrowClient {
     const [escrowPda]   = deriveEscrowPda(escrowId);
     const caller        = this.wallet.publicKey;
 
-    const vault         = getAssociatedTokenAddressSync(usdcMint, escrowPda,      true,  tokenProgram);
-    const streamerAta   = getAssociatedTokenAddressSync(usdcMint, streamer,        false, tokenProgram);
-    const viewerAta     = getAssociatedTokenAddressSync(usdcMint, viewer,          false, tokenProgram);
-    const feeWalletAta  = getAssociatedTokenAddressSync(usdcMint, CASI_FEE_WALLET, false, tokenProgram);
+    const vault         = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
+    const streamerAta   = getAssociatedTokenAddressSync(usdcMint, streamer,  false, tokenProgram);
+    const viewerAta     = getAssociatedTokenAddressSync(usdcMint, viewer,    false, tokenProgram);
 
     const sig = await (this.program.methods as any)
       .settleBeam(escrowIdBytes)
@@ -433,8 +420,6 @@ export class CasiEscrowClient {
         vault,
         streamerAta,
         viewerAta,
-        feeWalletAta,
-        feeWallet:            CASI_FEE_WALLET,
         usdcMint,
         tokenProgram,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,

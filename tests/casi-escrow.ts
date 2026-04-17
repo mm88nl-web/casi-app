@@ -5,10 +5,10 @@
  * program, then executes this file via ts-mocha).
  *
  * Coverage focuses on the audit-sensitive surface:
- *   - Fee math (5% of total, u128 intermediate) on normal + tiny amounts
+ *   - 100% payout: streamer receives the full settled amount (no platform skim)
  *   - Linear vesting cap in settle_beam (t=0, t=duration, t>duration)
  *   - Status machine transitions (Pending → {Settled, Cancelled, Active})
- *   - has_one / address constraint enforcement (streamer, viewer, fee_wallet)
+ *   - has_one constraint enforcement (streamer, viewer)
  *   - WrongEscrowType cross-calls
  */
 
@@ -34,8 +34,6 @@ import { randomBytes } from "crypto";
 
 // ---- constants mirrored from lib.rs -----------------------------------------
 const ESCROW_SEED = Buffer.from("casi-escrow");
-const FEE_WALLET  = SystemProgram.programId; // matches declare_id!(fee_wallet) placeholder in lib.rs
-const FEE_BPS     = 500n;
 const USDC_DECIMALS = 6;
 
 // Escrow type enum (discriminant values sent as u8)
@@ -60,25 +58,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Expected (streamer_amt, fee) split for a settled Flash of `total` micro-USDC. */
-function flashSplit(total: bigint): { streamerAmt: bigint; fee: bigint } {
-  const fee = (total * FEE_BPS) / 10_000n;
-  return { streamerAmt: total - fee, fee };
-}
-
-/** Expected (streamer_amt, fee, refund) for a Beam settled at `elapsed` secs. */
-function beamSplit(
-  total: bigint,
-  elapsed: bigint,
-  duration: bigint,
-): { streamerAmt: bigint; fee: bigint; refund: bigint } {
-  const vestedTicks = elapsed < duration ? elapsed : duration;
-  const grossVested = (total * vestedTicks) / duration;
-  const refund = total - grossVested;
-  const fee = (grossVested * FEE_BPS) / 10_000n;
-  return { streamerAmt: grossVested - fee, fee, refund };
-}
-
 // -----------------------------------------------------------------------------
 
 describe("casi-escrow", () => {
@@ -94,7 +73,6 @@ describe("casi-escrow", () => {
   const payer: Keypair = ((provider.wallet as any).payer) as Keypair;
 
   let usdcMint: PublicKey;
-  let feeWalletAta: PublicKey;
 
   async function airdrop(pubkey: PublicKey, sol = 2) {
     const sig = await provider.connection.requestAirdrop(
@@ -184,8 +162,6 @@ describe("casi-escrow", () => {
         escrowState: ctx.escrowPda,
         vault: ctx.vault,
         streamerAta: getAssociatedTokenAddressSync(usdcMint, signer.publicKey),
-        feeWalletAta,
-        feeWallet: FEE_WALLET,
         usdcMint,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -252,8 +228,6 @@ describe("casi-escrow", () => {
         vault: ctx.vault,
         streamerAta: ctx.streamerAta,
         viewerAta: ctx.viewerAta,
-        feeWalletAta,
-        feeWallet: FEE_WALLET,
         usdcMint,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -281,16 +255,14 @@ describe("casi-escrow", () => {
     usdcMint = await createMint(
       provider.connection, payer, payer.publicKey, null, USDC_DECIMALS,
     );
-    feeWalletAta = getAssociatedTokenAddressSync(usdcMint, FEE_WALLET, true);
   });
 
   // ---------------------------------------------------------------------------
   // Flash
   // ---------------------------------------------------------------------------
   describe("Flash", () => {
-    it("splits 95/5 on approve for a 1 USDC flash", async () => {
+    it("sends full amount to streamer on approve for a 1 USDC flash", async () => {
       const total = 1_000_000n; // 1 USDC
-      const { streamerAmt, fee } = flashSplit(total);
 
       const ctx = await setupParties(total);
       await initialize(ctx, total, 0n, TYPE_FLASH);
@@ -298,22 +270,18 @@ describe("casi-escrow", () => {
 
       await approveFlash(ctx);
 
-      expect(await balanceOf(ctx.streamerAta)).to.equal(streamerAmt);
-      expect(await balanceOf(feeWalletAta)).to.equal(fee);
+      expect(await balanceOf(ctx.streamerAta)).to.equal(total);
       expect(await balanceOf(ctx.viewerAta)).to.equal(0n);
     });
 
-    it("fees round to zero for a 1-micro-USDC flash (no underflow)", async () => {
+    it("sends the full 1 micro-USDC on approve (no rounding loss)", async () => {
       const total = 1n;
       const ctx = await setupParties(total);
       await initialize(ctx, total, 0n, TYPE_FLASH);
 
-      const before = await balanceOf(feeWalletAta);
       await approveFlash(ctx);
-      const after = await balanceOf(feeWalletAta);
 
       expect(await balanceOf(ctx.streamerAta)).to.equal(1n);
-      expect(after - before).to.equal(0n);
     });
 
     it("refunds viewer in full on deny", async () => {
@@ -379,35 +347,6 @@ describe("casi-escrow", () => {
         "InvalidAmount",
       );
     });
-
-    it("rejects approve_flash with a spoofed fee wallet (InvalidFeeWallet)", async () => {
-      const total = 1_000_000n;
-      const ctx = await setupParties(total);
-      await initialize(ctx, total, 0n, TYPE_FLASH);
-
-      const fakeFeeWallet = Keypair.generate().publicKey;
-      const fakeFeeAta = getAssociatedTokenAddressSync(usdcMint, fakeFeeWallet, true);
-
-      const call = program.methods
-        .approveFlash(ctx.escrowId)
-        .accounts({
-          streamer: ctx.streamer.publicKey,
-          viewer: ctx.viewer.publicKey,
-          escrowState: ctx.escrowPda,
-          vault: ctx.vault,
-          streamerAta: ctx.streamerAta,
-          feeWalletAta: fakeFeeAta,
-          feeWallet: fakeFeeWallet,
-          usdcMint,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([ctx.streamer])
-        .rpc();
-
-      await expectError(call, "InvalidFeeWallet");
-    });
   });
 
   // ---------------------------------------------------------------------------
@@ -443,22 +382,19 @@ describe("casi-escrow", () => {
       expect(await balanceOf(ctx.viewerAta)).to.equal(total);
     });
 
-    it("fully vests when settled at t >= duration (95/5 split, no refund)", async () => {
+    it("fully vests when settled at t >= duration (100% to streamer, no refund)", async () => {
       const total = 10_000_000n; // 10 USDC
       const duration = 2n;       // 2 seconds
-      const { streamerAmt, fee } = flashSplit(total); // full vest == flash math
 
       const ctx = await setupParties(total);
       await initialize(ctx, total, duration, TYPE_BEAM);
-      const feeBefore = await balanceOf(feeWalletAta);
       await startBeam(ctx);
 
       // Sleep beyond `duration` so the clamp `min(elapsed, duration)` triggers.
       await sleep(Number(duration) * 1000 + 1500);
       await settleBeam(ctx);
 
-      expect(await balanceOf(ctx.streamerAta)).to.equal(streamerAmt);
-      expect((await balanceOf(feeWalletAta)) - feeBefore).to.equal(fee);
+      expect(await balanceOf(ctx.streamerAta)).to.equal(total);
       expect(await balanceOf(ctx.viewerAta)).to.equal(0n);
     });
 
@@ -468,7 +404,6 @@ describe("casi-escrow", () => {
 
       const ctx = await setupParties(total);
       await initialize(ctx, total, duration, TYPE_BEAM);
-      const feeBefore = await balanceOf(feeWalletAta);
       await startBeam(ctx);
 
       await sleep(2500); // ~2-3 seconds into a 10s beam
@@ -476,15 +411,11 @@ describe("casi-escrow", () => {
 
       const streamerBal = await balanceOf(ctx.streamerAta);
       const viewerBal   = await balanceOf(ctx.viewerAta);
-      const feeDelta    = (await balanceOf(feeWalletAta)) - feeBefore;
 
-      // Conservation: all value accounted for (modulo program's integer math).
-      expect(streamerBal + viewerBal + feeDelta).to.equal(total);
+      // Conservation: every micro-USDC lands with either streamer or viewer.
+      expect(streamerBal + viewerBal).to.equal(total);
       // Streamer gets a strict minority and viewer gets a strict majority.
       expect(viewerBal > streamerBal).to.equal(true);
-      // Fee is exactly 5% of the vested portion.
-      const vested = streamerBal + feeDelta;
-      expect(feeDelta).to.equal((vested * FEE_BPS) / 10_000n);
     });
 
     it("rejects settle_beam twice (vault closed after first settle)", async () => {
@@ -522,7 +453,6 @@ describe("casi-escrow", () => {
 
       const ctx = await setupParties(total);
       await initialize(ctx, total, duration, TYPE_BEAM);
-      const feeBefore = await balanceOf(feeWalletAta);
       await startBeam(ctx);
 
       // Viewer voluntarily ends early.
@@ -532,8 +462,7 @@ describe("casi-escrow", () => {
       // Conservation holds regardless of who called.
       const streamerBal = await balanceOf(ctx.streamerAta);
       const viewerBal   = await balanceOf(ctx.viewerAta);
-      const feeDelta    = (await balanceOf(feeWalletAta)) - feeBefore;
-      expect(streamerBal + viewerBal + feeDelta).to.equal(total);
+      expect(streamerBal + viewerBal).to.equal(total);
     });
 
     it("allows anyone to settle_beam after duration elapses (crank)", async () => {
@@ -551,9 +480,8 @@ describe("casi-escrow", () => {
       // Should succeed — elapsed >= duration, so permissionless crank works.
       await settleBeam(ctx, cranker);
 
-      // Full vest expected.
-      const { streamerAmt } = flashSplit(total);
-      expect(await balanceOf(ctx.streamerAta)).to.equal(streamerAmt);
+      // Full vest expected — streamer receives 100%, viewer gets nothing.
+      expect(await balanceOf(ctx.streamerAta)).to.equal(total);
       expect(await balanceOf(ctx.viewerAta)).to.equal(0n);
     });
   });

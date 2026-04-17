@@ -8,8 +8,8 @@
  *   2. programs/casi-escrow/src/lib.rs  declare_id!("...")
  *   3. .env.local   NEXT_PUBLIC_CASI_PROGRAM_ID=...
  *
- * Also verifies that NEXT_PUBLIC_CASI_FEE_WALLET and NEXT_PUBLIC_USDC_MINT_*
- * are present in .env.local and prints a Vercel env-var checklist.
+ * Also verifies that NEXT_PUBLIC_USDC_MINT_* are present in .env.local and
+ * prints a Vercel env-var checklist.
  *
  * Usage:
  *   node scripts/sync-program-id.mjs                  # sync from IDL
@@ -125,14 +125,12 @@ async function main() {
   log(`.env.local        ${envChanged    ? verb : 'already up-to-date'}`);
 
   const env = (await readFileIfExists(ENV_LOCAL)) ?? '';
-  checkEnvVar(env, 'NEXT_PUBLIC_CASI_FEE_WALLET',   true);
   checkEnvVar(env, 'NEXT_PUBLIC_USDC_MINT_DEVNET',  false);
   checkEnvVar(env, 'NEXT_PUBLIC_USDC_MINT_MAINNET', false);
 
   log('');
   log('Vercel checklist (Settings → Environment Variables → Production/Preview):');
   log(`  NEXT_PUBLIC_CASI_PROGRAM_ID    = ${id}`);
-  log(`  NEXT_PUBLIC_CASI_FEE_WALLET    = <your treasury pubkey>`);
   log('  NEXT_PUBLIC_USDC_MINT_DEVNET   = 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
   log('  NEXT_PUBLIC_USDC_MINT_MAINNET  = EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
   log('');

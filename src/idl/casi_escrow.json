@@ -35,8 +35,6 @@
         { "name": "escrow_state",             "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "escrow_id" }] } },
         { "name": "vault",                    "writable": true },
         { "name": "streamer_ata",             "writable": true },
-        { "name": "fee_wallet_ata",           "writable": true },
-        { "name": "fee_wallet" },
         { "name": "usdc_mint" },
         { "name": "token_program" },
         { "name": "associated_token_program", "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bh6" },
@@ -99,8 +97,6 @@
         { "name": "vault",                    "writable": true },
         { "name": "streamer_ata",             "writable": true },
         { "name": "viewer_ata",               "writable": true },
-        { "name": "fee_wallet_ata",           "writable": true },
-        { "name": "fee_wallet" },
         { "name": "usdc_mint" },
         { "name": "token_program" },
         { "name": "associated_token_program", "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bh6" },
@@ -127,8 +123,7 @@
     { "code": 6004, "name": "AlreadySettled",   "msg": "Escrow is not in Pending status" },
     { "code": 6005, "name": "NotActive",        "msg": "Escrow is not in Active status" },
     { "code": 6006, "name": "WrongEscrowType",  "msg": "This instruction requires a different escrow type" },
-    { "code": 6007, "name": "InvalidFeeWallet", "msg": "Fee wallet address does not match the hardcoded CASI treasury" },
-    { "code": 6008, "name": "MathOverflow",     "msg": "Arithmetic overflow or underflow" }
+    { "code": 6007, "name": "MathOverflow",     "msg": "Arithmetic overflow or underflow" }
   ],
   "types": [
     {

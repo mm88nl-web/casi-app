@@ -82,12 +82,12 @@ Storage: `beams` bucket, public read, anon insert, 5MB cap, image/* + video/{mp4
 
 **Solana:** viewer connects wallet → preflight (SOL ≥ 0.01, USDC ≥ total) →
 `initialize_flash` or `initialize_beam` on the casi-escrow program → full
-amount locked in PDA-owned vault (5% fee deducted on-chain at settlement, no
-separate fee transfer) → attach `escrow_pda + tx_signature + viewer_wallet`
-to DB → streamer calls `approve_flash` / `deny_flash` (flashes) or viewer /
-streamer calls `settle_beam` (beams) → on-chain integer proration pays the
-streamer (95%) and refunds the viewer (5% to treasury). Post-duration beam
-settlement is permissionless (liveness guarantee).
+amount locked in PDA-owned vault → attach `escrow_pda + tx_signature +
+viewer_wallet` to DB → streamer calls `approve_flash` / `deny_flash`
+(flashes) or viewer / streamer calls `settle_beam` (beams) → on-chain integer
+proration pays the streamer 100% of the vested portion and refunds the
+viewer the remainder. No platform fee is deducted on-chain. Post-duration
+beam settlement is permissionless (liveness guarantee).
 
 **Free:** viewer sends with `payment_method: 'free'` (flashes rate-limited
 1/min via `free_flash_rate_limits` table) or books a slot whose
@@ -95,7 +95,7 @@ settlement is permissionless (liveness guarantee).
 
 ## Environment variables
 
-Public: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_CASI_FEE_WALLET`
+Public: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_CASI_PROGRAM_ID`
 
 Server: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `HELIUS_API_KEY`, `HELIUS_WEBHOOK_ID`, `HELIUS_WEBHOOK_SECRET`, `CRON_SECRET`
 
@@ -119,16 +119,18 @@ c24bf04 fix(tests): use anchor.BN alias instead of named import
 ```
 
 Active themes: security audit hardening done at the web tier (amount
-tampering, fee extraction, Helius signature, RLS). Solana program still
-has a 5% settlement fee on-chain — `programs/casi-escrow/src/lib.rs`
-holds the math; stripping it is a pending task. Anchor 19/19 tests still
-pass; devnet deploy still blocked on faucet availability.
+tampering, fee extraction, Helius signature, RLS). Solana program now
+matches: 5% settlement fee stripped from `programs/casi-escrow/src/lib.rs`,
+`fee_wallet` account + `FEE_BPS` constant + `InvalidFeeWallet` error all
+removed, streamer receives 100% of vested amount at settlement. Test suite
+rewritten to assert full payout. Devnet deploy still blocked on faucet
+availability.
 
 ## Known gaps / loose ends
 
 - **Devnet deploy pending** — `anchor test --provider.cluster localnet` passes 19/19, but devnet deploy is blocked on faucet availability (all public devnet faucets dry as of 2026-04-17). Once SOL is available: `./scripts/setup-devnet.sh` runs the full pipeline. Program keypair already generated at `target/deploy/casi_escrow-keypair.json` (pubkey `5WtNmRzjpoY5g1eTAgv6FuR3n6bdYmd6pKjbkRAYKCQs`).
 - **Stack-frame warnings** — `ApproveFlash` + `SettleBeam` context structs exceed BPF's 4KB stack by ~800–1000 bytes. Builds succeed, tests pass, but edge-case UB possible. Fix: `Box<InterfaceAccount<...>>` around the biggest fields.
-- Solana defaults to **devnet** via `src/lib/solana-network.ts:NETWORK`. Flip to `'mainnet'` to switch USDC mint, wallet-adapter cluster, and Solscan cluster query in one line. Program must be re-deployed to mainnet (new program ID); also replace `fee_wallet::ID` placeholder (`11111111111111111111111111111111`) with the real treasury pubkey in `lib.rs:39`.
+- Solana defaults to **devnet** via `src/lib/solana-network.ts:NETWORK`. Flip to `'mainnet'` to switch USDC mint, wallet-adapter cluster, and Solscan cluster query in one line. Program must be re-deployed to mainnet (new program ID).
 - Stripe currency hardcoded **EUR** (`stripe/authorize/route.ts`)
 - `expire-bookings` and `auto-expire` Edge Functions exist but are not the active cron path (GitHub Actions `stripe-janitor` is)
 - `/v`, `/setup`, `/join` pages orphaned; `bonk-ui-source/` checked in but unused (Privy remnants)
@@ -156,9 +158,9 @@ Project state as of `14d0e59` (2026-04-17, branch `claude/add-handoff-docs-mFcF9
 ### Next-step options (pick one)
 
 1. **Subscription table + Stripe Billing route** — SaaS tier scaffold. `subscriptions` table (`profile_id`, `stripe_customer_id`, `stripe_subscription_id`, `plan`, `current_period_end`), `/api/stripe/subscribe` → Checkout in subscription mode, webhook listens for `customer.subscription.*`. No plans defined yet, just wire the rails.
-2. **Strip 5% settlement fee from Anchor escrow** — `programs/casi-escrow/src/lib.rs` still deducts 5% at `settle_beam` / `approve_flash`. Matches the on-chain side with the Stripe-tier change. Requires `anchor build` + test regen + re-deploy (devnet faucet permitting).
-3. **`bookings.cancel_token` column** — strong viewer-cancel auth. Current Stripe cancel URL uses session-less booking id. Add server-generated random token on INSERT, require it on `/api/stripe/cancel`, strip RLS UPDATE-to-denied anon path.
-4. **Sync sibling branch** — merge or cherry-pick the 5 security commits onto `claude/casi-project-summary-zJfeU` so both branches are coherent.
+2. **`bookings.cancel_token` column** — strong viewer-cancel auth. Current Stripe cancel URL uses session-less booking id. Add server-generated random token on INSERT, require it on `/api/stripe/cancel`, strip RLS UPDATE-to-denied anon path.
+3. **Sync sibling branch** — merge or cherry-pick the security commits onto `claude/casi-project-summary-zJfeU` so both branches are coherent.
+4. **Pick a new monetization model** — with platform fee at 0% (Stripe + Solana both), `INVESTOR_BRIEF.md` "Monetization" section needs a replacement story (SaaS subscription tier, premium features, optional tip?). Business decision, not code.
 
 ### Common pitfalls we hit (don't repeat):
 1. Anchor 0.30.1 is incompatible with Rust ≥1.87 (`proc_macro2::Span::source_file()` removed). Do NOT try to pin Rust to 1.79 — dependency tree now needs edition2024 (1.85+). Stay on 0.31.1.

@@ -20,7 +20,6 @@ export const CASI_ERROR_NAMES = [
   'AlreadySettled',
   'NotActive',
   'WrongEscrowType',
-  'InvalidFeeWallet',
   'MathOverflow',
 ] as const;
 
@@ -38,7 +37,6 @@ const FRIENDLY: Record<CasiErrorName, string> = {
   AlreadySettled:    'This flash has already been approved or denied.',
   NotActive:         'This beam has not started yet.',
   WrongEscrowType:   'Wrong escrow type for this action.',
-  InvalidFeeWallet:  'Fee wallet mismatch — please report this to CASI support.',
   MathOverflow:      'Transaction amount is out of range — please try a smaller value.',
 };
 

@@ -28,17 +28,6 @@ declare_id!("11111111111111111111111111111111");
 /// PDA seed prefix for all CASI escrow state accounts.
 pub const ESCROW_SEED: &[u8] = b"casi-escrow";
 
-/// Platform fee in basis points (5 % = 500 bps).
-pub const FEE_BPS: u64 = 500;
-
-/// Hardcoded CASI fee wallet — receives FEE_BPS of every settled Flash/Beam.
-/// Placeholder is the System Program ID (all-1s); REPLACE with the real
-/// treasury pubkey before any deploy you intend to receive fees from.
-pub mod fee_wallet {
-    use super::*;
-    declare_id!("11111111111111111111111111111111");
-}
-
 // ---------------------------------------------------------------------------
 // Program
 // ---------------------------------------------------------------------------
@@ -101,7 +90,7 @@ pub mod casi_escrow {
         Ok(())
     }
 
-    /// Streamer approves a Flash: 95 % → streamer ATA, 5 % → CASI fee ATA.
+    /// Streamer approves a Flash: full amount → streamer ATA.
     /// Vault + EscrowState are closed; rent returned to streamer.
     pub fn approve_flash(
         ctx: Context<ApproveFlash>,
@@ -121,30 +110,13 @@ pub mod casi_escrow {
         let total = ctx.accounts.escrow_state.total_amount;
         let bump  = ctx.accounts.escrow_state.bump;
 
-        // Use u128 for the intermediate product to eliminate any overflow risk
-        // on large USDC amounts. Division is exact on u128 -> u64 (bps ≤ 10_000).
-        let fee          = ((total as u128) * (FEE_BPS as u128) / 10_000) as u64;
-        let streamer_amt = total.checked_sub(fee).ok_or(CasiError::MathOverflow)?;
-
         let signer_seeds: &[&[u8]] = &[ESCROW_SEED, escrow_id.as_ref(), &[bump]];
         let signer = &[signer_seeds];
 
-        // 95 % → streamer
         pda_transfer_checked(
             &ctx.accounts.vault,
             &ctx.accounts.streamer_ata,
-            streamer_amt,
-            &ctx.accounts.usdc_mint,
-            &ctx.accounts.escrow_state.to_account_info(),
-            &ctx.accounts.token_program,
-            signer,
-        )?;
-
-        // 5 % → CASI fee wallet
-        pda_transfer_checked(
-            &ctx.accounts.vault,
-            &ctx.accounts.fee_wallet_ata,
-            fee,
+            total,
             &ctx.accounts.usdc_mint,
             &ctx.accounts.escrow_state.to_account_info(),
             &ctx.accounts.token_program,
@@ -162,8 +134,7 @@ pub mod casi_escrow {
 
         emit!(FlashSettled {
             escrow_id,
-            streamer_amount: streamer_amt,
-            fee_amount: fee,
+            streamer_amount: total,
             approved: true,
         });
 
@@ -212,7 +183,6 @@ pub mod casi_escrow {
         emit!(FlashSettled {
             escrow_id,
             streamer_amount: 0,
-            fee_amount: 0,
             approved: false,
         });
 
@@ -287,7 +257,7 @@ pub mod casi_escrow {
     ///   can always be released even if both parties go offline.
     ///
     /// Integer proration: vested = total × min(elapsed, duration) / duration.
-    /// Fee is taken on vested portion only; remainder refunded to viewer.
+    /// Streamer receives the full vested portion; remainder refunded to viewer.
     /// Vault + EscrowState closed; rent returned to streamer.
     pub fn settle_beam(
         ctx: Context<SettleBeam>,
@@ -323,10 +293,8 @@ pub mod casi_escrow {
         // Integer proration with u128 intermediate to eliminate overflow risk.
         // worst case: u64::MAX * u64::MAX = u128::MAX / 4, well within u128 range.
         let vested_ticks = elapsed.min(duration);
-        let gross_vested = ((total as u128) * (vested_ticks as u128) / (duration as u128)) as u64;
-        let refund       = total.checked_sub(gross_vested).ok_or(CasiError::MathOverflow)?;
-        let fee          = ((gross_vested as u128) * (FEE_BPS as u128) / 10_000) as u64;
-        let streamer_amt = gross_vested.checked_sub(fee).ok_or(CasiError::MathOverflow)?;
+        let streamer_amt = ((total as u128) * (vested_ticks as u128) / (duration as u128)) as u64;
+        let refund       = total.checked_sub(streamer_amt).ok_or(CasiError::MathOverflow)?;
 
         ctx.accounts.escrow_state.status = EscrowStatus::Settled;
 
@@ -338,18 +306,6 @@ pub mod casi_escrow {
                 &ctx.accounts.vault,
                 &ctx.accounts.streamer_ata,
                 streamer_amt,
-                &ctx.accounts.usdc_mint,
-                &ctx.accounts.escrow_state.to_account_info(),
-                &ctx.accounts.token_program,
-                signer,
-            )?;
-        }
-
-        if fee > 0 {
-            pda_transfer_checked(
-                &ctx.accounts.vault,
-                &ctx.accounts.fee_wallet_ata,
-                fee,
                 &ctx.accounts.usdc_mint,
                 &ctx.accounts.escrow_state.to_account_info(),
                 &ctx.accounts.token_program,
@@ -381,7 +337,6 @@ pub mod casi_escrow {
         emit!(BeamSettled {
             escrow_id,
             streamer_amount: streamer_amt,
-            fee_amount: fee,
             viewer_refund: refund,
         });
 
@@ -541,19 +496,6 @@ pub struct ApproveFlash<'info> {
     )]
     pub streamer_ata: InterfaceAccount<'info, TokenAccount>,
 
-    #[account(
-        init_if_needed,
-        payer  = streamer,
-        associated_token::mint          = usdc_mint,
-        associated_token::authority     = fee_wallet,
-        associated_token::token_program = token_program,
-    )]
-    pub fee_wallet_ata: InterfaceAccount<'info, TokenAccount>,
-
-    /// CHECK: Hardcoded CASI fee wallet — validated by address constraint.
-    #[account(address = fee_wallet::ID @ CasiError::InvalidFeeWallet)]
-    pub fee_wallet: UncheckedAccount<'info>,
-
     #[account(mint::token_program = token_program)]
     pub usdc_mint: InterfaceAccount<'info, Mint>,
 
@@ -708,19 +650,6 @@ pub struct SettleBeam<'info> {
     )]
     pub viewer_ata: InterfaceAccount<'info, TokenAccount>,
 
-    #[account(
-        init_if_needed,
-        payer  = caller,
-        associated_token::mint          = usdc_mint,
-        associated_token::authority     = fee_wallet,
-        associated_token::token_program = token_program,
-    )]
-    pub fee_wallet_ata: InterfaceAccount<'info, TokenAccount>,
-
-    /// CHECK: Hardcoded CASI fee wallet — validated by address constraint.
-    #[account(address = fee_wallet::ID @ CasiError::InvalidFeeWallet)]
-    pub fee_wallet: UncheckedAccount<'info>,
-
     #[account(mint::token_program = token_program)]
     pub usdc_mint: InterfaceAccount<'info, Mint>,
 
@@ -793,7 +722,6 @@ pub struct EscrowInitialized {
 pub struct FlashSettled {
     pub escrow_id:      [u8; 32],
     pub streamer_amount: u64,
-    pub fee_amount:     u64,
     pub approved:       bool,
 }
 
@@ -801,7 +729,6 @@ pub struct FlashSettled {
 pub struct BeamSettled {
     pub escrow_id:      [u8; 32],
     pub streamer_amount: u64,
-    pub fee_amount:     u64,
     pub viewer_refund:  u64,
 }
 
@@ -825,8 +752,6 @@ pub enum CasiError {
     NotActive,
     #[msg("This instruction requires a different escrow type")]
     WrongEscrowType,
-    #[msg("Fee wallet address does not match the hardcoded CASI treasury")]
-    InvalidFeeWallet,
     #[msg("Arithmetic overflow or underflow")]
     MathOverflow,
 }

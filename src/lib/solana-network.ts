@@ -8,7 +8,6 @@
 //
 // 1. Change the NETWORK constant below from 'devnet' to 'mainnet'.
 // 2. In Vercel environment variables:
-//      - Set NEXT_PUBLIC_CASI_FEE_WALLET to a mainnet pubkey you control.
 //      - (Optional) Set NEXT_PUBLIC_SOLANA_RPC to a paid RPC (Helius, QuickNode,
 //        Triton) — the public `api.mainnet-beta.solana.com` rate-limits hard
 //        and will cause booking failures under load.
