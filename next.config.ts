@@ -15,7 +15,9 @@ const nextConfig: NextConfig = {
               // 'unsafe-inline' is required for hydration — without it React never attaches
               // event handlers and all buttons are dead.  'self' still blocks external
               // <script src="..."> injection from other origins.
-              `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
+              // Cloudflare Turnstile (challenges.cloudflare.com) is needed for captcha on
+              // free-tier submit paths.
+              `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com${isDev ? " 'unsafe-eval'" : ''}`,
 
               // Inline styles are used throughout (CSS string pattern).
               // Google Fonts stylesheet is loaded via @import in Header.
@@ -37,7 +39,7 @@ const nextConfig: NextConfig = {
 
               // Stripe Checkout is opened in a new tab (window.location.href),
               // but Stripe.js may render an iframe for some flows.
-              "frame-src 'self' https://js.stripe.com https://connect.stripe.com",
+              "frame-src 'self' https://js.stripe.com https://connect.stripe.com https://challenges.cloudflare.com",
 
               // Web Workers spun up by wallet adapters.
               "worker-src 'self' blob:",

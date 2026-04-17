@@ -11,12 +11,13 @@
  * Extracted from overlay/page.tsx as part of the Phase-1 tidy-up — the page
  * used to carry the whole form inline (~300 lines).
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { createClient } from '@/utils/supabase/client';
 import { sendFlash, SOLANA_ENABLED, type PaymentMethod } from '@/lib/payment-manager';
 import { EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
+import { TurnstileWidget } from '@/components/TurnstileWidget';
 
 // Minimal shape of the streamer profile we actually read.
 interface StreamerProfileLite {
@@ -52,6 +53,9 @@ export default function SendFlashSection({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('stripe');
   const [onChainStatus, setOnChainStatus] = useState<null | 'locking' | 'locked'>(null);
   const [onChainTx, setOnChainTx] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const onTurnstileVerify = useCallback((t: string) => setTurnstileToken(t), []);
+  const onTurnstileExpire = useCallback(() => setTurnstileToken(null), []);
   const supabase = useRef(createClient()).current;
 
   const { connection } = useConnection();
@@ -96,7 +100,7 @@ export default function SendFlashSection({
   const canSend =
     !submitting &&
     message.trim().length > 0 &&
-    (paymentMethod === 'free' ? true : amountCents >= 100 && !isNaN(amountCents)) &&
+    (paymentMethod === 'free' ? !!turnstileToken : amountCents >= 100 && !isNaN(amountCents)) &&
     solanaReady;
 
   const handleSend = async () => {
@@ -117,6 +121,7 @@ export default function SendFlashSection({
         solana: paymentMethod === 'solana'
           ? { connection, wallet: { publicKey, signTransaction, signAllTransactions } }
           : undefined,
+        turnstileToken: turnstileToken ?? undefined,
       });
 
       if (result.redirectTo) {
@@ -283,6 +288,18 @@ export default function SendFlashSection({
                   {paymentMethod === 'solana' ? 'min 1 USDC' : 'min €1'}
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* Captcha — only needed for free rail */}
+          {paymentMethod === 'free' && (
+            <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center' }}>
+              <TurnstileWidget
+                onVerify={onTurnstileVerify}
+                onExpire={onTurnstileExpire}
+                theme="dark"
+                compact
+              />
             </div>
           )}
 

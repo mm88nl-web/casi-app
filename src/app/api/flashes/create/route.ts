@@ -16,6 +16,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
 import { stripe } from '@/lib/stripe';
+import { moderateText } from '@/lib/content-moderation';
+import { verifyTurnstileToken } from '@/lib/turnstile';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -83,7 +85,7 @@ async function claimFreeFlashSlot(streamerId: string, viewerKey: string): Promis
 }
 
 export async function POST(req: Request) {
-  const { profile_id, viewer_name, message, amount_cents, payment_method } = await req.json();
+  const { profile_id, viewer_name, message, amount_cents, payment_method, turnstile_token } = await req.json();
 
   if (!profile_id || !viewer_name || !message) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -91,6 +93,11 @@ export async function POST(req: Request) {
   if (message.trim().length === 0) {
     return NextResponse.json({ error: 'Message cannot be empty' }, { status: 400 });
   }
+
+  const nameCheck = moderateText(viewer_name, 'viewer_name');
+  if (!nameCheck.ok) return NextResponse.json({ error: nameCheck.reason }, { status: 400 });
+  const msgCheck = moderateText(message, 'message');
+  if (!msgCheck.ok) return NextResponse.json({ error: msgCheck.reason }, { status: 400 });
 
   const method: PaymentMethod = (payment_method as PaymentMethod) || 'stripe';
   if (!['stripe', 'solana', 'free'].includes(method)) {
@@ -116,6 +123,9 @@ export async function POST(req: Request) {
     if (!profile.allow_free_flashes) {
       return NextResponse.json({ error: 'Free flashes are disabled for this streamer' }, { status: 403 });
     }
+    const captcha = await verifyTurnstileToken(turnstile_token, getClientIp(req));
+    if (!captcha.ok) return NextResponse.json({ error: captcha.reason }, { status: 400 });
+
     const viewerKey = await resolveViewerKey(req);
     const allowed = await claimFreeFlashSlot(profile_id, viewerKey);
     if (!allowed) {

@@ -37,6 +37,7 @@ export default function AuthPage() {
   const [avatarUrl, setAvatarUrl]           = useState('');
   const [avatarValid, setAvatarValid]       = useState(false);
   const [usernameStatus, setUsernameStatus] = useState<'idle'|'checking'|'taken'|'available'>('idle');
+  const [acceptedTos, setAcceptedTos]       = useState(false);
   // shared
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
@@ -74,6 +75,7 @@ export default function AuthPage() {
     e.preventDefault();
     setError('');
     if (regPassword.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (!acceptedTos)            { setError('Please accept the Terms and Privacy Policy'); return; }
     setStep('username');
   };
 
@@ -392,9 +394,23 @@ export default function AuthPage() {
                       {regPassword.length === 0 ? 'At least 6 characters' : regPassword.length < 6 ? `${6 - regPassword.length} more needed` : '✓ Looks good'}
                     </div>
                   </div>
-                  {error && <div className="auth-error">{error}</div>}
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#999', lineHeight: 1.5, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={acceptedTos}
+                      onChange={(e) => setAcceptedTos(e.target.checked)}
+                      style={{ marginTop: 2, accentColor: '#F58220', cursor: 'pointer' }}
+                    />
+                    <span>
+                      I agree to the{' '}
+                      <a href="/legal/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#F58220' }}>Terms of Service</a>,{' '}
+                      <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#F58220' }}>Privacy Policy</a>, and{' '}
+                      <a href="/legal/aup" target="_blank" rel="noopener noreferrer" style={{ color: '#F58220' }}>Acceptable Use Policy</a>. I confirm I am 18 or older.
+                    </span>
+                  </label>
+                  {error && <div className="auth-error" style={{ marginTop: 12 }}>{error}</div>}
                   <div style={{ marginTop: 8 }}>
-                    <button type="submit" className="auth-btn">Continue →</button>
+                    <button type="submit" disabled={!acceptedTos} className="auth-btn">Continue →</button>
                   </div>
                 </form>
               </>

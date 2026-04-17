@@ -432,6 +432,10 @@ export default function HomePage() {
           <div className="footer-links">
             <a href="/login?tab=signup" className="nav-link">Create studio</a>
             <a href="/login" className="nav-link">Sign in</a>
+            <a href="/legal/terms"   className="nav-link">Terms</a>
+            <a href="/legal/privacy" className="nav-link">Privacy</a>
+            <a href="/legal/aup"     className="nav-link">Acceptable use</a>
+            <a href="/legal/dmca"    className="nav-link">DMCA · Report</a>
           </div>
         </footer>
 

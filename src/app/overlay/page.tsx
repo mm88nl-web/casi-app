@@ -8,6 +8,7 @@ import SkinProvider from '@/components/SkinProvider';
 import WalletNav, { refreshWalletNav } from '@/components/WalletNav';
 import ChatPanel from '@/components/ChatPanel';
 import SendFlashSection from '@/components/overlay/SendFlashSection';
+import TurnstileWidget from '@/components/TurnstileWidget';
 import {
   SOLANA_RPC,
   USDC_MINT,
@@ -358,6 +359,9 @@ function OverlayContent() {
   // durationSeconds is the canonical unit; duration_minutes = durationSeconds / 60
   const [durationSeconds, setDurationSeconds] = useState(60);
   const [submitting, setSubmitting]     = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string|null>(null);
+  const onTurnstileVerify = useCallback((t: string) => setTurnstileToken(t), []);
+  const onTurnstileExpire = useCallback(() => setTurnstileToken(null), []);
   const [cancelling, setCancelling]     = useState<string|null>(null);
   const [notification, setNotification] = useState<{text:string;type:string}|null>(null);
   const [usdcBalance, setUsdcBalance]   = useState<number|null>(null);
@@ -635,6 +639,11 @@ function OverlayContent() {
   const handleFileSelect = async (file: File) => {
     if (file.size > 5 * 1024 * 1024) { showNotif('File too large — max 5 MB', 'denied'); return; }
     const fileType: 'image'|'video' = file.type.startsWith('video/') ? 'video' : 'image';
+    // P0 guard: free slots are image-only until video moderation ships.
+    if (fileType === 'video' && selectedSlot && Number(selectedSlot.price_value) === 0) {
+      showNotif('Videos are paid-slots only for now — please upload an image', 'denied');
+      return;
+    }
     const ext  = file.name.split('.').pop()?.toLowerCase() ?? 'bin';
     const path = `${profile?.username ?? 'anon'}/${Date.now()}-${Math.random().toString(36).slice(2,7)}.${ext}`;
     setUploading(true);
@@ -704,6 +713,53 @@ function OverlayContent() {
 
   const isFreeSlot = Number(selectedSlot.price_value) === 0;
 
+  // ── FREE SLOT PATH ─────────────────────────────────────────────────────────
+  // Free bookings go through a server-gated endpoint that enforces captcha +
+  // text moderation. Direct anon inserts for price_value=0 slots are blocked
+  // at the RLS layer (see 20260419000000_p0_hardening.sql).
+  if (isFreeSlot) {
+    // P0 guard: free slots are image-only until video moderation ships.
+    if (effectiveFileType === 'video') {
+      showNotif('Videos are paid-slots only for now — please use an image', 'denied');
+      setSubmitting(false);
+      return;
+    }
+    try {
+      const res = await fetch('/api/bookings/create-free', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id:       profile.id,
+          element_id:       selectedSlot.id,
+          viewer_name:      savedViewerName,
+          message:          isExtend ? `⏱ Extension request${message.trim() ? ' — ' + message.trim() : ''}` : (message.trim() || null),
+          image_url:        effectiveImageUrl,
+          storage_path:     effectiveStoragePath,
+          file_type:        effectiveFileType,
+          duration_minutes: durationSeconds / 60,
+          is_queued:        isQueue || isExtend,
+          queue_position:   (isQueue || isExtend) ? currentQueue + 1 : null,
+          turnstile_token:  turnstileToken,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        showNotif(json.error || 'Failed to submit free booking', 'error');
+        setSubmitting(false);
+        return;
+      }
+      showNotif('★ Free request sent — awaiting streamer approval', 'success');
+      setSubmitting(false);
+      closeSlot();
+    } catch (err) {
+      console.error('Free booking failed:', err);
+      showNotif('Server error. Please try again.', 'error');
+      setSubmitting(false);
+    }
+    return;
+  }
+
+  // ── PAID SLOT PATH ─────────────────────────────────────────────────────────
   const { data: newBooking, error: insertError } = await supabase.from('bookings').insert({
     profile_id:    profile.id,
     element_id:    selectedSlot.id,
@@ -716,7 +772,7 @@ function OverlayContent() {
     price_value:   selectedSlot.price_value,
     price_unit:    selectedSlot.price_unit,
     status:        'pending',
-    payment_method: isFreeSlot ? 'free' : 'stripe',
+    payment_method: 'stripe',
     is_queued:     isQueue || isExtend,
     queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
   }).select().single();
@@ -725,14 +781,6 @@ function OverlayContent() {
     console.error('Insert error:', insertError);
     showNotif('Failed to create booking', 'error');
     setSubmitting(false);
-    return;
-  }
-
-  // Free slot — no payment, just queue for streamer approval and close the form.
-  if (isFreeSlot) {
-    showNotif('★ Free request sent — awaiting streamer approval', 'success');
-    setSubmitting(false);
-    closeSlot();
     return;
   }
 
@@ -1525,7 +1573,19 @@ function OverlayContent() {
 })()}
               {(() => {
                 const isFreeSlot = Number(selectedSlot.price_value) === 0;
+                const freeBlocked = isFreeSlot && !turnstileToken;
                 return (
+                <>
+                {isFreeSlot && (
+                  <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'flex-end' }}>
+                    <TurnstileWidget
+                      onVerify={onTurnstileVerify}
+                      onExpire={onTurnstileExpire}
+                      theme="dark"
+                      compact
+                    />
+                  </div>
+                )}
                 <div className="bf-footer">
                   <div>
                     <div className="bf-cost-lbl">{isFreeSlot ? 'Cost' : 'Estimated cost'}</div>
@@ -1535,8 +1595,8 @@ function OverlayContent() {
                   </div>
                   <div style={{ display:'flex', gap:8, flexWrap:'wrap', justifyContent:'flex-end' }}>
                     {/* ── Stripe / Free ── */}
-                    <button onClick={submitBooking} disabled={!canSubmit||submitting} className="bf-sub"
-                      style={{ background: isFreeSlot ? '#4ade80' : accentColor, color:'var(--casi-bg)', display:'flex', alignItems:'center', gap:7, opacity: (!canSubmit||submitting) ? 0.5 : 1 }}>
+                    <button onClick={submitBooking} disabled={!canSubmit||submitting||freeBlocked} className="bf-sub"
+                      style={{ background: isFreeSlot ? '#4ade80' : accentColor, color:'var(--casi-bg)', display:'flex', alignItems:'center', gap:7, opacity: (!canSubmit||submitting||freeBlocked) ? 0.5 : 1 }}>
                       {isFreeSlot ? (
                         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M6.5 1l1.545 3.13L11.5 4.635 9 7.073l.59 3.442L6.5 8.89 3.41 10.515 4 7.073 1.5 4.635l3.455-.505L6.5 1z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/>
@@ -1572,6 +1632,7 @@ function OverlayContent() {
                     )}
                   </div>
                 </div>
+                </>
                 );
               })()}
             </div>

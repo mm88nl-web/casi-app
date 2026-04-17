@@ -31,6 +31,8 @@ export interface SendFlashInput {
     connection: Connection;
     wallet: Pick<WalletContextState, 'publicKey' | 'signTransaction' | 'signAllTransactions'>;
   };
+  /** Free-rail only — Cloudflare Turnstile token from the widget callback. */
+  turnstileToken?: string;
 }
 
 export interface SendFlashResult {
@@ -164,6 +166,7 @@ async function sendFlashFree(input: SendFlashInput): Promise<SendFlashResult> {
       message:        input.message.trim(),
       amount_cents:   0,
       payment_method: 'free',
+      turnstile_token: input.turnstileToken ?? null,
     }),
   });
   const { flash_id, error } = await res.json();
