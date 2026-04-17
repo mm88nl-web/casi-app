@@ -25,7 +25,7 @@ test coverage.
 - Next.js 16.2.2 (App Router), React 19.2.4, TypeScript 5, Tailwind 4
 - Supabase (Postgres + RLS + Realtime + Storage)
 - Stripe (Connect + manual-capture PaymentIntents) — EUR
-- Solana web3.js + Wallet Adapter + Anchor 0.30.1, `casi-escrow` on-chain program, Helius webhooks — devnet USDC
+- Solana web3.js + Wallet Adapter + Anchor 0.31.1, `casi-escrow` on-chain program, Helius webhooks — devnet USDC
 - Vercel hosting; cron via GitHub Actions (Hobby tier killed Vercel cron)
 
 `AGENTS.md` warning: this Next.js version has breaking changes vs older docs —
@@ -104,28 +104,47 @@ Server: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET
 ## Recent commits (top of branch)
 
 ```
-bc89d6a refactor: merge beam info/price into movement panel
-6fd4d19 feat: custom duration input + nav z-index fix on overlay
-220f783 fix: remove Vercel cron, add GitHub Actions janitor
-6fe6906 FORCE REBUILD: CSP and Overlay Fix
-fcb93af fix: CSP hydration, expireBooking race, Number() coercion
-bab4959 feat: seconds-based duration, D-pad, OBS resilience, Solana fee
-f5c6182 feat: file uploads, video beams, CSP, silhouette preview
-136caea security: enforce caller ownership on Stripe API routes
-730250c security: harden webhook auth, tighten bookings INSERT
+d284786 fix(tests): import BN directly from bn.js
+50f20fe fix(tests): use System Program ID for FEE_WALLET placeholder
+c24bf04 fix(tests): use anchor.BN alias instead of named import
+741a71f chore(escrow): upgrade anchor 0.30.1 → 0.31.1
+50952c8 chore(escrow): bump rust pin to 1.86 — edition2024 needs 1.85+
+1262c05 fix(escrow): add idl-build feature for anchor IDL generation
+2b58fac fix(escrow): mark DenyFlash.streamer mutable (payer for init_if_needed)
+a655ee8 fix(escrow): use token_2022 feature instead of nonexistent token_interface
+35f8266 fix(escrow): valid-base58 placeholders so anchor build doesn't crash pre-sync
+661d828 chore: purge residual Streamflow references
 ```
 
-Active themes: Solana stabilisation, OBS resilience, Stripe proration, UI polish.
+Active themes: Solana stabilisation (done — 19/19 tests passing), devnet deploy pending on faucet recovery, then end-to-end smoke test.
 
 ## Known gaps / loose ends
 
-- Solana defaults to **devnet** via `src/lib/solana-network.ts:NETWORK`. Flip to `'mainnet'` to switch USDC mint, wallet-adapter cluster, and Solscan cluster query in one line. Anchor program ID is cluster-specific (regenerate for mainnet deploy).
+- **Devnet deploy pending** — `anchor test --provider.cluster localnet` passes 19/19, but devnet deploy is blocked on faucet availability (all public devnet faucets dry as of 2026-04-17). Once SOL is available: `./scripts/setup-devnet.sh` runs the full pipeline. Program keypair already generated at `target/deploy/casi_escrow-keypair.json` (pubkey `5WtNmRzjpoY5g1eTAgv6FuR3n6bdYmd6pKjbkRAYKCQs`).
+- **Stack-frame warnings** — `ApproveFlash` + `SettleBeam` context structs exceed BPF's 4KB stack by ~800–1000 bytes. Builds succeed, tests pass, but edge-case UB possible. Fix: `Box<InterfaceAccount<...>>` around the biggest fields.
+- Solana defaults to **devnet** via `src/lib/solana-network.ts:NETWORK`. Flip to `'mainnet'` to switch USDC mint, wallet-adapter cluster, and Solscan cluster query in one line. Program must be re-deployed to mainnet (new program ID); also replace `fee_wallet::ID` placeholder (`11111111111111111111111111111111`) with the real treasury pubkey in `lib.rs:39`.
 - Stripe currency hardcoded **EUR** (`stripe/authorize/route.ts`)
 - `expire-bookings` and `auto-expire` Edge Functions exist but are not the active cron path (GitHub Actions `stripe-janitor` is)
 - `/v`, `/setup`, `/join` pages orphaned; `bonk-ui-source/` checked in but unused (Privy remnants)
 - Admin canvas (drag/resize) not optimised for touch
 - Helius webhook uses single shared secret, no per-event signature
 - Flash end-early proration not wired (flashes are one-shot tips by design; beams + backdrops have proration via `stripe/end-early`)
+
+## Handoff to next session
+
+Project state as of `d284786` (2026-04-17):
+- Anchor program builds + **all 19 tests pass** on local validator.
+- Toolchain pinned: Rust 1.86 (`rust-toolchain.toml`), Anchor 0.31.1 (`Anchor.toml`, `scripts/setup-devnet.sh`).
+- `scripts/setup-devnet.sh --skip-airdrop --skip-deploy` builds + tests end-to-end on a clean machine.
+- **Next logical step: devnet deploy** once faucets recover, then end-to-end smoke test `/overlay` → `/admin` with a devnet wallet. After that: mainnet prep (see "Mainnet prep" below).
+- Branch history is clean. 6 `archive/*` branches on the remote preserve every commit from the 10 pre-merge dead branches.
+
+Common pitfalls we hit (don't repeat):
+1. Anchor 0.30.1 is incompatible with Rust ≥1.87 (`proc_macro2::Span::source_file()` removed). Do NOT try to pin Rust to 1.79 — dependency tree now needs edition2024 (1.85+). Stay on 0.31.1.
+2. `sync-program-id.mjs` mutates `Anchor.toml` and `lib.rs` — re-run after every pull that touches those files. `git checkout -- <file>` reverts the local edits before pulling.
+3. Placeholder pubkeys in `Anchor.toml`/`lib.rs` must be valid base58 (exclude `0`, `O`, `I`, `l`). The canonical dev placeholder is `11111111111111111111111111111111` (System Program).
+4. `anchor test` reads `[provider] cluster` — use `--provider.cluster localnet` override or tests try to deploy to devnet and fail.
+5. `@coral-xyz/anchor` is CJS; under ts-mocha ESM loader, named imports (`import { BN }`) fail. Use `import BN from "bn.js"` directly.
 
 ## Useful file paths
 
