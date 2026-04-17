@@ -274,18 +274,18 @@ export default function SendFlashSection({
                       ...(parseFloat(amount) === p
                         ? { background: 'rgba(var(--casi-accent-rgb),0.12)', borderColor: 'rgba(var(--casi-accent-rgb),0.35)', color: 'var(--casi-accent)' }
                         : { background: 'none', borderColor: 'var(--casi-border)', color: 'var(--casi-text-muted)' }) }}>
-                    {paymentMethod === 'solana' ? `${p} USDC` : `€${p}`}
+                    {paymentMethod === 'solana' ? `${p} USDC` : `$${p}`}
                   </button>
                 ))}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '10px 14px' }}>
                 <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: 'var(--casi-text-muted)' }}>
-                  {paymentMethod === 'solana' ? '◎' : '€'}
+                  {paymentMethod === 'solana' ? '◎' : '$'}
                 </span>
                 <input type="number" value={amount} min="1" step="1" onChange={e => setAmount(e.target.value)}
                   style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 17, fontWeight: 700, color: 'var(--casi-text)', fontFamily: "'Syne', sans-serif" }} />
                 <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#333', whiteSpace: 'nowrap' }}>
-                  {paymentMethod === 'solana' ? 'min 1 USDC' : 'min €1'}
+                  {paymentMethod === 'solana' ? 'min 1 USDC' : 'min $1'}
                 </span>
               </div>
             </div>
@@ -324,7 +324,7 @@ export default function SendFlashSection({
               ? (submitting ? (onChainStatus === 'locking' ? 'Locking on-chain…' : 'Submitting…') : `Lock ${(amountCents / 100).toFixed(2)} USDC & Flash`)
               : paymentMethod === 'free'
                 ? (submitting ? 'Sending…' : 'Send Free Flash')
-                : (submitting ? 'Redirecting…' : `Pay €${(amountCents / 100).toFixed(2)} & Flash`)}
+                : (submitting ? 'Redirecting…' : `Pay $${(amountCents / 100).toFixed(2)} & Flash`)}
           </button>
 
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#2a2a2a', textAlign: 'center', marginTop: 10, lineHeight: 1.9 }}>

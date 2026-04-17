@@ -105,7 +105,7 @@ export async function POST(req: Request) {
   }
 
   if (method !== 'free' && (!amount_cents || amount_cents < 100)) {
-    return NextResponse.json({ error: 'Minimum flash amount is €1.00' }, { status: 400 });
+    return NextResponse.json({ error: 'Minimum flash amount is $1.00' }, { status: 400 });
   }
 
   const { data: profile } = await supabase
@@ -142,7 +142,7 @@ export async function POST(req: Request) {
         viewer_name,
         message: message.trim(),
         amount_cents: 0,
-        currency: 'eur',
+        currency: 'usd',
         status: 'pending',
         payment_method: 'free',
       })
@@ -164,7 +164,7 @@ export async function POST(req: Request) {
       viewer_name,
       message: message.trim(),
       amount_cents,
-      currency: 'eur',
+      currency: 'usd',
       status: 'pending',
       payment_method: method,
     })
@@ -205,7 +205,7 @@ export async function POST(req: Request) {
       line_items: [
         {
           price_data: {
-            currency: 'eur',
+            currency: 'usd',
             product_data: {
               name: `⚡ Flash to @${profile.username}`,
               description: truncatedMsg,

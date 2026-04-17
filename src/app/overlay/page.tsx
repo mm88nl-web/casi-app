@@ -312,7 +312,7 @@ function FlashFeed({ profileId }: { profileId: string }) {
               ⚡ {flash.viewer_name}
             </span>
             <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, background: 'rgba(var(--casi-accent-rgb),0.18)', color: 'var(--casi-accent)', border: '1px solid rgba(var(--casi-accent-rgb),0.35)', borderRadius: 20, padding: '1px 8px' }}>
-              €{(flash.amount_cents / 100).toFixed(2)}
+              ${(flash.amount_cents / 100).toFixed(2)}
             </span>
           </div>
           {/* iMessage-style bubble */}

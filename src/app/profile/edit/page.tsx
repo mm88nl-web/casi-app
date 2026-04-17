@@ -394,7 +394,7 @@ export default function ProfileEditPage() {
                   {stripeLoading ? 'Redirecting…' : stripeConnected ? '↗ Manage' : 'Connect →'}
                 </button>
               </div>
-              <div className="pe-hint">Accept card tips in EUR. Stripe takes ~2.9% + €0.25 per tip — CASI takes 0%. Payouts go directly to your bank.</div>
+              <div className="pe-hint">Accept card tips in USD. Stripe takes ~2.9% + $0.30 per tip — CASI takes 0%. Payouts go directly to your bank.</div>
             </div>
 
             {/* ── SOLANA WALLET ── */}

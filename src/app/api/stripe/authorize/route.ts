@@ -69,9 +69,9 @@ export async function POST(req: Request) {
       line_items: [
         {
           price_data: {
-            currency: 'eur',
+            currency: 'usd',
             product_data: {
-              name: `Beam slot — €${element.price_value}/${element.price_unit}`,
+              name: `Beam slot — $${element.price_value}/${element.price_unit}`,
               description: `${durationMinutes} min on ${profile.username}'s stream`,
             },
             unit_amount: amount,

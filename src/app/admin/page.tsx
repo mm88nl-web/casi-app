@@ -1646,7 +1646,7 @@ export default function AdminStudio() {
                             : <span className="tag t-dim">⌛ Awaiting payment</span>}
                           {isSolana
                             ? <span className="tag" style={{ background: 'rgba(153,69,255,0.12)', color: '#9945FF', border: '1px solid rgba(153,69,255,0.3)' }}>◎ {amountUsdc} USDC</span>
-                            : <span className="tag t-flash">€{(flash.amount_cents / 100).toFixed(2)}</span>}
+                            : <span className="tag t-flash">${(flash.amount_cents / 100).toFixed(2)}</span>}
                           <span className="tag t-dim">{flash.payment_method}</span>
                         </div>
                         <div className="req-msg">"{flash.message}"</div>
@@ -1656,7 +1656,7 @@ export default function AdminStudio() {
                             <span style={{ color: '#4ade80' }}>
                               {isSolana
                                 ? `◎ ${parseFloat(amountUsdc!).toFixed(2)} USDC → you · 100%`
-                                : `You receive €${(flash.amount_cents / 100).toFixed(2)} · 100%`}
+                                : `You receive $${(flash.amount_cents / 100).toFixed(2)} · 100%`}
                             </span>
                           )}
                           {flash.tx_signature && (

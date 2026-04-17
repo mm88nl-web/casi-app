@@ -193,7 +193,7 @@ export class CasiEscrowClient {
     const usdcMint    = params.usdcMint    ?? this.defaultMint();
     const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
-    const escrowIdBytes = Array.from(uuidToBytes(escrowId));
+    const escrowIdBytes = uuidToBytes(escrowId);
     const [escrowPda]   = deriveEscrowPda(escrowId);
     const viewer        = this.wallet.publicKey;
 
@@ -234,7 +234,7 @@ export class CasiEscrowClient {
     const usdcMint     = params.usdcMint     ?? this.defaultMint();
     const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
-    const escrowIdBytes = Array.from(uuidToBytes(escrowId));
+    const escrowIdBytes = uuidToBytes(escrowId);
     const [escrowPda]   = deriveEscrowPda(escrowId);
     const viewer        = this.wallet.publicKey;
 
@@ -274,7 +274,7 @@ export class CasiEscrowClient {
     const usdcMint    = params.usdcMint    ?? this.defaultMint();
     const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
-    const escrowIdBytes  = Array.from(uuidToBytes(escrowId));
+    const escrowIdBytes  = uuidToBytes(escrowId);
     const [escrowPda]    = deriveEscrowPda(escrowId);
     const vault          = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
     const streamerAta    = getAssociatedTokenAddressSync(usdcMint, streamer,  false, tokenProgram);
@@ -308,7 +308,7 @@ export class CasiEscrowClient {
     const usdcMint    = params.usdcMint    ?? this.defaultMint();
     const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
-    const escrowIdBytes = Array.from(uuidToBytes(escrowId));
+    const escrowIdBytes = uuidToBytes(escrowId);
     const [escrowPda]   = deriveEscrowPda(escrowId);
     const vault         = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
     const viewerAta     = getAssociatedTokenAddressSync(usdcMint, viewer,    false, tokenProgram);
@@ -344,7 +344,7 @@ export class CasiEscrowClient {
     const usdcMint    = params.usdcMint    ?? this.defaultMint();
     const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
-    const escrowIdBytes = Array.from(uuidToBytes(escrowId));
+    const escrowIdBytes = uuidToBytes(escrowId);
     const [escrowPda]   = deriveEscrowPda(escrowId);
     const viewer        = this.wallet.publicKey;
     const vault         = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
@@ -376,7 +376,7 @@ export class CasiEscrowClient {
     streamer: PublicKey;
   }): Promise<{ sig: string; solscanUrl: string }> {
     const { escrowId, streamer } = params;
-    const escrowIdBytes = Array.from(uuidToBytes(escrowId));
+    const escrowIdBytes = uuidToBytes(escrowId);
     const [escrowPda]   = deriveEscrowPda(escrowId);
 
     const sig = await (this.program.methods as any)
@@ -402,7 +402,7 @@ export class CasiEscrowClient {
     const usdcMint    = params.usdcMint    ?? this.defaultMint();
     const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
-    const escrowIdBytes = Array.from(uuidToBytes(escrowId));
+    const escrowIdBytes = uuidToBytes(escrowId);
     const [escrowPda]   = deriveEscrowPda(escrowId);
     const caller        = this.wallet.publicKey;
 
