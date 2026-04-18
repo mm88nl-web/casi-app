@@ -978,6 +978,35 @@ function OverlayContent() {
       const { formatEscrowError, isUserRejection } = await import('@/lib/casi-errors');
       console.error('[solana beam] initializeBeam failed:', err);
 
+      // Anchor's .rpc() rebroadcasts after Phantom already sent, so Solana
+      // rejects the retry with "already been processed". The first tx landed —
+      // verify the PDA exists and recover instead of marking the booking denied.
+      const msg = String((err as { message?: string })?.message ?? err);
+      if (msg.includes('already been processed')) {
+        try {
+          const { Connection } = await import('@solana/web3.js');
+          const { deriveEscrowPda } = await import('@/lib/casi-escrow');
+          const [escrowPda] = deriveEscrowPda(newBooking.id);
+          const info = await new Connection(SOLANA_RPC).getAccountInfo(escrowPda);
+          if (info) {
+            await supabase.from('bookings').update({
+              escrow_pda:    escrowPda.toBase58(),
+              viewer_wallet: publicKey.toBase58(),
+            }).eq('id', newBooking.id);
+            refreshWalletNav();
+            setTxStatus('waiting');
+            showNotif('◎ Payment locked — awaiting streamer approval!', 'success');
+            setShowConfirmModal(false);
+            closeSlot();
+            if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+            setSubmitting(false);
+            return;
+          }
+        } catch (recoverErr) {
+          console.error('[solana beam] recovery probe failed:', recoverErr);
+        }
+      }
+
       // Surface CasiError codes via the shared formatter; fall back to the
       // generic "payment failed" message so the UI never shows raw RPC noise.
       const userMsg = isUserRejection(err)
