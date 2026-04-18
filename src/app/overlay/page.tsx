@@ -856,17 +856,19 @@ function OverlayContent() {
     setTxStatus('booking');
     setTxError(null);
 
-    // Clean up any stale Solana-pending bookings that never got a stream
-    await supabase.from('bookings').update({ status: 'denied' })
-      .eq('profile_id', profile.id).eq('element_id', selectedSlot.id)
-      .eq('viewer_name', savedViewerName).eq('status', 'pending')
-      .eq('payment_method', 'solana').is('escrow_pda', null);
+    // Stale-pending cleanup + insert + cancel_token issuance happen
+    // server-side. The route stale-cleans the same (profile_id, element_id,
+    // viewer_name, payment_method='solana', no-escrow) set the overlay used
+    // to deny directly under bookings_update_anon, then issues a per-booking
+    // cancel_token used by the rest of this flow to authorize follow-up
+    // writes via /api/bookings/viewer-deny + /api/bookings/attach-solana-tx.
 
-    // Duplicate check
+    // Duplicate check (informational — server doesn't enforce this).
     if (!isExtend) {
       const { data: existing } = await supabase.from('bookings').select('id')
         .eq('profile_id', profile.id).eq('element_id', selectedSlot.id)
         .eq('viewer_name', savedViewerName).in('status', ['pending','active','approved_queued'])
+        .not('escrow_pda', 'is', null)
         .single();
       if (existing) {
         setSubmitting(false);
@@ -877,29 +879,34 @@ function OverlayContent() {
     }
 
     const currentQueue = queueCounts[selectedSlot.id] || 0;
-    const { data: newBooking, error: insertError } = await supabase.from('bookings').insert({
-      profile_id:    profile.id,
-      element_id:    selectedSlot.id,
-      viewer_name:   savedViewerName,
-      image_url:     effectiveSolImageUrl,
-      storage_path:  effectiveSolStoragePath,
-      file_type:     effectiveSolFileType,
-      message: isExtend ? `⏱ Extension request${message.trim() ? ' — ' + message.trim() : ''}` : (message.trim() || null),
-      duration_minutes: durationSeconds / 60,
-      price_value:   selectedSlot.price_value,
-      price_unit:    selectedSlot.price_unit,
-      status:        'pending',
-      payment_method: 'solana',
-      is_queued:     isQueue || isExtend,
-      queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
-    }).select().single();
-
-    if (insertError || !newBooking) {
-      showNotif('Failed to create booking', 'error');
-      setTxStatus('error'); setTxError('Failed to create booking');
+    const createRes = await fetch('/api/bookings/create-solana', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id:    profile.id,
+        element_id:    selectedSlot.id,
+        viewer_name:   savedViewerName,
+        image_url:     effectiveSolImageUrl,
+        storage_path:  effectiveSolStoragePath,
+        file_type:     effectiveSolFileType,
+        message: isExtend ? `⏱ Extension request${message.trim() ? ' — ' + message.trim() : ''}` : (message.trim() || null),
+        duration_minutes: durationSeconds / 60,
+        price_value:   selectedSlot.price_value,
+        price_unit:    selectedSlot.price_unit,
+        is_queued:     isQueue || isExtend,
+        queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
+      }),
+    });
+    const createBody = await createRes.json().catch(() => ({}));
+    if (!createRes.ok || !createBody?.booking_id) {
+      const reason = typeof createBody?.error === 'string' ? createBody.error : 'Failed to create booking';
+      showNotif(reason, 'error');
+      setTxStatus('error'); setTxError(reason);
       setSubmitting(false);
       return;
     }
+    const newBooking = { id: createBody.booking_id as string };
+    rememberBookingToken(newBooking.id, createBody.cancel_token as string);
 
     setTxStatus('streaming');
 
@@ -927,7 +934,7 @@ function OverlayContent() {
             : `Need devnet SOL for rent + fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.quicknode.com/solana/devnet`,
           'denied',
         );
-        await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
+        await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
         setSubmitting(false);
         return;
       }
@@ -944,7 +951,7 @@ function OverlayContent() {
             : 'No devnet USDC found (mint 4zMMC9…DU). Switch Phantom to Devnet then mint at spl-token-faucet.vercel.app',
           'denied',
         );
-        await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
+        await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
         setSubmitting(false);
         return;
       }
@@ -955,7 +962,7 @@ function OverlayContent() {
           `Insufficient USDC: you have ${usdcBalance.toFixed(2)}, need ${totalUsdc.toFixed(2)}`,
           'denied',
         );
-        await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
+        await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
         setSubmitting(false);
         return;
       }
@@ -991,12 +998,20 @@ function OverlayContent() {
       });
 
       // Persist on-chain state so the admin settle/cancel flows can rebuild
-      // the CPI accounts without re-fetching from chain.
-      await supabase.from('bookings').update({
-        tx_signature:  sig,
-        escrow_pda:    escrowPda,
-        viewer_wallet: publicKey.toBase58(),
-      }).eq('id', newBooking.id);
+      // the CPI accounts without re-fetching from chain. cancel_token-authed
+      // server route — anon UPDATE on tx_signature/escrow_pda/viewer_wallet
+      // is being phased out (see migration 20260421...).
+      await fetch('/api/bookings/attach-solana-tx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id:    newBooking.id,
+          cancel_token:  readBookingTokens()[newBooking.id],
+          tx_signature:  sig,
+          escrow_pda:    escrowPda,
+          viewer_wallet: publicKey.toBase58(),
+        }),
+      });
 
       setConfirmedTxId(sig);
       refreshWalletNav();
@@ -1020,10 +1035,16 @@ function OverlayContent() {
           const [escrowPda] = deriveEscrowPda(newBooking.id);
           const info = await new Connection(SOLANA_RPC).getAccountInfo(escrowPda);
           if (info) {
-            await supabase.from('bookings').update({
-              escrow_pda:    escrowPda.toBase58(),
-              viewer_wallet: publicKey.toBase58(),
-            }).eq('id', newBooking.id);
+            await fetch('/api/bookings/attach-solana-tx', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                booking_id:    newBooking.id,
+                cancel_token:  readBookingTokens()[newBooking.id],
+                escrow_pda:    escrowPda.toBase58(),
+                viewer_wallet: publicKey.toBase58(),
+              }),
+            });
             refreshWalletNav();
             setTxStatus('waiting');
             showNotif('◎ Payment locked — awaiting streamer approval!', 'success');
@@ -1044,7 +1065,7 @@ function OverlayContent() {
         ? 'Transaction rejected in wallet'
         : formatEscrowError(err);
 
-      await supabase.from('bookings').update({ status: 'denied' }).eq('id', newBooking.id);
+      await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
       setTxStatus('error'); setTxError(userMsg);
       showNotif(userMsg, 'denied');
     }
@@ -1121,10 +1142,18 @@ function OverlayContent() {
       showNotif(formatEscrowError(err), 'denied');
       return;
     }
-    // PDA is closed — hide the booking from the viewer's list.
-    await supabase.from('bookings')
-      .update({ status: 'denied', escrow_pda: null })
-      .eq('id', booking.id);
+    // PDA is closed — hide the booking from the viewer's list. cancel_token
+    // auth on /api/bookings/viewer-deny; null_escrow=true clears the pda
+    // pointer so the "recover" button doesn't keep showing.
+    await fetch('/api/bookings/viewer-deny', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        booking_id: booking.id,
+        cancel_token: readBookingTokens()[booking.id],
+        null_escrow: true,
+      }),
+    });
     refreshWalletNav();
     showNotif('◎ USDC returned to your wallet', 'warning');
     if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
