@@ -680,6 +680,7 @@ export default function AdminStudio() {
     measure();
     const ro = new ResizeObserver(() => measure());
     ro.observe(node);
+    return () => ro.disconnect();
   }, []);
 
   const toggleLive = async () => {
@@ -1560,9 +1561,12 @@ export default function AdminStudio() {
           </div>
         )}
 
-        {/* ── STUDIO ── */}
-        {view === 'studio' && (
-          <div className="studio-body">
+        {/* ── STUDIO ──
+            Always mounted, hidden via CSS when not active. Unmounting on tab
+            switch restarted canvas <SlotMedia> videos, reran the
+            ResizeObserver-driven dimension measurement, and reset Rnd
+            drag/resize state every time the user came back to studio. */}
+        <div className="studio-body" style={{ display: view === 'studio' ? undefined : 'none' }}>
 
             {/* Canvas */}
             <div className="canvas-wrap" ref={setMonitorRef}
@@ -1657,8 +1661,7 @@ export default function AdminStudio() {
                 ? 'Drag beam to move · Use arrows to nudge · Edit price inline'
                 : 'Tap a beam to select · Drag to move · Resize from corners'}
             </div>
-          </div>
-        )}
+        </div>
 
         {/* ── REQUESTS — separated by beam vs backdrop ── */}
         {view === 'requests' && (
