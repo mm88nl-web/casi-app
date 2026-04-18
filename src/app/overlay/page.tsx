@@ -707,31 +707,6 @@ function OverlayContent() {
   if (!savedViewerName || !hasMedia || !selectedSlot) return;
   setSubmitting(true);
 
-  // Clean up any stale unpaid pending bookings for this slot+viewer
-  await supabase
-    .from('bookings')
-    .update({ status: 'denied' })
-    .eq('profile_id', profile.id)
-    .eq('element_id', selectedSlot.id)
-    .eq('viewer_name', savedViewerName)
-    .eq('status', 'pending')
-    .is('payment_intent_id', null);
-
-  if (!isExtend) {
-  const { data: existing } = await supabase.from('bookings').select('id')
-    .eq('profile_id', profile.id)
-    .eq('element_id', selectedSlot.id)
-    .eq('viewer_name', savedViewerName)
-    .in('status', ['pending', 'active', 'approved_queued'])
-    .single();
-  if (existing) {
-    setSubmitting(false);
-    showNotif('You already have a booking for this slot', 'warning');
-    closeSlot();
-    return;
-  }
-}
-
   const currentQueue = queueCounts[selectedSlot.id] || 0;
   const effectiveImageUrl   = uploadMode === 'upload' ? uploadedUrl  : imageUrl;
   const effectiveStoragePath = uploadMode === 'upload' ? uploadedPath : null;
@@ -789,26 +764,48 @@ function OverlayContent() {
   }
 
   // ── PAID SLOT PATH ─────────────────────────────────────────────────────────
-  const { data: newBooking, error: insertError } = await supabase.from('bookings').insert({
-    profile_id:    profile.id,
-    element_id:    selectedSlot.id,
-    viewer_name:   savedViewerName,
-    image_url:     effectiveImageUrl,
-    storage_path:  effectiveStoragePath,
-    file_type:     effectiveFileType,
-    message: isExtend ? `⏱ Extension request${message.trim() ? ' — ' + message.trim() : ''}` : (message.trim() || null),
-    duration_minutes: durationSeconds / 60,
-    price_value:   selectedSlot.price_value,
-    price_unit:    selectedSlot.price_unit,
-    status:        'pending',
-    payment_method: 'stripe',
-    is_queued:     isQueue || isExtend,
-    queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
-  }).select().single();
-
-  if (insertError || !newBooking) {
-    console.error('Insert error:', insertError);
-    showNotif('Failed to create booking', 'error');
+  // Server-gated: stale-cleanup + duplicate-check + insert all run as
+  // service_role so anon no longer needs UPDATE or INSERT on bookings for
+  // Stripe rows. authorize() still mints the cancel_token right before the
+  // Checkout redirect.
+  let newBookingId: string;
+  try {
+    const createRes = await fetch('/api/bookings/create-stripe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id:       profile.id,
+        element_id:       selectedSlot.id,
+        viewer_name:      savedViewerName,
+        image_url:        effectiveImageUrl,
+        storage_path:     effectiveStoragePath,
+        file_type:        effectiveFileType,
+        message: isExtend ? `⏱ Extension request${message.trim() ? ' — ' + message.trim() : ''}` : (message.trim() || null),
+        duration_minutes: durationSeconds / 60,
+        price_value:      selectedSlot.price_value,
+        price_unit:       selectedSlot.price_unit,
+        is_queued:        isQueue || isExtend,
+        queue_position:   (isQueue || isExtend) ? currentQueue + 1 : null,
+        is_extend:        isExtend,
+      }),
+    });
+    const createJson = await createRes.json().catch(() => ({}));
+    if (!createRes.ok || !createJson.booking_id) {
+      if (createJson.error === 'already_booked') {
+        setSubmitting(false);
+        showNotif('You already have a booking for this slot', 'warning');
+        closeSlot();
+        return;
+      }
+      console.error('create-stripe error:', createJson.error);
+      showNotif(createJson.error || 'Failed to create booking', 'error');
+      setSubmitting(false);
+      return;
+    }
+    newBookingId = createJson.booking_id as string;
+  } catch (err) {
+    console.error('create-stripe fetch failed:', err);
+    showNotif('Server error. Please try again.', 'error');
     setSubmitting(false);
     return;
   }
@@ -817,13 +814,13 @@ function OverlayContent() {
     const res = await fetch('/api/stripe/authorize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ booking_id: newBooking.id }),
+      body: JSON.stringify({ booking_id: newBookingId }),
     });
     const json = await res.json();
     if (json.checkout_url) {
       // Store the cancel_token BEFORE navigating away — we won't get another
       // chance once Stripe Checkout takes over the page.
-      if (json.cancel_token) rememberBookingToken(newBooking.id, json.cancel_token);
+      if (json.cancel_token) rememberBookingToken(newBookingId, json.cancel_token);
       window.location.href = json.checkout_url;
     } else {
       console.error('Stripe error:', json.error);
