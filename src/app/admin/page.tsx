@@ -26,6 +26,23 @@ function Logo({ scale = 0.38, color = 'var(--casi-accent)', bg = 'var(--casi-bg)
   );
 }
 
+/* ── SlotMedia: renders <video> for videos, <img> otherwise. ── */
+// Admin canvas + request cards show whatever the viewer uploaded. Overlay
+// already branches on file_type; admin used <img> everywhere, so mp4/webm
+// uploads showed as broken images on the streamer's side.
+function SlotMedia({ src, fileType, style, alt = '' }: {
+  src: string | null | undefined;
+  fileType?: string | null;
+  style?: React.CSSProperties;
+  alt?: string;
+}) {
+  if (!src) return null;
+  const isVideo = fileType === 'video' || /\.(mp4|webm|mov|ogv)(\?|$)/i.test(src);
+  return isVideo
+    ? <video src={src} autoPlay loop muted playsInline style={style} />
+    : <img src={src} style={style} alt={alt} />;
+}
+
 /* ── Helpers ── */
 function getSecondsRemaining(booking: any): number {
   if (!booking?.started_at || !booking?.duration_minutes) return 0;
@@ -239,7 +256,7 @@ function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLo
             <div style={{ background: 'rgba(var(--casi-accent2-rgb),0.06)', border: '1px solid rgba(var(--casi-accent2-rgb),0.2)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
                 <div style={{ width: 40, height: 40, borderRadius: 8, border: '1px solid #222', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {activeBooking.image_url && <img src={activeBooking.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" />}
+                  {activeBooking.image_url && <SlotMedia src={activeBooking.image_url} fileType={activeBooking.file_type} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
                 </div>
                 <div>
                   <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, color: 'var(--casi-text)', fontSize: 14 }}>● {activeBooking.viewer_name}</div>
@@ -271,7 +288,7 @@ function SlotInfoPanel({ el, activeBooking, queueBookings, onClose, onKick, onLo
                 <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(var(--casi-accent-rgb),0.05)', border: '1px solid rgba(var(--casi-accent-rgb),0.12)', borderRadius: 8, padding: '8px 12px', marginBottom: 6 }}>
                   <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(var(--casi-accent-rgb),0.4)', minWidth: 20 }}>#{idx + 1}</span>
                   <div style={{ width: 20, height: 20, borderRadius: 4, overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
-                    {b.image_url && <img src={b.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" />}
+                    {b.image_url && <SlotMedia src={b.image_url} fileType={b.file_type} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
                   </div>
                   <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 600, color: 'var(--casi-text)', flex: 1 }}>{b.viewer_name}</span>
                   <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>{b.duration_minutes}m</span>
@@ -423,7 +440,7 @@ function BeamCtrlPanel({ el, activeBooking, updateSlider, updateLayer, toggleLoc
         <div style={{ display:'flex', alignItems:'center', gap:10, background:'rgba(var(--casi-accent2-rgb),0.06)', border:'1px solid rgba(var(--casi-accent2-rgb),0.2)', borderRadius:8, padding:'8px 12px', flexWrap:'wrap' }}>
           {activeBooking.image_url && (
             <div style={{ width:24, height:24, borderRadius:4, overflow:'hidden', flexShrink:0 }}>
-              <img src={activeBooking.image_url} style={{ width:'100%', height:'100%', objectFit:'contain' }} alt="" />
+              <SlotMedia src={activeBooking.image_url} fileType={activeBooking.file_type} style={{ width:'100%', height:'100%', objectFit:'contain' }} />
             </div>
           )}
           <span style={{ fontFamily:"'Syne',sans-serif", fontSize:12, fontWeight:700, color:'var(--casi-accent2)' }}>● {activeBooking.viewer_name}</span>
@@ -1380,7 +1397,7 @@ export default function AdminStudio() {
                 <button onClick={() => setPreviewBooking(null)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
               </div>
               <div style={{ aspectRatio: '16/9', background: 'var(--casi-bg)', border: '1px solid #1c1c1c', borderRadius: 10, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-                {previewBooking.image_url ? <img src={previewBooking.image_url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} alt="" /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#333' }}>No image</span>}
+                {previewBooking.image_url ? <SlotMedia src={previewBooking.image_url} fileType={previewBooking.file_type} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#333' }}>No image</span>}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
                 {[['From', previewBooking.viewer_name, 'var(--casi-text)'], ['Price', `$${previewBooking.price_value}/${previewBooking.price_unit}`, 'var(--casi-accent2)'], ['Duration', fmtDuration(previewBooking.duration_minutes), 'var(--casi-text)'], ['Total', `$${calcTotal(previewBooking)}`, '#4ade80']].map(([l, v, c]) => (
@@ -1529,7 +1546,7 @@ export default function AdminStudio() {
               const isBackdrop = isBackdropBooking(booking);
               return (
                 <div key={booking.id} className="beam-chip" onClick={() => setSelectedSlotId(booking.element_id)}>
-                  {booking.image_url && <img src={booking.image_url} style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }} alt="" />}
+                  {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }} />}
                   <div>
                     <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 600, color: 'var(--casi-text)' }}>{booking.viewer_name}</div>
                     <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: isBackdrop ? 'rgba(192,132,252,0.6)' : 'rgba(var(--casi-accent2-rgb),0.6)', letterSpacing: 1 }}>
@@ -1598,7 +1615,7 @@ export default function AdminStudio() {
                           {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : 'var(--casi-accent)' }}>${el.price_value}/{el.price_unit}</span>}
                         </div>
                       ) : (
-                        <img src={el.image_url} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'fill', pointerEvents: 'none' }} alt="" />
+                        <SlotMedia src={el.image_url} fileType={null} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'fill', pointerEvents: 'none' }} />
                       )}
                       {/* Selection glow */}
                       {isSelected && !el.is_background && (
@@ -1727,7 +1744,7 @@ export default function AdminStudio() {
                       return (
                         <div key={booking.id} className="req-card c-active">
                           <div style={{ width: 64, height: 64, borderRadius: 10, border: '1px solid rgba(var(--casi-accent2-rgb),0.2)', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
-                            {booking.image_url && <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" />}
+                            {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)', marginBottom: 4 }}>{booking.viewer_name}</div>
@@ -1768,7 +1785,7 @@ export default function AdminStudio() {
       <div key={booking.id} className="req-card c-queued">
         <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 500, color: 'rgba(var(--casi-accent-rgb),0.3)', minWidth: 28 }}>#{getQueuePosition(booking)}</span>
         <div style={{ width: 52, height: 52, borderRadius: 8, border: '1px solid rgba(var(--casi-accent-rgb),0.15)', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
-          {booking.image_url && <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" />}
+          {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: 'var(--casi-text)', marginBottom: 3 }}>{booking.viewer_name}</div>
@@ -1824,7 +1841,7 @@ export default function AdminStudio() {
                     {pendingBeams.map(booking => (
                       <div key={booking.id} className="req-card">
                         <button className="req-thumb" onClick={() => setPreviewBooking(booking)}>
-                          {booking.image_url ? <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
+                          {booking.image_url ? <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
                         </button>
                         <div className="req-info">
                           <div className="req-name">{booking.viewer_name}</div>
@@ -1860,7 +1877,7 @@ export default function AdminStudio() {
                     {queuedBeams.map(booking => (
                       <div key={booking.id} className="req-card" style={{ borderColor: 'rgba(var(--casi-accent-rgb),0.12)', background: 'rgba(245,130,32,0.03)' }}>
                         <button className="req-thumb" onClick={() => setPreviewBooking(booking)}>
-                          {booking.image_url ? <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
+                          {booking.image_url ? <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
                         </button>
                         <div className="req-info">
                           <div className="req-name">{booking.viewer_name}</div>
@@ -1911,7 +1928,7 @@ export default function AdminStudio() {
                     {activeBackdrop.map(booking => (
                       <div key={booking.id} className="req-card c-backdrop-active">
                         <div style={{ width: 64, height: 64, borderRadius: 10, border: '1px solid rgba(192,132,252,0.2)', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
-                          {booking.image_url && <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />}
+                          {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)', marginBottom: 4 }}>{booking.viewer_name}</div>
@@ -1934,7 +1951,7 @@ export default function AdminStudio() {
       <div key={booking.id} className="req-card c-backdrop-queue">
         <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 500, color: 'rgba(192,132,252,0.3)', minWidth: 28 }}>#{getQueuePosition(booking)}</span>
         <div style={{ width: 52, height: 52, borderRadius: 8, border: '1px solid rgba(192,132,252,0.15)', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
-          {booking.image_url && <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />}
+          {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: 'var(--casi-text)', marginBottom: 3 }}>{booking.viewer_name}</div>
@@ -1984,7 +2001,7 @@ export default function AdminStudio() {
                     {pendingBackdrop.map(booking => (
                       <div key={booking.id} className="req-card">
                         <button className="req-thumb" onClick={() => setPreviewBooking(booking)}>
-                          {booking.image_url ? <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
+                          {booking.image_url ? <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
                         </button>
                         <div className="req-info">
                           <div className="req-name">{booking.viewer_name}</div>
@@ -2014,7 +2031,7 @@ export default function AdminStudio() {
                     {queuedBackdrop.map(booking => (
                       <div key={booking.id} className="req-card c-backdrop-queue">
                         <button className="req-thumb" onClick={() => setPreviewBooking(booking)}>
-                          {booking.image_url ? <img src={booking.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
+                          {booking.image_url ? <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
                         </button>
                         <div className="req-info">
                           <div className="req-name">{booking.viewer_name}</div>
