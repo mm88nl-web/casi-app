@@ -37,6 +37,7 @@ import {
   getAssociatedTokenAddressSync,
 } from '@solana/spl-token';
 import type { AnchorWallet } from '@solana/wallet-adapter-react';
+import { sha256 } from '@noble/hashes/sha256';
 import IDL from '@/idl/casi_escrow.json';
 
 // ---------------------------------------------------------------------------
@@ -77,25 +78,25 @@ const ESCROW_SEED = Buffer.from('casi-escrow');
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Convert a UUID string ("xxxxxxxx-xxxx-…") to a 32-byte Uint8Array seed. */
-export function uuidToBytes(uuid: string): Uint8Array {
-  if (typeof uuid !== 'string') {
-    throw new Error(
-      `uuidToBytes: expected string, got ${typeof uuid} (${JSON.stringify(uuid)?.slice(0, 120)})`,
-    );
+/**
+ * Derive a 32-byte escrow seed from any booking/flash id.
+ *
+ * The Anchor program treats `escrow_id` as 32 opaque bytes used as a PDA
+ * seed — it doesn't care about the shape of the source id. Supabase returns
+ * `bookings.id` as a number (bigint column) and `flashes.id` as a uuid
+ * string; SHA-256-ing the stringified id gives a stable 32-byte seed for
+ * either shape, so both rails derive the same PDA client and server side.
+ */
+export function uuidToBytes(id: string | number | bigint): Uint8Array {
+  if (id === null || id === undefined) {
+    throw new Error(`uuidToBytes: id is ${id}`);
   }
-  const hex = uuid.replace(/-/g, '');
-  if (hex.length !== 32) throw new Error(`Invalid UUID: ${uuid}`);
-  const bytes = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
+  return sha256(String(id));
 }
 
-/** Derive the escrow PDA address from a UUID string or raw bytes. */
+/** Derive the escrow PDA address from a booking/flash id or raw bytes. */
 export function deriveEscrowPda(
-  escrowId: string | Uint8Array,
+  escrowId: string | number | bigint | Uint8Array,
   programId: PublicKey = PROGRAM_ID,
 ): [PublicKey, number] {
   const idBytes =
@@ -124,7 +125,7 @@ export function solscanAccountUrl(
 // ---------------------------------------------------------------------------
 
 export interface InitFlashParams {
-  escrowId:  string;
+  escrowId:  string | number | bigint;
   streamer:  PublicKey;
   /** USDC micro-units (1 USDC = 1_000_000). */
   amountUsdc: number;
@@ -134,7 +135,7 @@ export interface InitFlashParams {
 }
 
 export interface InitBeamParams {
-  escrowId:  string;
+  escrowId:  string | number | bigint;
   streamer:  PublicKey;
   /** USDC micro-units (1 USDC = 1_000_000). */
   amountUsdc: number;
@@ -145,7 +146,7 @@ export interface InitBeamParams {
 }
 
 export interface ModerateFlashParams {
-  escrowId:    string;
+  escrowId:    string | number | bigint;
   viewer:      PublicKey;
   streamer:    PublicKey;
   usdcMint?:   PublicKey;
@@ -341,7 +342,7 @@ export class CasiEscrowClient {
   // -------------------------------------------------------------------------
 
   async cancelEscrow(params: {
-    escrowId:    string;
+    escrowId:    string | number | bigint;
     usdcMint?:   PublicKey;
     tokenProgram?: PublicKey;
   }): Promise<{ sig: string; solscanUrl: string }> {
@@ -377,7 +378,7 @@ export class CasiEscrowClient {
   // -------------------------------------------------------------------------
 
   async startBeam(params: {
-    escrowId: string;
+    escrowId: string | number | bigint;
     streamer: PublicKey;
   }): Promise<{ sig: string; solscanUrl: string }> {
     const { escrowId, streamer } = params;
@@ -397,7 +398,7 @@ export class CasiEscrowClient {
   // -------------------------------------------------------------------------
 
   async settleBeam(params: {
-    escrowId:    string;
+    escrowId:    string | number | bigint;
     viewer:      PublicKey;
     streamer:    PublicKey;
     usdcMint?:   PublicKey;

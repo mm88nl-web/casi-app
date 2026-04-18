@@ -43,17 +43,14 @@ function getProgramId(): PublicKey {
   return _programId;
 }
 
-function uuidToBytes(uuid: string): Uint8Array {
-  const hex = uuid.replace(/-/g, '');
-  if (hex.length !== 32) throw new Error(`Invalid UUID: ${uuid}`);
-  const bytes = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
+// Kept in lockstep with `uuidToBytes` in src/lib/casi-escrow.ts. The Anchor
+// program treats escrow_id as 32 opaque bytes; SHA-256-ing the stringified
+// id works whether flashes.id is a uuid string or bookings.id is a bigint.
+function uuidToBytes(id: string | number | bigint): Uint8Array {
+  return createHash('sha256').update(String(id)).digest();
 }
 
-function deriveEscrowPda(flashId: string): PublicKey {
+function deriveEscrowPda(flashId: string | number | bigint): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
     [ESCROW_SEED, uuidToBytes(flashId)],
     getProgramId(),
