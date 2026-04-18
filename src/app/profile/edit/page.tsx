@@ -172,10 +172,13 @@ export default function ProfileEditPage() {
 
     // Register with Helius so this streamer's payments are watched automatically
     // Fire-and-forget — a misconfigured Helius key shouldn't block the save UX
+    const { data: { session } } = await supabase.auth.getSession();
     fetch('/api/solana/sync-webhook', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token ?? ''}`,
+      },
     }).catch(err => console.warn('[sync-webhook]', err));
 
     setSavingWallet(false);

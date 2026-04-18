@@ -553,10 +553,13 @@ export default function AdminStudio() {
     if (saveError) { setSavingWallet(false); return; }
     setSolanaWallet(address);
     setProfile((p: any) => ({ ...p, solana_wallet: address }));
+    const { data: { session } } = await supabase.auth.getSession();
     fetch('/api/solana/sync-webhook', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token ?? ''}`,
+      },
     }).catch(() => {});
     setSavingWallet(false);
     setWalletSaved(true);
