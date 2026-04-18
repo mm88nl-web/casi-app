@@ -64,6 +64,30 @@ function Countdown({ booking, onWarning, onExpire }: { booking: any; onWarning?:
 }
 
 const VIEWER_NAME_KEY = 'casi_viewer_name';
+// Per-booking cancel_tokens keyed by booking_id. Stored here so the viewer
+// (who is anonymous) can later prove ownership to /api/stripe/cancel without
+// relying on the publicly-readable viewer_name column.
+const BOOKING_TOKENS_KEY = 'casi_booking_tokens';
+function readBookingTokens(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(BOOKING_TOKENS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+function rememberBookingToken(bookingId: string, token: string) {
+  try {
+    const map = readBookingTokens();
+    map[bookingId] = token;
+    localStorage.setItem(BOOKING_TOKENS_KEY, JSON.stringify(map));
+  } catch {}
+}
+function forgetBookingToken(bookingId: string) {
+  try {
+    const map = readBookingTokens();
+    delete map[bookingId];
+    localStorage.setItem(BOOKING_TOKENS_KEY, JSON.stringify(map));
+  } catch {}
+}
 const ADJECTIVES = ['Cool','Fast','Bold','Wild','Epic','Slick','Dark','Neon','Hyper','Ultra','Turbo','Mega','Swift','Storm','Blaze'];
 const ANIMALS    = ['Tiger','Panda','Fox','Wolf','Hawk','Bear','Shark','Eagle','Viper','Lynx','Raven','Cobra','Falcon','Bison','Orca'];
 function generateRandomName() {
@@ -583,16 +607,22 @@ function OverlayContent() {
 
   const cancelBooking = async (bookingId: string) => {
   setCancelling(bookingId);
-  // Call cancel API which handles both Stripe + DB. Viewer is anonymous, so
-  // we echo back the stored viewer_name — the server checks it matches the
-  // booking row as a cheap ownership signal. See stripe/cancel/route.ts.
-  await fetch('/api/stripe/cancel', {
+  // Viewer is anonymous, so we prove ownership with the per-booking
+  // cancel_token handed to us by /api/stripe/authorize or /bookings/create-free
+  // and stashed in localStorage. See stripe/cancel/route.ts.
+  const cancelToken = readBookingTokens()[bookingId];
+  const res = await fetch('/api/stripe/cancel', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ booking_id: bookingId, viewer_name: savedViewerName }),
+    body: JSON.stringify({ booking_id: bookingId, cancel_token: cancelToken }),
   });
   setCancelling(null);
-  showNotif('Booking cancelled', 'warning');
+  if (res.ok) {
+    forgetBookingToken(bookingId);
+    showNotif('Booking cancelled', 'warning');
+  } else {
+    showNotif('Cancel failed — the streamer can still deny this request', 'error');
+  }
   if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
 };
 
@@ -749,6 +779,9 @@ function OverlayContent() {
         setSubmitting(false);
         return;
       }
+      if (json.booking_id && json.cancel_token) {
+        rememberBookingToken(json.booking_id, json.cancel_token);
+      }
       showNotif('★ Free request sent — awaiting streamer approval', 'success');
       setSubmitting(false);
       closeSlot();
@@ -793,6 +826,9 @@ function OverlayContent() {
     });
     const json = await res.json();
     if (json.checkout_url) {
+      // Store the cancel_token BEFORE navigating away — we won't get another
+      // chance once Stripe Checkout takes over the page.
+      if (json.cancel_token) rememberBookingToken(newBooking.id, json.cancel_token);
       window.location.href = json.checkout_url;
     } else {
       console.error('Stripe error:', json.error);

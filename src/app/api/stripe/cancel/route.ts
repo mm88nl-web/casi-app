@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { timingSafeEqual } from 'node:crypto';
 import { stripe } from '@/lib/stripe';
 
 const supabase = createClient(
@@ -13,24 +14,33 @@ const supabase = createClient(
  * Two caller types:
  *   1. Streamer (admin page) — presents a Supabase bearer token. Allowed to
  *      cancel any booking on their own profile.
- *   2. Viewer (overlay page) — anonymous, but must echo back the booking's
- *      viewer_name. This raises the bar beyond "enumerate booking_id and DoS
- *      everyone's bookings". A future cancel_token on the booking row would
- *      be stronger — tracked for the subscription refactor.
+ *   2. Viewer (overlay page) — anonymous, but must present the booking's
+ *      cancel_token (random UUID issued once by /api/stripe/authorize or
+ *      /api/bookings/create-free and stored in the viewer's localStorage).
+ *      viewer_name was previously used here but is publicly readable via
+ *      bookings_select_public, which allowed mass enumeration + cancel.
  *
  * Direct Charges note: PaymentIntents live on the streamer's connected
  * account (see stripe/authorize/route.ts), so every Stripe call here must
  * pass { stripeAccount } to target the right account.
  */
+function tokensMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
 export async function POST(req: Request) {
-  const { booking_id, viewer_name: claimedViewerName } = await req.json();
+  const { booking_id, cancel_token: claimedToken } = await req.json();
   if (!booking_id) {
     return NextResponse.json({ error: 'booking_id required' }, { status: 400 });
   }
 
   const { data: booking } = await supabase
     .from('bookings')
-    .select('id, profile_id, payment_intent_id, status, viewer_name')
+    .select('id, profile_id, payment_intent_id, status, cancel_token')
     .eq('id', booking_id)
     .single();
 
@@ -38,7 +48,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
 
-  // ── Authz: streamer-token OR viewer_name match ──────────────────────────
+  // ── Authz: streamer-token OR viewer cancel_token match ──────────────────
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
   let authorized = false;
 
@@ -46,7 +56,7 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser(token);
     if (user && user.id === booking.profile_id) authorized = true;
   }
-  if (!authorized && claimedViewerName && booking.viewer_name === claimedViewerName) {
+  if (!authorized && tokensMatch(claimedToken, booking.cancel_token)) {
     authorized = true;
   }
   if (!authorized) {

@@ -16,7 +16,7 @@
  */
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { moderateText, LIMITS } from '@/lib/content-moderation';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 
@@ -145,6 +145,11 @@ export async function POST(req: Request) {
     );
   }
 
+  // cancel_token: see stripe/authorize/route.ts — random secret returned
+  // once to the viewer so /api/stripe/cancel can authorize viewer-branch
+  // cancellation without trusting the public viewer_name column.
+  const cancelToken = randomUUID();
+
   const { data: booking, error: insertErr } = await supabase
     .from('bookings')
     .insert({
@@ -162,6 +167,7 @@ export async function POST(req: Request) {
       payment_method: 'free',
       is_queued: !!is_queued,
       queue_position: is_queued ? queue_position ?? null : null,
+      cancel_token: cancelToken,
     })
     .select('id')
     .single();
@@ -171,5 +177,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
   }
 
-  return NextResponse.json({ booking_id: booking.id });
+  return NextResponse.json({ booking_id: booking.id, cancel_token: cancelToken });
 }
