@@ -1,157 +1,1432 @@
 {
-  "address": "6utjMbb5ovFHUdMcMWaGc5ovmVhLryVRLEzYPWzeBosg",
+  "address": "Dkai2s6Rwreyh51bajqLYMJdfHE6Gonwz9vFw6joUfRd",
   "metadata": {
     "name": "casi_escrow",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "CASI Escrow — Flash and Beam. Follows audited solana-developers/program-examples token_interface pattern."
+    "description": "CASI Escrow Program — Flash and Beam payment escrow for Solana"
   },
   "instructions": [
     {
-      "name": "initialize_escrow",
-      "discriminator": [243,160,77,153,11,92,48,209],
-      "accounts": [
-        { "name": "viewer",                   "writable": true, "signer": true },
-        { "name": "streamer" },
-        { "name": "escrow_state",             "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "escrow_id" }] } },
-        { "name": "vault",                    "writable": true },
-        { "name": "viewer_ata",               "writable": true },
-        { "name": "usdc_mint" },
-        { "name": "token_program" },
-        { "name": "associated_token_program", "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bh6" },
-        { "name": "system_program",           "address": "11111111111111111111111111111111" }
-      ],
-      "args": [
-        { "name": "escrow_id",       "type": { "array": ["u8", 32] } },
-        { "name": "amount",          "type": "u64" },
-        { "name": "duration_secs",   "type": "u64" },
-        { "name": "escrow_type_val", "type": "u8" }
-      ]
-    },
-    {
       "name": "approve_flash",
-      "discriminator": [147,245,112,105,129,130,96,236],
+      "docs": [
+        "Streamer approves a Flash: full amount → streamer ATA.",
+        "Vault + EscrowState are closed; rent returned to streamer."
+      ],
+      "discriminator": [
+        147,
+        245,
+        112,
+        105,
+        129,
+        130,
+        96,
+        236
+      ],
       "accounts": [
-        { "name": "streamer",                 "writable": true, "signer": true },
-        { "name": "viewer",                   "writable": true },
-        { "name": "escrow_state",             "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "escrow_id" }] } },
-        { "name": "vault",                    "writable": true },
-        { "name": "streamer_ata",             "writable": true },
-        { "name": "usdc_mint" },
-        { "name": "token_program" },
-        { "name": "associated_token_program", "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bh6" },
-        { "name": "system_program",           "address": "11111111111111111111111111111111" }
+        {
+          "name": "streamer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "escrow_state"
+          ]
+        },
+        {
+          "name": "viewer",
+          "docs": [
+            "the full party set for indexing/event-matching; not read on-chain."
+          ],
+          "writable": true
+        },
+        {
+          "name": "escrow_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "streamer_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "streamer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
       ],
       "args": [
-        { "name": "escrow_id", "type": { "array": ["u8", 32] } }
-      ]
-    },
-    {
-      "name": "deny_flash",
-      "discriminator": [29,88,56,249,152,228,136,97],
-      "accounts": [
-        { "name": "streamer",                 "signer": true },
-        { "name": "viewer",                   "writable": true },
-        { "name": "escrow_state",             "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "escrow_id" }] } },
-        { "name": "vault",                    "writable": true },
-        { "name": "viewer_ata",               "writable": true },
-        { "name": "usdc_mint" },
-        { "name": "token_program" },
-        { "name": "associated_token_program", "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bh6" },
-        { "name": "system_program",           "address": "11111111111111111111111111111111" }
-      ],
-      "args": [
-        { "name": "escrow_id", "type": { "array": ["u8", 32] } }
+        {
+          "name": "escrow_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
       ]
     },
     {
       "name": "cancel_escrow",
-      "discriminator": [156,203,54,179,38,72,33,21],
+      "docs": [
+        "Viewer cancels a pending Flash or Beam before the streamer acts.",
+        "Full refund; vault + EscrowState closed; rent returned to viewer."
+      ],
+      "discriminator": [
+        156,
+        203,
+        54,
+        179,
+        38,
+        72,
+        33,
+        21
+      ],
       "accounts": [
-        { "name": "viewer",                   "writable": true, "signer": true },
-        { "name": "escrow_state",             "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "escrow_id" }] } },
-        { "name": "vault",                    "writable": true },
-        { "name": "viewer_ata",               "writable": true },
-        { "name": "usdc_mint" },
-        { "name": "token_program" },
-        { "name": "associated_token_program", "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bh6" },
-        { "name": "system_program",           "address": "11111111111111111111111111111111" }
+        {
+          "name": "viewer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "escrow_state"
+          ]
+        },
+        {
+          "name": "escrow_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "viewer_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "viewer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
       ],
       "args": [
-        { "name": "escrow_id", "type": { "array": ["u8", 32] } }
+        {
+          "name": "escrow_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
       ]
     },
     {
-      "name": "start_beam",
-      "discriminator": [187,39,92,123,231,162,107,84],
+      "name": "deny_flash",
+      "docs": [
+        "Streamer denies a Flash: full refund to viewer.",
+        "Vault + EscrowState are closed; rent returned to viewer."
+      ],
+      "discriminator": [
+        29,
+        88,
+        56,
+        249,
+        152,
+        228,
+        136,
+        97
+      ],
       "accounts": [
-        { "name": "streamer",     "signer": true },
-        { "name": "escrow_state", "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "_escrow_id" }] } }
+        {
+          "name": "streamer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "escrow_state"
+          ]
+        },
+        {
+          "name": "viewer",
+          "writable": true,
+          "relations": [
+            "escrow_state"
+          ]
+        },
+        {
+          "name": "escrow_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "viewer_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "viewer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
       ],
       "args": [
-        { "name": "_escrow_id", "type": { "array": ["u8", 32] } }
+        {
+          "name": "escrow_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize_escrow",
+      "docs": [
+        "Viewer locks USDC into a PDA-owned vault ATA.",
+        "",
+        "* `escrow_id`       — 32-byte UUID; used as PDA seed and stored for signing.",
+        "* `amount`          — USDC micro-units (6 decimals; 1 USDC = 1_000_000).",
+        "* `duration_secs`   — 0 for Flash, > 0 for Beam.",
+        "* `escrow_type_val` — 0 = Flash, 1 = Beam."
+      ],
+      "discriminator": [
+        243,
+        160,
+        77,
+        153,
+        11,
+        92,
+        48,
+        209
+      ],
+      "accounts": [
+        {
+          "name": "viewer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "streamer"
+        },
+        {
+          "name": "escrow_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "PDA-owned vault ATA — holds viewer's USDC during escrow."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "viewer_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "viewer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "escrow_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "duration_secs",
+          "type": "u64"
+        },
+        {
+          "name": "escrow_type_val",
+          "type": "u8"
+        }
       ]
     },
     {
       "name": "settle_beam",
-      "discriminator": [168,38,48,236,91,235,124,50],
+      "docs": [
+        "Beam settlement.",
+        "",
+        "* Before `duration` elapses: only `streamer` or `viewer` may call — either",
+        "party can end the stream early and accept the pro-rata split.",
+        "* After `duration` elapses: permissionless (anyone may crank), so funds",
+        "can always be released even if both parties go offline.",
+        "",
+        "Integer proration: vested = total × min(elapsed, duration) / duration.",
+        "Streamer receives the full vested portion; remainder refunded to viewer.",
+        "Vault + EscrowState closed; rent returned to streamer."
+      ],
+      "discriminator": [
+        168,
+        38,
+        48,
+        236,
+        91,
+        235,
+        124,
+        50
+      ],
       "accounts": [
-        { "name": "caller",                   "writable": true, "signer": true },
-        { "name": "streamer",                 "writable": true },
-        { "name": "viewer",                   "writable": true },
-        { "name": "escrow_state",             "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [99,97,115,105,45,101,115,99,114,111,119] }, { "kind": "arg", "path": "escrow_id" }] } },
-        { "name": "vault",                    "writable": true },
-        { "name": "streamer_ata",             "writable": true },
-        { "name": "viewer_ata",               "writable": true },
-        { "name": "usdc_mint" },
-        { "name": "token_program" },
-        { "name": "associated_token_program", "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bh6" },
-        { "name": "system_program",           "address": "11111111111111111111111111111111" }
+        {
+          "name": "caller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "streamer",
+          "writable": true,
+          "relations": [
+            "escrow_state"
+          ]
+        },
+        {
+          "name": "viewer",
+          "writable": true,
+          "relations": [
+            "escrow_state"
+          ]
+        },
+        {
+          "name": "escrow_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "streamer_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "streamer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "viewer_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "viewer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
       ],
       "args": [
-        { "name": "escrow_id", "type": { "array": ["u8", 32] } }
+        {
+          "name": "escrow_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "start_beam",
+      "docs": [
+        "Streamer starts a Beam: records `start_timestamp`, sets status → Active."
+      ],
+      "discriminator": [
+        187,
+        39,
+        92,
+        123,
+        231,
+        162,
+        107,
+        84
+      ],
+      "accounts": [
+        {
+          "name": "streamer",
+          "signer": true,
+          "relations": [
+            "escrow_state"
+          ]
+        },
+        {
+          "name": "escrow_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "_escrow_id"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "_escrow_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
       ]
     }
   ],
   "accounts": [
-    { "name": "EscrowState", "discriminator": [0,0,0,0,0,0,0,0] }
+    {
+      "name": "EscrowState",
+      "discriminator": [
+        19,
+        90,
+        148,
+        111,
+        55,
+        130,
+        229,
+        108
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "BeamSettled",
+      "discriminator": [
+        27,
+        240,
+        23,
+        237,
+        102,
+        244,
+        150,
+        202
+      ]
+    },
+    {
+      "name": "EscrowInitialized",
+      "discriminator": [
+        222,
+        186,
+        157,
+        47,
+        145,
+        142,
+        176,
+        248
+      ]
+    },
+    {
+      "name": "FlashSettled",
+      "discriminator": [
+        187,
+        173,
+        214,
+        193,
+        111,
+        212,
+        137,
+        53
+      ]
+    }
   ],
   "errors": [
-    { "code": 6000, "name": "InvalidAmount",    "msg": "Amount must be greater than zero" },
-    { "code": 6001, "name": "InvalidDuration",  "msg": "Duration must be > 0 for Beam escrows" },
-    { "code": 6002, "name": "InvalidEscrowType","msg": "Invalid escrow type — expected 0 (Flash) or 1 (Beam)" },
-    { "code": 6003, "name": "Unauthorized",     "msg": "Caller is not the authorized party for this escrow" },
-    { "code": 6004, "name": "AlreadySettled",   "msg": "Escrow is not in Pending status" },
-    { "code": 6005, "name": "NotActive",        "msg": "Escrow is not in Active status" },
-    { "code": 6006, "name": "WrongEscrowType",  "msg": "This instruction requires a different escrow type" },
-    { "code": 6007, "name": "MathOverflow",     "msg": "Arithmetic overflow or underflow" }
+    {
+      "code": 6000,
+      "name": "InvalidAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidDuration",
+      "msg": "Duration must be > 0 for Beam escrows"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidEscrowType",
+      "msg": "Invalid escrow type — expected 0 (Flash) or 1 (Beam)"
+    },
+    {
+      "code": 6003,
+      "name": "Unauthorized",
+      "msg": "Caller is not the authorized party for this escrow"
+    },
+    {
+      "code": 6004,
+      "name": "AlreadySettled",
+      "msg": "Escrow is not in Pending status"
+    },
+    {
+      "code": 6005,
+      "name": "NotActive",
+      "msg": "Escrow is not in Active status"
+    },
+    {
+      "code": 6006,
+      "name": "WrongEscrowType",
+      "msg": "This instruction requires a different escrow type"
+    },
+    {
+      "code": 6007,
+      "name": "MathOverflow",
+      "msg": "Arithmetic overflow or underflow"
+    }
   ],
   "types": [
+    {
+      "name": "BeamSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "streamer_amount",
+            "type": "u64"
+          },
+          {
+            "name": "viewer_refund",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "viewer",
+            "type": "pubkey"
+          },
+          {
+            "name": "streamer",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "escrow_type_val",
+            "type": "u8"
+          }
+        ]
+      }
+    },
     {
       "name": "EscrowState",
       "type": {
         "kind": "struct",
         "fields": [
-          { "name": "escrow_id",       "type": { "array": ["u8", 32] } },
-          { "name": "viewer",          "type": "pubkey" },
-          { "name": "streamer",        "type": "pubkey" },
-          { "name": "usdc_mint",       "type": "pubkey" },
-          { "name": "total_amount",    "type": "u64" },
-          { "name": "duration_secs",   "type": "u64" },
-          { "name": "start_timestamp", "type": "i64" },
-          { "name": "escrow_type",     "type": { "defined": { "name": "EscrowType" } } },
-          { "name": "status",          "type": { "defined": { "name": "EscrowStatus" } } },
-          { "name": "bump",            "type": "u8" }
+          {
+            "name": "escrow_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "viewer",
+            "type": "pubkey"
+          },
+          {
+            "name": "streamer",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_amount",
+            "type": "u64"
+          },
+          {
+            "name": "duration_secs",
+            "type": "u64"
+          },
+          {
+            "name": "start_timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "escrow_type",
+            "type": {
+              "defined": {
+                "name": "EscrowType"
+              }
+            }
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "EscrowStatus"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pending"
+          },
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Settled"
+          },
+          {
+            "name": "Cancelled"
+          }
         ]
       }
     },
     {
       "name": "EscrowType",
-      "type": { "kind": "enum", "variants": [{ "name": "Flash" }, { "name": "Beam" }] }
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Flash"
+          },
+          {
+            "name": "Beam"
+          }
+        ]
+      }
     },
     {
-      "name": "EscrowStatus",
-      "type": { "kind": "enum", "variants": [{ "name": "Pending" }, { "name": "Active" }, { "name": "Settled" }, { "name": "Cancelled" }] }
+      "name": "FlashSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "streamer_amount",
+            "type": "u64"
+          },
+          {
+            "name": "approved",
+            "type": "bool"
+          }
+        ]
+      }
     }
   ]
 }
