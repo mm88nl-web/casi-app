@@ -623,6 +623,23 @@ export default function AdminStudio() {
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id, supabase, loadBookings]);
 
+  // Keep local `elements` in sync with overlay_elements DB writes from other
+  // contexts (Vercel Cron janitor, queue advance, other admin sessions).
+  // Without this, a beam flipping active → expired via cron clears
+  // overlay_elements.image_url server-side but the Studio canvas keeps
+  // rendering the stale image_url until manual refresh.
+  useEffect(() => {
+    if (!profile?.id) return;
+    const channel = supabase.channel(`admin_elements_${profile.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'overlay_elements', filter: `profile_id=eq.${profile.id}` }, (payload: any) => {
+        const row = payload.new;
+        if (!row?.id) return;
+        setElements(prev => prev.map(el => el.id === row.id ? { ...el, ...row } : el));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profile?.id, supabase]);
+
   useEffect(() => {
     if (!profile?.id) return;
     loadFlashes(profile.id);
