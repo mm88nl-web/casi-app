@@ -585,8 +585,17 @@ function OverlayContent() {
     }
 
     if (payment === 'cancelled' && bookingId) {
-      // Mark as denied in DB so the pending slot clears
-      supabase.from('bookings').update({ status: 'denied' }).eq('id', bookingId).then(() => {
+      // Mark as denied via /api/stripe/cancel (authorized with the per-booking
+      // cancel_token stashed by /api/stripe/authorize). Previously this wrote
+      // status='denied' directly under bookings_update_anon, which anyone
+      // could call on any booking id to mass-deny.
+      const cancelToken = readBookingTokens()[bookingId];
+      fetch('/api/stripe/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: bookingId, cancel_token: cancelToken }),
+      }).then(() => {
+        forgetBookingToken(bookingId);
         if (typeof loadData === 'function') {
           loadData(profile.id, savedViewerName ?? undefined);
         }
@@ -627,37 +636,23 @@ function OverlayContent() {
 };
 
   // Expires a booking from the viewer side (runs when countdown hits 0 or viewer
-  // ends early). Uses a conditional update so it's a no-op if admin already expired it.
+  // ends early). Delegated to /api/bookings/expire-and-advance so the write
+  // runs under service_role and the server can independently verify the
+  // timer actually ran out — previously the overlay wrote status directly
+  // under bookings_update_anon, which was a mass-expire attack surface.
   const clientExpireBooking = useCallback(async (booking: any) => {
-    const { data } = await supabase
-      .from('bookings')
-      .update({ status: 'expired' })
-      .eq('id', booking.id)
-      .eq('status', 'active') // only proceed if still active
-      .select()
-      .single();
-
-    if (!data) return; // admin already handled it — realtime will refresh
-
-    if (booking.element_id) {
-      const { data: next } = await supabase
-        .from('bookings')
-        .select('*')
-        .eq('element_id', booking.element_id)
-        .eq('status', 'approved_queued')
-        .order('approved_at', { ascending: true })
-        .limit(1)
-        .single();
-
-      if (next) {
-        await supabase.from('bookings').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', next.id);
-        await supabase.from('overlay_elements').update({ image_url: next.image_url }).eq('id', next.element_id);
-      } else {
-        await supabase.from('overlay_elements').update({ image_url: '' }).eq('id', booking.element_id);
-      }
+    const res = await fetch('/api/bookings/expire-and-advance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_id: booking.id }),
+    });
+    if (!res.ok && res.status !== 409) {
+      // 409 = not-overdue (another client raced us or clock skew); silently
+      // let realtime/cron catch it. Other errors are logged for diagnosis.
+      console.error('[overlay] expire-and-advance failed:', res.status);
     }
     if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
-  }, [supabase, profile?.id, loadData, savedViewerName]);
+  }, [profile?.id, loadData, savedViewerName]);
 
   // Detect video vs image from a URL's path extension (no server round-trip).
   const getUrlFileType = (url: string): 'image'|'video' => {
