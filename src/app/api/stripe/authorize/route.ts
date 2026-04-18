@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'node:crypto';
 import { stripe } from '@/lib/stripe';
 import { calcAmountCents } from '@/lib/payment-math';
 
@@ -86,10 +87,32 @@ export async function POST(req: Request) {
     { stripeAccount: profile.stripe_account_id },
   );
 
-  await supabase
+  // cancel_token: random secret returned once to the viewer. /api/stripe/cancel
+  // requires this token to match on the viewer branch so viewer_name (which is
+  // publicly readable via bookings_select_public) can no longer authorize
+  // cancellation of arbitrary bookings. Only set if not already present so a
+  // retry of authorize on the same booking doesn't rotate the token out from
+  // under the viewer who stored the original.
+  const cancelToken = randomUUID();
+  const { data: updated } = await supabase
     .from('bookings')
-    .update({ original_amount_cents: amount })
-    .eq('id', booking_id);
+    .update({ original_amount_cents: amount, cancel_token: cancelToken })
+    .eq('id', booking_id)
+    .is('cancel_token', null)
+    .select('cancel_token')
+    .maybeSingle();
 
-  return NextResponse.json({ checkout_url: session.url });
+  // If the row already had a token (authorize retried), re-read it so we
+  // return the existing one rather than nothing.
+  let finalToken = updated?.cancel_token ?? cancelToken;
+  if (!updated) {
+    const { data: existing } = await supabase
+      .from('bookings')
+      .select('cancel_token')
+      .eq('id', booking_id)
+      .single();
+    if (existing?.cancel_token) finalToken = existing.cancel_token;
+  }
+
+  return NextResponse.json({ checkout_url: session.url, cancel_token: finalToken });
 }

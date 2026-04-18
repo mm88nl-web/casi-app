@@ -458,6 +458,7 @@ export default function AdminStudio() {
   const [uploadingPreviewBg, setUploadingPreviewBg] = useState(false);
   const [editThemeColor, setEditThemeColor] = useState('#F58220');
   const [editCustomColor, setEditCustomColor] = useState('');
+  const [editAllowFreeFlashes, setEditAllowFreeFlashes] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editSaved, setEditSaved] = useState(false);
   // Stripe + Solana
@@ -552,10 +553,13 @@ export default function AdminStudio() {
     if (saveError) { setSavingWallet(false); return; }
     setSolanaWallet(address);
     setProfile((p: any) => ({ ...p, solana_wallet: address }));
+    const { data: { session } } = await supabase.auth.getSession();
     fetch('/api/solana/sync-webhook', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token ?? ''}`,
+      },
     }).catch(() => {});
     setSavingWallet(false);
     setWalletSaved(true);
@@ -575,6 +579,7 @@ export default function AdminStudio() {
         setEditAvatar(prof.avatar_url || '');
         if (prof.avatar_url) setEditAvatarValid(true);
         if (prof.theme_color) setEditThemeColor(prof.theme_color);
+        setEditAllowFreeFlashes(!!prof.allow_free_flashes);
         if (prof.stripe_account_id) setStripeConnected(true);
         if (prof.solana_wallet) setSolanaWallet(prof.solana_wallet);
         if (prof.preview_background_url) setPreviewBgUrl(prof.preview_background_url);
@@ -622,6 +627,23 @@ export default function AdminStudio() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id, supabase, loadBookings]);
+
+  // Keep local `elements` in sync with overlay_elements DB writes from other
+  // contexts (Vercel Cron janitor, queue advance, other admin sessions).
+  // Without this, a beam flipping active → expired via cron clears
+  // overlay_elements.image_url server-side but the Studio canvas keeps
+  // rendering the stale image_url until manual refresh.
+  useEffect(() => {
+    if (!profile?.id) return;
+    const channel = supabase.channel(`admin_elements_${profile.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'overlay_elements', filter: `profile_id=eq.${profile.id}` }, (payload: any) => {
+        const row = payload.new;
+        if (!row?.id) return;
+        setElements(prev => prev.map(el => el.id === row.id ? { ...el, ...row } : el));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profile?.id, supabase]);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -2246,6 +2268,22 @@ export default function AdminStudio() {
                     <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>Connect your wallet then click Save to link it to your profile.</div>
                   </div>
 
+                  {/* Free Flashes toggle — gates the Test Flash button on Studio */}
+                  <div>
+                    <label className="pe-lbl">Free tier <span style={{ letterSpacing: 0, textTransform: 'none', opacity: 0.6 }}>— let viewers send Flashes without paying</span></label>
+                    <div style={{ background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--casi-text)', marginBottom: 2 }}>Allow free Flashes</div>
+                        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>Chat messages without payment · 1 per minute per viewer</div>
+                      </div>
+                      <button type="button" role="switch" aria-checked={editAllowFreeFlashes}
+                        onClick={() => setEditAllowFreeFlashes(v => !v)}
+                        style={{ position: 'relative', width: 44, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, background: editAllowFreeFlashes ? 'var(--casi-accent)' : 'rgba(255,255,255,0.12)', transition: 'background .15s' }}>
+                        <span style={{ position: 'absolute', top: 2, left: editAllowFreeFlashes ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .15s' }} />
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 8, paddingTop: 2 }}>
                     <button type="button" onClick={() => {
@@ -2256,6 +2294,7 @@ export default function AdminStudio() {
                       setEditAvatarValid(!!profile.avatar_url);
                       setEditThemeColor(profile.theme_color || '#F58220');
                       setEditCustomColor('');
+                      setEditAllowFreeFlashes(!!profile.allow_free_flashes);
                       setEditOpen(false);
                     }} style={{ flex: 1, padding: '10px 0', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--casi-border)', borderRadius: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 12, color: 'var(--casi-text-muted)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                       Cancel
@@ -2269,12 +2308,14 @@ export default function AdminStudio() {
                           bio: editBio || null,
                           avatar_url: editAvatarValid ? editAvatar : null,
                           theme_color: editThemeColor,
+                          allow_free_flashes: editAllowFreeFlashes,
                         }).eq('id', profile.id);
                         setProfile((p: any) => ({ ...p,
                           display_name: editName || profile.username,
                           bio: editBio || null,
                           avatar_url: editAvatarValid ? editAvatar : null,
                           theme_color: editThemeColor,
+                          allow_free_flashes: editAllowFreeFlashes,
                         }));
                         setEditSaving(false);
                         setEditSaved(true);
