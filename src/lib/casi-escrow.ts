@@ -79,6 +79,11 @@ const ESCROW_SEED = Buffer.from('casi-escrow');
 
 /** Convert a UUID string ("xxxxxxxx-xxxx-…") to a 32-byte Uint8Array seed. */
 export function uuidToBytes(uuid: string): Uint8Array {
+  if (typeof uuid !== 'string') {
+    throw new Error(
+      `uuidToBytes: expected string, got ${typeof uuid} (${JSON.stringify(uuid)?.slice(0, 120)})`,
+    );
+  }
   const hex = uuid.replace(/-/g, '');
   if (hex.length !== 32) throw new Error(`Invalid UUID: ${uuid}`);
   const bytes = new Uint8Array(32);
