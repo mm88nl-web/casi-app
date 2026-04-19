@@ -31,9 +31,11 @@
  */
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { Connection, PublicKey } from '@solana/web3.js';
-import { SOLANA_RPC } from '@/lib/solana-network';
-import { logError } from '@/lib/observability';
+import { Connection, Keypair, PublicKey } from '@solana/web3.js';
+import { SOLANA_RPC, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
+import { CasiEscrowClient } from '@/lib/casi-escrow';
+import { decodeBase58 } from '@/lib/casi-escrow-decoder';
+import { logError, logWarn } from '@/lib/observability';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -64,12 +66,19 @@ const ESCROW_STATUS_ACTIVE = 1;
 // streamer approving) finish first without a race.
 const PENDING_STALE_AFTER_HOURS = 2;
 
+// Mirror of PENDING_TIMEOUT_SECS in programs/casi-escrow/src/lib.rs — the
+// earliest moment cancel_stale_pending will succeed on-chain. Rows probed
+// before this cutoff simply get left in Pending. Small extra buffer (1h) so
+// we never race the program's on-chain clock check.
+const PENDING_CRANK_CUTOFF_HOURS = 7 * 24 + 1;
+
 type PendingRow = {
   id: number | string;
   escrow_pda: string;
   created_at: string;
   image_url: string | null;
   element_id: string | null;
+  viewer_wallet: string | null;
 };
 
 type ActiveRow = {
@@ -93,6 +102,15 @@ export async function GET(req: Request) {
 
   const connection = new Connection(SOLANA_RPC, 'confirmed');
 
+  // Optional permissionless-crank signer. Unset = we only PROBE the chain,
+  // we don't try to close stuck-pending escrows. Any signer with a few
+  // thousand lamports works — this is literally the permissionless path
+  // the on-chain program allows for anyone.
+  const cranker = loadCrankerKeypair();
+  if (!cranker) {
+    logWarn('solana-reconciler', 'SOLANA_CRANKER_KEYPAIR not set — stale-pending cancels will be skipped');
+  }
+
   const pendingCutoff = new Date(
     Date.now() - PENDING_STALE_AFTER_HOURS * 60 * 60 * 1000,
   ).toISOString();
@@ -100,7 +118,7 @@ export async function GET(req: Request) {
   const [pending, active] = await Promise.all([
     supabase
       .from('bookings')
-      .select('id, escrow_pda, created_at, image_url, element_id')
+      .select('id, escrow_pda, created_at, image_url, element_id, viewer_wallet')
       .eq('status', 'pending')
       .eq('payment_method', 'solana')
       .not('escrow_pda', 'is', null)
@@ -119,13 +137,19 @@ export async function GET(req: Request) {
   if (pending.error) logError('solana-reconciler', pending.error, { scope: 'select pending' });
   if (active.error) logError('solana-reconciler', active.error, { scope: 'select active' });
 
-  const healed = { pendingToActive: 0, pendingToDenied: 0, activeToExpired: 0 };
+  const healed = {
+    pendingToActive: 0,
+    pendingToDenied: 0,
+    activeToExpired: 0,
+    stalePendingCranked: 0,
+  };
 
   for (const row of (pending.data ?? []) as PendingRow[]) {
     try {
-      const result = await reconcilePending(connection, row);
+      const result = await reconcilePending(connection, row, cranker);
       if (result === 'active') healed.pendingToActive++;
       else if (result === 'denied') healed.pendingToDenied++;
+      else if (result === 'cranked') healed.stalePendingCranked++;
     } catch (err) {
       logError('solana-reconciler', err, { booking_id: row.id, stage: 'pending' });
     }
@@ -162,7 +186,8 @@ function isDurationExceeded(row: ActiveRow, nowMs: number): boolean {
 async function reconcilePending(
   connection: Connection,
   row: PendingRow,
-): Promise<'active' | 'denied' | 'noop'> {
+  cranker: Keypair | null,
+): Promise<'active' | 'denied' | 'cranked' | 'noop'> {
   const info = await connection.getAccountInfo(new PublicKey(row.escrow_pda));
 
   if (!info) {
@@ -201,8 +226,85 @@ async function reconcilePending(
   }
 
   // status byte 0 (Pending) → viewer hasn't cancelled, streamer hasn't
-  // started. Nothing to heal.
+  // started. If the row is past PENDING_CRANK_CUTOFF_HOURS and we have a
+  // cranker keypair, the on-chain program will let anyone close this PDA
+  // and refund the viewer. Fire it — no one else may. (Viewer's reclaim
+  // path only runs when the viewer revisits; most don't.)
+  const createdMs = Date.parse(row.created_at);
+  const ageHours  = Number.isFinite(createdMs)
+    ? (Date.now() - createdMs) / (60 * 60 * 1000)
+    : 0;
+  if (cranker && ageHours >= PENDING_CRANK_CUTOFF_HOURS && row.viewer_wallet) {
+    try {
+      await crankStalePending(connection, cranker, row);
+      // Status flip is handled by the webhook when the on-chain event lands;
+      // the cancel_stale_pending discriminator was added in the phase-3 webhook
+      // slice. If for any reason the webhook misses this, tomorrow's reconciler
+      // run will see the closed PDA and flip DB → denied via the branch above.
+      return 'cranked';
+    } catch (err) {
+      logError('solana-reconciler', err, { booking_id: row.id, stage: 'crank-stale' });
+      // Fall through to noop — we'll retry tomorrow.
+    }
+  }
   return 'noop';
+}
+
+/**
+ * Load the cranker signer from SOLANA_CRANKER_KEYPAIR env var.
+ *
+ * Accepts either:
+ *   • 64-byte secret as base58 (one-liner, matches what `solana-keygen new`
+ *     prints to stderr and what Phantom exports)
+ *   • JSON array of 64 numbers (matches the `~/.config/solana/id.json` format
+ *     so ops can reuse a CLI-created keypair)
+ *
+ * Returns null on any parse failure — the caller just skips cranking.
+ */
+function loadCrankerKeypair(): Keypair | null {
+  const raw = process.env.SOLANA_CRANKER_KEYPAIR;
+  if (!raw) return null;
+  try {
+    if (raw.trim().startsWith('[')) {
+      const arr = JSON.parse(raw) as number[];
+      if (!Array.isArray(arr) || arr.length !== 64) return null;
+      return Keypair.fromSecretKey(Uint8Array.from(arr));
+    }
+    const bytes = decodeBase58(raw.trim());
+    if (bytes.length !== 64) return null;
+    return Keypair.fromSecretKey(bytes);
+  } catch (err) {
+    logError('solana-reconciler', err, { scope: 'loadCrankerKeypair' });
+    return null;
+  }
+}
+
+async function crankStalePending(
+  connection: Connection,
+  cranker: Keypair,
+  row: PendingRow,
+): Promise<void> {
+  if (!row.viewer_wallet) return;
+  // CasiEscrowClient expects an AnchorWallet — build a minimal shim so we can
+  // reuse the existing `cancelStalePending` helper rather than duplicate the
+  // instruction-build logic here.
+  const wallet = {
+    publicKey: cranker.publicKey,
+    signTransaction: async <T>(t: T): Promise<T> => {
+      (t as { partialSign(k: Keypair): void }).partialSign(cranker);
+      return t;
+    },
+    signAllTransactions: async <T>(ts: T[]): Promise<T[]> => {
+      for (const t of ts) (t as { partialSign(k: Keypair): void }).partialSign(cranker);
+      return ts;
+    },
+  } as unknown as import('@solana/wallet-adapter-react').AnchorWallet;
+
+  const client = new CasiEscrowClient(connection, wallet, WALLET_ADAPTER_CLUSTER);
+  await client.cancelStalePending({
+    escrowId: row.id,
+    viewer:   new PublicKey(row.viewer_wallet),
+  });
 }
 
 async function reconcileActive(
