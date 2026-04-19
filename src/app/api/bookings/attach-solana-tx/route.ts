@@ -30,15 +30,16 @@ function tokensMatch(a: string | null | undefined, b: string | null | undefined)
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
-  const booking_id = body?.booking_id;
+  const rawId = body?.booking_id;
   const claimedToken = body?.cancel_token;
   const tx_signature: string | undefined = body?.tx_signature;
   const escrow_pda: string | undefined = body?.escrow_pda;
   const viewer_wallet: string | undefined = body?.viewer_wallet;
 
-  if (!booking_id || typeof booking_id !== 'string') {
+  if (rawId === undefined || rawId === null || rawId === '') {
     return NextResponse.json({ error: 'booking_id required' }, { status: 400 });
   }
+  const booking_id = typeof rawId === 'number' ? rawId : String(rawId);
   if (!escrow_pda || !viewer_wallet) {
     return NextResponse.json({ error: 'escrow_pda + viewer_wallet required' }, { status: 400 });
   }

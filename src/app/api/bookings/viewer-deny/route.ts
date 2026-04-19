@@ -33,13 +33,16 @@ function tokensMatch(a: string | null | undefined, b: string | null | undefined)
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
-  const booking_id = body?.booking_id;
+  const rawId = body?.booking_id;
   const claimedToken = body?.cancel_token;
   const nullEscrow = !!body?.null_escrow;
 
-  if (!booking_id || typeof booking_id !== 'string') {
+  if (rawId === undefined || rawId === null || rawId === '') {
     return NextResponse.json({ error: 'booking_id required' }, { status: 400 });
   }
+  // bookings.id is numeric — accept both number and string (PostgREST is happy
+  // either way) so callers don't have to remember to String()-coerce.
+  const booking_id = typeof rawId === 'number' ? rawId : String(rawId);
 
   const { data: booking } = await supabase
     .from('bookings')
