@@ -10,6 +10,10 @@ import { SKINS } from '@/lib/skins';
 import WalletNav from '@/components/WalletNav';
 import ChatPanel from '@/components/ChatPanel';
 import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
+import Logo from './_components/Logo';
+import SlotMedia from './_components/SlotMedia';
+import BeamTimer from './_components/BeamTimer';
+import { getSecondsRemaining, formatTime, fmtDuration } from './_components/time';
 
 // Explicit column list for bookings reads. Swapping `*` for this is belt +
 // suspenders alongside the column-level GRANT in 20260423 — if a new
@@ -20,88 +24,6 @@ const FLASH_COLS = 'id, created_at, profile_id, viewer_name, status, message, am
 // Hard cap per-status list to keep worst-case payload bounded even if a
 // streamer somehow accumulates thousands of bookings / flashes pending.
 const BOOKING_PAGE_LIMIT = 200;
-
-/* ── Logo ── */
-function Logo({ scale = 0.38, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width={400 * scale} height={200 * scale}>
-      <g stroke={color} fill={color} strokeWidth="16" strokeLinecap="round">
-        <line x1="50" y1="60" x2="350" y2="60" />
-        <line x1="20" y1="100" x2="380" y2="100" />
-        <line x1="50" y1="140" x2="350" y2="140" />
-      </g>
-      <path fill={color} stroke="none" d="M 90,100 C 130,30 270,30 310,100 C 270,170 130,170 90,100 Z" />
-      <circle fill={bg} cx="200" cy="100" r="45" />
-    </svg>
-  );
-}
-
-/* ── SlotMedia: renders <video> for videos, <img> otherwise. ── */
-// Admin canvas + request cards show whatever the viewer uploaded. Overlay
-// already branches on file_type; admin used <img> everywhere, so mp4/webm
-// uploads showed as broken images on the streamer's side.
-function SlotMedia({ src, fileType, style, alt = '' }: {
-  src: string | null | undefined;
-  fileType?: string | null;
-  style?: React.CSSProperties;
-  alt?: string;
-}) {
-  if (!src) return null;
-  const isVideo = fileType === 'video' || /\.(mp4|webm|mov|ogv)(\?|$)/i.test(src);
-  return isVideo
-    ? <video src={src} autoPlay loop muted playsInline style={style} />
-    : <img src={src} style={style} alt={alt} />;
-}
-
-/* ── Helpers ── */
-function getSecondsRemaining(booking: any): number {
-  if (!booking?.started_at || !booking?.duration_minutes) return 0;
-  const started = new Date(booking.started_at).getTime();
-  // Explicit Number() coercion: Postgres NUMERIC columns return as strings via PostgREST
-  const expiresAt = started + Number(booking.duration_minutes) * 60 * 1000;
-  return Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
-}
-function formatTime(seconds: number): string {
-  if (seconds <= 0) return '0:00';
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-function fmtDuration(minutes: number): string {
-  const secs = Math.round(minutes * 60);
-  if (secs < 60) return `${secs}s`;
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return s === 0 ? `${m}m` : `${m}m ${s}s`;
-}
-
-function BeamTimer({ booking, onExpire }: { booking: any; onExpire: (b: any) => void }) {
-  const [seconds, setSeconds] = useState(getSecondsRemaining(booking));
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const remaining = getSecondsRemaining(booking);
-      setSeconds(remaining);
-      if (remaining <= 0) { clearInterval(interval); onExpire(booking); }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [booking, onExpire]);
-  const isWarning = seconds <= 120 && seconds > 0;
-  const isExpired = seconds <= 0;
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      padding: '3px 10px', borderRadius: 20, fontSize: 11,
-      fontFamily: "'DM Mono', monospace", fontWeight: 500,
-      background: isExpired ? 'rgba(239,68,68,0.12)' : isWarning ? 'rgba(234,179,8,0.12)' : 'rgba(var(--casi-accent2-rgb),0.10)',
-      color: isExpired ? '#f87171' : isWarning ? '#facc15' : 'var(--casi-accent2)',
-      border: `1px solid ${isExpired ? 'rgba(239,68,68,0.3)' : isWarning ? 'rgba(234,179,8,0.3)' : 'rgba(var(--casi-accent2-rgb),0.2)'}`,
-      animation: isWarning ? 'pulse 1.5s infinite' : 'none',
-    }}>
-      <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
-      {isExpired ? 'Expired' : formatTime(seconds)}
-    </span>
-  );
-}
 
 /* ── Smart placement: find first unoccupied grid cell ── */
 function findFreePosition(elements: any[]): { pos_x: number; pos_y: number } {
