@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "ts-mocha -p tests/unit/tsconfig.json 'tests/unit/**/*.test.ts'"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",
