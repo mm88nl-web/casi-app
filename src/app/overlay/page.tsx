@@ -1172,8 +1172,8 @@ function OverlayContent() {
    */
   const reclaimSolanaEscrow = async (booking: any) => {
     if (!booking.escrow_pda) return;
-    const clearPdaInDb = async () => {
-      await fetch('/api/bookings/viewer-deny', {
+    const clearPdaInDb = async (): Promise<boolean> => {
+      const denyRes = await fetch('/api/bookings/viewer-deny', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1183,6 +1183,7 @@ function OverlayContent() {
         }),
       });
       if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+      return denyRes.ok;
     };
 
     const { Connection, PublicKey } = await import('@solana/web3.js');
@@ -1190,8 +1191,8 @@ function OverlayContent() {
     const pdaInfo = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
     if (!pdaInfo) {
       // PDA already closed — funds have left the vault. Clean up the stale row.
-      await clearPdaInDb();
-      showNotif('Escrow already closed — cleared', 'warning');
+      const ok = await clearPdaInDb();
+      showNotif(ok ? 'Escrow already closed — cleared' : 'Escrow closed, but DB cleanup failed — refresh the page', 'warning');
       return;
     }
 
@@ -1209,8 +1210,8 @@ function OverlayContent() {
       if (/AlreadySettled|already.*processed/i.test(msg)) {
         const after = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
         if (!after) {
-          await clearPdaInDb();
-          showNotif('Escrow already closed — cleared', 'warning');
+          const ok = await clearPdaInDb();
+          showNotif(ok ? 'Escrow already closed — cleared' : 'Escrow closed, but DB cleanup failed — refresh the page', 'warning');
           return;
         }
         showNotif('Beam is live — wait for it to finish', 'denied');
@@ -1219,9 +1220,22 @@ function OverlayContent() {
       showNotif(formatEscrowError(err), 'denied');
       return;
     }
-    await clearPdaInDb();
+
+    // .rpc() resolved without throwing, but verify the PDA is actually closed
+    // before celebrating — RPC quirks can let a failed-but-confirmed tx slip
+    // through, and we don't want a green toast on top of locked funds.
+    const after = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
+    if (after) {
+      console.error('[beam] cancelEscrow returned but PDA still alive:', booking.escrow_pda);
+      showNotif('Cancel sent but escrow still holds funds — try again or contact support', 'denied');
+      return;
+    }
+    const denyOk = await clearPdaInDb();
     refreshWalletNav();
-    showNotif('◎ USDC returned to your wallet', 'warning');
+    showNotif(
+      denyOk ? '◎ USDC returned to your wallet' : 'USDC returned, but booking row needs a manual refresh',
+      'warning',
+    );
   };
   // ──────────────────────────────────────────────────────────────────────────
 

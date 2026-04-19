@@ -24,10 +24,11 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
-  const booking_id = body?.booking_id;
-  if (!booking_id || typeof booking_id !== 'string') {
+  const rawId = body?.booking_id;
+  if (rawId === undefined || rawId === null || rawId === '') {
     return NextResponse.json({ error: 'booking_id required' }, { status: 400 });
   }
+  const booking_id = typeof rawId === 'number' ? rawId : String(rawId);
 
   const { data: booking } = await supabase
     .from('bookings')
