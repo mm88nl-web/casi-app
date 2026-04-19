@@ -496,12 +496,20 @@ function OverlayContent() {
     (queued||[]).forEach((b:any) => { if (b.element_id) counts[b.element_id]=(counts[b.element_id]||0)+1; });
     setQueueCounts(counts);
     if (name) {
+      // Load the viewer's active + recent rows. Denied rows are included so
+      // the visibility filter at visibleMyBookings can surface "recover USDC"
+      // for Solana bookings whose escrow PDA still holds funds. Without this,
+      // a viewer who can't recover within the 30s grace window below is stuck.
       const { data: mine } = await supabase.from('bookings').select(BOOKING_COLS)
         .eq('profile_id', profId).eq('viewer_name', name)
-        .in('status',['pending','active','approved_queued'])
+        .in('status',['pending','active','approved_queued','denied'])
         .order('created_at',{ascending:false})
         .limit(50);
-      const relevant = (mine||[]).filter((b:any) => b.status!=='denied' || Date.now()-new Date(b.created_at).getTime()<30000);
+      const relevant = (mine||[]).filter((b:any) =>
+        b.status !== 'denied'
+        || (b.payment_method === 'solana' && b.escrow_pda)
+        || Date.now() - new Date(b.created_at).getTime() < 30000,
+      );
       setMyBookings(relevant);
     }
   }, [supabase]);
@@ -1156,9 +1164,38 @@ function OverlayContent() {
    * while the beam is in Pending status on-chain (streamer has not called
    * start_beam). Called when the viewer clicks "recover USDC" on a denied
    * booking whose PDA still holds funds.
+   *
+   * The on-chain state is authoritative: DB-only cleanup if the PDA is already
+   * closed (funds previously returned / settled), cancel if it's still Pending,
+   * bail out with a message if it's Active (funds vesting — viewer can't cancel
+   * anymore, the streamer or expiry flow will settle).
    */
   const reclaimSolanaEscrow = async (booking: any) => {
     if (!booking.escrow_pda) return;
+    const clearPdaInDb = async (): Promise<boolean> => {
+      const denyRes = await fetch('/api/bookings/viewer-deny', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id: booking.id,
+          cancel_token: readBookingTokens()[booking.id],
+          null_escrow: true,
+        }),
+      });
+      if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+      return denyRes.ok;
+    };
+
+    const { Connection, PublicKey } = await import('@solana/web3.js');
+    const conn = new Connection(SOLANA_RPC);
+    const pdaInfo = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
+    if (!pdaInfo) {
+      // PDA already closed — funds have left the vault. Clean up the stale row.
+      const ok = await clearPdaInDb();
+      showNotif(ok ? 'Escrow already closed — cleared' : 'Escrow closed, but DB cleanup failed — refresh the page', 'warning');
+      return;
+    }
+
     try {
       const client = await buildViewerCasiClient();
       if (!client) throw new Error('Wallet not ready to sign');
@@ -1166,51 +1203,39 @@ function OverlayContent() {
     } catch (err) {
       const { formatEscrowError } = await import('@/lib/casi-errors');
       console.error('[beam] cancelEscrow failed:', err);
+      // AlreadySettled means the escrow moved out of Pending between our probe
+      // and the cancel — either streamer approved or someone else cancelled.
+      // Re-probe; if the PDA is gone, the row is safe to clean up.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/AlreadySettled|already.*processed/i.test(msg)) {
+        const after = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
+        if (!after) {
+          const ok = await clearPdaInDb();
+          showNotif(ok ? 'Escrow already closed — cleared' : 'Escrow closed, but DB cleanup failed — refresh the page', 'warning');
+          return;
+        }
+        showNotif('Beam is live — wait for it to finish', 'denied');
+        return;
+      }
       showNotif(formatEscrowError(err), 'denied');
       return;
     }
 
-    // .rpc() resolved without throwing, but verify the PDA is actually
-    // closed before celebrating — RPC quirks can let a failed-but-confirmed
-    // tx slip through, and we don't want a green toast on top of locked funds.
-    try {
-      const { Connection } = await import('@solana/web3.js');
-      const { deriveEscrowPda } = await import('@/lib/casi-escrow');
-      const [escrowPda] = deriveEscrowPda(booking.id);
-      const info = await new Connection(SOLANA_RPC).getAccountInfo(escrowPda);
-      if (info) {
-        console.error('[beam] cancelEscrow returned but PDA still alive:', escrowPda.toBase58());
-        showNotif('Cancel sent but escrow still holds funds — try again or contact support', 'denied');
-        return;
-      }
-    } catch (probeErr) {
-      console.error('[beam] post-cancel PDA probe failed:', probeErr);
-      // Don't block the success path on a probe failure — the cancel itself
-      // confirmed. Worst case the UI is briefly stale.
+    // .rpc() resolved without throwing, but verify the PDA is actually closed
+    // before celebrating — RPC quirks can let a failed-but-confirmed tx slip
+    // through, and we don't want a green toast on top of locked funds.
+    const after = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
+    if (after) {
+      console.error('[beam] cancelEscrow returned but PDA still alive:', booking.escrow_pda);
+      showNotif('Cancel sent but escrow still holds funds — try again or contact support', 'denied');
+      return;
     }
-
-    // PDA is closed — hide the booking from the viewer's list. cancel_token
-    // auth on /api/bookings/viewer-deny; null_escrow=true clears the pda
-    // pointer so the "recover" button doesn't keep showing.
-    const denyRes = await fetch('/api/bookings/viewer-deny', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        booking_id: booking.id,
-        cancel_token: readBookingTokens()[booking.id],
-        null_escrow: true,
-      }),
-    });
-    if (!denyRes.ok) {
-      // On-chain refund happened, only the DB cleanup failed. Tell the
-      // viewer their money is safe but the row will still look weird.
-      console.error('[beam] viewer-deny failed after on-chain cancel:', denyRes.status);
-      showNotif('USDC returned, but booking row needs a manual refresh', 'warning');
-    } else {
-      showNotif('◎ USDC returned to your wallet', 'warning');
-    }
+    const denyOk = await clearPdaInDb();
     refreshWalletNav();
-    if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+    showNotif(
+      denyOk ? '◎ USDC returned to your wallet' : 'USDC returned, but booking row needs a manual refresh',
+      'warning',
+    );
   };
   // ──────────────────────────────────────────────────────────────────────────
 

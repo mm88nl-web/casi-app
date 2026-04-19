@@ -85,6 +85,43 @@ Every bookable row has a `status` lifecycle: `pending → approved_queued | acti
 
 **Important**: the Solana rail does **not** auto-promote the next queued booking on expire. The admin page's `playNow` handler explicitly kicks the current and starts the next. Don't add auto-promotion to the Solana rail without also updating the escrow program.
 
+## Solana escrow state machine (read this before touching deny / refund paths)
+
+**On-chain state is authoritative.** The DB is a projection; it can drift (tab closes mid-tx, cron hasn't run, webhook missed). Anything that acts on funds must probe the PDA first via `connection.getAccountInfo(pda)` and branch on the result.
+
+**Program constraints (from `programs/casi-escrow/src/lib.rs`)**:
+
+| State | Who can close it | How |
+|---|---|---|
+| `Pending` (viewer funded, streamer hasn't approved) | **viewer only** | `cancel_escrow` → 100% refund |
+| `Active` (streamer called `start_beam`) | **viewer OR streamer** | `settle_beam` → pro-rata |
+| after `elapsed ≥ duration` | **anyone (permissionless crank)** | `settle_beam` → 100% to streamer |
+
+Streamers cannot cancel a `Pending` escrow from their side. That's a program-level constraint, not a UI choice — if you think you need to add it, update the program first.
+
+**Settle math**: `vested_to_streamer = total × min(elapsed, duration) / duration`, viewer gets the remainder. `elapsed = now − start_timestamp` where `start_timestamp` is set by `start_beam`. This means **a booking left in `denied` DB state while the escrow is still `Active` on-chain vests 100% to the streamer as wall-clock time passes**. Admin deny MUST call `settle_beam` immediately for Active escrows, not just flip DB status.
+
+**EscrowState layout** (for raw decoding without loading the IDL):
+```
+8   bytes  Anchor discriminator
+32  bytes  escrow_id
+32  bytes  viewer Pubkey
+32  bytes  streamer Pubkey
+32  bytes  usdc_mint Pubkey
+8   bytes  total_amount (u64)
+8   bytes  duration_secs (u64)
+8   bytes  start_timestamp (i64)
+1   byte   escrow_type (0=Flash, 1=Beam)
+1   byte   status       (0=Pending, 1=Active)   ← offset 161
+1   byte   bump
+```
+`Settled` / `Cancelled` close the account, so if `getAccountInfo` returns non-null the status byte is only 0 or 1. `StuckEscrowsPanel` uses this to skip loading the IDL on every row.
+
+**Recovery surfaces**:
+- Viewer: `reclaimSolanaEscrow` in `overlay/page.tsx` — probes PDA, cancels if Pending, tells viewer "beam is live" if Active. Handles numeric booking ids.
+- Streamer: `StuckEscrowsPanel` in `admin/_components/` — lists denied rows with non-null `escrow_pda`, offers per-row `settle_beam` signed by the streamer.
+- Shared helper: `settleOrClearSolanaEscrow` in `admin/page.tsx` — discriminated-outcome (`settled | closed | pending-chain | no-wallet | error`) so callers compose their own DB + toast logic without duplicating signing boilerplate.
+
 ## Migration workflow
 
 - Timestamp filename: `YYYYMMDDHHMMSS_description.sql`.
@@ -104,6 +141,8 @@ Every bookable row has a `status` lifecycle: `pending → approved_queued | acti
 - **Solana cluster mismatch**: `WALLET_ADAPTER_CLUSTER` + `EXPLORER_CLUSTER_QUERY` must match. Devnet wallet on mainnet endpoint = silent failure.
 - **`file_type: 'video'`** means use `<video autoPlay loop muted playsInline>`. `SlotMedia` does this — don't `<img>` a video URL.
 - **`profile_id` vs `auth.uid()`**: `profiles.id` = user id = `auth.uid()` for authenticated streamers. `bookings.profile_id` points at the streamer (who *receives*), not the viewer.
+- **Numeric vs string `booking_id`**: PostgREST returns `bookings.id` as a JS number, but older server routes rejected `typeof booking_id !== 'string'`. Always accept either — `typeof x === 'number' ? x : String(x)` — or the viewer's client will silently 400. Affects `/api/bookings/viewer-deny`, `/api/bookings/attach-solana-tx`, `/api/bookings/expire-and-advance`.
+- **`NEXT_PUBLIC_CASI_PROGRAM_ID` unset**: `CasiEscrowClient` throws a loud error in its constructor. Without this guard, unset env → client falls back to `SystemProgram.programId` and signs txs that look fine to the wallet but land on the wrong program.
 
 ## Observability
 
@@ -126,3 +165,4 @@ Every bookable row has a `status` lifecycle: `pending → approved_queued | acti
 - **Don't add every-minute cron on Hobby.** Deploy will fail.
 - **Don't call `select('*')` on bookings.** Use the explicit column list already in `admin/page.tsx` / `overlay/page.tsx`.
 - **Don't auto-promote Solana queue on expire.** Escrow program isn't wired for it.
+- **Don't flip a Solana booking's DB status without reconciling the chain first.** DB status ≠ escrow status; acting on the DB alone leaves funds stuck or over-vested to the streamer. Use `settleOrClearSolanaEscrow` or equivalent probe-first logic.
