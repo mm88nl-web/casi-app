@@ -17,6 +17,13 @@ import {
   WALLET_ADAPTER_CLUSTER,
 } from '@/lib/solana-network';
 
+// Explicit column list for bookings reads. Belt + suspenders alongside the
+// column-level GRANT in 20260423 — if a new sensitive column lands on
+// bookings and someone forgets to update the REVOKE/GRANT list, clients
+// here still only ask for known columns.
+const BOOKING_COLS = 'id, created_at, profile_id, element_id, viewer_name, status, image_url, storage_path, file_type, message, duration_minutes, price_value, price_unit, payment_method, tx_signature, payment_intent_id, original_amount_cents, approved_at, started_at, escrow_pda, viewer_wallet, is_queued, queue_position';
+const BOOKING_PAGE_LIMIT = 200;
+
 function Logo({ scale = 0.32, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width={400 * scale} height={200 * scale}>
@@ -477,9 +484,9 @@ function OverlayContent() {
     const name = nameOverride ?? viewerNameRef.current;
     const [{ data: els }, { data: active }, { data: aq }, { data: queued }] = await Promise.all([
       supabase.from('overlay_elements').select('*').eq('profile_id', profId),
-      supabase.from('bookings').select('*').eq('profile_id', profId).eq('status','active'),
-      supabase.from('bookings').select('*').eq('profile_id', profId).eq('status','approved_queued').order('approved_at',{ascending:true}),
-      supabase.from('bookings').select('element_id').eq('profile_id', profId).eq('status','pending'),
+      supabase.from('bookings').select(BOOKING_COLS).eq('profile_id', profId).eq('status','active').limit(BOOKING_PAGE_LIMIT),
+      supabase.from('bookings').select(BOOKING_COLS).eq('profile_id', profId).eq('status','approved_queued').order('approved_at',{ascending:true}).limit(BOOKING_PAGE_LIMIT),
+      supabase.from('bookings').select('element_id').eq('profile_id', profId).eq('status','pending').limit(BOOKING_PAGE_LIMIT),
     ]);
     // Viewer overlay: show backdrops + any slot with a defined price (0 == free).
     setElements((els||[]).filter((el:any) => el.is_background || el.price_value >= 0));
@@ -489,10 +496,11 @@ function OverlayContent() {
     (queued||[]).forEach((b:any) => { if (b.element_id) counts[b.element_id]=(counts[b.element_id]||0)+1; });
     setQueueCounts(counts);
     if (name) {
-      const { data: mine } = await supabase.from('bookings').select('*')
+      const { data: mine } = await supabase.from('bookings').select(BOOKING_COLS)
         .eq('profile_id', profId).eq('viewer_name', name)
         .in('status',['pending','active','approved_queued'])
-        .order('created_at',{ascending:false});
+        .order('created_at',{ascending:false})
+        .limit(50);
       const relevant = (mine||[]).filter((b:any) => b.status!=='denied' || Date.now()-new Date(b.created_at).getTime()<30000);
       setMyBookings(relevant);
     }
