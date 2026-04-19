@@ -19,6 +19,8 @@ import BeamCtrlPanel from './_components/BeamCtrlPanel';
 import FlashCard from './_components/FlashCard';
 import PendingRequestCard from './_components/PendingRequestCard';
 import QueuedRequestCard from './_components/QueuedRequestCard';
+import ActiveCard from './_components/ActiveCard';
+import ApprovedQueueCard from './_components/ApprovedQueueCard';
 import { getSecondsRemaining, formatTime, fmtDuration } from './_components/time';
 
 // Explicit column list for bookings reads. Swapping `*` for this is belt +
@@ -682,6 +684,34 @@ export default function AdminStudio() {
     }
   }, [expireBooking, publicKey, profile?.solana_wallet, walletConnection, supabase]);
 
+  // Force-advance a queued booking to active: end the current one on the
+  // same slot (settles on-chain for Solana / prorates for Stripe), then
+  // flip this booking to active ourselves since queue auto-promotion is
+  // disabled on the Solana rail. Plain function (not useCallback) because
+  // startSolanaBeamOnChain + showFlashToast aren't memoized, so memoizing
+  // here would just capture stale refs.
+  const playNow = async (booking: any) => {
+    const current = activeBookings.find(b => b.element_id === booking.element_id);
+    if (current) await kickBeam(current);
+    if (booking.payment_method === 'solana') {
+      try { await startSolanaBeamOnChain(booking); }
+      catch (err: unknown) {
+        const { formatEscrowError } = await import('@/lib/casi-errors');
+        showFlashToast(formatEscrowError(err), 'err');
+        return;
+      }
+    }
+    await supabase
+      .from('bookings')
+      .update({ status: 'active', started_at: new Date().toISOString() })
+      .eq('id', booking.id);
+    await supabase
+      .from('overlay_elements')
+      .update({ image_url: booking.image_url })
+      .eq('id', booking.element_id);
+    if (profile?.id) loadBookings(profile.id);
+  };
+
   const copyUrl = (url: string, key: string) => {
     navigator.clipboard.writeText(url);
     setCopiedUrl(key);
@@ -1312,98 +1342,34 @@ export default function AdminStudio() {
                     {activeBeams.map(booking => {
                       const queueForSlot = approvedBeams.filter(b => b.element_id === booking.element_id).sort((a, b) => new Date(a.approved_at).getTime() - new Date(b.approved_at).getTime());
                       return (
-                        <div key={booking.id} className="req-card c-active">
-                          <div style={{ width: 64, height: 64, borderRadius: 10, border: '1px solid rgba(var(--casi-accent2-rgb),0.2)', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
-                            {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)', marginBottom: 4 }}>{booking.viewer_name}</div>
-                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                              <span>${booking.price_value}/{booking.price_unit} · {fmtDuration(booking.duration_minutes)}</span>
-                              {booking.tx_signature && (
-                                <a href={`https://solscan.io/tx/${booking.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
-                                  style={{ color: '#9945FF', textDecoration: 'none', fontSize: 10 }}>↗ Solscan</a>
-                              )}
-                            </div>
-                            {booking.message && <div className="req-msg">"{booking.message}"</div>}
-                            {queueForSlot.length > 0 && (
-                              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                                {queueForSlot.map((next, idx) => (
-                                  <div key={next.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'rgba(var(--casi-accent-rgb),0.4)', minWidth: 20 }}>#{idx + 1}</span>
-                                    <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, color: 'rgba(var(--casi-accent-rgb),0.7)' }}>{next.viewer_name}</span>
-                                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444' }}>{idx === 0 ? '— auto-starts next' : `pos #${idx + 1}`}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-                            <BeamTimer booking={booking} onExpire={expireBooking} />
-                            <button onClick={() => kickBeam(booking)} style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>End early</button>
-                          </div>
-                        </div>
+                        <ActiveCard
+                          key={booking.id}
+                          booking={booking}
+                          kind="beam"
+                          nextUpList={queueForSlot}
+                          onExpire={expireBooking}
+                          onKick={kickBeam}
+                        />
                       );
                     })}
                   </div>
                 )}
 
                 {approvedBeams.length > 0 && (
-  <div style={{ marginBottom: 20 }}>
-    <div className="sec-head" style={{ color: 'var(--casi-accent)' }}>⏳ Approved queue — {approvedBeams.length}</div>
-    {approvedBeams.map(booking => (
-      <div key={booking.id} className="req-card c-queued">
-        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 500, color: 'rgba(var(--casi-accent-rgb),0.3)', minWidth: 28 }}>#{getQueuePosition(booking)}</span>
-        <div style={{ width: 52, height: 52, borderRadius: 8, border: '1px solid rgba(var(--casi-accent-rgb),0.15)', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
-          {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: 'var(--casi-text)', marginBottom: 3 }}>{booking.viewer_name}</div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>${booking.price_value}/{booking.price_unit} · {fmtDuration(booking.duration_minutes)}</div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(var(--casi-accent-rgb),0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>
-            {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
-          </span>
-          <button onClick={async () => {
-  // End current active booking on this slot first — use kickBeam to route
-  // Solana beams through settle_beam and Stripe beams through the prorate API.
-  // kickBeam also calls expireBooking which advances the queue; since the
-  // next candidate on a Solana-rail slot is now intentionally NOT auto-promoted,
-  // we always finish by flipping THIS booking to active ourselves.
-  const current = activeBookings.find(b => b.element_id === booking.element_id);
-  if (current) await kickBeam(current);
-  // For Solana: start_beam must land on-chain before the DB shows active.
-  if (booking.payment_method === 'solana') {
-    try { await startSolanaBeamOnChain(booking); }
-    catch (err: unknown) {
-      const { formatEscrowError } = await import('@/lib/casi-errors');
-      showFlashToast(formatEscrowError(err), 'err');
-      return;
-    }
-  }
-  await supabase
-    .from('bookings')
-    .update({ status: 'active', started_at: new Date().toISOString() })
-    .eq('id', booking.id);
-  await supabase
-    .from('overlay_elements')
-    .update({ image_url: booking.image_url })
-    .eq('id', booking.element_id);
-  if (profile?.id) loadBookings(profile.id);
-}}
-  style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(var(--casi-accent2-rgb),0.6)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
-  Play Now
-</button>
-<button onClick={() => denyBooking(booking.id)}
-  style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
-  Remove
-</button>
-        </div>
-      </div>
-    ))}
-  </div>
-)}
+                  <div style={{ marginBottom: 20 }}>
+                    <div className="sec-head" style={{ color: 'var(--casi-accent)' }}>⏳ Approved queue — {approvedBeams.length}</div>
+                    {approvedBeams.map(booking => (
+                      <ApprovedQueueCard
+                        key={booking.id}
+                        booking={booking}
+                        kind="beam"
+                        queuePosition={getQueuePosition(booking)}
+                        onPlayNow={playNow}
+                        onRemove={denyBooking}
+                      />
+                    ))}
+                  </div>
+                )}
 
                 {pendingBeams.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
@@ -1462,74 +1428,33 @@ export default function AdminStudio() {
                   <div style={{ marginBottom: 20 }}>
                     <div className="sec-head" style={{ color: '#c084fc' }}>● Live</div>
                     {activeBackdrop.map(booking => (
-                      <div key={booking.id} className="req-card c-backdrop-active">
-                        <div style={{ width: 64, height: 64, borderRadius: 10, border: '1px solid rgba(192,132,252,0.2)', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
-                          {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)', marginBottom: 4 }}>{booking.viewer_name}</div>
-                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 6 }}>${booking.price_value}/{booking.price_unit} · {fmtDuration(booking.duration_minutes)}</div>
-                          {booking.message && <div className="req-msg">"{booking.message}"</div>}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-                          <BeamTimer booking={booking} onExpire={expireBooking} />
-                          <button onClick={() => kickBeam(booking)} style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>End early</button>
-                        </div>
-                      </div>
+                      <ActiveCard
+                        key={booking.id}
+                        booking={booking}
+                        kind="backdrop"
+                        nextUpList={[]}
+                        onExpire={expireBooking}
+                        onKick={kickBeam}
+                      />
                     ))}
                   </div>
                 )}
 
                 {approvedBackdrop.length > 0 && (
-  <div style={{ marginBottom: 20 }}>
-    <div className="sec-head" style={{ color: '#c084fc', opacity: 0.7 }}>⏳ Approved queue — {approvedBackdrop.length}</div>
-    {approvedBackdrop.map(booking => (
-      <div key={booking.id} className="req-card c-backdrop-queue">
-        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 500, color: 'rgba(192,132,252,0.3)', minWidth: 28 }}>#{getQueuePosition(booking)}</span>
-        <div style={{ width: 52, height: 52, borderRadius: 8, border: '1px solid rgba(192,132,252,0.15)', overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
-          {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: 'var(--casi-text)', marginBottom: 3 }}>{booking.viewer_name}</div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>${booking.price_value}/{booking.price_unit} · {fmtDuration(booking.duration_minutes)}</div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(192,132,252,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>
-            {getQueuePosition(booking) === 1 ? 'Next up' : `Queue #${getQueuePosition(booking)}`}
-          </span>
-          <button onClick={async () => {
-  const current = activeBookings.find(b => b.element_id === booking.element_id);
-  if (current) await kickBeam(current);
-  if (booking.payment_method === 'solana') {
-    try { await startSolanaBeamOnChain(booking); }
-    catch (err: unknown) {
-      const { formatEscrowError } = await import('@/lib/casi-errors');
-      showFlashToast(formatEscrowError(err), 'err');
-      return;
-    }
-  }
-  await supabase
-    .from('bookings')
-    .update({ status: 'active', started_at: new Date().toISOString() })
-    .eq('id', booking.id);
-  await supabase
-    .from('overlay_elements')
-    .update({ image_url: booking.image_url })
-    .eq('id', booking.element_id);
-  if (profile?.id) loadBookings(profile.id);
-}}
-  style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(var(--casi-accent2-rgb),0.6)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
-  Play Now
-</button>
-<button onClick={() => denyBooking(booking.id)}
-  style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
-  Remove
-</button>
-        </div>
-      </div>
-    ))}
-  </div>
-)}
+                  <div style={{ marginBottom: 20 }}>
+                    <div className="sec-head" style={{ color: '#c084fc', opacity: 0.7 }}>⏳ Approved queue — {approvedBackdrop.length}</div>
+                    {approvedBackdrop.map(booking => (
+                      <ApprovedQueueCard
+                        key={booking.id}
+                        booking={booking}
+                        kind="backdrop"
+                        queuePosition={getQueuePosition(booking)}
+                        onPlayNow={playNow}
+                        onRemove={denyBooking}
+                      />
+                    ))}
+                  </div>
+                )}
 
                 {pendingBackdrop.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
