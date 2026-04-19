@@ -85,6 +85,60 @@ Every bookable row has a `status` lifecycle: `pending → approved_queued | acti
 
 **Important**: the Solana rail does **not** auto-promote the next queued booking on expire. The admin page's `playNow` handler explicitly kicks the current and starts the next. Don't add auto-promotion to the Solana rail without also updating the escrow program.
 
+## Phase 3 — session-key delegation (the "no popup on approve" flow)
+
+Phase 3 added a scoped delegation layer to the escrow program so the streamer doesn't have to sign a wallet popup every time a beam starts. The program still works without any of this — it's pure UX glue on top of `start_beam`.
+
+**Program surface** (see `programs/casi-escrow/PRIMITIVE.md` for the full framing):
+
+- `set_delegate` — streamer signs once, stores a session pubkey + expiry under a PDA keyed by the streamer.
+- `revoke_delegate` — streamer invalidates the delegate at any time.
+- `start_beam_delegated` — same effect as `start_beam`, but signed by the registered session key instead of the streamer wallet. Scoped: the session key cannot withdraw funds, cancel escrows, or change delegation.
+- `cancel_stale_pending` — permissionless crank that refunds the viewer after a 7-day (`PENDING_TIMEOUT_SECS`) Pending timeout. Any signer can call it.
+
+**Server surface**:
+
+- `/api/solana/delegates/install` — streamer-auth; generates a session keypair, seals the secret with `DELEGATE_ENCRYPTION_KEY` (AES-256-GCM), upserts to `streamer_delegates`.
+- `/api/solana/delegates/status` — UI helper to pick card state (not-installed / installed / expired / revoked).
+- `/api/solana/delegates/revoke` — streamer-auth; stamps `revoked_at`. Admin should also fire `revoke_delegate` on-chain.
+- `/api/solana/delegates/start-beam` — called by the admin page's approve handler when a healthy delegate exists. Signs `start_beam_delegated` with the decrypted session key. **Uses the cranker as fee payer** (the session key has no SOL; Solana refuses to debit an un-credited account).
+
+**The cranker** (`SOLANA_CRANKER_KEYPAIR` env var, loaded via `src/lib/cranker-keypair.ts`):
+
+- Single shared keypair that pays fees for `start_beam_delegated` and signs the permissionless `cancel_stale_pending` crank from the daily reconciler.
+- Required if the delegate flow is enabled. Unset = `/api/solana/delegates/start-beam` returns 503 `reason: 'no_cranker'` and admin falls back to wallet-signed `start_beam` (popup per approve). This is a safe degradation; the program doesn't care.
+- Fund with ~0.05 SOL. Each delegated start costs one base fee + compute; cancel-stale-pending cranks eat ~5k lamports each.
+- Loader returns `null` on missing/malformed env — never throws. Callers branch on null and either fall back or 503.
+
+**Install UX contract** (see `DelegateKeyCard.tsx` state machine):
+
+Install is a two-phase write — DB row (server) + on-chain `set_delegate` (streamer wallet). Either can fail independently, so the component tracks a `needs-finalize` state:
+
+1. `loading` → fetch status.
+2. `absent` → "Install" button. Disabled unless `walletReady` (wallet connected AND matches `profile.solana_wallet`).
+3. Click Install → POST `/api/solana/delegates/install` (DB upsert). Then call `onInstalled(sessionPubkey, expiresAt)` which the admin page implements as a `set_delegate` tx from the streamer wallet.
+4. If step 3b throws, component stays in `needs-finalize` with a "Finalize →" button. Clicking re-runs `onInstalled` with the **same** session pubkey — no DB write, no key regeneration. Idempotent retry.
+5. Green "✓ Delegate registered on-chain — view tx" with Solscan link on success.
+6. Rotate = same flow but keeps the old `installed_at`; revoke flips DB `revoked_at` and (should) fire `revoke_delegate` on-chain.
+
+**Never regenerate session keys on finalize retry** — the DB already has the pubkey committed. A new key means the on-chain `set_delegate` would register a stranger. Always re-use the pubkey the server returned.
+
+**Env vars introduced in phase 3**:
+
+| Name | Notes |
+|---|---|
+| `DELEGATE_ENCRYPTION_KEY` | 32 raw bytes, base64 or hex. `openssl rand -base64 32`. Rotating invalidates every installed delegate. |
+| `SOLANA_CRANKER_KEYPAIR` | 64-byte secret as base58 OR JSON array. Same format as `~/.config/solana/id.json`. |
+
+**Migration**: `supabase/migrations/20260425000000_streamer_delegates.sql` adds the `streamer_delegates` table (one row per streamer, sealed secret + pubkey + expiry + rotated/revoked timestamps).
+
+**Don'ts**:
+
+- Don't make the install button callable without `walletReady` — you'll leave orphan DB rows when the streamer clicks before connecting.
+- Don't have the client sign `start_beam_delegated` with a user wallet. It's scoped to the session pubkey; a user-wallet sig will fail `has_one` on the delegate PDA.
+- Don't reuse the cranker as the escrow vault authority, the streamer, or anything else money-moving. It's a fee payer. Keep its balance small.
+- Don't skip the webhook for `start_beam_delegated` / `cancel_stale_pending` / `set_delegate` / `revoke_delegate` discriminators — the webhook is the only authoritative DB writer.
+
 ## Solana escrow state machine (read this before touching deny / refund paths)
 
 **On-chain state is authoritative.** The DB is a projection; it can drift (tab closes mid-tx, cron hasn't run, webhook missed). Anything that acts on funds must probe the PDA first via `connection.getAccountInfo(pda)` and branch on the result.
@@ -94,10 +148,13 @@ Every bookable row has a `status` lifecycle: `pending → approved_queued | acti
 | State | Who can close it | How |
 |---|---|---|
 | `Pending` (viewer funded, streamer hasn't approved) | **viewer only** | `cancel_escrow` → 100% refund |
+| `Pending`, age ≥ 7 days | **anyone (permissionless crank)** | `cancel_stale_pending` → 100% refund to viewer |
 | `Active` (streamer called `start_beam`) | **viewer OR streamer** | `settle_beam` → pro-rata |
 | after `elapsed ≥ duration` | **anyone (permissionless crank)** | `settle_beam` → 100% to streamer |
 
 Streamers cannot cancel a `Pending` escrow from their side. That's a program-level constraint, not a UI choice — if you think you need to add it, update the program first.
+
+`start_beam` has a delegated twin: `start_beam_delegated`, signed by a pre-registered session key instead of the streamer wallet. Same status effect. See the phase-3 section above.
 
 **Settle math**: `vested_to_streamer = total × min(elapsed, duration) / duration`, viewer gets the remainder. `elapsed = now − start_timestamp` where `start_timestamp` is set by `start_beam`. This means **a booking left in `denied` DB state while the escrow is still `Active` on-chain vests 100% to the streamer as wall-clock time passes**. Admin deny MUST call `settle_beam` immediately for Active escrows, not just flip DB status.
 
@@ -143,6 +200,8 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 - **`profile_id` vs `auth.uid()`**: `profiles.id` = user id = `auth.uid()` for authenticated streamers. `bookings.profile_id` points at the streamer (who *receives*), not the viewer.
 - **Numeric vs string `booking_id`**: PostgREST returns `bookings.id` as a JS number, but older server routes rejected `typeof booking_id !== 'string'`. Always accept either — `typeof x === 'number' ? x : String(x)` — or the viewer's client will silently 400. Affects `/api/bookings/viewer-deny`, `/api/bookings/attach-solana-tx`, `/api/bookings/expire-and-advance`.
 - **`NEXT_PUBLIC_CASI_PROGRAM_ID` unset**: `CasiEscrowClient` throws a loud error in its constructor. Without this guard, unset env → client falls back to `SystemProgram.programId` and signs txs that look fine to the wallet but land on the wrong program.
+- **Session key as fee payer**: `start_beam_delegated` *cannot* be signed with the session key as fee payer — Solana returns `"Attempt to debit an account but found no record of a prior credit"` because the ephemeral key has never received SOL. Always pay fees with the cranker; co-sign with the session key. `loadCrankerKeypair` in `src/lib/cranker-keypair.ts` is the shared loader.
+- **Cranker balance drift**: the cranker is the silent single point of failure for the delegated approve flow. Monitor its SOL balance; if it hits 0, every approve starts popping a wallet prompt again (the route returns 503 and admin falls back). It's not a protocol bug — it's an ops reminder to keep the fee payer funded.
 
 ## Observability
 

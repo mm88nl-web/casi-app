@@ -9,6 +9,12 @@ Two payment primitives:
 
 No platform fee is deducted on-chain — the streamer receives the full settled amount and the viewer receives the refund of any unvested portion.
 
+> **For reviewers and grant evaluators**: [`PRIMITIVE.md`](./PRIMITIVE.md)
+> frames this program as a general time-boxed payment primitive
+> (consulting / tutoring / compute rentals / content windows — CASI is
+> one consumer of it) and explains why the server-side cranker is a UX
+> choice, not a protocol dependency.
+
 ---
 
 ## Design choices
