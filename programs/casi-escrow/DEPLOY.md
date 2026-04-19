@@ -73,11 +73,13 @@ All set in Vercel → Project → Settings → Environment Variables. Every
 |---|---|
 | `DELEGATE_ENCRYPTION_KEY` | **32 bytes, base64 or hex.** Generate with `openssl rand -base64 32`. Wraps every session-key secret at rest. **Rotating this invalidates every installed delegate** — streamers will need to hit "rotate" again. |
 
-### Optional (phase 3)
+### Required if delegate flow is enabled (phase 3)
 
 | Name | Notes |
 |---|---|
-| `SOLANA_CRANKER_KEYPAIR` | 64-byte secret as base58 OR JSON array (matches `~/.config/solana/id.json`). If set, the daily `solana-reconciler` cron fires permissionless `cancel_stale_pending` on any Pending escrow older than 7d, refunding the viewer on-chain. **Unset = no crank**, rows stay Pending until the viewer or a third party reclaims. Fund with ~0.01 SOL for fees. |
+| `SOLANA_CRANKER_KEYPAIR` | 64-byte secret as base58 OR JSON array (matches `~/.config/solana/id.json`). **Required** as the fee payer for `start_beam_delegated` — the session key has no SOL and Solana refuses to debit an un-credited account. Same keypair also powers the daily `solana-reconciler`'s permissionless `cancel_stale_pending` crank on 7d-old Pending escrows. Fund with ~0.05 SOL; the reconciler eats ~5k lamports per crank and each delegated start costs one base fee + compute. |
+
+If you leave `SOLANA_CRANKER_KEYPAIR` unset, `/api/solana/delegates/start-beam` returns 503 (`reason: 'no_cranker'`) and the admin page falls back to wallet-signed `start_beam`. That's a safe degradation — every Approve will prompt the streamer's wallet, same as phase-2 behavior.
 
 ## 5. Helius webhook
 

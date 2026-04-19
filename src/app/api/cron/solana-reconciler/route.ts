@@ -34,7 +34,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import { SOLANA_RPC, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 import { CasiEscrowClient } from '@/lib/casi-escrow';
-import { decodeBase58 } from '@/lib/casi-escrow-decoder';
+import { loadCrankerKeypair } from '@/lib/cranker-keypair';
 import { logError, logWarn } from '@/lib/observability';
 
 export const dynamic = 'force-dynamic';
@@ -106,7 +106,7 @@ export async function GET(req: Request) {
   // we don't try to close stuck-pending escrows. Any signer with a few
   // thousand lamports works — this is literally the permissionless path
   // the on-chain program allows for anyone.
-  const cranker = loadCrankerKeypair();
+  const cranker = loadCrankerKeypair('solana-reconciler');
   if (!cranker) {
     logWarn('solana-reconciler', 'SOLANA_CRANKER_KEYPAIR not set — stale-pending cancels will be skipped');
   }
@@ -250,34 +250,6 @@ async function reconcilePending(
   return 'noop';
 }
 
-/**
- * Load the cranker signer from SOLANA_CRANKER_KEYPAIR env var.
- *
- * Accepts either:
- *   • 64-byte secret as base58 (one-liner, matches what `solana-keygen new`
- *     prints to stderr and what Phantom exports)
- *   • JSON array of 64 numbers (matches the `~/.config/solana/id.json` format
- *     so ops can reuse a CLI-created keypair)
- *
- * Returns null on any parse failure — the caller just skips cranking.
- */
-function loadCrankerKeypair(): Keypair | null {
-  const raw = process.env.SOLANA_CRANKER_KEYPAIR;
-  if (!raw) return null;
-  try {
-    if (raw.trim().startsWith('[')) {
-      const arr = JSON.parse(raw) as number[];
-      if (!Array.isArray(arr) || arr.length !== 64) return null;
-      return Keypair.fromSecretKey(Uint8Array.from(arr));
-    }
-    const bytes = decodeBase58(raw.trim());
-    if (bytes.length !== 64) return null;
-    return Keypair.fromSecretKey(bytes);
-  } catch (err) {
-    logError('solana-reconciler', err, { scope: 'loadCrankerKeypair' });
-    return null;
-  }
-}
 
 async function crankStalePending(
   connection: Connection,

@@ -9,6 +9,7 @@ import {
 } from '@solana/web3.js';
 import { SOLANA_RPC, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 import { openSessionSecret } from '@/lib/delegate-crypto';
+import { loadCrankerKeypair } from '@/lib/cranker-keypair';
 import { CasiEscrowClient, solscanTxUrl } from '@/lib/casi-escrow';
 import { logError, logWarn } from '@/lib/observability';
 
@@ -160,6 +161,21 @@ export async function POST(req: Request) {
     );
   }
 
+  // The session key can sign the ix but has no SOL — Solana refuses to debit
+  // an account with no prior credit. The cranker keypair funds the fee; the
+  // session signature satisfies the program's `delegate.session_key == session`
+  // constraint. Without a cranker configured, the delegated path is unusable
+  // and callers should fall back to a wallet-signed start_beam.
+  const cranker = loadCrankerKeypair('delegates-start-beam');
+  if (!cranker) {
+    logWarn('delegates-start-beam',
+      'SOLANA_CRANKER_KEYPAIR not set — delegated start cannot pay fees');
+    return NextResponse.json(
+      { error: 'Server fee payer not configured', reason: 'no_cranker' },
+      { status: 503 },
+    );
+  }
+
   const connection = new Connection(SOLANA_RPC, 'confirmed');
   const streamer   = new PublicKey(profile.solana_wallet);
 
@@ -199,14 +215,15 @@ export async function POST(req: Request) {
     });
 
     const tx = new Transaction().add(ix);
-    tx.feePayer = session.publicKey;
+    tx.feePayer = cranker.publicKey;
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
     tx.recentBlockhash = blockhash;
     tx.lastValidBlockHeight = lastValidBlockHeight;
 
-    // Session key is both fee payer and the `session` signer on the ix —
-    // a single signature covers both roles.
-    sig = await sendAndConfirmTransaction(connection, tx, [session], {
+    // Cranker pays the fee; session key signs the ix. Two distinct roles, two
+    // signatures. Order doesn't matter to the runtime but signer array must
+    // contain both.
+    sig = await sendAndConfirmTransaction(connection, tx, [cranker, session], {
       commitment: 'confirmed',
       skipPreflight: false,
     });
