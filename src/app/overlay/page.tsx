@@ -1203,11 +1203,13 @@ function OverlayContent() {
     } catch (err) {
       const { formatEscrowError } = await import('@/lib/casi-errors');
       console.error('[beam] cancelEscrow failed:', err);
-      // AlreadySettled means the escrow moved out of Pending between our probe
-      // and the cancel — either streamer approved or someone else cancelled.
-      // Re-probe; if the PDA is gone, the row is safe to clean up.
+      // AlreadySettled = escrow moved out of Pending between our probe and the
+      // cancel (approved / settled / cancelled elsewhere). AccountNotInitialized
+      // = Anchor couldn't find a valid EscrowState at the PDA (account closed,
+      // or an RPC race where our probe hit a stale replica). In both cases re-
+      // probe; if the PDA is gone, clean up the stale DB row.
       const msg = err instanceof Error ? err.message : String(err);
-      if (/AlreadySettled|already.*processed/i.test(msg)) {
+      if (/AlreadySettled|already.*processed|AccountNotInitialized/i.test(msg)) {
         const after = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
         if (!after) {
           const ok = await clearPdaInDb();

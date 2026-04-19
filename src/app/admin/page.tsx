@@ -550,6 +550,11 @@ export default function AdminStudio() {
       .catch(() => null);
     if (!pdaInfo) return { outcome: 'closed' };
 
+    // Short-circuit Pending: settle_beam requires status=Active, so on Pending
+    // it reverts with NotActive — skip the wasted signing prompt + tx fee.
+    // Status byte lives at offset 161; see EscrowState layout in lib.rs.
+    if (pdaInfo.data[161] === 0) return { outcome: 'pending-chain' };
+
     const canSign = !!booking.viewer_wallet && !!publicKey && !!profile?.solana_wallet
       && publicKey.toBase58() === profile.solana_wallet;
     if (!canSign) return { outcome: 'no-wallet' };
