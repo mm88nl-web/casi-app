@@ -11,6 +11,16 @@ import WalletNav from '@/components/WalletNav';
 import ChatPanel from '@/components/ChatPanel';
 import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 
+// Explicit column list for bookings reads. Swapping `*` for this is belt +
+// suspenders alongside the column-level GRANT in 20260423 — if a new
+// sensitive column lands on bookings and someone forgets to update the
+// REVOKE/GRANT list, clients here still only ask for known columns.
+const BOOKING_COLS = 'id, created_at, profile_id, element_id, viewer_name, status, image_url, storage_path, file_type, message, duration_minutes, price_value, price_unit, payment_method, tx_signature, payment_intent_id, original_amount_cents, approved_at, started_at, escrow_pda, viewer_wallet, is_queued, queue_position';
+const FLASH_COLS = 'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, tx_signature, payment_intent_id, escrow_pda, viewer_wallet';
+// Hard cap per-status list to keep worst-case payload bounded even if a
+// streamer somehow accumulates thousands of bookings / flashes pending.
+const BOOKING_PAGE_LIMIT = 200;
+
 /* ── Logo ── */
 function Logo({ scale = 0.38, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
   return (
@@ -615,9 +625,9 @@ export default function AdminStudio() {
 
   const loadBookings = useCallback(async (profileId: string) => {
     const [{ data: pending }, { data: active }, { data: aq }] = await Promise.all([
-      supabase.from('bookings').select('*').eq('profile_id', profileId).eq('status', 'pending').order('created_at', { ascending: true }),
-      supabase.from('bookings').select('*').eq('profile_id', profileId).eq('status', 'active').order('started_at', { ascending: false }),
-      supabase.from('bookings').select('*').eq('profile_id', profileId).eq('status', 'approved_queued').order('approved_at', { ascending: true }),
+      supabase.from('bookings').select(BOOKING_COLS).eq('profile_id', profileId).eq('status', 'pending').order('created_at', { ascending: true }).limit(BOOKING_PAGE_LIMIT),
+      supabase.from('bookings').select(BOOKING_COLS).eq('profile_id', profileId).eq('status', 'active').order('started_at', { ascending: false }).limit(BOOKING_PAGE_LIMIT),
+      supabase.from('bookings').select(BOOKING_COLS).eq('profile_id', profileId).eq('status', 'approved_queued').order('approved_at', { ascending: true }).limit(BOOKING_PAGE_LIMIT),
     ]);
     const all = pending || [];
     setPendingBookings(all.filter(b => !b.is_queued));
@@ -629,10 +639,11 @@ export default function AdminStudio() {
   const loadFlashes = useCallback(async (profileId: string) => {
     const { data } = await supabase
       .from('flashes')
-      .select('*')
+      .select(FLASH_COLS)
       .eq('profile_id', profileId)
       .eq('status', 'pending')
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(BOOKING_PAGE_LIMIT);
     setPendingFlashes(data || []);
   }, [supabase]);
 
@@ -707,7 +718,7 @@ export default function AdminStudio() {
     }
     await supabase.from('bookings').update({ status: 'expired', image_url: null }).eq('id', booking.id);
     if (booking.element_id) {
-      const { data: next } = await supabase.from('bookings').select('*')
+      const { data: next } = await supabase.from('bookings').select('id, element_id, image_url, payment_method')
         .eq('element_id', booking.element_id).eq('status', 'approved_queued')
         .order('approved_at', { ascending: true }).limit(1).single();
       // Solana beams require an explicit start_beam signature from the streamer,
