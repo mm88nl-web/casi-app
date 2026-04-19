@@ -1142,9 +1142,37 @@ function OverlayContent() {
    * while the beam is in Pending status on-chain (streamer has not called
    * start_beam). Called when the viewer clicks "recover USDC" on a denied
    * booking whose PDA still holds funds.
+   *
+   * The on-chain state is authoritative: DB-only cleanup if the PDA is already
+   * closed (funds previously returned / settled), cancel if it's still Pending,
+   * bail out with a message if it's Active (funds vesting — viewer can't cancel
+   * anymore, the streamer or expiry flow will settle).
    */
   const reclaimSolanaEscrow = async (booking: any) => {
     if (!booking.escrow_pda) return;
+    const clearPdaInDb = async () => {
+      await fetch('/api/bookings/viewer-deny', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id: booking.id,
+          cancel_token: readBookingTokens()[booking.id],
+          null_escrow: true,
+        }),
+      });
+      if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+    };
+
+    const { Connection, PublicKey } = await import('@solana/web3.js');
+    const conn = new Connection(SOLANA_RPC);
+    const pdaInfo = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
+    if (!pdaInfo) {
+      // PDA already closed — funds have left the vault. Clean up the stale row.
+      await clearPdaInDb();
+      showNotif('Escrow already closed — cleared', 'warning');
+      return;
+    }
+
     try {
       const client = await buildViewerCasiClient();
       if (!client) throw new Error('Wallet not ready to sign');
@@ -1152,24 +1180,26 @@ function OverlayContent() {
     } catch (err) {
       const { formatEscrowError } = await import('@/lib/casi-errors');
       console.error('[beam] cancelEscrow failed:', err);
+      // AlreadySettled means the escrow moved out of Pending between our probe
+      // and the cancel — either streamer approved or someone else cancelled.
+      // Re-probe; if the PDA is gone, the row is safe to clean up.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/AlreadySettled|already.*processed/i.test(msg)) {
+        const after = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
+        if (!after) {
+          await clearPdaInDb();
+          showNotif('Escrow already closed — cleared', 'warning');
+          return;
+        }
+        showNotif('Beam is live — wait for it to finish', 'denied');
+        return;
+      }
       showNotif(formatEscrowError(err), 'denied');
       return;
     }
-    // PDA is closed — hide the booking from the viewer's list. cancel_token
-    // auth on /api/bookings/viewer-deny; null_escrow=true clears the pda
-    // pointer so the "recover" button doesn't keep showing.
-    await fetch('/api/bookings/viewer-deny', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        booking_id: booking.id,
-        cancel_token: readBookingTokens()[booking.id],
-        null_escrow: true,
-      }),
-    });
+    await clearPdaInDb();
     refreshWalletNav();
     showNotif('◎ USDC returned to your wallet', 'warning');
-    if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
   };
   // ──────────────────────────────────────────────────────────────────────────
 
