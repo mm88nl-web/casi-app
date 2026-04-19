@@ -68,6 +68,8 @@ type PendingRow = {
   id: number | string;
   escrow_pda: string;
   created_at: string;
+  image_url: string | null;
+  element_id: string | null;
 };
 
 type ActiveRow = {
@@ -75,6 +77,7 @@ type ActiveRow = {
   escrow_pda: string;
   started_at: string | null;
   duration_minutes: number | string | null;
+  element_id: string | null;
 };
 
 export async function GET(req: Request) {
@@ -97,7 +100,7 @@ export async function GET(req: Request) {
   const [pending, active] = await Promise.all([
     supabase
       .from('bookings')
-      .select('id, escrow_pda, created_at')
+      .select('id, escrow_pda, created_at, image_url, element_id')
       .eq('status', 'pending')
       .eq('payment_method', 'solana')
       .not('escrow_pda', 'is', null)
@@ -105,7 +108,7 @@ export async function GET(req: Request) {
       .limit(200),
     supabase
       .from('bookings')
-      .select('id, escrow_pda, started_at, duration_minutes')
+      .select('id, escrow_pda, started_at, duration_minutes, element_id')
       .eq('status', 'active')
       .eq('payment_method', 'solana')
       .not('escrow_pda', 'is', null)
@@ -186,6 +189,14 @@ async function reconcilePending(
       .eq('id', row.id)
       .eq('status', 'pending');
     if (error) throw error;
+    // Mirror to overlay_elements — same reason as in the webhook: the
+    // admin client may have failed to run its post-sign projection.
+    if (row.element_id && row.image_url) {
+      await supabase
+        .from('overlay_elements')
+        .update({ image_url: row.image_url })
+        .eq('id', row.element_id);
+    }
     return 'active';
   }
 
@@ -213,5 +224,13 @@ async function reconcileActive(
     .eq('id', row.id)
     .eq('status', 'active');
   if (error) throw error;
+  // Clear the canvas to match admin's expire path (empty string, not null
+  // — OBS filters on truthy length).
+  if (row.element_id) {
+    await supabase
+      .from('overlay_elements')
+      .update({ image_url: '' })
+      .eq('id', row.element_id);
+  }
   return 'expired';
 }

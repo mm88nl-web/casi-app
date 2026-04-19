@@ -146,13 +146,15 @@ type BookingRow = {
   tx_signature: string | null;
   viewer_wallet: string | null;
   started_at: string | null;
+  image_url: string | null;
+  element_id: string | null;
 };
 
 async function findBookingByPdaAccounts(accounts: string[]): Promise<BookingRow | null> {
   if (accounts.length === 0) return null;
   const { data, error } = await supabase
     .from('bookings')
-    .select('id, status, escrow_pda, tx_signature, viewer_wallet, started_at')
+    .select('id, status, escrow_pda, tx_signature, viewer_wallet, started_at, image_url, element_id')
     .in('escrow_pda', accounts)
     .eq('payment_method', 'solana')
     .limit(1);
@@ -204,7 +206,21 @@ async function applyTransition({
         .update({ status: 'active', started_at: new Date().toISOString() })
         .eq('id', booking.id)
         .eq('status', 'pending');
-      if (error) logError('solana-webhook', error, { kind, booking_id: booking.id });
+      if (error) {
+        logError('solana-webhook', error, { kind, booking_id: booking.id });
+        return;
+      }
+      // Mirror the beam onto the streamer's canvas. Historically the admin
+      // client did this right after signing start_beam; with the webhook now
+      // authoritative, the admin's browser can race/fail and leave OBS blank
+      // despite DB status='active'. Projection belongs on the server.
+      if (booking.element_id && booking.image_url) {
+        const { error: elErr } = await supabase
+          .from('overlay_elements')
+          .update({ image_url: booking.image_url })
+          .eq('id', booking.element_id);
+        if (elErr) logError('solana-webhook', elErr, { kind, booking_id: booking.id, scope: 'overlay_elements' });
+      }
       return;
     }
 
@@ -218,7 +234,19 @@ async function applyTransition({
         .update({ status: 'expired', image_url: null })
         .eq('id', booking.id)
         .eq('status', 'active');
-      if (error) logError('solana-webhook', error, { kind, booking_id: booking.id });
+      if (error) {
+        logError('solana-webhook', error, { kind, booking_id: booking.id });
+        return;
+      }
+      // Clear the canvas. Match admin's expire path (line 359) which writes
+      // empty string rather than null — OBS filters on truthy length.
+      if (booking.element_id) {
+        const { error: elErr } = await supabase
+          .from('overlay_elements')
+          .update({ image_url: '' })
+          .eq('id', booking.element_id);
+        if (elErr) logError('solana-webhook', elErr, { kind, booking_id: booking.id, scope: 'overlay_elements' });
+      }
       return;
     }
 
