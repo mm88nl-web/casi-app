@@ -1162,10 +1162,15 @@ function OverlayContent() {
         streamer: new PK(profile.solana_wallet),
       });
     } catch (err) {
-      const { formatEscrowError } = await import('@/lib/casi-errors');
-      console.error('[beam] settleBeam failed:', err);
-      showNotif(formatEscrowError(err), 'denied');
-      return;
+      // "Transaction has already been processed" = Anchor's .rpc() resubmitted
+      // the signed tx after the first submission already landed. The refund
+      // went through; treat as success and fall through to the happy path.
+      const { formatEscrowError, isAlreadyProcessed } = await import('@/lib/casi-errors');
+      if (!isAlreadyProcessed(err)) {
+        console.error('[beam] settleBeam failed:', err);
+        showNotif(formatEscrowError(err), 'denied');
+        return;
+      }
     }
     refreshWalletNav();
     showNotif('◎ Beam ended — refund returned to your wallet', 'warning');

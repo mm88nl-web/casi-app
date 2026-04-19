@@ -573,8 +573,11 @@ export default function AdminStudio() {
     } catch (err) {
       // NotActive = escrow is still Pending on-chain. Only the viewer can
       // close it via cancel_escrow; surface that to the caller.
-      const { parseCasiError } = await import('@/lib/casi-errors');
+      const { parseCasiError, isAlreadyProcessed } = await import('@/lib/casi-errors');
       if (parseCasiError(err) === 'NotActive') return { outcome: 'pending-chain' };
+      // "already processed" = our first submission already landed and the
+      // settle succeeded. Treat as success so the caller doesn't toast.
+      if (isAlreadyProcessed(err)) return { outcome: 'settled' };
       console.error('[settleOrClearSolanaEscrow] settle_beam failed:', err);
       return { outcome: 'error', error: err };
     }

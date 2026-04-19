@@ -114,12 +114,31 @@ export function isTransientRpcError(err: unknown): boolean {
 }
 
 /**
+ * True if the RPC rejected the tx because the cluster already has this
+ * signature on file. This is NOT a real failure — it means a prior submission
+ * of the same signed tx already landed and the state change succeeded. Anchor's
+ * `.rpc()` helper can resubmit when confirmation is slow, and wallet adapters
+ * occasionally do the same. Callers should treat this as success.
+ */
+export function isAlreadyProcessed(err: unknown): boolean {
+  const msg = errorMessage(err).toLowerCase();
+  return (
+    msg.includes('already been processed') ||
+    msg.includes('already processed')
+  );
+}
+
+/**
  * Produce a short toast-ready string for any error thrown during a CASI
  * escrow tx. Precedence:
  *   1. User rejected in wallet → "Transaction cancelled"
  *   2. Mapped CasiError        → friendly copy from FRIENDLY
  *   3. Transient RPC error     → "Network issue — please try again"
  *   4. Fallback                → trimmed err.message (max 140 chars)
+ *
+ * Note: callers should check `isAlreadyProcessed(err)` BEFORE calling this —
+ * that's a false alarm (the first submission landed), not a real error, so
+ * it should short-circuit to the happy path instead of being formatted.
  */
 export function formatEscrowError(err: unknown): string {
   if (isUserRejection(err)) return 'Transaction cancelled';
