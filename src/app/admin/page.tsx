@@ -16,6 +16,9 @@ import BeamTimer from './_components/BeamTimer';
 import BackdropModal from './_components/BackdropModal';
 import SlotInfoPanel from './_components/SlotInfoPanel';
 import BeamCtrlPanel from './_components/BeamCtrlPanel';
+import FlashCard from './_components/FlashCard';
+import PendingRequestCard from './_components/PendingRequestCard';
+import QueuedRequestCard from './_components/QueuedRequestCard';
 import { getSecondsRemaining, formatTime, fmtDuration } from './_components/time';
 
 // Explicit column list for bookings reads. Swapping `*` for this is belt +
@@ -1283,59 +1286,15 @@ export default function AdminStudio() {
                   <span className="slot-type-badge badge-flash">⚡ Flashes</span>
                   {confirmedFlashes.length > 0 && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#4ade80' }}>{confirmedFlashes.length} paid</span>}
                 </div>
-                {pendingFlashes.map(flash => {
-                  const isFree = flash.payment_method === 'free' || flash.amount_cents === 0;
-                  const paid = !!(flash.payment_intent_id || flash.tx_signature) || isFree;
-                  const isSolana = flash.payment_method === 'solana';
-                  const settling = !!settlingSolana[flash.id];
-                  const amountUsdc = isSolana ? (flash.amount_cents / 100).toFixed(2) : null;
-                  return (
-                    <div key={flash.id} className="req-card c-flash">
-                      <div style={{ fontSize: 28, flexShrink: 0, lineHeight: 1 }}>⚡</div>
-                      <div className="req-info">
-                        <div className="req-meta">
-                          <span className="req-name">{flash.viewer_name}</span>
-                          {isFree
-                            ? <span className="tag t-green">🆓 Free</span>
-                            : paid
-                              ? <span className="tag t-green">✓ {isSolana ? 'Escrowed' : 'Paid'}</span>
-                              : <span className="tag t-dim">⌛ Awaiting payment</span>}
-                          {!isFree && (isSolana
-                            ? <span className="tag" style={{ background: 'rgba(153,69,255,0.12)', color: '#9945FF', border: '1px solid rgba(153,69,255,0.3)' }}>◎ {amountUsdc} USDC</span>
-                            : <span className="tag t-flash">${(flash.amount_cents / 100).toFixed(2)}</span>)}
-                          <span className="tag t-dim">{flash.payment_method}</span>
-                        </div>
-                        <div className="req-msg">"{flash.message}"</div>
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', marginTop: 6, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                          <span>{new Date(flash.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          {paid && (
-                            <span style={{ color: '#4ade80' }}>
-                              {isSolana
-                                ? `◎ ${parseFloat(amountUsdc!).toFixed(2)} USDC → you · 100%`
-                                : `You receive $${(flash.amount_cents / 100).toFixed(2)} · 100%`}
-                            </span>
-                          )}
-                          {flash.tx_signature && (
-                            <a href={`https://solscan.io/tx/${flash.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
-                              style={{ color: '#9945FF', textDecoration: 'none', fontSize: 10 }}>
-                              ↗ Solscan
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                      <div className="req-actions">
-                        <button onClick={() => denyFlash(flash)} disabled={settling} className="act-btn"
-                          style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', opacity: settling ? 0.5 : 1 }}>
-                          {isSolana && flash.escrow_pda ? '◎ Deny' : 'Deny'}
-                        </button>
-                        <button onClick={() => paid && approveFlash(flash)} disabled={!paid || settling} className="act-btn"
-                          style={{ background: paid ? (isSolana ? '#9945FF' : '#facc15') : 'var(--casi-border)', color: paid ? (isSolana ? '#fff' : '#111') : '#444', cursor: paid && !settling ? 'pointer' : 'not-allowed', border: 'none', opacity: settling ? 0.7 : 1 }}>
-                          {settling ? '◎ Signing…' : paid ? (isSolana && flash.escrow_pda ? '◎ Approve' : '⚡ Approve') : 'Awaiting…'}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                {pendingFlashes.map(flash => (
+                  <FlashCard
+                    key={flash.id}
+                    flash={flash}
+                    settling={!!settlingSolana[flash.id]}
+                    onApprove={approveFlash}
+                    onDeny={denyFlash}
+                  />
+                ))}
               </div>
             )}
 
@@ -1450,34 +1409,17 @@ export default function AdminStudio() {
                   <div style={{ marginBottom: 12 }}>
                     <div className="sec-head" style={{ color: 'var(--casi-text-muted)' }}>Pending — {pendingBeams.length}</div>
                     {pendingBeams.map(booking => (
-                      <div key={booking.id} className="req-card">
-                        <button className="req-thumb" onClick={() => setPreviewBooking(booking)}>
-                          {booking.image_url ? <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
-                        </button>
-                        <div className="req-info">
-                          <div className="req-name">{booking.viewer_name}</div>
-                          <div className="req-meta">
-                            <span className="tag t-orange">${booking.price_value}/{booking.price_unit}</span>
-                            <span className="tag t-green">${calcTotal(booking)} total</span>
-                            <span className="tag t-cyan">{fmtDuration(booking.duration_minutes)}</span>
-                          </div>
-                          {booking.message && <div className="req-msg">"{booking.message}"</div>}
-                          {booking.tx_signature && (
-                            <div style={{ marginTop: 5 }}>
-                              <a href={`https://solscan.io/tx/${booking.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
-                                style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none' }}>↗ Solscan</a>
-                            </div>
-                          )}
-                        </div>
-                        <div className="req-actions">
-                          <button onClick={() => approveBooking(booking)} className="act-btn"
-                            disabled={!isPaymentConfirmed(booking)}
-                            style={{ background: !isPaymentConfirmed(booking) ? 'var(--casi-border)' : activeBookings.some(b => b.element_id === booking.element_id) ? 'var(--casi-accent)' : 'var(--casi-accent2)', color: !isPaymentConfirmed(booking) ? '#444' : 'var(--casi-bg)', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
-                            {!isPaymentConfirmed(booking) ? 'Awaiting payment' : activeBookings.some(b => b.element_id === booking.element_id) ? 'Queue' : 'Approve'}
-                          </button>
-                          <button onClick={() => denyBooking(booking.id, booking.payment_method)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
-                        </div>
-                      </div>
+                      <PendingRequestCard
+                        key={booking.id}
+                        booking={booking}
+                        kind="beam"
+                        slotOccupied={activeBookings.some(b => b.element_id === booking.element_id)}
+                        paymentConfirmed={isPaymentConfirmed(booking)}
+                        calcTotal={calcTotal}
+                        onApprove={approveBooking}
+                        onDeny={denyBooking}
+                        onPreview={setPreviewBooking}
+                      />
                     ))}
                   </div>
                 )}
@@ -1486,33 +1428,16 @@ export default function AdminStudio() {
                   <div>
                     <div className="sec-head" style={{ color: 'rgba(var(--casi-accent-rgb),0.5)' }}>Wants next beam — {queuedBeams.length}</div>
                     {queuedBeams.map(booking => (
-                      <div key={booking.id} className="req-card" style={{ borderColor: 'rgba(var(--casi-accent-rgb),0.12)', background: 'rgba(245,130,32,0.03)' }}>
-                        <button className="req-thumb" onClick={() => setPreviewBooking(booking)}>
-                          {booking.image_url ? <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
-                        </button>
-                        <div className="req-info">
-                          <div className="req-name">{booking.viewer_name}</div>
-                          <div className="req-meta">
-                            <span className="tag t-dim">${booking.price_value}/{booking.price_unit}</span>
-                            <span className="tag t-green">${calcTotal(booking)} total</span>
-                          </div>
-                          {booking.message && <div className="req-msg">"{booking.message}"</div>}
-                          {booking.tx_signature && (
-                            <div style={{ marginTop: 5 }}>
-                              <a href={`https://solscan.io/tx/${booking.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
-                                style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none' }}>↗ Solscan</a>
-                            </div>
-                          )}
-                        </div>
-                        <div className="req-actions">
-                          <button onClick={() => approveBooking(booking)} className="act-btn"
-  disabled={!isPaymentConfirmed(booking)}
-  style={{ background: !isPaymentConfirmed(booking) ? 'var(--casi-border)' : 'var(--casi-accent)', color: !isPaymentConfirmed(booking) ? '#444' : 'var(--casi-bg)', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
-  {!isPaymentConfirmed(booking) ? 'Awaiting payment' : 'Queue'}
-</button>
-                          <button onClick={() => denyBooking(booking.id, booking.payment_method)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
-                        </div>
-                      </div>
+                      <QueuedRequestCard
+                        key={booking.id}
+                        booking={booking}
+                        kind="beam"
+                        paymentConfirmed={isPaymentConfirmed(booking)}
+                        calcTotal={calcTotal}
+                        onApprove={approveBooking}
+                        onDeny={denyBooking}
+                        onPreview={setPreviewBooking}
+                      />
                     ))}
                   </div>
                 )}
@@ -1610,28 +1535,17 @@ export default function AdminStudio() {
                   <div style={{ marginBottom: 12 }}>
                     <div className="sec-head" style={{ color: 'var(--casi-text-muted)' }}>Pending — {pendingBackdrop.length}</div>
                     {pendingBackdrop.map(booking => (
-                      <div key={booking.id} className="req-card">
-                        <button className="req-thumb" onClick={() => setPreviewBooking(booking)}>
-                          {booking.image_url ? <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
-                        </button>
-                        <div className="req-info">
-                          <div className="req-name">{booking.viewer_name}</div>
-                          <div className="req-meta">
-                            <span className="tag" style={{ color: '#c084fc', background: 'rgba(168,85,247,0.08)', borderColor: 'rgba(168,85,247,0.2)' }}>${booking.price_value}/{booking.price_unit}</span>
-                            <span className="tag t-green">${calcTotal(booking)} total</span>
-                            <span className="tag" style={{ color: '#888', background: 'rgba(255,255,255,0.04)', borderColor: '#1c1c1c' }}>{fmtDuration(booking.duration_minutes)}</span>
-                          </div>
-                          {booking.message && <div className="req-msg">"{booking.message}"</div>}
-                        </div>
-                        <div className="req-actions">
-                          <button onClick={() => approveBooking(booking)} className="act-btn"
-                            disabled={!isPaymentConfirmed(booking)}
-                            style={{ background: !isPaymentConfirmed(booking) ? 'var(--casi-border)' : '#c084fc', color: !isPaymentConfirmed(booking) ? '#444' : 'var(--casi-bg)', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
-                            {!isPaymentConfirmed(booking) ? 'Awaiting payment' : activeBookings.some(b => b.element_id === booking.element_id) ? 'Queue' : 'Approve'}
-                          </button>
-                          <button onClick={() => denyBooking(booking.id, booking.payment_method)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
-                        </div>
-                      </div>
+                      <PendingRequestCard
+                        key={booking.id}
+                        booking={booking}
+                        kind="backdrop"
+                        slotOccupied={activeBookings.some(b => b.element_id === booking.element_id)}
+                        paymentConfirmed={isPaymentConfirmed(booking)}
+                        calcTotal={calcTotal}
+                        onApprove={approveBooking}
+                        onDeny={denyBooking}
+                        onPreview={setPreviewBooking}
+                      />
                     ))}
                   </div>
                 )}
@@ -1640,26 +1554,16 @@ export default function AdminStudio() {
                   <div>
                     <div className="sec-head" style={{ color: 'rgba(192,132,252,0.5)' }}>Wants next backdrop — {queuedBackdrop.length}</div>
                     {queuedBackdrop.map(booking => (
-                      <div key={booking.id} className="req-card c-backdrop-queue">
-                        <button className="req-thumb" onClick={() => setPreviewBooking(booking)}>
-                          {booking.image_url ? <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
-                        </button>
-                        <div className="req-info">
-                          <div className="req-name">{booking.viewer_name}</div>
-                          <div className="req-meta">
-                            <span className="tag" style={{ color: 'rgba(192,132,252,0.6)', background: 'rgba(168,85,247,0.05)', borderColor: 'rgba(168,85,247,0.12)' }}>${booking.price_value}/{booking.price_unit}</span>
-                            <span className="tag t-green">${calcTotal(booking)} total</span>
-                          </div>
-                        </div>
-                        <div className="req-actions">
-                          <button onClick={() => approveBooking(booking)} className="act-btn"
-  disabled={!isPaymentConfirmed(booking)}
-  style={{ background: !isPaymentConfirmed(booking) ? 'var(--casi-border)' : '#c084fc', color: !isPaymentConfirmed(booking) ? '#444' : 'var(--casi-bg)', cursor: !isPaymentConfirmed(booking) ? 'not-allowed' : 'pointer' }}>
-  {!isPaymentConfirmed(booking) ? 'Awaiting payment' : 'Queue'}
-</button>
-                          <button onClick={() => denyBooking(booking.id, booking.payment_method)} className="act-btn b-danger" style={{ border: '1px solid rgba(248,113,113,0.2)' }}>Deny</button>
-                        </div>
-                      </div>
+                      <QueuedRequestCard
+                        key={booking.id}
+                        booking={booking}
+                        kind="backdrop"
+                        paymentConfirmed={isPaymentConfirmed(booking)}
+                        calcTotal={calcTotal}
+                        onApprove={approveBooking}
+                        onDeny={denyBooking}
+                        onPreview={setPreviewBooking}
+                      />
                     ))}
                   </div>
                 )}
