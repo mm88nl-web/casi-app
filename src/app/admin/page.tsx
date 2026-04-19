@@ -517,10 +517,15 @@ export default function AdminStudio() {
    * every subsequent Approve is popup-free because the server signs
    * `start_beam_delegated` with the registered session key.
    *
-   * Throws if signing fails or the wallet isn't connected so the card can
-   * surface the error; the stale DB row gets overwritten by the next Install.
+   * Returns the tx's Solscan URL so the card can surface a "view tx" link on
+   * success. Throws on signing failure so the card can transition to
+   * `needs-finalize` and offer a retry — NEVER regenerates a session key
+   * silently, that would leave an orphan secret in the DB.
    */
-  const installDelegateOnChain = async (sessionPubkey: string, expiresAt: number) => {
+  const installDelegateOnChain = async (
+    sessionPubkey: string,
+    expiresAt: number,
+  ): Promise<{ solscanUrl: string }> => {
     const anchorWallet = buildAnchorWalletForEscrow();
     if (!anchorWallet) {
       openWalletModal();
@@ -532,10 +537,11 @@ export default function AdminStudio() {
     const { CasiEscrowClient } = await import('@/lib/casi-escrow');
     const { PublicKey }        = await import('@solana/web3.js');
     const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
-    await client.setDelegate({
+    const { solscanUrl } = await client.setDelegate({
       sessionKey: new PublicKey(sessionPubkey),
       expiresAt,
     });
+    return { solscanUrl };
   };
 
   const approveBooking = async (booking: any) => {
@@ -1922,7 +1928,11 @@ export default function AdminStudio() {
                   </div>
 
                   {/* Session key delegate — optional server-side start_beam */}
-                  <DelegateKeyCard supabase={supabase} onInstalled={installDelegateOnChain} />
+                  <DelegateKeyCard
+                    supabase={supabase}
+                    walletReady={!!publicKey && !!profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet}
+                    onInstalled={installDelegateOnChain}
+                  />
 
                   {/* Free Flashes toggle — gates the Test Flash button on Studio */}
                   <div>

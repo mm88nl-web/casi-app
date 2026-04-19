@@ -4,34 +4,37 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 /**
  * Settings card for the server-held session-key delegate.
  *
- * The delegate is an ephemeral on-chain key the server holds encrypted at
- * rest. It can only sign `start_beam_delegated` — so when a streamer clicks
- * Approve on a pending booking, the server can flip the escrow Pending →
- * Active without the streamer's wallet prompting. It cannot move funds and
- * cannot settle (the on-chain program enforces the scope).
+ * The delegate lets the server sign `start_beam_delegated` on the streamer's
+ * behalf so Approve clicks don't pop a wallet. It's a two-phase install:
+ *   (1) server generates + stores the encrypted secret (POST install)
+ *   (2) streamer signs `set_delegate` on-chain so the program knows the
+ *       session key is authorized (onInstalled callback)
  *
- * States we render:
- *   - loading    — status probe in flight
- *   - absent     — no delegate installed, offer "Install"
- *   - healthy    — installed, not expired, not revoked
- *   - expired    — past `expires_at`, same "rotate" action as absent
- *   - revoked    — admin manually killed it; same "rotate" action
+ * If phase (2) fails after phase (1) succeeded, the card shows a
+ * `needs-finalize` state with a retry button — we NEVER re-generate a session
+ * key silently, because a streamer could end up with an orphan secret in the
+ * DB that doesn't match what's on-chain.
  *
- * Install / rotate / revoke all round-trip through the server routes under
- * /api/solana/delegates — the secret key never reaches this component.
+ * Install / rotate / revoke / finalize all require the streamer wallet to be
+ * connected AND match the solana_wallet saved on their profile. If it's not,
+ * the card disables mutations and tells them to connect — rather than failing
+ * halfway through the two-phase install.
+ *
+ * The secret key NEVER reaches this component.
  */
+
+type BaseInstalled = {
+  sessionPubkey: string;
+  expiresAt:     number;          // unix seconds
+  rotatedAt?:    string | null;
+  createdAt?:    string | null;
+  revokedAt?:    string | null;
+};
 
 type Status =
   | { kind: 'loading' }
   | { kind: 'absent' }
-  | {
-      kind: 'healthy' | 'expired' | 'revoked';
-      sessionPubkey: string;
-      expiresAt:     number;          // unix seconds
-      rotatedAt?:    string | null;
-      createdAt?:    string | null;
-      revokedAt?:    string | null;
-    };
+  | ({ kind: 'healthy' | 'expired' | 'revoked' | 'needs-finalize' } & BaseInstalled);
 
 /** 7 days — matches the hobby-cron cadence for /api/cron/solana-reconciler.
  *  Anything shorter forces rotation noise; anything longer and we risk a
@@ -41,16 +44,24 @@ const DEFAULT_LIFETIME_SECS = 7 * 24 * 60 * 60;
 
 export default function DelegateKeyCard({
   supabase,
+  walletReady,
   onInstalled,
 }: {
   supabase: SupabaseClient;
-  /** Fired after a successful install/rotate so the parent can, e.g.,
-   *  prompt the streamer to sign the on-chain `set_delegate` tx. */
-  onInstalled?: (sessionPubkey: string, expiresAt: number) => void;
+  /** True iff the streamer's wallet is connected AND matches the
+   *  `solana_wallet` saved on their profile. When false, the card disables
+   *  install/rotate/finalize and tells the user to connect instead. */
+  walletReady: boolean;
+  /** Sign `set_delegate` on-chain. Must throw on failure so the card can
+   *  transition to the `needs-finalize` state and offer a retry. Returning
+   *  a Solscan URL is optional — if provided it's rendered as a success
+   *  confirmation. */
+  onInstalled?: (sessionPubkey: string, expiresAt: number) => Promise<void | { solscanUrl?: string }>;
 }) {
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
-  const [busy, setBusy]     = useState<'install' | 'revoke' | null>(null);
+  const [busy, setBusy]     = useState<'install' | 'finalize' | 'revoke' | null>(null);
   const [err, setErr]       = useState<string | null>(null);
+  const [okLink, setOkLink] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setErr(null);
@@ -63,16 +74,15 @@ export default function DelegateKeyCard({
       if (!res.ok) throw new Error(`status ${res.status}`);
       const j = await res.json();
       if (!j.installed) { setStatus({ kind: 'absent' }); return; }
-      const kind: 'healthy' | 'expired' | 'revoked' =
-        j.revoked ? 'revoked' : j.expired ? 'expired' : 'healthy';
-      setStatus({
-        kind,
+      const kind: BaseInstalled & { kind: Status['kind'] } = {
+        kind:          j.revoked ? 'revoked' : j.expired ? 'expired' : 'healthy',
         sessionPubkey: j.sessionPubkey,
         expiresAt:     j.expiresAt,
         rotatedAt:     j.rotatedAt,
         createdAt:     j.createdAt,
         revokedAt:     j.revokedAt,
-      });
+      };
+      setStatus(kind as Status);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Failed to load');
       setStatus({ kind: 'absent' });
@@ -82,7 +92,12 @@ export default function DelegateKeyCard({
   useEffect(() => { load(); }, [load]);
 
   const install = async () => {
-    setBusy('install'); setErr(null);
+    if (!walletReady) {
+      setErr('Connect + save your Solana wallet first.');
+      return;
+    }
+    setBusy('install'); setErr(null); setOkLink(null);
+    let dbRow: { sessionPubkey: string; expiresAt: number } | null = null;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/solana/delegates/install', {
@@ -95,16 +110,47 @@ export default function DelegateKeyCard({
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Install failed');
-      // Server has the session key; now the streamer must sign `set_delegate`
-      // on-chain so the Anchor program recognizes the delegate PDA. Without
-      // this step the server-side crank has no authority and every Approve
-      // falls back to a wallet pop-up. Awaited so signing errors (user
-      // rejection, network blip) surface in the card's error state — the
-      // stale DB row gets overwritten on the next Install click.
-      if (onInstalled) await onInstalled(j.sessionPubkey, j.expiresAt);
+      dbRow = { sessionPubkey: j.sessionPubkey, expiresAt: j.expiresAt };
+
+      if (onInstalled) {
+        const maybe = await onInstalled(dbRow.sessionPubkey, dbRow.expiresAt);
+        if (maybe && typeof maybe === 'object' && 'solscanUrl' in maybe && maybe.solscanUrl) {
+          setOkLink(maybe.solscanUrl);
+        }
+      }
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Install failed');
+      const msg = e instanceof Error ? e.message : 'Install failed';
+      setErr(msg);
+      // If the DB write succeeded but the on-chain step failed, pop into
+      // `needs-finalize` immediately so the streamer sees the retry button
+      // without waiting for the next `load()` cycle.
+      if (dbRow) {
+        setStatus({
+          kind: 'needs-finalize',
+          sessionPubkey: dbRow.sessionPubkey,
+          expiresAt:     dbRow.expiresAt,
+        });
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const finalize = async () => {
+    if (status.kind !== 'needs-finalize' && status.kind !== 'healthy') return;
+    if (!walletReady) { setErr('Connect + save your Solana wallet first.'); return; }
+    if (!onInstalled) return;
+    setBusy('finalize'); setErr(null); setOkLink(null);
+    try {
+      const { sessionPubkey, expiresAt } = status;
+      const maybe = await onInstalled(sessionPubkey, expiresAt);
+      if (maybe && typeof maybe === 'object' && 'solscanUrl' in maybe && maybe.solscanUrl) {
+        setOkLink(maybe.solscanUrl);
+      }
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Finalize failed');
     } finally {
       setBusy(null);
     }
@@ -112,7 +158,7 @@ export default function DelegateKeyCard({
 
   const revoke = async () => {
     if (!confirm('Revoke the current session key? You can always install a new one.')) return;
-    setBusy('revoke'); setErr(null);
+    setBusy('revoke'); setErr(null); setOkLink(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/solana/delegates/revoke', {
@@ -132,6 +178,15 @@ export default function DelegateKeyCard({
   // ── presentation ─────────────────────────────────────────────────────────
 
   const { headline, sub, accent } = describe(status);
+  const primaryLabel =
+    busy === 'install'  ? 'Generating…'
+    : status.kind === 'healthy'         ? 'Rotate'
+    : status.kind === 'needs-finalize'  ? 'Finalize →'
+    : status.kind === 'absent'          ? 'Install →'
+                                        : 'Reinstall →';
+  const primaryAction = status.kind === 'needs-finalize' ? finalize : install;
+  const primaryBusy   = busy === 'install' || busy === 'finalize';
+  const showRevoke    = status.kind === 'healthy' || status.kind === 'needs-finalize';
 
   return (
     <div>
@@ -178,8 +233,9 @@ export default function DelegateKeyCard({
           {status.kind !== 'loading' && (
             <button
               type="button"
-              onClick={install}
-              disabled={busy !== null}
+              onClick={primaryAction}
+              disabled={busy !== null || !walletReady}
+              title={!walletReady ? 'Connect + save your Solana wallet first' : undefined}
               style={{
                 background: status.kind === 'healthy' ? 'rgba(255,255,255,0.04)' : 'var(--casi-accent)',
                 border: status.kind === 'healthy' ? '1px solid var(--casi-border)' : 'none',
@@ -190,17 +246,14 @@ export default function DelegateKeyCard({
                 fontSize: 11,
                 textTransform: 'uppercase',
                 color: status.kind === 'healthy' ? 'var(--casi-text)' : 'var(--casi-bg)',
-                cursor: busy ? 'wait' : 'pointer',
+                cursor: busy ? 'wait' : walletReady ? 'pointer' : 'not-allowed',
+                opacity: walletReady ? 1 : 0.5,
                 whiteSpace: 'nowrap',
               }}>
-              {busy === 'install'
-                ? 'Generating…'
-                : status.kind === 'healthy' ? 'Rotate'
-                : status.kind === 'absent'  ? 'Install →'
-                : 'Reinstall →'}
+              {primaryBusy ? (busy === 'finalize' ? 'Signing…' : 'Generating…') : primaryLabel}
             </button>
           )}
-          {status.kind === 'healthy' && (
+          {showRevoke && (
             <button
               type="button"
               onClick={revoke}
@@ -226,12 +279,16 @@ export default function DelegateKeyCard({
       <div style={{
         fontFamily: "'DM Mono',monospace",
         fontSize: 9,
-        color: err ? '#ef4444' : 'var(--casi-text-muted)',
+        color: err ? '#ef4444' : okLink ? '#4ade80' : 'var(--casi-text-muted)',
         marginTop: 5,
       }}>
         {err
           ? `✕ ${err}`
-          : 'Scoped: can only approve pending beams. Cannot move funds or settle escrows.'}
+          : okLink
+            ? <>✓ Delegate registered on-chain — <a href={okLink} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>view tx</a></>
+            : !walletReady
+              ? 'Connect + save your Solana wallet above to install a session key.'
+              : 'Scoped: can only approve pending beams. Cannot move funds or settle escrows.'}
       </div>
     </div>
   );
@@ -246,6 +303,12 @@ function describe(s: Status): { headline: string; sub: string; accent: string } 
         headline: 'No session key installed',
         sub: 'Streamers must sign each approval manually',
         accent: 'var(--casi-text)',
+      };
+    case 'needs-finalize':
+      return {
+        headline: '◎ Finalize on-chain',
+        sub: `${shortPk(s.sessionPubkey)} · generated, not yet registered`,
+        accent: '#eab308',
       };
     case 'expired':
       return {
