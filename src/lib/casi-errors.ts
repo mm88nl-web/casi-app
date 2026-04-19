@@ -21,6 +21,11 @@ export const CASI_ERROR_NAMES = [
   'NotActive',
   'WrongEscrowType',
   'MathOverflow',
+  'UnsupportedVersion',
+  'InvalidExpiry',
+  'DelegateLifetimeExceedsMax',
+  'DelegateExpired',
+  'PendingNotStale',
 ] as const;
 
 export type CasiErrorName = (typeof CASI_ERROR_NAMES)[number];
@@ -38,6 +43,11 @@ const FRIENDLY: Record<CasiErrorName, string> = {
   NotActive:         'This beam has not started yet.',
   WrongEscrowType:   'Wrong escrow type for this action.',
   MathOverflow:      'Transaction amount is out of range — please try a smaller value.',
+  UnsupportedVersion:         'Escrow account format is out of date — please contact support.',
+  InvalidExpiry:              'Delegate expiry must be in the future.',
+  DelegateLifetimeExceedsMax: 'Delegate lifetime is too long — please choose a shorter window.',
+  DelegateExpired:            'Streamer session key has expired — please ask them to refresh it.',
+  PendingNotStale:            'This booking is not old enough to cancel permissionlessly yet.',
 };
 
 /**
