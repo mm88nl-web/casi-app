@@ -176,6 +176,16 @@ export class CasiEscrowClient {
       preflightCommitment: 'confirmed',
     },
   ) {
+    // Fail loud when the deploy forgot to set NEXT_PUBLIC_CASI_PROGRAM_ID.
+    // The module-load fallback (DEFAULT_PROGRAM_ID = SystemProgram) lets the
+    // build pass in sandboxes without env vars, but actually sending a tx
+    // against the System Program silently no-ops and orphans user funds.
+    if (PROGRAM_ID.equals(SystemProgram.programId)) {
+      throw new Error(
+        'NEXT_PUBLIC_CASI_PROGRAM_ID is unset — refusing to sign against the System Program. ' +
+        'Set it in your env (see scripts/sync-program-id.mjs) and redeploy.',
+      );
+    }
     this.cluster = cluster;
     const provider = new AnchorProvider(connection, wallet, confirmOpts);
     setProvider(provider);

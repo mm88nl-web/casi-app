@@ -1006,7 +1006,7 @@ function OverlayContent() {
       // the CPI accounts without re-fetching from chain. cancel_token-authed
       // server route — anon UPDATE on tx_signature/escrow_pda/viewer_wallet
       // is being phased out (see migration 20260421...).
-      await fetch('/api/bookings/attach-solana-tx', {
+      const attachRes = await fetch('/api/bookings/attach-solana-tx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1017,6 +1017,17 @@ function OverlayContent() {
           viewer_wallet: publicKey.toBase58(),
         }),
       });
+      if (!attachRes.ok) {
+        // Funds are already locked on-chain. Don't fall through to the catch
+        // (which would deny) — leave the row where it is and surface the PDA
+        // so recovery is possible even if the viewer closes this tab.
+        console.error('[solana beam] attach failed after on-chain success:', attachRes.status, 'sig=', sig, 'pda=', escrowPda);
+        setTxStatus('error');
+        setTxError(`Payment confirmed on-chain (tx ${sig}) but booking update failed. Contact the streamer with escrow ${escrowPda}.`);
+        showNotif('Payment confirmed but booking update failed — see console for recovery info', 'error');
+        setSubmitting(false);
+        return;
+      }
 
       setConfirmedTxId(sig);
       refreshWalletNav();
@@ -1029,27 +1040,36 @@ function OverlayContent() {
       const { formatEscrowError, isUserRejection } = await import('@/lib/casi-errors');
       console.error('[solana beam] initializeBeam failed:', err);
 
-      // Anchor's .rpc() rebroadcasts after Phantom already sent, so Solana
-      // rejects the retry with "already been processed". The first tx landed —
-      // verify the PDA exists and recover instead of marking the booking denied.
-      const msg = String((err as { message?: string })?.message ?? err);
-      if (msg.includes('already been processed')) {
-        try {
-          const { Connection } = await import('@solana/web3.js');
-          const { deriveEscrowPda } = await import('@/lib/casi-escrow');
-          const [escrowPda] = deriveEscrowPda(newBooking.id);
-          const info = await new Connection(SOLANA_RPC).getAccountInfo(escrowPda);
-          if (info) {
-            await fetch('/api/bookings/attach-solana-tx', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                booking_id:    newBooking.id,
-                cancel_token:  readBookingTokens()[newBooking.id],
-                escrow_pda:    escrowPda.toBase58(),
-                viewer_wallet: publicKey.toBase58(),
-              }),
-            });
+      // User rejected in wallet — nothing on-chain, safe to deny.
+      if (isUserRejection(err)) {
+        await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
+        setTxStatus('error'); setTxError('Transaction rejected in wallet');
+        showNotif('Transaction rejected in wallet', 'denied');
+        setSubmitting(false);
+        return;
+      }
+
+      // Any other error can still land the tx on-chain — confirmation
+      // timeouts, Anchor's rebroadcast quirk ("already been processed"), RPC
+      // flakes. Probe the PDA before denying: if funds are locked, backfill
+      // the booking so the streamer can approve or the viewer can recover.
+      try {
+        const { Connection } = await import('@solana/web3.js');
+        const { deriveEscrowPda } = await import('@/lib/casi-escrow');
+        const [escrowPda] = deriveEscrowPda(newBooking.id);
+        const info = await new Connection(SOLANA_RPC).getAccountInfo(escrowPda);
+        if (info) {
+          const recoverRes = await fetch('/api/bookings/attach-solana-tx', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              booking_id:    newBooking.id,
+              cancel_token:  readBookingTokens()[newBooking.id],
+              escrow_pda:    escrowPda.toBase58(),
+              viewer_wallet: publicKey.toBase58(),
+            }),
+          });
+          if (recoverRes.ok) {
             refreshWalletNav();
             setTxStatus('waiting');
             showNotif('◎ Payment locked — awaiting streamer approval!', 'success');
@@ -1059,17 +1079,19 @@ function OverlayContent() {
             setSubmitting(false);
             return;
           }
-        } catch (recoverErr) {
-          console.error('[solana beam] recovery probe failed:', recoverErr);
+          console.error('[solana beam] recovery attach failed:', recoverRes.status, 'pda=', escrowPda.toBase58());
+          setTxStatus('error');
+          setTxError(`Payment confirmed on-chain but booking update failed. Contact the streamer with escrow ${escrowPda.toBase58()}.`);
+          showNotif('Payment confirmed but booking update failed — see console for recovery info', 'error');
+          setSubmitting(false);
+          return;
         }
+      } catch (probeErr) {
+        console.error('[solana beam] PDA probe failed:', probeErr);
       }
 
-      // Surface CasiError codes via the shared formatter; fall back to the
-      // generic "payment failed" message so the UI never shows raw RPC noise.
-      const userMsg = isUserRejection(err)
-        ? 'Transaction rejected in wallet'
-        : formatEscrowError(err);
-
+      // Nothing on-chain — safe to deny.
+      const userMsg = formatEscrowError(err);
       await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
       setTxStatus('error'); setTxError(userMsg);
       showNotif(userMsg, 'denied');
