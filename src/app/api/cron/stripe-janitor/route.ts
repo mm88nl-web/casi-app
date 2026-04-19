@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { stripe } from '@/lib/stripe';
 
-// Vercel Cron calls this with Authorization: Bearer $CRON_SECRET
-// Add to vercel.json:
-//   "crons": [{ "path": "/api/cron/stripe-janitor", "schedule": "* * * * *" }]
+// Vercel Cron calls this with Authorization: Bearer $CRON_SECRET.
+// Runs once per day on Hobby (Hobby plans cap crons at daily). The normal
+// end-of-beam capture path runs synchronously via /api/stripe/end-early, so
+// this is just a safety net for abandoned bookings — 24h reconciliation is
+// acceptable for that edge case. Upgrade to Pro + bump schedule if that
+// lag becomes a problem.
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
