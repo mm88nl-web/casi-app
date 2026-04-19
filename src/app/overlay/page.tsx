@@ -496,12 +496,20 @@ function OverlayContent() {
     (queued||[]).forEach((b:any) => { if (b.element_id) counts[b.element_id]=(counts[b.element_id]||0)+1; });
     setQueueCounts(counts);
     if (name) {
+      // Load the viewer's active + recent rows. Denied rows are included so
+      // the visibility filter at visibleMyBookings can surface "recover USDC"
+      // for Solana bookings whose escrow PDA still holds funds. Without this,
+      // a viewer who can't recover within the 30s grace window below is stuck.
       const { data: mine } = await supabase.from('bookings').select(BOOKING_COLS)
         .eq('profile_id', profId).eq('viewer_name', name)
-        .in('status',['pending','active','approved_queued'])
+        .in('status',['pending','active','approved_queued','denied'])
         .order('created_at',{ascending:false})
         .limit(50);
-      const relevant = (mine||[]).filter((b:any) => b.status!=='denied' || Date.now()-new Date(b.created_at).getTime()<30000);
+      const relevant = (mine||[]).filter((b:any) =>
+        b.status !== 'denied'
+        || (b.payment_method === 'solana' && b.escrow_pda)
+        || Date.now() - new Date(b.created_at).getTime() < 30000,
+      );
       setMyBookings(relevant);
     }
   }, [supabase]);
