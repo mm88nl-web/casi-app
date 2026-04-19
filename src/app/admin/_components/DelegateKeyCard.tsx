@@ -95,7 +95,13 @@ export default function DelegateKeyCard({
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Install failed');
-      onInstalled?.(j.sessionPubkey, j.expiresAt);
+      // Server has the session key; now the streamer must sign `set_delegate`
+      // on-chain so the Anchor program recognizes the delegate PDA. Without
+      // this step the server-side crank has no authority and every Approve
+      // falls back to a wallet pop-up. Awaited so signing errors (user
+      // rejection, network blip) surface in the card's error state — the
+      // stale DB row gets overwritten on the next Install click.
+      if (onInstalled) await onInstalled(j.sessionPubkey, j.expiresAt);
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Install failed');

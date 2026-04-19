@@ -511,6 +511,33 @@ export default function AdminStudio() {
     await client.startBeam({ escrowId: booking.id, streamer: publicKey! });
   };
 
+  /**
+   * Sign `set_delegate` on-chain after the server has generated + stored a
+   * session keypair. This is the ONE wallet pop-up in the session-key flow —
+   * every subsequent Approve is popup-free because the server signs
+   * `start_beam_delegated` with the registered session key.
+   *
+   * Throws if signing fails or the wallet isn't connected so the card can
+   * surface the error; the stale DB row gets overwritten by the next Install.
+   */
+  const installDelegateOnChain = async (sessionPubkey: string, expiresAt: number) => {
+    const anchorWallet = buildAnchorWalletForEscrow();
+    if (!anchorWallet) {
+      openWalletModal();
+      throw new Error('Connect your streamer wallet to finalize the session key');
+    }
+    if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
+      throw new Error('Connected wallet is not the streamer wallet on file');
+    }
+    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const { PublicKey }        = await import('@solana/web3.js');
+    const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
+    await client.setDelegate({
+      sessionKey: new PublicKey(sessionPubkey),
+      expiresAt,
+    });
+  };
+
   const approveBooking = async (booking: any) => {
   setPreviewBooking(null);
   const slotOccupied = activeBookings.some(b => b.element_id === booking.element_id);
@@ -1895,7 +1922,7 @@ export default function AdminStudio() {
                   </div>
 
                   {/* Session key delegate — optional server-side start_beam */}
-                  <DelegateKeyCard supabase={supabase} />
+                  <DelegateKeyCard supabase={supabase} onInstalled={installDelegateOnChain} />
 
                   {/* Free Flashes toggle — gates the Test Flash button on Studio */}
                   <div>
