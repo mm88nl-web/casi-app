@@ -22,6 +22,7 @@ import QueuedRequestCard from './_components/QueuedRequestCard';
 import ActiveCard from './_components/ActiveCard';
 import ApprovedQueueCard from './_components/ApprovedQueueCard';
 import StuckEscrowsPanel from './_components/StuckEscrowsPanel';
+import DelegateKeyCard from './_components/DelegateKeyCard';
 import { getSecondsRemaining, formatTime, fmtDuration } from './_components/time';
 
 // Explicit column list for bookings reads. Swapping `*` for this is belt +
@@ -471,6 +472,32 @@ export default function AdminStudio() {
       console.warn('[startSolanaBeam] booking has no escrow_pda — skipping');
       return;
     }
+
+    // Prefer the server-held session-key delegate. If it exists, is healthy,
+    // and the on-chain program accepts it (the server will probe all three
+    // constraints), the streamer doesn't need to pop open their wallet.
+    // Fall back to streamer-signed start_beam if the delegate is missing /
+    // expired / revoked / server errored.
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const res = await fetch('/api/solana/delegates/start-beam', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization:  `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ booking_id: booking.id }),
+        });
+        if (res.ok) return;
+        // Non-200 with known reasons means the delegate can't crank this tx.
+        // Fall through to wallet-signed path; any other status is also
+        // tolerated — the worst case is one extra wallet prompt.
+      }
+    } catch (err) {
+      console.warn('[startSolanaBeam] delegate crank failed; falling back', err);
+    }
+
     const anchorWallet = buildAnchorWalletForEscrow();
     if (!anchorWallet) {
       openWalletModal();
@@ -1866,6 +1893,9 @@ export default function AdminStudio() {
                     </div>
                     <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>Connect your wallet then click Save to link it to your profile.</div>
                   </div>
+
+                  {/* Session key delegate — optional server-side start_beam */}
+                  <DelegateKeyCard supabase={supabase} />
 
                   {/* Free Flashes toggle — gates the Test Flash button on Studio */}
                   <div>
