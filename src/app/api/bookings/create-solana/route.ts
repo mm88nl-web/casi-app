@@ -24,7 +24,9 @@
  */
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { SystemProgram } from '@solana/web3.js';
 import { createHash, randomUUID } from 'node:crypto';
+import { deriveEscrowPda, PROGRAM_ID } from '@/lib/casi-escrow';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -164,6 +166,35 @@ export async function POST(req: Request) {
   if (insertErr || !booking) {
     console.error('[bookings/create-solana] insert failed:', insertErr);
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
+  }
+
+  // Pre-compute and store the escrow PDA server-side. The derivation is
+  // deterministic (sha256(booking_id) → PDA), so the server and client end up
+  // with the same address. Storing it at insert time is what lets the Helius
+  // webhook (/api/webhooks/solana) look up the booking by PDA on the very
+  // first event — before the client has a chance to POST /attach-solana-tx.
+  // Without this, initialize_escrow webhooks would miss and we'd rely on the
+  // client-side race-prone attach path.
+  //
+  // Fail soft: if PROGRAM_ID is unset (sandbox / misconfigured deploy) we log
+  // and skip. The client will still attach via /attach-solana-tx on the happy
+  // path; only the webhook-only path is affected.
+  if (!PROGRAM_ID.equals(SystemProgram.programId)) {
+    try {
+      const [escrowPda] = deriveEscrowPda(booking.id);
+      const { error: pdaErr } = await supabase
+        .from('bookings')
+        .update({ escrow_pda: escrowPda.toBase58() })
+        .eq('id', booking.id)
+        .is('escrow_pda', null);
+      if (pdaErr) {
+        console.error('[bookings/create-solana] escrow_pda write failed:', pdaErr);
+      }
+    } catch (err) {
+      console.error('[bookings/create-solana] deriveEscrowPda threw:', err);
+    }
+  } else {
+    console.warn('[bookings/create-solana] NEXT_PUBLIC_CASI_PROGRAM_ID unset — skipping server-side escrow_pda');
   }
 
   return NextResponse.json({ booking_id: booking.id, cancel_token: cancelToken });

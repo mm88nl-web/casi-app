@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/stripe-janitor",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/solana-reconciler",
+      "schedule": "30 3 * * *"
     }
   ],
   "functions": {
@@ -12,6 +16,12 @@
     },
     "src/app/api/cron/stripe-janitor/route.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/cron/solana-reconciler/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/webhooks/solana/route.ts": {
+      "maxDuration": 30
     },
     "src/app/api/bookings/attach-solana-tx/route.ts": {
       "maxDuration": 30
