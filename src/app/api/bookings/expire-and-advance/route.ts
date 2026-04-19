@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
   const { data: booking } = await supabase
     .from('bookings')
-    .select('id, element_id, status, started_at, duration_minutes')
+    .select('id, element_id, status, started_at, duration_minutes, payment_method, escrow_pda')
     .eq('id', booking_id)
     .single();
 
@@ -45,18 +45,43 @@ export async function POST(req: Request) {
     return NextResponse.json({ expired: false, reason: 'not_active' });
   }
 
-  // Independently verify the timer ran out. A caller that triggers expiry on
-  // a still-running booking is doing exactly what the mass-expire attack was.
+  // Two ways to prove the beam is actually over:
+  //   1. Clock — the booking's timer has run out (natural expiry).
+  //   2. On-chain — for Solana, a closed escrow PDA means settle_beam already
+  //      distributed funds (viewer ended early). The program enforces that
+  //      only the viewer/streamer can trigger this, so a closed PDA is just
+  //      as authoritative as the clock and can't be spoofed by an attacker.
+  // A caller that triggers expiry on a still-running booking with an open
+  // PDA is doing exactly what the mass-expire attack was.
   const startedMs = booking.started_at ? new Date(booking.started_at).getTime() : 0;
   const durationMs = Number(booking.duration_minutes || 0) * 60 * 1000;
-  if (!startedMs || !durationMs || Date.now() < startedMs + durationMs) {
+  const timerElapsed = !!startedMs && !!durationMs && Date.now() >= startedMs + durationMs;
+
+  let onChainClosed = false;
+  if (!timerElapsed && booking.payment_method === 'solana' && booking.escrow_pda) {
+    try {
+      const { Connection, PublicKey } = await import('@solana/web3.js');
+      const { SOLANA_RPC } = await import('@/lib/solana-network');
+      const conn = new Connection(SOLANA_RPC, 'confirmed');
+      const info = await conn.getAccountInfo(new PublicKey(booking.escrow_pda));
+      onChainClosed = !info;
+    } catch (err) {
+      console.error('[expire-and-advance] PDA probe failed:', err);
+    }
+  }
+
+  if (!timerElapsed && !onChainClosed) {
     return NextResponse.json({ expired: false, reason: 'not_overdue' }, { status: 409 });
   }
 
   // Conditional update — second concurrent caller gets no row back and exits.
+  // For Solana end-early paths we also clear escrow_pda since the vault just
+  // closed — keeps StuckEscrowsPanel from treating this as an orphan.
+  const update: Record<string, unknown> = { status: 'expired', image_url: null };
+  if (onChainClosed) update.escrow_pda = null;
   const { data: updated } = await supabase
     .from('bookings')
-    .update({ status: 'expired', image_url: null })
+    .update(update)
     .eq('id', booking.id)
     .eq('status', 'active')
     .select('id')
