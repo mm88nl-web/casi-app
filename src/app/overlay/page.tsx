@@ -1061,11 +1061,24 @@ function OverlayContent() {
       // timeouts, Anchor's rebroadcast quirk ("already been processed"), RPC
       // flakes. Probe the PDA before denying: if funds are locked, backfill
       // the booking so the streamer can approve or the viewer can recover.
+      //
+      // Retry the probe with backoff because the RPC replica we hit may not
+      // have propagated the freshly-landed account yet. Without this, a tx
+      // that actually succeeded gets treated as "nothing on-chain", the
+      // booking denied, and the viewer's USDC stuck in a vault with no DB
+      // pointer back to it (no recover-USDC button surfaces).
       try {
         const { Connection } = await import('@solana/web3.js');
         const { deriveEscrowPda } = await import('@/lib/casi-escrow');
         const [escrowPda] = deriveEscrowPda(newBooking.id);
-        const info = await new Connection(SOLANA_RPC).getAccountInfo(escrowPda);
+        const conn = new Connection(SOLANA_RPC, 'confirmed');
+        const probeDelaysMs = [0, 800, 1600, 2400];
+        let info = null;
+        for (const delay of probeDelaysMs) {
+          if (delay) await new Promise(r => setTimeout(r, delay));
+          info = await conn.getAccountInfo(escrowPda).catch(() => null);
+          if (info) break;
+        }
         if (info) {
           const recoverRes = await fetch('/api/bookings/attach-solana-tx', {
             method: 'POST',
