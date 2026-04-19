@@ -1169,10 +1169,30 @@ function OverlayContent() {
       showNotif(formatEscrowError(err), 'denied');
       return;
     }
+
+    // .rpc() resolved without throwing, but verify the PDA is actually
+    // closed before celebrating — RPC quirks can let a failed-but-confirmed
+    // tx slip through, and we don't want a green toast on top of locked funds.
+    try {
+      const { Connection } = await import('@solana/web3.js');
+      const { deriveEscrowPda } = await import('@/lib/casi-escrow');
+      const [escrowPda] = deriveEscrowPda(booking.id);
+      const info = await new Connection(SOLANA_RPC).getAccountInfo(escrowPda);
+      if (info) {
+        console.error('[beam] cancelEscrow returned but PDA still alive:', escrowPda.toBase58());
+        showNotif('Cancel sent but escrow still holds funds — try again or contact support', 'denied');
+        return;
+      }
+    } catch (probeErr) {
+      console.error('[beam] post-cancel PDA probe failed:', probeErr);
+      // Don't block the success path on a probe failure — the cancel itself
+      // confirmed. Worst case the UI is briefly stale.
+    }
+
     // PDA is closed — hide the booking from the viewer's list. cancel_token
     // auth on /api/bookings/viewer-deny; null_escrow=true clears the pda
     // pointer so the "recover" button doesn't keep showing.
-    await fetch('/api/bookings/viewer-deny', {
+    const denyRes = await fetch('/api/bookings/viewer-deny', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1181,8 +1201,15 @@ function OverlayContent() {
         null_escrow: true,
       }),
     });
+    if (!denyRes.ok) {
+      // On-chain refund happened, only the DB cleanup failed. Tell the
+      // viewer their money is safe but the row will still look weird.
+      console.error('[beam] viewer-deny failed after on-chain cancel:', denyRes.status);
+      showNotif('USDC returned, but booking row needs a manual refresh', 'warning');
+    } else {
+      showNotif('◎ USDC returned to your wallet', 'warning');
+    }
     refreshWalletNav();
-    showNotif('◎ USDC returned to your wallet', 'warning');
     if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
   };
   // ──────────────────────────────────────────────────────────────────────────
