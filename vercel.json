@@ -1,1 +1,20 @@
-{}
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/stripe-janitor",
+      "schedule": "* * * * *"
+    }
+  ],
+  "functions": {
+    "src/app/api/stripe/webhook/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/cron/stripe-janitor/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/bookings/attach-solana-tx/route.ts": {
+      "maxDuration": 30
+    }
+  }
+}
