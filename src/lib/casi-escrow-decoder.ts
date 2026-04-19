@@ -19,19 +19,27 @@
 export type CasiIxKind =
   | 'initialize_escrow'
   | 'start_beam'
+  | 'start_beam_delegated'
   | 'settle_beam'
   | 'cancel_escrow'
+  | 'cancel_stale_pending'
   | 'approve_flash'
-  | 'deny_flash';
+  | 'deny_flash'
+  | 'set_delegate'
+  | 'revoke_delegate';
 
 /** First 8 bytes of sha256("global:<ix_name>"), sourced from the Anchor IDL. */
 export const CASI_IX_DISCRIMINATORS: Record<CasiIxKind, readonly number[]> = {
-  initialize_escrow: [243, 160, 77, 153, 11, 92, 48, 209],
-  start_beam:        [187, 39, 92, 123, 231, 162, 107, 84],
-  settle_beam:       [168, 38, 48, 236, 91, 235, 124, 50],
-  cancel_escrow:     [156, 203, 54, 179, 38, 72, 33, 21],
-  approve_flash:     [147, 245, 112, 105, 129, 130, 96, 236],
-  deny_flash:        [29, 88, 56, 249, 152, 228, 136, 97],
+  initialize_escrow:    [243, 160,  77, 153,  11,  92,  48, 209],
+  start_beam:           [187,  39,  92, 123, 231, 162, 107,  84],
+  start_beam_delegated: [195, 222, 233, 170, 211, 183, 120,  78],
+  settle_beam:          [168,  38,  48, 236,  91, 235, 124,  50],
+  cancel_escrow:        [156, 203,  54, 179,  38,  72,  33,  21],
+  cancel_stale_pending: [109, 239, 233,  36,  66,  98, 100, 244],
+  approve_flash:        [147, 245, 112, 105, 129, 130,  96, 236],
+  deny_flash:           [ 29,  88,  56, 249, 152, 228, 136,  97],
+  set_delegate:         [242,  30,  46,  76, 108, 235, 128, 181],
+  revoke_delegate:      [142,  66,  98, 126, 102,  60,  92, 163],
 };
 
 // Reverse lookup: 8-byte key → instruction name. Keyed by comma-joined bytes

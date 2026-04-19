@@ -197,9 +197,14 @@ async function applyTransition({
       return;
     }
 
-    case 'start_beam': {
+    case 'start_beam':
+    case 'start_beam_delegated': {
       // pending → active. Only advance from pending; never regress or
-      // re-stamp started_at if the admin already flipped it.
+      // re-stamp started_at if the admin already flipped it. The delegated
+      // variant lands here too — on-chain it's identical (flips status to
+      // Active, stamps start_timestamp), and we want the same DB + overlay
+      // projection regardless of whether the streamer or their session key
+      // signed.
       if (booking.status !== 'pending') return;
       const { error } = await supabase
         .from('bookings')
@@ -264,10 +269,30 @@ async function applyTransition({
       return;
     }
 
+    case 'cancel_stale_pending': {
+      // Permissionless crank fired on a pending escrow that aged past the
+      // on-chain timeout — outcome is identical to viewer-side cancel (100%
+      // refund, PDA closed). DB just needs the status flip.
+      if (booking.status !== 'pending') return;
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status: 'denied' })
+        .eq('id', booking.id)
+        .eq('status', 'pending');
+      if (error) logError('solana-webhook', error, { kind, booking_id: booking.id });
+      return;
+    }
+
     case 'approve_flash':
     case 'deny_flash':
       // Flashes are written by /api/flashes/attach-escrow + moderate.
       // Phase 1B will route them through here too; for now, no-op.
+      return;
+
+    case 'set_delegate':
+    case 'revoke_delegate':
+      // Delegate lifecycle lives in streamer_delegates (written by
+      // /api/solana/delegates/*); we don't mirror it onto bookings.
       return;
   }
 }
