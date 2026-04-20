@@ -505,8 +505,8 @@ export default function AdminStudio() {
    * unfunded, chain revert).
    *
    * Why a separate helper instead of inlining: both `settleOrClearSolanaEscrow`
-   * (deny + stuck-escrow panel) and `kickBeam` (playNow + end-early) need the
-   * same try-delegated-first semantics. Keeping it one place keeps the fallback
+   * (deny path) and `kickBeam` (playNow + end-early) need the same
+   * try-delegated-first semantics. Keeping it one place keeps the fallback
    * behavior identical across surfaces.
    */
   const trySolanaSettleDelegated = async (bookingId: string): Promise<boolean> => {

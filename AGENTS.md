@@ -104,7 +104,7 @@ Phase 3 added a scoped delegation layer to the escrow program so the streamer do
 - `/api/solana/delegates/status` — UI helper to pick card state (not-installed / installed / expired / revoked).
 - `/api/solana/delegates/revoke` — streamer-auth; stamps `revoked_at`. Admin should also fire `revoke_delegate` on-chain.
 - `/api/solana/delegates/start-beam` — called by the admin page's approve handler when a healthy delegate exists. Signs `start_beam_delegated` with the decrypted session key. **Uses the cranker as fee payer** (the session key has no SOL; Solana refuses to debit an un-credited account).
-- `/api/solana/delegates/settle-beam` — called by admin's `kickBeam` + `settleOrClearSolanaEscrow` (deny-on-Active, stuck-escrow panel). Signs `settle_beam_delegated` with the session key, cranker pays fees + ATA inits. On 503 `no_cranker` or any non-OK status, the admin page falls back to wallet-signed `settle_beam`.
+- `/api/solana/delegates/settle-beam` — called by admin's `kickBeam` + `settleOrClearSolanaEscrow` (deny-on-Active). Signs `settle_beam_delegated` with the session key, cranker pays fees + ATA inits. On 503 `no_cranker` or any non-OK status, the admin page falls back to wallet-signed `settle_beam`.
 
 **The cranker** (`SOLANA_CRANKER_KEYPAIR` env var, loaded via `src/lib/cranker-keypair.ts`):
 
@@ -175,11 +175,11 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 1   byte   status       (0=Pending, 1=Active)   ← offset 161
 1   byte   bump
 ```
-`Settled` / `Cancelled` close the account, so if `getAccountInfo` returns non-null the status byte is only 0 or 1. `StuckEscrowsPanel` uses this to skip loading the IDL on every row.
+`Settled` / `Cancelled` close the account, so if `getAccountInfo` returns non-null the status byte is only 0 or 1. Viewer-side recovery uses this to skip loading the IDL on every row.
 
 **Recovery surfaces**:
-- Viewer: `reclaimSolanaEscrow` in `overlay/page.tsx` — probes PDA, cancels if Pending, tells viewer "beam is live" if Active. Handles numeric booking ids.
-- Streamer: `StuckEscrowsPanel` in `admin/_components/` — lists denied rows with non-null `escrow_pda`, offers per-row `settle_beam` signed by the streamer.
+- Viewer: `reclaimSolanaEscrow` in `overlay/page.tsx` — probes PDA, cancels if Pending, tells viewer "beam is live" if Active. Handles numeric booking ids. Shows for denied rows scoped by `viewer_name` (local-tab) OR `viewer_wallet` (cross-device same-wallet), so abandoning a tab and reconnecting from a new browser still surfaces the refund chip as long as the same wallet is used.
+- Streamer: none by design. Deny-on-Active settles immediately via `settleOrClearSolanaEscrow`, and the `cancel_stale_pending` crank in `/api/cron/solana-reconciler` refunds abandoned Pending escrows after 7 days. Admins don't need to babysit stuck escrows.
 - Shared helper: `settleOrClearSolanaEscrow` in `admin/page.tsx` — discriminated-outcome (`settled | closed | pending-chain | no-wallet | error`) so callers compose their own DB + toast logic without duplicating signing boilerplate.
 
 ## Migration workflow

@@ -1191,9 +1191,9 @@ pub struct CancelStalePending<'info> {
 #[derive(InitSpace)]
 pub struct EscrowState {
     // ─── Original layout (v0). Do NOT reorder; off-chain decoders in
-    // `src/lib/casi-escrow-decoder.ts`, the reconciler, and the admin's
-    // StuckEscrowsPanel all read `status` at byte offset 161 from the start
-    // of the account data (= 8-byte discriminator + fixed fields below).
+    // `src/lib/casi-escrow-decoder.ts` and the reconciler read `status` at
+    // byte offset 161 from the start of the account data (= 8-byte
+    // discriminator + fixed fields below).
     pub escrow_id:       [u8; 32],
     pub viewer:          Pubkey,
     pub streamer:        Pubkey,

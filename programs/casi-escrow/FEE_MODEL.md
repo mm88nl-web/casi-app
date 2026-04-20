@@ -174,7 +174,6 @@ What changes:
 - `settleBeam` / `settleBeamDelegated` / kick / deny paths: fetch the
   `EscrowState` to get `fee_recipient`, pass it through to the client
   builder. Or cache on the booking row at create time for fewer RPCs.
-- Stuck-escrow panel: same.
 
 **`src/app/api/solana/delegates/start-beam/route.ts`**: no change —
 start_beam doesn't touch fees.
