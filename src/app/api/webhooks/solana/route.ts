@@ -238,7 +238,7 @@ async function applyTransition({
       if (booking.status !== 'active') return;
       const { error } = await supabase
         .from('bookings')
-        .update({ status: 'expired', image_url: null })
+        .update({ status: 'expired', image_url: null, escrow_pda: null })
         .eq('id', booking.id)
         .eq('status', 'active');
       if (error) {
@@ -257,30 +257,23 @@ async function applyTransition({
       return;
     }
 
-    case 'cancel_escrow': {
-      // Viewer cancelled a pending escrow → refund on chain, DB → denied.
-      // Only from pending; a cancel against an active escrow is impossible
-      // per the program, so this branch should never run on an active row.
-      if (booking.status !== 'pending') return;
-      const { error } = await supabase
-        .from('bookings')
-        .update({ status: 'denied' })
-        .eq('id', booking.id)
-        .eq('status', 'pending');
-      if (error) logError('solana-webhook', error, { kind, booking_id: booking.id });
-      return;
-    }
-
+    case 'cancel_escrow':
     case 'cancel_stale_pending': {
-      // Permissionless crank fired on a pending escrow that aged past the
-      // on-chain timeout — outcome is identical to viewer-side cancel (100%
-      // refund, PDA closed). DB just needs the status flip.
-      if (booking.status !== 'pending') return;
+      // Viewer cancelled a pending escrow (or the permissionless timeout
+      // crank fired) → refund on chain, PDA closed. The streamer may have
+      // already flipped DB status to 'denied' (admin deny while Pending),
+      // so accept either pending → denied or denied → denied and null the
+      // stale PDA pointer in both cases. Without this, the admin's stuck
+      // escrows panel keeps showing the row as "closed on-chain / Clear
+      // row" even though the viewer's on-chain action fully resolved the
+      // escrow. A cancel against an active escrow is impossible per the
+      // program, so we never see that here.
+      if (booking.status !== 'pending' && booking.status !== 'denied') return;
       const { error } = await supabase
         .from('bookings')
-        .update({ status: 'denied' })
+        .update({ status: 'denied', escrow_pda: null })
         .eq('id', booking.id)
-        .eq('status', 'pending');
+        .in('status', ['pending', 'denied']);
       if (error) logError('solana-webhook', error, { kind, booking_id: booking.id });
       return;
     }
