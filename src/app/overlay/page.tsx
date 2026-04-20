@@ -1224,6 +1224,19 @@ function OverlayContent() {
 
     const { Connection, PublicKey } = await import('@solana/web3.js');
     const conn = new Connection(SOLANA_RPC);
+    // Poll-probe the PDA over ~3s to tolerate RPC replica lag: a tx that just
+    // closed the account can take a beat to propagate to every replica we hit,
+    // and a single getAccountInfo can read the stale side and falsely report
+    // "still alive". Treat "gone on any attempt" as authoritative closure.
+    const isPdaClosed = async (attempts = 4, delayMs = 700): Promise<boolean> => {
+      for (let i = 0; i < attempts; i++) {
+        const info = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
+        if (!info) return true;
+        if (i < attempts - 1) await new Promise(r => setTimeout(r, delayMs));
+      }
+      return false;
+    };
+
     const pdaInfo = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
     if (!pdaInfo) {
       // PDA already closed — funds have left the vault. Clean up the stale row.
@@ -1240,16 +1253,17 @@ function OverlayContent() {
       const { formatEscrowError } = await import('@/lib/casi-errors');
       console.error('[beam] cancelEscrow failed:', err);
       // AlreadySettled = escrow moved out of Pending between our probe and the
-      // cancel (approved / settled / cancelled elsewhere). AccountNotInitialized
-      // = Anchor couldn't find a valid EscrowState at the PDA (account closed,
-      // or an RPC race where our probe hit a stale replica). In both cases re-
-      // probe; if the PDA is gone, clean up the stale DB row.
+      // cancel (approved / settled / cancelled elsewhere). already-processed =
+      // Anchor's .rpc() resubmitted a tx that already landed; the underlying
+      // cancel likely succeeded. AccountNotInitialized = Anchor couldn't find
+      // a valid EscrowState (closed). In all three cases the tx may have
+      // actually closed the PDA — poll-probe before concluding otherwise.
       const msg = err instanceof Error ? err.message : String(err);
       if (/AlreadySettled|already.*processed|AccountNotInitialized/i.test(msg)) {
-        const after = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
-        if (!after) {
+        if (await isPdaClosed()) {
           const ok = await clearPdaInDb();
-          showNotif(ok ? 'Escrow already closed — cleared' : 'Escrow closed, but DB cleanup failed — refresh the page', 'warning');
+          refreshWalletNav();
+          showNotif(ok ? '◎ USDC returned to your wallet' : 'USDC returned, but booking row needs a manual refresh', 'warning');
           return;
         }
         showNotif('Beam is live — wait for it to finish', 'denied');
@@ -1262,8 +1276,7 @@ function OverlayContent() {
     // .rpc() resolved without throwing, but verify the PDA is actually closed
     // before celebrating — RPC quirks can let a failed-but-confirmed tx slip
     // through, and we don't want a green toast on top of locked funds.
-    const after = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
-    if (after) {
+    if (!(await isPdaClosed())) {
       console.error('[beam] cancelEscrow returned but PDA still alive:', booking.escrow_pda);
       showNotif('Cancel sent but escrow still holds funds — try again or contact support', 'denied');
       return;
