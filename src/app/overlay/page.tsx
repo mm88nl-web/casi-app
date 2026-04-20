@@ -1227,26 +1227,31 @@ function OverlayContent() {
   const reclaimSolanaEscrow = async (booking: any) => {
     if (!booking.escrow_pda) return;
     const clearPdaInDb = async (): Promise<boolean> => {
-      const denyRes = await fetch('/api/bookings/viewer-deny', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          booking_id: booking.id,
-          cancel_token: readBookingTokens()[booking.id],
-          null_escrow: true,
-        }),
-      });
-      if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
-      return denyRes.ok;
+      try {
+        const denyRes = await fetch('/api/bookings/viewer-deny', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            booking_id: booking.id,
+            cancel_token: readBookingTokens()[booking.id],
+            null_escrow: true,
+          }),
+        });
+        if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+        return denyRes.ok;
+      } catch (err) {
+        console.error('[reclaim] clearPdaInDb failed:', err);
+        return false;
+      }
     };
 
     const { Connection, PublicKey } = await import('@solana/web3.js');
     const conn = new Connection(SOLANA_RPC);
-    // Poll-probe the PDA over ~3s to tolerate RPC replica lag: a tx that just
-    // closed the account can take a beat to propagate to every replica we hit,
-    // and a single getAccountInfo can read the stale side and falsely report
+    // Poll-probe the PDA to tolerate RPC replica lag: a tx that just closed
+    // the account can take a beat to propagate to every replica we hit, and
+    // a single getAccountInfo can read the stale side and falsely report
     // "still alive". Treat "gone on any attempt" as authoritative closure.
-    const isPdaClosed = async (attempts = 4, delayMs = 700): Promise<boolean> => {
+    const isPdaClosed = async (attempts = 6, delayMs = 1000): Promise<boolean> => {
       for (let i = 0; i < attempts; i++) {
         const info = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
         if (!info) return true;
@@ -1263,11 +1268,13 @@ function OverlayContent() {
       return;
     }
 
+    let cancelThrew = false;
     try {
       const client = await buildViewerCasiClient();
       if (!client) throw new Error('Wallet not ready to sign');
       await client.cancelEscrow({ escrowId: booking.id });
     } catch (err) {
+      cancelThrew = true;
       const { formatEscrowError } = await import('@/lib/casi-errors');
       console.error('[beam] cancelEscrow failed:', err);
       // AlreadySettled = escrow moved out of Pending between our probe and the
@@ -1291,18 +1298,23 @@ function OverlayContent() {
       return;
     }
 
-    // .rpc() resolved without throwing, but verify the PDA is actually closed
-    // before celebrating — RPC quirks can let a failed-but-confirmed tx slip
-    // through, and we don't want a green toast on top of locked funds.
-    if (!(await isPdaClosed())) {
-      console.error('[beam] cancelEscrow returned but PDA still alive:', booking.escrow_pda);
-      showNotif('Cancel sent but escrow still holds funds — try again or contact support', 'denied');
-      return;
-    }
+    // .rpc() resolved — Anchor has awaited confirmed commitment, so the tx
+    // reached the leader and is fully on-chain. Any lingering "PDA still
+    // alive" read from here is RPC replica lag, not a failed cancel. Always
+    // clean the DB row (the webhook would eventually do the same, but devnet
+    // doesn't always have a webhook configured and we don't want the viewer
+    // stuck on a stale chip + the streamer stuck on a stale "stuck" panel).
+    if (cancelThrew) return; // belt-and-suspenders; handled above
+    const closed = await isPdaClosed();
     const denyOk = await clearPdaInDb();
     refreshWalletNav();
+    if (!closed) {
+      console.warn('[beam] cancelEscrow confirmed but PDA probe still reads alive (replica lag):', booking.escrow_pda);
+    }
     showNotif(
-      denyOk ? '◎ USDC returned to your wallet' : 'USDC returned, but booking row needs a manual refresh',
+      denyOk
+        ? (closed ? '◎ USDC returned to your wallet' : '◎ Cancel confirmed — USDC landing in your wallet')
+        : 'USDC returned, but booking row needs a manual refresh',
       'warning',
     );
   };
