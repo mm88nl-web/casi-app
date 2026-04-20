@@ -308,7 +308,11 @@ export default function AdminStudio() {
     setTogglingLive(false);
   };
 
-  const expireBooking = useCallback(async (booking: any) => {
+  // Not memoized: this closes over startSolanaBeamOnChain (declared below) and
+  // a useCallback wrapper here would need startSolanaBeamOnChain in its deps,
+  // which is itself unmemoized. The onExpire prop's identity churn is harmless
+  // — BeamTimer keys on booking.id, not callback identity.
+  const expireBooking = async (booking: any) => {
     // Stripe capture for natural expiry is handled by the Vercel Cron janitor
     // (/api/cron/stripe-janitor). We do NOT call the API here because a
     // fire-and-forget fetch races with the queue-advance logic below:
@@ -323,33 +327,41 @@ export default function AdminStudio() {
     }
     await supabase.from('bookings').update({ status: 'expired', image_url: null }).eq('id', booking.id);
     if (booking.element_id) {
-      const { data: next } = await supabase.from('bookings').select('id, element_id, image_url, payment_method')
+      const { data: next } = await supabase.from('bookings')
+        .select('id, element_id, image_url, payment_method, escrow_pda')
         .eq('element_id', booking.element_id).eq('status', 'approved_queued')
-        .order('approved_at', { ascending: true }).limit(1).single();
-      // Solana beams require an explicit start_beam signature from the streamer,
-      // so we CANNOT auto-promote them from a timer / background context — the
-      // streamer's wallet may not be connected here. Leave the next booking in
-      // approved_queued; the admin UI renders a "Start Beam" action for it.
-      if (next && next.payment_method !== 'solana') {
+        .order('approved_at', { ascending: true }).limit(1).maybeSingle();
+
+      if (!next) {
+        await supabase.from('overlay_elements').update({ image_url: '' }).eq('id', booking.element_id);
+        setElements(prev => prev.map(el => el.id === booking.element_id ? { ...el, image_url: '' } : el));
+      } else if (next.payment_method === 'solana') {
+        // Solana queue: on-chain Pending → Active MUST happen before the DB
+        // flip, or settle_beam will revert. startSolanaBeamOnChain tries the
+        // server-held delegate first (cranker pays fees, no popup) and falls
+        // back to a wallet-signed start_beam if the delegate is missing /
+        // revoked / expired / unfunded. If both fail we leave the row in
+        // approved_queued and nudge the streamer to click Play Now.
+        try {
+          await startSolanaBeamOnChain(next);
+          await supabase.from('bookings').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', next.id);
+          await supabase.from('overlay_elements').update({ image_url: next.image_url }).eq('id', next.element_id);
+          setElements(prev => prev.map(el => el.id === next.element_id ? { ...el, image_url: next.image_url } : el));
+        } catch (err) {
+          console.warn('[expireBooking] Solana auto-promote failed, leaving queued', err);
+          await supabase.from('overlay_elements').update({ image_url: '' }).eq('id', booking.element_id);
+          setElements(prev => prev.map(el => el.id === booking.element_id ? { ...el, image_url: '' } : el));
+          showFlashToast('Next Solana beam ready — click Play Now to start', 'ok');
+        }
+      } else {
         await supabase.from('bookings').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', next.id);
         await supabase.from('overlay_elements').update({ image_url: next.image_url }).eq('id', next.element_id);
         setElements(prev => prev.map(el => el.id === next.element_id ? { ...el, image_url: next.image_url } : el));
-      } else {
-        // No eligible auto-promotable next booking → clear the slot. For a
-        // Solana next-up the streamer will click Start Beam manually.
-        await supabase.from('overlay_elements').update({ image_url: '' }).eq('id', booking.element_id);
-        setElements(prev => prev.map(el => el.id === booking.element_id ? { ...el, image_url: '' } : el));
-        if (next && next.payment_method === 'solana') {
-          // Solana queue doesn't auto-promote (streamer wallet may be idle);
-          // surface a nudge so the studio isn't left with a blank slot while
-          // an approved beam is waiting.
-          showFlashToast('Next Solana beam ready — click Play Now to start', 'ok');
-        }
       }
     }
     setActiveBookings(prev => prev.filter(b => b.id !== booking.id));
     if (profile?.id) loadBookings(profile.id);
-  }, [supabase, profile?.id, loadBookings]);
+  };
 
   const updateLayer = useCallback(async (id: string, updates: any) => {
     setSaveStatus('Saving…');
@@ -844,7 +856,9 @@ export default function AdminStudio() {
     }
   };
 
-  const kickBeam = useCallback(async (booking: any) => {
+  // Plain function (not useCallback) because it closes over the unmemoized
+  // expireBooking + startSolanaBeamOnChain. Memoizing would capture stale refs.
+  const kickBeam = async (booking: any) => {
     setSelectedSlotId(null);
     setShowInfoPanel(false);
     if (booking.payment_method === 'solana') {
@@ -896,7 +910,7 @@ export default function AdminStudio() {
       });
       await expireBooking(booking);
     }
-  }, [expireBooking, publicKey, profile?.solana_wallet, walletConnection, supabase]);
+  };
 
   // Force-advance a queued booking to active: end the current one on the
   // same slot (settles on-chain for Solana / prorates for Stripe), then
