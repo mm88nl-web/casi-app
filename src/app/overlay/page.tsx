@@ -582,12 +582,15 @@ function OverlayContent() {
       const old = prev.find((b: any) => b.id === booking.id);
       if (!old) return;
       if (old.status === 'pending' && booking.status === 'denied') {
-        // Solana deny on a Pending escrow leaves funds in the PDA — cancel_escrow
-        // is viewer-only, so we have to sign it here. Tell the viewer what the
-        // popup is for up front; auto-pop fires 600 ms later so both stack.
+        // Solana deny on a Pending escrow leaves funds in the PDA — only the
+        // viewer can close it via cancel_escrow. We used to auto-pop the
+        // wallet here, but Phantom doesn't reliably foreground popups when
+        // the overlay tab isn't focused (streamer just denied, so attention
+        // is on the admin tab), and a popup the viewer doesn't see = a
+        // cancel tx that never lands. Point them at the persistent RECOVER
+        // USDC button on the chip instead — one deliberate click.
         if (booking.payment_method === 'solana' && booking.escrow_pda) {
-          showNotif('Denied — approve the wallet popup to reclaim your USDC', 'denied');
-          setTimeout(() => reclaimSolanaEscrow(booking), 600);
+          showNotif('Denied — click RECOVER USDC to reclaim your funds', 'denied');
         } else {
           showNotif('Your request was denied', 'denied');
         }
