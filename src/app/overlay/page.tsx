@@ -453,6 +453,11 @@ function OverlayContent() {
 
   const supabase = useRef(createClient()).current;
   const viewerNameRef = useRef('');
+  // Mirrors the connected wallet pubkey into a ref so loadData can pick up
+  // cross-device denied rows (viewer_name lives in localStorage, wallet does
+  // not). Updated by an effect below; reading via ref avoids reconstructing
+  // the loadData callback on every wallet change.
+  const viewerWalletRef = useRef<string | null>(null);
   const lastRealtimeEventAt = useRef(Date.now());
 
   // Theme color tokens — CSS vars, set by SkinProvider
@@ -482,6 +487,7 @@ function OverlayContent() {
 
   const loadData = useCallback(async (profId: string, nameOverride?: string) => {
     const name = nameOverride ?? viewerNameRef.current;
+    const wallet = viewerWalletRef.current;
     const [{ data: els }, { data: active }, { data: aq }, { data: queued }] = await Promise.all([
       supabase.from('overlay_elements').select('*').eq('profile_id', profId),
       supabase.from('bookings').select(BOOKING_COLS).eq('profile_id', profId).eq('status','active').limit(BOOKING_PAGE_LIMIT),
@@ -495,17 +501,41 @@ function OverlayContent() {
     const counts: Record<string,number> = {};
     (queued||[]).forEach((b:any) => { if (b.element_id) counts[b.element_id]=(counts[b.element_id]||0)+1; });
     setQueueCounts(counts);
-    if (name) {
+    if (name || wallet) {
       // Load the viewer's active + recent rows. Denied rows are included so
       // the visibility filter at visibleMyBookings can surface "recover USDC"
       // for Solana bookings whose escrow PDA still holds funds. Without this,
       // a viewer who can't recover within the 30s grace window below is stuck.
-      const { data: mine } = await supabase.from('bookings').select(BOOKING_COLS)
-        .eq('profile_id', profId).eq('viewer_name', name)
-        .in('status',['pending','active','approved_queued','denied'])
-        .order('created_at',{ascending:false})
-        .limit(50);
-      const relevant = (mine||[]).filter((b:any) =>
+      //
+      // Two parallel queries, merged on id:
+      //   - by viewer_name: the full recent set (pending / active / queued /
+      //     denied) for this browser's saved handle
+      //   - by viewer_wallet: denied Solana rows with a live escrow PDA, so a
+      //     viewer who abandoned a deny on one device and reconnects the same
+      //     wallet elsewhere still sees the RECOVER USDC chip. Scoped narrowly
+      //     (denied + payment_method=solana + escrow_pda non-null) so we don't
+      //     drag in unrelated history.
+      const [nameRes, walletRes] = await Promise.all([
+        name
+          ? supabase.from('bookings').select(BOOKING_COLS)
+              .eq('profile_id', profId).eq('viewer_name', name)
+              .in('status', ['pending', 'active', 'approved_queued', 'denied'])
+              .order('created_at', { ascending: false })
+              .limit(50)
+          : Promise.resolve({ data: [] as any[] }),
+        wallet
+          ? supabase.from('bookings').select(BOOKING_COLS)
+              .eq('profile_id', profId).eq('viewer_wallet', wallet)
+              .eq('payment_method', 'solana').eq('status', 'denied')
+              .not('escrow_pda', 'is', null)
+              .limit(20)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const byId = new Map<any, any>();
+      for (const b of (nameRes.data || [])) byId.set(b.id, b);
+      for (const b of (walletRes.data || [])) if (!byId.has(b.id)) byId.set(b.id, b);
+      const mine = Array.from(byId.values());
+      const relevant = mine.filter((b:any) =>
         b.status !== 'denied'
         || (b.payment_method === 'solana' && b.escrow_pda)
         || Date.now() - new Date(b.created_at).getTime() < 30000,
@@ -513,6 +543,18 @@ function OverlayContent() {
       setMyBookings(relevant);
     }
   }, [supabase]);
+
+  // Keep viewerWalletRef in sync with the adapter, and re-pull bookings when
+  // a wallet connects/disconnects. This is what lets a viewer open the page
+  // on a brand-new browser/device, connect the same wallet, and see their
+  // previously-denied Solana booking's RECOVER USDC chip — without this they
+  // would be locked out until the 7-day cancel_stale_pending crank fires.
+  useEffect(() => {
+    const next = publicKey?.toBase58() ?? null;
+    if (next === viewerWalletRef.current) return;
+    viewerWalletRef.current = next;
+    if (profile?.id) loadData(profile.id);
+  }, [publicKey, profile?.id, loadData]);
 
   useEffect(() => {
     if (!username) return;
@@ -1301,9 +1343,11 @@ function OverlayContent() {
     // .rpc() resolved — Anchor has awaited confirmed commitment, so the tx
     // reached the leader and is fully on-chain. Any lingering "PDA still
     // alive" read from here is RPC replica lag, not a failed cancel. Always
-    // clean the DB row (the webhook would eventually do the same, but devnet
-    // doesn't always have a webhook configured and we don't want the viewer
-    // stuck on a stale chip + the streamer stuck on a stale "stuck" panel).
+    // try to clean the DB row (the Helius webhook would eventually do the
+    // same; we short-circuit for snappier UX on the device that signed).
+    // clearPdaInDb can fail with 403 when the viewer recovered from a
+    // different browser than they booked on (cancel_token lives in
+    // localStorage) — that's fine, the webhook will catch it.
     if (cancelThrew) return; // belt-and-suspenders; handled above
     const closed = await isPdaClosed();
     const denyOk = await clearPdaInDb();
@@ -1314,7 +1358,7 @@ function OverlayContent() {
     showNotif(
       denyOk
         ? (closed ? '◎ USDC returned to your wallet' : '◎ Cancel confirmed — USDC landing in your wallet')
-        : 'USDC returned, but booking row needs a manual refresh',
+        : '◎ USDC returned — this device will sync shortly',
       'warning',
     );
   };
