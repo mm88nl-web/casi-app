@@ -561,6 +561,34 @@ describe("casi-escrow", () => {
         .rpc();
     }
 
+    async function settleBeamDelegated(
+      ctx: EscrowCtx,
+      session: Keypair,
+      cranker: Keypair,
+      delegateStreamer: PublicKey = ctx.streamer.publicKey,
+    ) {
+      const delegatePda = deriveDelegatePda(delegateStreamer, program.programId);
+      return program.methods
+        .settleBeamDelegated(ctx.escrowId)
+        .accounts({
+          session: session.publicKey,
+          cranker: cranker.publicKey,
+          streamer: delegateStreamer,
+          viewer: ctx.viewer.publicKey,
+          delegate: delegatePda,
+          escrowState: ctx.escrowPda,
+          vault: ctx.vault,
+          streamerAta: ctx.streamerAta,
+          viewerAta: ctx.viewerAta,
+          usdcMint,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([session, cranker])
+        .rpc();
+    }
+
     it("installs + rotates + revokes a delegate (happy path)", async () => {
       const streamer = Keypair.generate();
       await airdrop(streamer.publicKey);
@@ -691,6 +719,122 @@ describe("casi-escrow", () => {
       // escrow.streamer ≠ streamerA → Unauthorized.
       await expectError(
         startBeamDelegated(ctxB, session, streamerA.publicKey),
+        "Unauthorized",
+      );
+    });
+
+    it("lets a valid delegate settle an Active beam (pro-rata split)", async () => {
+      const total = 6_000_000n;
+      const ctx = await setupParties(total);
+      await initialize(ctx, total, 60n, TYPE_BEAM);
+
+      const session = Keypair.generate();
+      const cranker = Keypair.generate();
+      await airdrop(session.publicKey);
+      await airdrop(cranker.publicKey);
+      await setDelegate(ctx.streamer, session.publicKey, nowSecs() + 60);
+
+      await startBeamDelegated(ctx, session);
+      await sleep(1500);
+      await settleBeamDelegated(ctx, session, cranker);
+
+      // Conservation: streamer + viewer == total. Exact split depends on the
+      // validator's clock, but we know both sides must be > 0 (some elapsed)
+      // and strictly less than total (beam didn't reach duration).
+      const streamerBal = await balanceOf(ctx.streamerAta);
+      const viewerBal   = await balanceOf(ctx.viewerAta);
+      expect(streamerBal + viewerBal).to.equal(total);
+      expect(streamerBal).to.be.greaterThan(0n);
+      expect(viewerBal).to.be.greaterThan(0n);
+    });
+
+    it("rejects settle_beam_delegated from a non-matching session key (Unauthorized)", async () => {
+      const total = 1_000_000n;
+      const ctx = await setupParties(total);
+      await initialize(ctx, total, 60n, TYPE_BEAM);
+
+      const realSession = Keypair.generate();
+      const fakeSession = Keypair.generate();
+      const cranker = Keypair.generate();
+      await airdrop(realSession.publicKey);
+      await airdrop(fakeSession.publicKey);
+      await airdrop(cranker.publicKey);
+      await setDelegate(ctx.streamer, realSession.publicKey, nowSecs() + 60);
+
+      await startBeamDelegated(ctx, realSession);
+
+      await expectError(
+        settleBeamDelegated(ctx, fakeSession, cranker),
+        "Unauthorized",
+      );
+    });
+
+    it("rejects settle_beam_delegated after expires_at (DelegateExpired)", async () => {
+      const total = 1_000_000n;
+      const ctx = await setupParties(total);
+      await initialize(ctx, total, 60n, TYPE_BEAM);
+
+      const session = Keypair.generate();
+      const cranker = Keypair.generate();
+      await airdrop(session.publicKey);
+      await airdrop(cranker.publicKey);
+      // 3-second window: enough to start, then expire before we settle.
+      await setDelegate(ctx.streamer, session.publicKey, nowSecs() + 3);
+      await startBeamDelegated(ctx, session);
+      await sleep(4000);
+
+      await expectError(
+        settleBeamDelegated(ctx, session, cranker),
+        "DelegateExpired",
+      );
+    });
+
+    it("rejects settle_beam_delegated on a Pending beam (NotActive)", async () => {
+      const total = 1_000_000n;
+      const ctx = await setupParties(total);
+      await initialize(ctx, total, 60n, TYPE_BEAM);
+
+      const session = Keypair.generate();
+      const cranker = Keypair.generate();
+      await airdrop(session.publicKey);
+      await airdrop(cranker.publicKey);
+      await setDelegate(ctx.streamer, session.publicKey, nowSecs() + 60);
+
+      // No start_beam yet — escrow is Pending on-chain.
+      await expectError(
+        settleBeamDelegated(ctx, session, cranker),
+        "NotActive",
+      );
+    });
+
+    it("rejects cross-streamer delegated settle (Unauthorized)", async () => {
+      // StreamerA installs a delegate. The session key tries to settle a
+      // beam owned by streamerB. The delegate PDA seed + escrow.streamer
+      // constraint should reject it.
+      const total = 1_000_000n;
+      const ctxB = await setupParties(total);
+      await initialize(ctxB, total, 60n, TYPE_BEAM);
+      // Start ctxB's beam via its own streamer's wallet so we have an Active
+      // target for the cross-streamer attempt.
+      await program.methods
+        .startBeam(ctxB.escrowId)
+        .accounts({
+          streamer: ctxB.streamer.publicKey,
+          escrowState: ctxB.escrowPda,
+        })
+        .signers([ctxB.streamer])
+        .rpc();
+
+      const streamerA = Keypair.generate();
+      await airdrop(streamerA.publicKey);
+      const session = Keypair.generate();
+      const cranker = Keypair.generate();
+      await airdrop(session.publicKey);
+      await airdrop(cranker.publicKey);
+      await setDelegate(streamerA, session.publicKey, nowSecs() + 60);
+
+      await expectError(
+        settleBeamDelegated(ctxB, session, cranker, streamerA.publicKey),
         "Unauthorized",
       );
     });

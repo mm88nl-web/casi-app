@@ -191,6 +191,21 @@ export interface StartBeamDelegatedIxParams {
   sessionKey: PublicKey;
 }
 
+export interface SettleBeamDelegatedIxParams {
+  escrowId: string | number | bigint;
+  /** Streamer wallet this delegate belongs to. Receives the vested portion
+   *  and the account rent (via close = streamer). */
+  streamer: PublicKey;
+  /** Viewer wallet — refund destination, bound by `has_one` on the escrow. */
+  viewer: PublicKey;
+  /** Session-key pubkey (authorization signer, attached server-side). */
+  sessionKey: PublicKey;
+  /** Cranker pubkey — fee + ATA-init payer, attached server-side. */
+  cranker: PublicKey;
+  usdcMint?: PublicKey;
+  tokenProgram?: PublicKey;
+}
+
 export interface CancelStalePendingParams {
   escrowId: string | number | bigint;
   /** Viewer wallet — refund destination (bound by the escrow's `has_one`). */
@@ -566,6 +581,46 @@ export class CasiEscrowClient {
         streamer,
         delegate:    delegatePda,
         escrowState: escrowPda,
+      })
+      .instruction();
+  }
+
+  // -------------------------------------------------------------------------
+  // settle_beam_delegated  (server-side: built here, signed with session key
+  // and co-signed with the cranker as fee payer)
+  // -------------------------------------------------------------------------
+
+  async buildSettleBeamDelegatedIx(
+    params: SettleBeamDelegatedIxParams,
+  ): Promise<TransactionInstruction> {
+    const { escrowId, streamer, viewer, sessionKey, cranker } = params;
+    const usdcMint     = params.usdcMint     ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
+
+    const escrowIdBytes = uuidToBytes(escrowId);
+    const [escrowPda]   = deriveEscrowPda(escrowId);
+    const [delegatePda] = deriveDelegatePda(streamer);
+
+    const vault       = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
+    const streamerAta = getAssociatedTokenAddressSync(usdcMint, streamer,  false, tokenProgram);
+    const viewerAta   = getAssociatedTokenAddressSync(usdcMint, viewer,    false, tokenProgram);
+
+    return (this.program.methods as any)
+      .settleBeamDelegated(escrowIdBytes)
+      .accounts({
+        session:     sessionKey,
+        cranker,
+        streamer,
+        viewer,
+        delegate:    delegatePda,
+        escrowState: escrowPda,
+        vault,
+        streamerAta,
+        viewerAta,
+        usdcMint,
+        tokenProgram,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram:          SystemProgram.programId,
       })
       .instruction();
   }

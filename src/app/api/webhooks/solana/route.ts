@@ -229,10 +229,12 @@ async function applyTransition({
       return;
     }
 
-    case 'settle_beam': {
-      // Natural end OR early-kick from either party. Either way the escrow
-      // is Settled on-chain — flip DB to expired. Only advance from active;
-      // a late settle on an already-expired booking is a no-op.
+    case 'settle_beam':
+    case 'settle_beam_delegated': {
+      // Natural end OR early-kick from either party (wallet-signed OR via
+      // session-key crank). Either way the escrow is Settled on-chain — flip
+      // DB to expired. Only advance from active; a late settle on an
+      // already-expired booking is a no-op.
       if (booking.status !== 'active') return;
       const { error } = await supabase
         .from('bookings')

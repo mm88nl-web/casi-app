@@ -56,14 +56,16 @@ program is accounts and math.
 | `start_beam`             | provider                                | Starts the vesting clock.                                         |
 | `start_beam_delegated`   | provider's pre-registered session key   | Same as `start_beam`, signed by a scoped ephemeral key.           |
 | `settle_beam`            | buyer OR provider OR (anyone post-dur.) | Settles at current `vested`. Permissionless after duration.       |
-| `set_delegate`           | provider                                | Registers a session key allowed to call `start_beam_delegated`.   |
+| `settle_beam_delegated`  | provider's pre-registered session key   | Same effect as `settle_beam`, signed by the scoped ephemeral key. |
+| `set_delegate`           | provider                                | Registers a session key allowed to call the delegated twins.      |
 | `revoke_delegate`        | provider                                | Invalidates the registered session key.                           |
 | `cancel_stale_pending`   | **anyone**, but only past 7-day stale   | Refunds buyer when provider abandoned a Pending escrow.           |
 
-The three permissionless paths (`settle_beam` post-duration,
-`cancel_stale_pending`, and the `set_delegate`-scoped `start_beam_delegated`)
-are the three places the program deliberately opens liveness to the public.
-Everything else is `has_one` constrained to the buyer or provider.
+The permissionless paths (`settle_beam` post-duration,
+`cancel_stale_pending`) and the session-key twins (`start_beam_delegated`,
+`settle_beam_delegated`) are the places the program deliberately opens
+liveness to the public or to a narrowly-scoped ephemeral key. Everything
+else is `has_one` constrained to the buyer or provider.
 
 ---
 
@@ -82,11 +84,13 @@ program does not know the cranker exists.
 | **Fully gasless**          | relayer / paymaster        | relayer co-signs           | Future work. Protocol already supports it — any caller that can pay fees + co-sign the session key works. |
 
 The delegation model is scoped: the session key can call
-`start_beam_delegated` and nothing else. It cannot withdraw funds, cannot
-cancel pending escrows, cannot change the delegate registration.
-Compromise of the session key costs the provider at most a griefed start
-call; it never costs the funds. Providers can revoke at any time with
-`revoke_delegate`.
+`start_beam_delegated` and `settle_beam_delegated` and nothing else. It
+cannot withdraw funds outside the vesting schedule, cannot cancel pending
+escrows, cannot change the delegate registration. Both delegated calls
+run the same vesting math as their wallet-signed twins; a compromised
+session key can at worst force an early settle at the current `vested`
+point (funds split per the schedule, no theft). Providers can revoke at
+any time with `revoke_delegate`.
 
 CASI's production setup uses mode 2 with a platform-owned cranker
 funded with ~0.05 SOL. Forks that don't want to operate a cranker can
@@ -185,10 +189,12 @@ product that is not CASI?" should verify:
    after 7 days refunds 100% to the buyer. Neither can be called
    earlier, neither can drain to the caller.
 4. **Delegate authority does not leak.** `set_delegate` stores a session
-   pubkey and expiry under a PDA keyed by the provider. The only
-   instruction that honors it is `start_beam_delegated`, and that
-   instruction does not move funds — it only flips status + stamps
-   `start_timestamp`.
+   pubkey and expiry under a PDA keyed by the provider. Only
+   `start_beam_delegated` and `settle_beam_delegated` honor it. Neither
+   can move funds outside the vesting schedule — start only flips status
+   + stamps `start_timestamp`, settle runs the same `vested =
+   total × min(elapsed, duration) / duration` formula as wallet-signed
+   settle. The session key never controls the refund destination.
 5. **CPI surface is two programs.** `token_interface` (`transfer_checked`,
    `close_account`) and the associated-token-program. No user-supplied
    program IDs, no arbitrary CPI.

@@ -512,6 +512,37 @@ export default function AdminStudio() {
   };
 
   /**
+   * Try the server-held session key first for settle_beam_delegated. Returns
+   * true if the delegated crank succeeded; the caller should NOT fall back to
+   * wallet-signed settle. Returns false on any failure so the caller can pop
+   * the streamer's wallet as a fallback (missing delegate, expired, cranker
+   * unfunded, chain revert).
+   *
+   * Why a separate helper instead of inlining: both `settleOrClearSolanaEscrow`
+   * (deny + stuck-escrow panel) and `kickBeam` (playNow + end-early) need the
+   * same try-delegated-first semantics. Keeping it one place keeps the fallback
+   * behavior identical across surfaces.
+   */
+  const trySolanaSettleDelegated = async (bookingId: string): Promise<boolean> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return false;
+      const res = await fetch('/api/solana/delegates/settle-beam', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization:  `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ booking_id: bookingId }),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[trySolanaSettleDelegated] crank failed; falling back', err);
+      return false;
+    }
+  };
+
+  /**
    * Sign `set_delegate` on-chain after the server has generated + stored a
    * session keypair. This is the ONE wallet pop-up in the session-key flow —
    * every subsequent Approve is popup-free because the server signs
@@ -614,6 +645,14 @@ export default function AdminStudio() {
     // it reverts with NotActive — skip the wasted signing prompt + tx fee.
     // Status byte lives at offset 161; see EscrowState layout in lib.rs.
     if (pdaInfo.data[161] === 0) return { outcome: 'pending-chain' };
+
+    // Try the delegated crank first — if a healthy session key is installed,
+    // the server settles without a wallet pop-up. On failure (no delegate,
+    // expired, cranker unfunded, chain revert) we fall through to the
+    // wallet-signed path below.
+    if (await trySolanaSettleDelegated(booking.id)) {
+      return { outcome: 'settled' };
+    }
 
     const canSign = !!booking.viewer_wallet && !!publicKey && !!profile?.solana_wallet
       && publicKey.toBase58() === profile.solana_wallet;
@@ -846,27 +885,35 @@ export default function AdminStudio() {
       // Settle the on-chain escrow: streamer receives 100% of the vested
       // portion, viewer receives the unvested portion as a refund. The
       // vault ATA + EscrowState are closed in the same tx.
-      const canSettleOnChain =
-        booking.escrow_pda && booking.viewer_wallet && publicKey &&
-        profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet;
-
-      if (canSettleOnChain) {
-        try {
-          const anchorWallet = buildAnchorWalletForEscrow();
-          if (!anchorWallet) throw new Error('Wallet not ready to sign');
-          const { CasiEscrowClient } = await import('@/lib/casi-escrow');
-          const { PublicKey: PK }    = await import('@solana/web3.js');
-          const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
-          await client.settleBeam({
-            escrowId: booking.id,
-            viewer:   new PK(booking.viewer_wallet),
-            streamer: publicKey!,
-          });
-        } catch (err) {
-          // Log and continue to expireBooking — DB still needs to advance
-          // the queue even if on-chain settle failed (e.g. already settled
-          // by viewer). The escrow_pda remains so the viewer can see it.
-          console.error('[kickBeam] settleBeam failed:', err);
+      //
+      // Try the server-held session key first (no wallet pop-up). If the
+      // delegate is missing / expired / cranker unfunded, fall back to
+      // wallet-signed settle — only possible when the streamer's wallet is
+      // connected and matches their profile's solana_wallet.
+      if (booking.escrow_pda && booking.viewer_wallet) {
+        const delegated = await trySolanaSettleDelegated(booking.id);
+        if (!delegated) {
+          const canSignFallback = publicKey && profile?.solana_wallet
+            && publicKey.toBase58() === profile.solana_wallet;
+          if (canSignFallback) {
+            try {
+              const anchorWallet = buildAnchorWalletForEscrow();
+              if (!anchorWallet) throw new Error('Wallet not ready to sign');
+              const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+              const { PublicKey: PK }    = await import('@solana/web3.js');
+              const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
+              await client.settleBeam({
+                escrowId: booking.id,
+                viewer:   new PK(booking.viewer_wallet),
+                streamer: publicKey!,
+              });
+            } catch (err) {
+              // Log and continue to expireBooking — DB still needs to advance
+              // the queue even if on-chain settle failed (e.g. already
+              // settled by viewer). escrow_pda stays so a later retry works.
+              console.error('[kickBeam] settleBeam fallback failed:', err);
+            }
+          }
         }
       }
       await expireBooking(booking);

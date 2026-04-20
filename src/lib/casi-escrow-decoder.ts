@@ -21,6 +21,7 @@ export type CasiIxKind =
   | 'start_beam'
   | 'start_beam_delegated'
   | 'settle_beam'
+  | 'settle_beam_delegated'
   | 'cancel_escrow'
   | 'cancel_stale_pending'
   | 'approve_flash'
@@ -34,6 +35,7 @@ export const CASI_IX_DISCRIMINATORS: Record<CasiIxKind, readonly number[]> = {
   start_beam:           [187,  39,  92, 123, 231, 162, 107,  84],
   start_beam_delegated: [195, 222, 233, 170, 211, 183, 120,  78],
   settle_beam:          [168,  38,  48, 236,  91, 235, 124,  50],
+  settle_beam_delegated:[108, 137,  86,  59,  53, 140, 189,  92],
   cancel_escrow:        [156, 203,  54, 179,  38,  72,  33,  21],
   cancel_stale_pending: [109, 239, 233,  36,  66,  98, 100, 244],
   approve_flash:        [147, 245, 112, 105, 129, 130,  96, 236],

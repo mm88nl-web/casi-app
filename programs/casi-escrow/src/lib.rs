@@ -445,6 +445,109 @@ pub mod casi_escrow {
         Ok(())
     }
 
+    /// Session-key path for early-ending a Beam. Identical effect to
+    /// `settle_beam` (pro-rata vest, vault closes, rent to streamer) except
+    /// the authorization comes from a pre-registered session key instead of
+    /// the streamer's own wallet. Extends the scoped-delegation trust model
+    /// to the high-frequency "end early / play next" action.
+    ///
+    /// Authorization is the delegate PDA's constraints:
+    ///   * `delegate.session_key == session.key()` — ephemeral server key.
+    ///   * `delegate.streamer    == escrow.streamer` — per-streamer scope.
+    ///   * `now < delegate.expires_at` — time-bound.
+    ///
+    /// No caller-is-party check: the delegate binding IS the streamer's
+    /// authorization (equivalent to the streamer personally signing).
+    ///
+    /// Fee + ATA-init payer is a separate `cranker` signer: the session key
+    /// has no SOL (Solana rejects "debit before credit" on zero-balance
+    /// accounts), and init_if_needed for `streamer_ata`/`viewer_ata` needs a
+    /// funded payer. Cranker does not appear in the state machine otherwise.
+    pub fn settle_beam_delegated(
+        ctx: Context<SettleBeamDelegated>,
+        escrow_id: [u8; 32],
+    ) -> Result<()> {
+        require!(
+            ctx.accounts.escrow_state.version == ESCROW_STATE_VERSION,
+            CasiError::UnsupportedVersion
+        );
+        require!(
+            ctx.accounts.delegate.version == STREAMER_DELEGATE_VERSION,
+            CasiError::UnsupportedVersion
+        );
+        require!(
+            ctx.accounts.escrow_state.status == EscrowStatus::Active,
+            CasiError::NotActive
+        );
+        require!(
+            ctx.accounts.escrow_state.escrow_type == EscrowType::Beam,
+            CasiError::WrongEscrowType
+        );
+
+        let now = Clock::get()?.unix_timestamp;
+        require!(
+            now < ctx.accounts.delegate.expires_at,
+            CasiError::DelegateExpired
+        );
+
+        let start_ts = ctx.accounts.escrow_state.start_timestamp;
+        let elapsed  = now.saturating_sub(start_ts).max(0) as u64;
+        let duration = ctx.accounts.escrow_state.duration_secs;
+        let total    = ctx.accounts.escrow_state.total_amount;
+        let bump     = ctx.accounts.escrow_state.bump;
+
+        require!(duration > 0, CasiError::InvalidDuration);
+
+        let vested_ticks = elapsed.min(duration);
+        let streamer_amt = ((total as u128) * (vested_ticks as u128) / (duration as u128)) as u64;
+        let refund       = total.checked_sub(streamer_amt).ok_or(CasiError::MathOverflow)?;
+
+        ctx.accounts.escrow_state.status = EscrowStatus::Settled;
+
+        let signer_seeds: &[&[u8]] = &[ESCROW_SEED, escrow_id.as_ref(), &[bump]];
+        let signer = &[signer_seeds];
+
+        if streamer_amt > 0 {
+            pda_transfer_checked(
+                &ctx.accounts.vault,
+                &ctx.accounts.streamer_ata,
+                streamer_amt,
+                &ctx.accounts.usdc_mint,
+                &ctx.accounts.escrow_state.to_account_info(),
+                &ctx.accounts.token_program,
+                signer,
+            )?;
+        }
+
+        if refund > 0 {
+            pda_transfer_checked(
+                &ctx.accounts.vault,
+                &ctx.accounts.viewer_ata,
+                refund,
+                &ctx.accounts.usdc_mint,
+                &ctx.accounts.escrow_state.to_account_info(),
+                &ctx.accounts.token_program,
+                signer,
+            )?;
+        }
+
+        pda_close_account(
+            &ctx.accounts.vault,
+            ctx.accounts.streamer.to_account_info(),
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
+            signer,
+        )?;
+
+        emit!(BeamSettled {
+            escrow_id,
+            streamer_amount: streamer_amt,
+            viewer_refund: refund,
+        });
+
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------
     // Session-key delegation
     // -----------------------------------------------------------------------
@@ -456,10 +559,14 @@ pub mod casi_escrow {
     ///     streamer can install one for themselves.
     ///   * `session_key` is an ephemeral pubkey (the server generates a fresh
     ///     keypair on each install; the secret stays server-side, encrypted).
-    ///   * The delegate can ONLY call `start_beam_delegated` — it cannot
-    ///     settle, cancel, deny, or move USDC. Worst-case server compromise
-    ///     is a premature beam start, which still vests correctly for the
-    ///     viewer (pro-rata on elapsed).
+    ///   * The delegate can call `start_beam_delegated` (flip Pending → Active)
+    ///     and `settle_beam_delegated` (end an Active beam early, pro-rata
+    ///     vest). It CANNOT cancel Pending escrows, deny flashes, move its
+    ///     own rent, or change delegation. Worst-case server compromise is
+    ///     an attacker ending a live beam early — viewer gets the unvested
+    ///     portion refunded, streamer loses the unvested portion. Bounded,
+    ///     recoverable by `revoke_delegate`, never leaks funds to the
+    ///     attacker.
     ///   * Self-expires after `expires_at`; program caps expiry to
     ///     `now + MAX_DELEGATE_LIFETIME_SECS`.
     ///   * Streamer can revoke any time via `revoke_delegate`.
@@ -950,6 +1057,81 @@ pub struct StartBeamDelegated<'info> {
         constraint = escrow_state.streamer == streamer.key() @ CasiError::Unauthorized,
     )]
     pub escrow_state: Account<'info, EscrowState>,
+}
+
+#[derive(Accounts)]
+#[instruction(escrow_id: [u8; 32])]
+pub struct SettleBeamDelegated<'info> {
+    /// The ephemeral session key. Must match `delegate.session_key`.
+    pub session: Signer<'info>,
+
+    /// Fee + ATA-init payer. The session key has no SOL; a funded co-signer
+    /// (the server-side "cranker") pays every delegated instruction's rent.
+    #[account(mut)]
+    pub cranker: Signer<'info>,
+
+    /// CHECK: Receives streamer_amt, the vault ATA rent (via close = streamer)
+    /// and the EscrowState rent. Not a signer; bound to the escrow's
+    /// `streamer` field via `has_one` below so the delegate cannot redirect
+    /// funds. Must match the streamer stored on the delegate PDA.
+    #[account(mut)]
+    pub streamer: SystemAccount<'info>,
+
+    /// CHECK: Refund destination. Bound to the escrow's `viewer` field via
+    /// `has_one` below; cannot be redirected.
+    #[account(mut)]
+    pub viewer: SystemAccount<'info>,
+
+    #[account(
+        seeds = [DELEGATE_SEED, streamer.key().as_ref()],
+        bump  = delegate.bump,
+        constraint = delegate.streamer    == streamer.key()   @ CasiError::Unauthorized,
+        constraint = delegate.session_key == session.key()    @ CasiError::Unauthorized,
+    )]
+    pub delegate: Account<'info, StreamerDelegate>,
+
+    #[account(
+        mut,
+        seeds   = [ESCROW_SEED, escrow_id.as_ref()],
+        bump    = escrow_state.bump,
+        has_one = streamer @ CasiError::Unauthorized,
+        has_one = viewer   @ CasiError::Unauthorized,
+        close   = streamer,
+    )]
+    pub escrow_state: Account<'info, EscrowState>,
+
+    #[account(
+        mut,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = escrow_state,
+        associated_token::token_program = token_program,
+    )]
+    pub vault: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        init_if_needed,
+        payer  = cranker,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = streamer,
+        associated_token::token_program = token_program,
+    )]
+    pub streamer_ata: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        init_if_needed,
+        payer  = cranker,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = viewer,
+        associated_token::token_program = token_program,
+    )]
+    pub viewer_ata: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(mint::token_program = token_program)]
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
+
+    pub token_program:            Interface<'info, TokenInterface>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program:           Program<'info, System>,
 }
 
 #[derive(Accounts)]
