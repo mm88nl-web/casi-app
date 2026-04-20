@@ -264,9 +264,15 @@ describe("casi-escrow", () => {
       await p;
       expect.fail(`expected tx to fail with ${variant} but it succeeded`);
     } catch (err) {
-      const msg = String(
-        (err as { message?: unknown })?.message ?? err,
-      );
+      // Anchor puts the error-code name in `message` for plain RPC failures,
+      // but in `logs` when the tx contains init_if_needed / CPI (simulation
+      // wraps the inner program error). Concatenate both so expectError works
+      // for either shape without callers needing to know which is which.
+      const e = err as { message?: unknown; logs?: unknown };
+      const msg = [
+        typeof e?.message === 'string' ? e.message : '',
+        Array.isArray(e?.logs) ? e.logs.join('\n') : '',
+      ].join('\n');
       expect(msg).to.include(variant);
     }
   }
@@ -744,8 +750,10 @@ describe("casi-escrow", () => {
       const streamerBal = await balanceOf(ctx.streamerAta);
       const viewerBal   = await balanceOf(ctx.viewerAta);
       expect(streamerBal + viewerBal).to.equal(total);
-      expect(streamerBal).to.be.greaterThan(0n);
-      expect(viewerBal).to.be.greaterThan(0n);
+      // chai's `greaterThan` doesn't accept bigints, so coerce to Number for
+      // the bound check. Safe: balances fit in u53 at these test amounts.
+      expect(Number(streamerBal)).to.be.greaterThan(0);
+      expect(Number(viewerBal)).to.be.greaterThan(0);
     });
 
     it("rejects settle_beam_delegated from a non-matching session key (Unauthorized)", async () => {
