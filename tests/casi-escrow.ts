@@ -574,6 +574,12 @@ describe("casi-escrow", () => {
       delegateStreamer: PublicKey = ctx.streamer.publicKey,
     ) {
       const delegatePda = deriveDelegatePda(delegateStreamer, program.programId);
+      // streamer_ata is constrained `associated_token::authority=streamer`, so
+      // when the test overrides the streamer account (cross-streamer scenario)
+      // we must derive the ATA from the override key — otherwise the tx fails
+      // pre-simulation with a generic ATA-mismatch error before the program's
+      // `has_one = streamer` check ever runs.
+      const streamerAta = getAssociatedTokenAddressSync(usdcMint, delegateStreamer);
       return program.methods
         .settleBeamDelegated(ctx.escrowId)
         .accounts({
@@ -584,7 +590,7 @@ describe("casi-escrow", () => {
           delegate: delegatePda,
           escrowState: ctx.escrowPda,
           vault: ctx.vault,
-          streamerAta: ctx.streamerAta,
+          streamerAta,
           viewerAta: ctx.viewerAta,
           usdcMint,
           tokenProgram: TOKEN_PROGRAM_ID,
