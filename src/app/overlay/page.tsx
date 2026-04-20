@@ -574,6 +574,11 @@ function OverlayContent() {
   }, [username, supabase, loadData]);
 
   const prevMyBookingsRef = useRef<any[]>([]);
+  // Booking IDs that flipped to denied within the last minute. Used to keep
+  // Stripe-denied chips on screen briefly ("✕ Denied — refund on the way")
+  // since the viewer's payment is voided automatically and there's no button
+  // to click. Solana-denied rows stay visible via the escrow_pda signal.
+  const [recentlyDenied, setRecentlyDenied] = useState<Set<string>>(new Set());
 
   // 1. Status Change Notifications
   useEffect(() => {
@@ -592,8 +597,21 @@ function OverlayContent() {
         if (booking.payment_method === 'solana' && booking.escrow_pda) {
           showNotif('Denied — click RECOVER USDC to reclaim your funds', 'denied');
         } else {
-          showNotif('Your request was denied', 'denied');
+          showNotif('Your request was denied — refund on the way', 'denied');
         }
+        const id = String(booking.id);
+        setRecentlyDenied(prev => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+        setTimeout(() => {
+          setRecentlyDenied(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        }, 60_000);
       }
       if (old.status === 'pending' && booking.status === 'active')          showNotif('Your beam is live! 🎉', 'success');
       if (old.status === 'pending' && booking.status === 'approved_queued') showNotif("Approved — you're in the queue!", 'queue');
@@ -1306,8 +1324,13 @@ function OverlayContent() {
   const accentColorRgb = isExtend ? '234, 179, 8' : tcRgb;
   // Keep denied Solana bookings visible if their escrow PDA still holds funds
   // — the viewer may need to click "recover USDC" to reclaim from chain.
+  // Keep denied Stripe bookings visible for ~60s after the transition so the
+  // viewer sees a "refund on the way" chip (Stripe cancel voids the PI
+  // automatically, no action needed).
   const visibleMyBookings = myBookings.filter((b:any) =>
-    b.status !== 'denied' || (b.payment_method === 'solana' && b.escrow_pda),
+    b.status !== 'denied'
+    || (b.payment_method === 'solana' && b.escrow_pda)
+    || (b.payment_method === 'stripe' && recentlyDenied.has(String(b.id))),
   );
 
   if (loading) return null;
@@ -1441,6 +1464,7 @@ function OverlayContent() {
                   const isApproved = booking.status==='approved_queued';
                   const isPending  = booking.status==='pending';
                   const isDenied   = booking.status==='denied';
+                  const isSolanaLocked = isDenied && booking.payment_method === 'solana' && booking.escrow_pda;
                   const isExpiring = isLive && expiringSoon.has(booking.id);
                   const activeBooking = activeBookings.find((b:any) => b.id===booking.id);
                   const canCancel = isPending || isApproved;
@@ -1450,14 +1474,16 @@ function OverlayContent() {
                     ? { background:`rgba(${tcRgb},0.07)`, borderColor:`rgba(${tcRgb},0.21)`, color:tc }
                     : isApproved
                     ? { background:`rgba(${tcRgb},0.06)`, borderColor:`rgba(${tcRgb},0.19)`, color:tc }
-                    : isDenied
+                    : isSolanaLocked
                     ? { background:'rgba(192,132,252,0.06)', borderColor:'rgba(192,132,252,0.25)', color:'#c084fc' }
+                    : isDenied
+                    ? { background:'rgba(248,113,113,0.06)', borderColor:'rgba(248,113,113,0.22)', color:'#f87171' }
                     : { background:'rgba(255,255,255,0.03)', borderColor:'var(--casi-border)', color:'var(--casi-text-muted)' };
                   return (
                     <div key={booking.id} className="beam-chip" style={chipStyle}>
                       {booking.image_url && <img src={booking.image_url} style={{ width:20, height:20, objectFit:'contain', borderRadius:4 }} alt="" />}
                       <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, fontWeight:500 }}>
-                        {isExpiring?'⚠ Expiring':isLive?'● Live':isApproved?'⏳ Queued':isDenied?'✕ Denied — USDC locked':'⌛ Pending'}
+                        {isExpiring?'⚠ Expiring':isLive?'● Live':isApproved?'⏳ Queued':isSolanaLocked?'✕ Denied — USDC locked':isDenied?'✕ Denied — refund on the way':'⌛ Pending'}
                       </span>
                       {isLive && activeBooking && (
                         <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, opacity:0.7 }}>

@@ -122,6 +122,65 @@ export async function GET(req: Request) {
     }
   }
 
-  console.log(`[stripe-janitor] processed ${overdue.length} overdue, captured ${captured}`);
-  return NextResponse.json({ overdue: overdue.length, captured });
+  // ── Abandoned-pending sweep ─────────────────────────────────────────────
+  // Stripe manual-capture PaymentIntents auto-expire at ~7 days. Before that
+  // happens we void any pending booking older than PENDING_MAX_AGE_HOURS so
+  // the viewer's card auth doesn't linger — and flip the row to denied so
+  // their overlay doesn't keep showing a stale "⌛ Pending" chip forever.
+  const PENDING_MAX_AGE_HOURS = 48;
+  const cutoff = new Date(Date.now() - PENDING_MAX_AGE_HOURS * 3600 * 1000).toISOString();
+  const { data: stale } = await supabase
+    .from('bookings')
+    .select('id, profile_id, payment_intent_id, storage_path')
+    .eq('status', 'pending')
+    .not('payment_intent_id', 'is', null)
+    .neq('payment_method', 'solana')
+    .lt('created_at', cutoff);
+
+  let cancelled = 0;
+  if (stale?.length) {
+    // Reuse + extend the profile→stripe_account map so we can hit Direct
+    // Charges on each connected account.
+    const staleProfileIds = Array.from(new Set(stale.map((b: any) => b.profile_id).filter(Boolean)));
+    const missing = staleProfileIds.filter(id => !stripeAccountByProfile.has(id));
+    if (missing.length) {
+      const { data: profs } = await supabase
+        .from('profiles')
+        .select('id, stripe_account_id')
+        .in('id', missing);
+      for (const p of profs || []) {
+        if (p.stripe_account_id) stripeAccountByProfile.set(p.id, p.stripe_account_id);
+      }
+    }
+
+    for (const b of stale as any[]) {
+      try {
+        const stripeAccount = stripeAccountByProfile.get(b.profile_id);
+        if (stripeAccount) {
+          const opts = { stripeAccount };
+          const pi = await stripe.paymentIntents.retrieve(b.payment_intent_id, undefined, opts);
+          // Any non-terminal state is safe to cancel. Skip already-captured /
+          // already-cancelled PIs — those would throw.
+          if (pi.status === 'requires_capture' || pi.status === 'requires_payment_method' || pi.status === 'requires_confirmation' || pi.status === 'requires_action') {
+            await stripe.paymentIntents.cancel(b.payment_intent_id, undefined, opts);
+            cancelled++;
+          }
+        }
+        if (b.storage_path) {
+          await supabase.storage.from('beams').remove([b.storage_path]).catch((err: any) => {
+            console.error('[stripe-janitor] storage delete failed:', err.message);
+          });
+        }
+        await supabase
+          .from('bookings')
+          .update({ status: 'denied', image_url: null })
+          .eq('id', b.id);
+      } catch (err: any) {
+        console.error(`[stripe-janitor] stale booking ${b.id} failed:`, err.message);
+      }
+    }
+  }
+
+  console.log(`[stripe-janitor] processed ${overdue.length} overdue, captured ${captured}; stale ${stale?.length ?? 0}, cancelled ${cancelled}`);
+  return NextResponse.json({ overdue: overdue.length, captured, stale: stale?.length ?? 0, cancelled });
 }

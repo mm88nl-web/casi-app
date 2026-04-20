@@ -359,6 +359,12 @@ export default function AdminStudio() {
         // Solana next-up the streamer will click Start Beam manually.
         await supabase.from('overlay_elements').update({ image_url: '' }).eq('id', booking.element_id);
         setElements(prev => prev.map(el => el.id === booking.element_id ? { ...el, image_url: '' } : el));
+        if (next && next.payment_method === 'solana') {
+          // Solana queue doesn't auto-promote (streamer wallet may be idle);
+          // surface a nudge so the studio isn't left with a blank slot while
+          // an approved beam is waiting.
+          showFlashToast('Next Solana beam ready — click Play Now to start', 'ok');
+        }
       }
     }
     setActiveBookings(prev => prev.filter(b => b.id !== booking.id));
@@ -743,8 +749,16 @@ export default function AdminStudio() {
 
     if (result.outcome === 'settled') {
       showFlashToast('✕ Denied & escrow settled on-chain', 'ok');
+    } else if (result.outcome === 'closed') {
+      // PDA was already closed by the time we probed — either viewer
+      // reclaimed first, cranker cancelled a stale pending, or the row had
+      // no escrow to begin with. Nothing left for anyone to do.
+      showFlashToast('✕ Denied — escrow already closed', 'ok');
     } else if (result.outcome === 'pending-chain') {
-      showFlashToast('✕ Denied — viewer must reclaim escrow (still Pending)', 'ok');
+      // Escrow is still Pending on-chain: only the viewer can cancel_escrow.
+      // They'll see "✕ Denied — USDC locked" with a RECOVER button the next
+      // time they open the overlay.
+      showFlashToast('✕ Denied — viewer can reclaim their USDC from the overlay', 'ok');
     } else if (result.outcome === 'no-wallet') {
       showFlashToast('✕ Denied — connect streamer wallet to settle escrow', 'err');
     } else if (result.outcome === 'error') {
