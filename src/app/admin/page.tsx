@@ -21,7 +21,6 @@ import PendingRequestCard from './_components/PendingRequestCard';
 import QueuedRequestCard from './_components/QueuedRequestCard';
 import ActiveCard from './_components/ActiveCard';
 import ApprovedQueueCard from './_components/ApprovedQueueCard';
-import StuckEscrowsPanel from './_components/StuckEscrowsPanel';
 import DelegateKeyCard from './_components/DelegateKeyCard';
 import { getSecondsRemaining, formatTime, fmtDuration } from './_components/time';
 
@@ -103,10 +102,6 @@ export default function AdminStudio() {
   const [queuedBookings, setQueuedBookings] = useState<any[]>([]);
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [approvedQueued, setApprovedQueued] = useState<any[]>([]);
-  // Denied Solana bookings whose escrow_pda is still non-null — the on-chain
-  // vault may or may not hold funds. StuckEscrowsPanel probes each one and
-  // offers a streamer-signed settle for Active escrows. Typically empty.
-  const [stuckEscrows, setStuckEscrows] = useState<any[]>([]);
   const [pendingFlashes, setPendingFlashes] = useState<any[]>([]);
   // Keyed by flash id: true while the streamer is signing approve/deny on-chain.
   const [settlingSolana, setSettlingSolana] = useState<Record<string, boolean>>({});
@@ -244,19 +239,6 @@ export default function AdminStudio() {
     setApprovedQueued(aq || []);
   }, [supabase]);
 
-  const loadStuckEscrows = useCallback(async (profileId: string) => {
-    const { data } = await supabase
-      .from('bookings')
-      .select('id, viewer_name, escrow_pda, viewer_wallet, tx_signature, created_at, price_value, price_unit')
-      .eq('profile_id', profileId)
-      .eq('payment_method', 'solana')
-      .eq('status', 'denied')
-      .not('escrow_pda', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(20);
-    setStuckEscrows(data || []);
-  }, [supabase]);
-
   const loadFlashes = useCallback(async (profileId: string) => {
     const { data } = await supabase
       .from('flashes')
@@ -271,15 +253,13 @@ export default function AdminStudio() {
   useEffect(() => {
     if (!profile?.id) return;
     loadBookings(profile.id);
-    loadStuckEscrows(profile.id);
     const channel = supabase.channel(`admin_bookings_${profile.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `profile_id=eq.${profile.id}` }, () => {
         loadBookings(profile.id);
-        loadStuckEscrows(profile.id);
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [profile?.id, supabase, loadBookings, loadStuckEscrows]);
+  }, [profile?.id, supabase, loadBookings]);
 
   // Keep local `elements` in sync with overlay_elements DB writes from other
   // contexts (Vercel Cron janitor, queue advance, other admin sessions).
@@ -687,34 +667,6 @@ export default function AdminStudio() {
       return { outcome: 'error', error: err };
     }
   }, [walletConnection, publicKey, profile?.solana_wallet]);
-
-  /**
-   * Recover a stuck denied Solana booking by reusing the probe + settle helper
-   * plus DB cleanup. Used by the <StuckEscrowsPanel> rows. Outcomes:
-   *   - Active escrow → streamer signs settle_beam, viewer gets pro-rata refund
-   *   - Closed PDA    → just clear the stale escrow_pda pointer
-   *   - Pending       → no-op with toast (viewer must click recover)
-   */
-  const handleSettleStuckEscrow = useCallback(async (booking: {
-    id: string; escrow_pda: string | null; viewer_wallet: string | null;
-  }) => {
-    const result = await settleOrClearSolanaEscrow(booking);
-    if (result.outcome === 'settled' || result.outcome === 'closed') {
-      await supabase.from('bookings').update({ escrow_pda: null }).eq('id', booking.id);
-      showFlashToast(
-        result.outcome === 'settled' ? '◎ Settled — refund sent to viewer' : 'Row cleared',
-        'ok',
-      );
-      if (profile?.id) loadStuckEscrows(profile.id);
-    } else if (result.outcome === 'pending-chain') {
-      showFlashToast('Escrow is Pending — only the viewer can reclaim', 'err');
-    } else if (result.outcome === 'no-wallet') {
-      showFlashToast('Connect your streamer wallet first', 'err');
-    } else {
-      const { formatEscrowError } = await import('@/lib/casi-errors');
-      showFlashToast(formatEscrowError(result.error), 'err');
-    }
-  }, [settleOrClearSolanaEscrow, supabase, profile?.id, loadStuckEscrows]);
 
   const denyBooking = async (id: string, paymentMethod?: string) => {
   setPreviewBooking(null);
@@ -1569,14 +1521,6 @@ export default function AdminStudio() {
         {/* ── REQUESTS — separated by beam vs backdrop ── */}
         {view === 'requests' && (
           <div className="req-body">
-
-            {/* ── STUCK SOLANA ESCROWS ── */}
-            <StuckEscrowsPanel
-              bookings={stuckEscrows}
-              connection={walletConnection}
-              walletReady={!!publicKey && !!profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet}
-              onSettle={handleSettleStuckEscrow}
-            />
 
             {/* ── FLASH MESSAGES ── */}
             {pendingFlashes.length > 0 && (

@@ -76,7 +76,7 @@ export async function POST(req: Request) {
 
   // Conditional update — second concurrent caller gets no row back and exits.
   // For Solana end-early paths we also clear escrow_pda since the vault just
-  // closed — keeps StuckEscrowsPanel from treating this as an orphan.
+  // closed, keeping the DB projection in sync with on-chain state.
   const update: Record<string, unknown> = { status: 'expired', image_url: null };
   if (onChainClosed) update.escrow_pda = null;
   const { data: updated } = await supabase
