@@ -539,8 +539,22 @@ function OverlayContent() {
         const bump = () => { lastRealtimeEventAt.current = Date.now(); };
         const channel = supabase.channel(`overlay_${prof.id}`)
           .on('postgres_changes',{event:'*',schema:'public',table:'overlay_elements',filter:`profile_id=eq.${prof.id}`},()=>{bump();loadData(prof.id);})
-          .on('postgres_changes',{event:'*',schema:'public',table:'bookings',filter:`profile_id=eq.${prof.id}`},()=>{bump();loadData(prof.id);})
-          .subscribe((status) => { if (status === 'SUBSCRIBED') bump(); });
+          .on('postgres_changes',{event:'*',schema:'public',table:'bookings',filter:`profile_id=eq.${prof.id}`},(payload)=>{
+            // TEMP diagnostic for deny-doesn't-propagate bug. Remove once fixed.
+            console.warn('[overlay/rt/bookings]', {
+              type: payload.eventType,
+              oldStatus: (payload.old as { status?: string } | null)?.status,
+              newStatus: (payload.new as { status?: string } | null)?.status,
+              id: (payload.new as { id?: string | number } | null)?.id
+                ?? (payload.old as { id?: string | number } | null)?.id,
+            });
+            bump();
+            loadData(prof.id);
+          })
+          .subscribe((status) => {
+            console.warn('[overlay/rt/subscribe]', status);
+            if (status === 'SUBSCRIBED') bump();
+          });
 
         // OBS heartbeat: if Realtime goes silent for 30 s, reload to reconnect
         let watchdog: ReturnType<typeof setInterval>|undefined;

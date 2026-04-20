@@ -693,7 +693,14 @@ export default function AdminStudio() {
     if (result.outcome === 'settled' || result.outcome === 'closed') {
       update.escrow_pda = null;
     }
-    await supabase.from('bookings').update(update).eq('id', id);
+    const { error: updateErr, data: updateData } = await supabase
+      .from('bookings')
+      .update(update)
+      .eq('id', id)
+      .select('id, status, escrow_pda, profile_id')
+      .maybeSingle();
+    // TEMP diagnostic for deny-doesn't-propagate bug. Remove once fixed.
+    console.warn('[admin/deny/solana]', { id, outcome: result.outcome, updateErr, updateData });
 
     if (result.outcome === 'settled') {
       showFlashToast('✕ Denied & escrow settled on-chain', 'ok');
