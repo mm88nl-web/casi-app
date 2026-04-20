@@ -582,13 +582,14 @@ function OverlayContent() {
       const old = prev.find((b: any) => b.id === booking.id);
       if (!old) return;
       if (old.status === 'pending' && booking.status === 'denied') {
-        showNotif('Your request was denied', 'denied');
-        // Auto-reclaim the escrow so USDC returns to viewer immediately. Only
-        // runs if the beam was still Pending on-chain (streamer hadn't started
-        // it yet); if Active, the admin's kickBeam already settled on-chain
-        // and the PDA is gone, so we skip.
+        // Solana deny on a Pending escrow leaves funds in the PDA — cancel_escrow
+        // is viewer-only, so we have to sign it here. Tell the viewer what the
+        // popup is for up front; auto-pop fires 600 ms later so both stack.
         if (booking.payment_method === 'solana' && booking.escrow_pda) {
-          reclaimSolanaEscrow(booking);
+          showNotif('Denied — approve the wallet popup to reclaim your USDC', 'denied');
+          setTimeout(() => reclaimSolanaEscrow(booking), 600);
+        } else {
+          showNotif('Your request was denied', 'denied');
         }
       }
       if (old.status === 'pending' && booking.status === 'active')          showNotif('Your beam is live! 🎉', 'success');
@@ -1423,6 +1424,7 @@ function OverlayContent() {
                   const isLive     = booking.status==='active';
                   const isApproved = booking.status==='approved_queued';
                   const isPending  = booking.status==='pending';
+                  const isDenied   = booking.status==='denied';
                   const isExpiring = isLive && expiringSoon.has(booking.id);
                   const activeBooking = activeBookings.find((b:any) => b.id===booking.id);
                   const canCancel = isPending || isApproved;
@@ -1432,12 +1434,14 @@ function OverlayContent() {
                     ? { background:`rgba(${tcRgb},0.07)`, borderColor:`rgba(${tcRgb},0.21)`, color:tc }
                     : isApproved
                     ? { background:`rgba(${tcRgb},0.06)`, borderColor:`rgba(${tcRgb},0.19)`, color:tc }
+                    : isDenied
+                    ? { background:'rgba(192,132,252,0.06)', borderColor:'rgba(192,132,252,0.25)', color:'#c084fc' }
                     : { background:'rgba(255,255,255,0.03)', borderColor:'var(--casi-border)', color:'var(--casi-text-muted)' };
                   return (
                     <div key={booking.id} className="beam-chip" style={chipStyle}>
                       {booking.image_url && <img src={booking.image_url} style={{ width:20, height:20, objectFit:'contain', borderRadius:4 }} alt="" />}
                       <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, fontWeight:500 }}>
-                        {isExpiring?'⚠ Expiring':isLive?'● Live':isApproved?'⏳ Queued':'⌛ Pending'}
+                        {isExpiring?'⚠ Expiring':isLive?'● Live':isApproved?'⏳ Queued':isDenied?'✕ Denied — USDC locked':'⌛ Pending'}
                       </span>
                       {isLive && activeBooking && (
                         <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, opacity:0.7 }}>
