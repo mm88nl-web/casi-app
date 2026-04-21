@@ -764,9 +764,20 @@ function OverlayContent() {
   };
 
   // Upload a viewer's file to the beams Storage bucket before payment.
+  // Per-file-type caps: images are usually fine at 5 MB (a compressed
+  // 1080p JPEG is ~1 MB, a PNG ~3 MB), but videos need real headroom —
+  // a 10-second 1080p mp4 easily runs 8-15 MB. Accepting up to 20 MB
+  // lets streamers show clips that don't look like motion-blurred mush.
+  const MAX_IMAGE_BYTES = 5  * 1024 * 1024;
+  const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
   const handleFileSelect = async (file: File) => {
-    if (file.size > 5 * 1024 * 1024) { showNotif('File too large — max 5 MB', 'denied'); return; }
     const fileType: 'image'|'video' = file.type.startsWith('video/') ? 'video' : 'image';
+    const cap = fileType === 'video' ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+    if (file.size > cap) {
+      const mb = cap / (1024 * 1024);
+      showNotif(`File too large — max ${mb} MB for ${fileType}s`, 'denied');
+      return;
+    }
     // P0 guard: free slots are image-only until video moderation ships.
     if (fileType === 'video' && selectedSlot && Number(selectedSlot.price_value) === 0) {
       showNotif('Videos are paid-slots only for now — please upload an image', 'denied');
@@ -1761,9 +1772,13 @@ function OverlayContent() {
                 <div key={el.id} style={{ position:'absolute', left:`${el.pos_x}%`, top:`${el.pos_y}%`, width:`${el.width}%`, height:`${el.height}%`, zIndex:el.is_background?10:50, transition:'all 0.35s cubic-bezier(0.16,1,0.3,1)' }}>
                   {displayImage ? (
                     <div style={{ position:'relative', width:'100%', height:'100%' }}>
+                      {/* Backdrop fills (cover, crop as needed). Beam slots
+                          preserve the viewer's aspect ratio (contain) —
+                          `fill` stretches to the slot and visibly squishes
+                          any upload whose AR differs from the slot's. */}
                       {displayFileType === 'video'
-                        ? <video key={displayImage} src={displayImage} autoPlay loop muted playsInline style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'fill', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} />
-                        : <img key={displayImage ?? 'empty'} src={displayImage} style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'fill', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} alt="" />
+                        ? <video key={displayImage} src={displayImage} autoPlay loop muted playsInline style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'contain', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} />
+                        : <img key={displayImage ?? 'empty'} src={displayImage} style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'contain', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} alt="" />
                       }
                       {viewerHasPreview && !isOBS && <div style={{ position:'absolute', inset:0, borderRadius:4, boxShadow:`inset 0 0 0 2px rgba(${accentColorRgb},0.5)`, pointerEvents:'none' }} />}
                     </div>
@@ -1854,7 +1869,7 @@ function OverlayContent() {
                             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
                           <span style={{ fontSize:18 }}>{uploading ? '⟳' : uploadedUrl ? (uploadedFileType === 'video' ? '▶' : '🖼') : '↑'}</span>
                           <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color: uploadedUrl ? accentColor : '#555', letterSpacing:0.5, textAlign:'center' }}>
-                            {uploading ? 'Uploading…' : uploadedUrl ? `✓ ${uploadedFileType === 'video' ? 'Video' : 'Image'} ready` : 'Click to upload · max 5 MB'}
+                            {uploading ? 'Uploading…' : uploadedUrl ? `✓ ${uploadedFileType === 'video' ? 'Video' : 'Image'} ready` : 'Click to upload · img 5 MB · video 20 MB'}
                           </span>
                           {!uploadedUrl && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'#444' }}>jpg · png · gif · webp · mp4 · webm</span>}
                         </label>
