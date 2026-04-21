@@ -1,15 +1,15 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { useWallet, useConnection } from '@solana/wallet-adapter-react';
+import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
-import { getAssociatedTokenAddressSync } from '@solana/spl-token';
-import { USDC_MINT, NETWORK_LABEL } from '@/lib/solana-network';
+import { NETWORK_LABEL } from '@/lib/solana-network';
+import { useWalletBalances, refreshWalletBalances } from '@/lib/wallet-balances';
 
-// Module-level refresh signal — allows any page (overlay, admin) to trigger
-// an immediate balance re-fetch without prop-drilling or React context.
-let _refreshFn: (() => void) | null = null;
-export function refreshWalletNav() { _refreshFn?.(); }
+// Back-compat export: every existing `refreshWalletNav()` call site now
+// routes through the shared balance store. Kept as a named export so the
+// overlay/admin pages don't need to change their imports.
+export function refreshWalletNav() { refreshWalletBalances(); }
 
 const CSS = `
   .wn-connect {
@@ -157,21 +157,16 @@ function truncate(pk: PublicKey): string {
 
 export default function WalletNav() {
   const { connected, publicKey, disconnect, wallet, connect, connecting } = useWallet();
-  const { connection } = useConnection();
   const { setVisible } = useWalletModal();
 
-  const [solBal, setSolBal]     = useState<number | null>(null);
-  const [usdcBal, setUsdcBal]   = useState<number | null>(null);
+  // Single source of truth — the same values feed every other balance
+  // surface in the app (the overlay booking-form "Your balance" line,
+  // any future admin card). Backed by one WS subscription + 10s poll.
+  const { sol: solBal, usdc: usdcBal } = useWalletBalances();
+
   const [dropOpen, setDropOpen]  = useState(false);
   const [dropPos, setDropPos]    = useState<{ top: number; right: number }>({ top: 56, right: 12 });
-  const [refreshTick, setRefreshTick] = useState(0);
   const dropRef = useRef<HTMLDivElement>(null);
-
-  // Register the module-level refresh function so any page can trigger it
-  useEffect(() => {
-    _refreshFn = () => setRefreshTick(t => t + 1);
-    return () => { _refreshFn = null; };
-  }, []);
 
   // Only connect() after an explicit user click — Wallet Standard auto-registers
   // Phantom into `wallet` on page load, but we must not auto-connect silently.
@@ -204,87 +199,6 @@ export default function WalletNav() {
     }
     setDropOpen(o => !o);
   };
-
-  // Keep balances in sync with three signals:
-  //   1. WebSocket `onAccountChange` subscriptions on the wallet SOL account
-  //      and the derived USDC ATA — fire the instant the chain emits a state
-  //      change, matching what Phantom does internally. This is what makes
-  //      post-buy / post-refund balances feel "live" instead of lagging.
-  //   2. A 10s HTTP poll as backstop — WebSocket subscriptions can drop
-  //      silently on flaky networks, and re-subscribing on reconnect isn't
-  //      worth the complexity when a poll catches it within 10s.
-  //   3. A short retry burst on every effect run (including refreshTick
-  //      bumps from `refreshWalletNav()`). This closes the window where a
-  //      caller has just confirmed a tx but the RPC replica we hit hasn't
-  //      finished propagating the change — a single fetch can read stale.
-  //      Four fetches over ~6s covers that window without hammering the RPC.
-  // Commitment is 'confirmed' throughout (~2s vs 'finalized' ~13s).
-  useEffect(() => {
-    if (!connected || !publicKey) { setSolBal(null); setUsdcBal(null); return; }
-    let cancelled = false;
-
-    const fetchBalances = async () => {
-      try {
-        const lamports = await connection.getBalance(publicKey, 'confirmed');
-        if (!cancelled) setSolBal(lamports / 1e9);
-      } catch { /* ignore */ }
-
-      try {
-        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-          publicKey,
-          { mint: new PublicKey(USDC_MINT) },
-          'confirmed',
-        );
-        const amount = tokenAccounts.value[0]
-          ?.account.data.parsed.info.tokenAmount.uiAmount ?? 0;
-        if (!cancelled) setUsdcBal(amount);
-      } catch { if (!cancelled) setUsdcBal(0); }
-    };
-
-    // Retry burst — first fetch is immediate; follow-ups cover the
-    // confirm→propagate→read window on lagging RPC replicas.
-    (async () => {
-      for (const delay of [0, 600, 1800, 3600]) {
-        if (delay) await new Promise(r => setTimeout(r, delay));
-        if (cancelled) return;
-        await fetchBalances();
-      }
-    })();
-
-    // WebSocket subscriptions. `getAssociatedTokenAddressSync` works even
-    // when the USDC ATA doesn't exist yet — the subscription fires the
-    // moment the account is created, so first-ever USDC arrival is instant.
-    let solSubId: number | null  = null;
-    let usdcSubId: number | null = null;
-    try {
-      solSubId = connection.onAccountChange(
-        publicKey,
-        () => { if (!cancelled) fetchBalances(); },
-        'confirmed',
-      );
-    } catch (err) {
-      console.warn('[WalletNav] SOL onAccountChange failed — polling only', err);
-    }
-    try {
-      const usdcAta = getAssociatedTokenAddressSync(new PublicKey(USDC_MINT), publicKey);
-      usdcSubId = connection.onAccountChange(
-        usdcAta,
-        () => { if (!cancelled) fetchBalances(); },
-        'confirmed',
-      );
-    } catch (err) {
-      console.warn('[WalletNav] USDC onAccountChange failed — polling only', err);
-    }
-
-    const interval = setInterval(fetchBalances, 10_000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-      if (solSubId  !== null) connection.removeAccountChangeListener(solSubId ).catch(() => {});
-      if (usdcSubId !== null) connection.removeAccountChangeListener(usdcSubId).catch(() => {});
-    };
-  }, [connected, publicKey, connection, refreshTick]);
 
   // Close dropdown on outside click
   useEffect(() => {

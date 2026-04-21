@@ -2,10 +2,11 @@
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { useWallet, useConnection } from '@solana/wallet-adapter-react';
+import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import WalletNav, { refreshWalletNav } from '@/components/WalletNav';
+import { useWalletBalances } from '@/lib/wallet-balances';
 import ChatPanel from '@/components/ChatPanel';
 import SendFlashSection from '@/components/overlay/SendFlashSection';
 import TurnstileWidget from '@/components/TurnstileWidget';
@@ -395,7 +396,10 @@ function OverlayContent() {
   const onTurnstileExpire = useCallback(() => setTurnstileToken(null), []);
   const [cancelling, setCancelling]     = useState<string|null>(null);
   const [notification, setNotification] = useState<{text:string;type:string}|null>(null);
-  const [usdcBalance, setUsdcBalance]   = useState<number|null>(null);
+  // Pulled from the shared wallet-balance store (same source the top-right
+  // WalletNav reads from, so the booking-form "Your balance" line and the
+  // nav are guaranteed in lockstep). One WS sub + 10s poll for the whole app.
+  const { usdc: usdcBalance } = useWalletBalances();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [txStatus, setTxStatus]         = useState<TxStatus>('idle');
   const [txError, setTxError]           = useState<string|null>(null);
@@ -410,7 +414,6 @@ function OverlayContent() {
   // ─────────────────────────────────────────────────────────────────────────
 
   // ── Wallet state ──────────────────────────────────────────────────────────
-  const { connection: walletConn }      = useConnection();
   const { wallet, connected, connecting, connect, publicKey, signTransaction, signAllTransactions } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
 
@@ -434,22 +437,6 @@ function OverlayContent() {
     }
   };
   // ─────────────────────────────────────────────────────────────────────────
-
-  // Proactively fetch USDC balance for live cost preview
-  useEffect(() => {
-    if (!publicKey) { setUsdcBalance(null); return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const { PublicKey: PK } = await import('@solana/web3.js');
-        const { value: accs } = await walletConn.getParsedTokenAccountsByOwner(
-          publicKey, { mint: new PK(USDC_MINT) }
-        );
-        if (!cancelled) setUsdcBalance(accs[0]?.account.data.parsed.info.tokenAmount.uiAmount ?? 0);
-      } catch { if (!cancelled) setUsdcBalance(null); }
-    })();
-    return () => { cancelled = true; };
-  }, [publicKey, walletConn]);
 
   const supabase = useRef(createClient()).current;
   const viewerNameRef = useRef('');
