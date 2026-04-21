@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { USDC_MINT, NETWORK_LABEL } from '@/lib/solana-network';
 
 // Module-level refresh signal — allows any page (overlay, admin) to trigger
@@ -204,9 +205,20 @@ export default function WalletNav() {
     setDropOpen(o => !o);
   };
 
-  // Fetch balances on connect, on publicKey change, on manual refresh tick,
-  // and every 10 s. Uses 'confirmed' commitment for ~2 s faster visibility
-  // vs the default 'finalized' (32 blocks).
+  // Keep balances in sync with three signals:
+  //   1. WebSocket `onAccountChange` subscriptions on the wallet SOL account
+  //      and the derived USDC ATA — fire the instant the chain emits a state
+  //      change, matching what Phantom does internally. This is what makes
+  //      post-buy / post-refund balances feel "live" instead of lagging.
+  //   2. A 10s HTTP poll as backstop — WebSocket subscriptions can drop
+  //      silently on flaky networks, and re-subscribing on reconnect isn't
+  //      worth the complexity when a poll catches it within 10s.
+  //   3. A short retry burst on every effect run (including refreshTick
+  //      bumps from `refreshWalletNav()`). This closes the window where a
+  //      caller has just confirmed a tx but the RPC replica we hit hasn't
+  //      finished propagating the change — a single fetch can read stale.
+  //      Four fetches over ~6s covers that window without hammering the RPC.
+  // Commitment is 'confirmed' throughout (~2s vs 'finalized' ~13s).
   useEffect(() => {
     if (!connected || !publicKey) { setSolBal(null); setUsdcBal(null); return; }
     let cancelled = false;
@@ -229,9 +241,49 @@ export default function WalletNav() {
       } catch { if (!cancelled) setUsdcBal(0); }
     };
 
-    fetchBalances();
+    // Retry burst — first fetch is immediate; follow-ups cover the
+    // confirm→propagate→read window on lagging RPC replicas.
+    (async () => {
+      for (const delay of [0, 600, 1800, 3600]) {
+        if (delay) await new Promise(r => setTimeout(r, delay));
+        if (cancelled) return;
+        await fetchBalances();
+      }
+    })();
+
+    // WebSocket subscriptions. `getAssociatedTokenAddressSync` works even
+    // when the USDC ATA doesn't exist yet — the subscription fires the
+    // moment the account is created, so first-ever USDC arrival is instant.
+    let solSubId: number | null  = null;
+    let usdcSubId: number | null = null;
+    try {
+      solSubId = connection.onAccountChange(
+        publicKey,
+        () => { if (!cancelled) fetchBalances(); },
+        'confirmed',
+      );
+    } catch (err) {
+      console.warn('[WalletNav] SOL onAccountChange failed — polling only', err);
+    }
+    try {
+      const usdcAta = getAssociatedTokenAddressSync(new PublicKey(USDC_MINT), publicKey);
+      usdcSubId = connection.onAccountChange(
+        usdcAta,
+        () => { if (!cancelled) fetchBalances(); },
+        'confirmed',
+      );
+    } catch (err) {
+      console.warn('[WalletNav] USDC onAccountChange failed — polling only', err);
+    }
+
     const interval = setInterval(fetchBalances, 10_000);
-    return () => { cancelled = true; clearInterval(interval); };
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      if (solSubId  !== null) connection.removeAccountChangeListener(solSubId ).catch(() => {});
+      if (usdcSubId !== null) connection.removeAccountChangeListener(usdcSubId).catch(() => {});
+    };
   }, [connected, publicKey, connection, refreshTick]);
 
   // Close dropdown on outside click
