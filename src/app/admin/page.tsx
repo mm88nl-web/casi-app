@@ -473,6 +473,24 @@ export default function AdminStudio() {
   };
 
   const deleteLayer = async (id: string) => {
+    // Guard against deleting a slot that still has bookings attached.
+    // The ✕ on the canvas is already hidden for this case in the UI, but
+    // the SlotInfoPanel and BeamCtrlPanel Delete buttons also call this —
+    // plus the UI check races the realtime feed. Doing it here is the
+    // single source of truth: dropping the row without settling leaves
+    // USDC locked in the on-chain escrow and orphans queued bookings
+    // whose element_id FK becomes dangling.
+    const hasActive = activeBookings.some(b => b.element_id === id);
+    const hasQueued = approvedQueued.some(b => b.element_id === id);
+    if (hasActive || hasQueued) {
+      showFlashToast(
+        hasActive
+          ? 'End the live beam first — delete settles nothing on chain.'
+          : 'Clear the queue first — viewers in line have funds locked.',
+        'err',
+      );
+      return;
+    }
     if (selectedSlotId === id) { setSelectedSlotId(null); setShowInfoPanel(false); }
     await supabase.from('overlay_elements').delete().eq('id', id);
     setElements(prev => prev.filter(el => el.id !== id));
@@ -1582,8 +1600,15 @@ export default function AdminStudio() {
                       {isSelected && !el.is_background && (
                         <div style={{ position: 'absolute', top: -2, left: -2, right: -2, bottom: -2, border: '2px solid var(--casi-accent)', borderRadius: 8, pointerEvents: 'none', boxShadow: '0 0 0 3px rgba(var(--casi-accent-rgb),0.15)' }} />
                       )}
-                      {/* Delete button — large touch target */}
-                      {!el.is_background && (
+                      {/* Delete button — only surface when the slot is
+                          idle. Deleting a slot with a live or queued
+                          booking drops the row without settling the
+                          escrow, which leaves USDC stuck in the on-chain
+                          vault AND orphans queue rows that still point
+                          at a now-missing element_id. If the streamer
+                          wants to end the beam, the End Early flow is
+                          the right path; deletion is for cleanup only. */}
+                      {!el.is_background && !activeBookings.some(b => b.element_id === el.id) && !approvedQueued.some(b => b.element_id === el.id) && (
                         <button
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => { e.stopPropagation(); deleteLayer(el.id); }}
