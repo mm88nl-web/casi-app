@@ -66,28 +66,11 @@ export default function BeamCtrlPanel({
         </button>
       </div>
 
-      {/* Coordinate readout */}
-      <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#444', letterSpacing:1 }}>
-        X {Math.round(el.pos_x)}% · Y {Math.round(el.pos_y)}% · W {Math.round(el.width)}% · H {Math.round(el.height)}%
-      </div>
-
-      {/* Size steppers — position lives on the canvas (drag to move). */}
-      <div style={{ display:'flex', alignItems:'center', gap:24, flexWrap:'wrap' }}>
-        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:2, textTransform:'uppercase', color:'#333', marginBottom:2 }}>Size</div>
-          {[
-            { label:'W', field:'width',  min:5, max:60, val:el.width  },
-            { label:'H', field:'height', min:5, max:60, val:el.height },
-          ].map(({ label, field, min, max, val }) => (
-            <div key={field} style={{ display:'flex', alignItems:'center', gap:6 }}>
-              <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#444', width:10 }}>{label}</span>
-              <button className="step-btn" onClick={() => updateSlider(el.id, { [field]: Math.max(min, val - 2) })}>−</button>
-              <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, color:'var(--casi-text)', width:34, textAlign:'center' }}>{Math.round(val)}%</span>
-              <button className="step-btn" onClick={() => updateSlider(el.id, { [field]: Math.min(max, val + 2) })}>+</button>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Coordinate readout + size steppers removed — drag + resize on
+          the canvas itself are more responsive now and covered the same
+          need. `updateSlider` prop stays in the signature for future
+          numeric inputs (e.g. banner height tuning) without a breaking
+          API change. */}
 
       {/* Shape + glow row. Shape buttons autosnap dimensions in the parent
           (circle/hex → pixel-square; banner → full-width strip). Glow is a
