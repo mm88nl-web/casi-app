@@ -1,4 +1,4 @@
-import SlotMedia from './SlotMedia';
+import SlotMedia from '@/components/SlotMedia';
 import { fmtDuration } from './time';
 import { EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import SlotMedia from './SlotMedia';
+import SlotMedia from '@/components/SlotMedia';
 import { formatTime, getSecondsRemaining } from './time';
 
 /* Inline beam control panel (D-pad + price + lock + delete + active strip) */

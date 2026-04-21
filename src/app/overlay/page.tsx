@@ -6,6 +6,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import WalletNav, { refreshWalletNav } from '@/components/WalletNav';
+import SlotMedia from '@/components/SlotMedia';
 import { useWalletBalances } from '@/lib/wallet-balances';
 import ChatPanel from '@/components/ChatPanel';
 import SendFlashSection from '@/components/overlay/SendFlashSection';
@@ -1671,7 +1672,7 @@ function OverlayContent() {
                     : { background:'rgba(255,255,255,0.03)', borderColor:'var(--casi-border)', color:'var(--casi-text-muted)' };
                   return (
                     <div key={booking.id} className="beam-chip" style={chipStyle}>
-                      {booking.image_url && <img src={booking.image_url} style={{ width:20, height:20, objectFit:'contain', borderRadius:4 }} alt="" />}
+                      {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width:20, height:20, objectFit:'contain', borderRadius:4 }} />}
                       <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, fontWeight:500 }}>
                         {isExpiring?'⚠ Expiring':isLive?'● Live':isApproved?'⏳ Queued':isSolanaKickLeaked?'⚡ Ended early — USDC recoverable':isSolanaLocked?'✕ Denied — USDC locked':isDenied?'✕ Denied — refund on the way':'⌛ Pending'}
                       </span>
@@ -2100,7 +2101,7 @@ function OverlayContent() {
                         </span>
                       )}
                       <div className="s-thumb" style={{ borderColor:isFree?'rgba(74,222,128,0.25)':isOccupied?`rgba(${tcRgb},0.21)`:`rgba(${tcRgb},0.14)` }}>
-                        {el.image_url?<img src={el.image_url} style={{ width:'100%',height:'100%',objectFit:'contain' }} alt="" />:<span>{isLocked?'🔒':el.is_background?'🖼':'✦'}</span>}
+                        {el.image_url?<SlotMedia src={el.image_url} fileType={null} style={{ width:'100%',height:'100%',objectFit:'contain' }} />:<span>{isLocked?'🔒':el.is_background?'🖼':'✦'}</span>}
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div className="s-type">{isLocked?'Locked':myBookingForSlot?String(myBookingForSlot.status||'pending').replace('_',' '):isOccupied?`In use${queueCount>0?` · ${queueCount} waiting`:''}`:el.is_background?'Full Backdrop':'Beam'}</div>

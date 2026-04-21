@@ -1,4 +1,4 @@
-import SlotMedia from './SlotMedia';
+import SlotMedia from '@/components/SlotMedia';
 import { fmtDuration } from './time';
 
 // Approved-queue row: paid + admin-approved, waiting for the current

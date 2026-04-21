@@ -11,7 +11,7 @@ import WalletNav from '@/components/WalletNav';
 import ChatPanel from '@/components/ChatPanel';
 import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 import Logo from './_components/Logo';
-import SlotMedia from './_components/SlotMedia';
+import SlotMedia from '@/components/SlotMedia';
 import BeamTimer from './_components/BeamTimer';
 import BackdropModal from './_components/BackdropModal';
 import SlotInfoPanel from './_components/SlotInfoPanel';

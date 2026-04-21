@@ -1,4 +1,4 @@
-import SlotMedia from './SlotMedia';
+import SlotMedia from '@/components/SlotMedia';
 import { EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 
 // Card shown under "Wants next beam/backdrop" — a viewer that chose to queue
