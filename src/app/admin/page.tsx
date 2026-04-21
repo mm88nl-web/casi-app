@@ -886,39 +886,30 @@ export default function AdminStudio() {
     setSelectedSlotId(null);
     setShowInfoPanel(false);
     if (booking.payment_method === 'solana') {
-      // Settle the on-chain escrow: streamer receives 100% of the vested
-      // portion, viewer receives the unvested portion as a refund. The
-      // vault ATA + EscrowState are closed in the same tx.
-      //
-      // Try the server-held session key first (no wallet pop-up). If the
-      // delegate is missing / expired / cranker unfunded, fall back to
-      // wallet-signed settle — only possible when the streamer's wallet is
-      // connected and matches their profile's solana_wallet.
+      // Settle the on-chain escrow via the shared probe-first helper: it
+      // tries the cranker-signed delegate first, falls back to a wallet pop-
+      // up, and reports back WHICH state the escrow ended in. Only `settled`
+      // or `closed` are safe to expire in the DB — any other outcome means
+      // the PDA is still alive with funds and the beam must stay live until
+      // someone finishes the settle. This is the bug fix for the case where
+      // the streamer cancels the wallet popup and the beam "disappeared"
+      // while funds were still locked on-chain.
       if (booking.escrow_pda && booking.viewer_wallet) {
-        const delegated = await trySolanaSettleDelegated(booking.id);
-        if (!delegated.ok) {
-          showFlashToast(describeDelegateSettleFailure(delegated), 'err');
-          const canSignFallback = publicKey && profile?.solana_wallet
-            && publicKey.toBase58() === profile.solana_wallet;
-          if (canSignFallback) {
-            try {
-              const anchorWallet = buildAnchorWalletForEscrow();
-              if (!anchorWallet) throw new Error('Wallet not ready to sign');
-              const { CasiEscrowClient } = await import('@/lib/casi-escrow');
-              const { PublicKey: PK }    = await import('@solana/web3.js');
-              const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
-              await client.settleBeam({
-                escrowId: booking.id,
-                viewer:   new PK(booking.viewer_wallet),
-                streamer: publicKey!,
-              });
-            } catch (err) {
-              // Log and continue to expireBooking — DB still needs to advance
-              // the queue even if on-chain settle failed (e.g. already
-              // settled by viewer). escrow_pda stays so a later retry works.
-              console.error('[kickBeam] settleBeam fallback failed:', err);
-            }
+        const result = await settleOrClearSolanaEscrow({
+          id:            booking.id,
+          escrow_pda:    booking.escrow_pda,
+          viewer_wallet: booking.viewer_wallet,
+        });
+        if (result.outcome !== 'settled' && result.outcome !== 'closed') {
+          if (result.outcome === 'pending-chain') {
+            showFlashToast('Escrow still Pending on-chain — viewer must reclaim from overlay', 'err');
+          } else if (result.outcome === 'no-wallet') {
+            showFlashToast('Connect streamer wallet to end this beam', 'err');
+          } else {
+            const { formatEscrowError } = await import('@/lib/casi-errors');
+            showFlashToast(`End early failed — ${formatEscrowError(result.error)}; beam stays live`, 'err');
           }
+          return;
         }
       }
       await expireBooking(booking);

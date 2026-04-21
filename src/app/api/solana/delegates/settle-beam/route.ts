@@ -12,6 +12,7 @@ import { openSessionSecret } from '@/lib/delegate-crypto';
 import { loadCrankerKeypair } from '@/lib/cranker-keypair';
 import { CasiEscrowClient, solscanTxUrl } from '@/lib/casi-escrow';
 import { logError, logWarn } from '@/lib/observability';
+import { parseCasiError } from '@/lib/casi-errors';
 
 /**
  * POST /api/solana/delegates/settle-beam
@@ -222,9 +223,24 @@ export async function POST(req: Request) {
       });
       return NextResponse.json({ ok: true, alreadyProcessed: true });
     }
-    logError('delegates-settle-beam', err, { booking_id: booking.id });
+    // Pull the Anchor logs off the SendTransactionError so the admin toast
+    // can tell the streamer WHICH constraint the program failed — otherwise
+    // a generic "On-chain settle failed" leaves us guessing between wallet
+    // mismatch, delegate expired, ATA mismatch, etc.
+    const anchorLogs = (err as { logs?: unknown })?.logs;
+    const casiError = parseCasiError(err);
+    logError('delegates-settle-beam', err, {
+      booking_id: booking.id,
+      casi_error: casiError,
+      logs: Array.isArray(anchorLogs) ? anchorLogs : undefined,
+    });
     return NextResponse.json(
-      { error: 'On-chain settle failed', reason: 'chain_error', message: msg },
+      {
+        error: 'On-chain settle failed',
+        reason: 'chain_error',
+        casiError,
+        message: casiError ? `${casiError}: ${msg}` : msg,
+      },
       { status: 502 },
     );
   }
