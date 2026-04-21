@@ -11,6 +11,19 @@
 export const BANNER_MAX_MESSAGE = 160;
 
 /**
+ * Shape presets surfaced in the admin slot editor. Kept in one place so the
+ * inline BeamCtrlPanel and the full SlotInfoPanel render the exact same
+ * pill list — if a preset is added here, it shows up in both surfaces.
+ */
+export const SHAPE_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: 'rect',    label: 'Rect'    },
+  { id: 'rounded', label: 'Rounded' },
+  { id: 'circle',  label: 'Circle'  },
+  { id: 'hex',     label: 'Hex'     },
+  { id: 'banner',  label: 'Banner'  },
+];
+
+/**
  * Server-side gate for banner bookings. Called from every /api/bookings/create-*
  * route after the slot's shape has been read from overlay_elements. The client
  * form also enforces these, but the client is untrusted — this is the one

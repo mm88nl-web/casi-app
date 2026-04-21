@@ -1587,6 +1587,8 @@ export default function AdminStudio() {
                 deleteLayer={deleteLayer}
                 kickBeam={kickBeam}
                 onDone={() => setSelectedSlotId(null)}
+                onUpdateShape={handleUpdateShape}
+                onUpdateGlow={handleUpdateGlow}
               />
             )}
 

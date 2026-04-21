@@ -1,17 +1,7 @@
 import { useEffect, useState } from 'react';
 import SlotMedia from '@/components/SlotMedia';
+import { SHAPE_OPTIONS } from '@/lib/banner';
 import { fmtDuration, formatTime, getSecondsRemaining } from './time';
-
-// Shape options surfaced in the editor. `banner` lives in the same picker
-// (so "convert a slot into a banner" is one click) but its render path is
-// totally different — see overlay/page.tsx for the marquee layout.
-const SHAPE_OPTIONS: { id: string; label: string }[] = [
-  { id: 'rect',    label: 'Rect'    },
-  { id: 'rounded', label: 'Rounded' },
-  { id: 'circle',  label: 'Circle'  },
-  { id: 'hex',     label: 'Hex'     },
-  { id: 'banner',  label: 'Banner'  },
-];
 
 export default function SlotInfoPanel({
   el,

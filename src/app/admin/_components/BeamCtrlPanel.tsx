@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import SlotMedia from '@/components/SlotMedia';
+import { SHAPE_OPTIONS } from '@/lib/banner';
 import { formatTime, getSecondsRemaining } from './time';
 
-/* Inline beam control panel (D-pad + price + lock + delete + active strip) */
+/* Inline beam control panel (D-pad + shape + price + lock + delete + active strip).
+   Mirrors SlotInfoPanel's shape/glow controls so streamers can reshape a
+   slot without popping open the full modal — the modal is still the place
+   for deeper edits (queue view, end-early, delete confirmation). */
 export default function BeamCtrlPanel({
   el,
   activeBooking,
@@ -12,6 +16,8 @@ export default function BeamCtrlPanel({
   deleteLayer,
   kickBeam,
   onDone,
+  onUpdateShape,
+  onUpdateGlow,
 }: {
   el: any;
   activeBooking: any | null;
@@ -21,6 +27,10 @@ export default function BeamCtrlPanel({
   deleteLayer: (id: string) => void;
   kickBeam: (booking: any) => void;
   onDone: () => void;
+  // Same autosnap-aware handlers SlotInfoPanel gets. Optional so the
+  // inline panel still renders if a parent forgets to pass them.
+  onUpdateShape?: (id: string, shape: string) => void;
+  onUpdateGlow?:  (id: string, glow: boolean) => void;
 }) {
   const [editPrice, setEditPrice] = useState(String(el.price_value || 0));
   const [editUnit, setEditUnit] = useState(el.price_unit || 'min');
@@ -91,6 +101,30 @@ export default function BeamCtrlPanel({
           ))}
         </div>
       </div>
+
+      {/* Shape + glow row. Shape buttons autosnap dimensions in the parent
+          (circle/hex → pixel-square; banner → full-width strip). Glow is a
+          pill toggle — on by default. */}
+      {onUpdateShape && (
+        <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', paddingTop:12, borderTop:'1px solid rgba(255,255,255,0.05)' }}>
+          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1, textTransform:'uppercase', color:'#444', marginRight:4 }}>Shape</span>
+          {SHAPE_OPTIONS.map(s => {
+            const active = (el.shape || 'rect') === s.id;
+            return (
+              <button key={s.id} onClick={() => onUpdateShape(el.id, s.id)}
+                style={{ background: active ? 'rgba(var(--casi-accent-rgb),0.15)' : 'rgba(255,255,255,0.04)', border: `1px solid ${active ? 'rgba(var(--casi-accent-rgb),0.5)' : '#222'}`, borderRadius: 6, padding: '5px 10px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: active ? 'var(--casi-accent)' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
+                {s.label}
+              </button>
+            );
+          })}
+          {onUpdateGlow && (
+            <button onClick={() => onUpdateGlow(el.id, !(el.glow_on_start ?? true))}
+              style={{ marginLeft:'auto', background: (el.glow_on_start ?? true) ? 'rgba(var(--casi-accent-rgb),0.1)' : 'rgba(255,255,255,0.04)', border:`1px solid ${(el.glow_on_start ?? true) ? 'rgba(var(--casi-accent-rgb),0.3)' : '#222'}`, borderRadius:7, padding:'5px 10px', color: (el.glow_on_start ?? true) ? 'var(--casi-accent)' : '#555', fontFamily:"'DM Mono',monospace", fontSize:10, textTransform:'uppercase', letterSpacing:1, cursor:'pointer' }}>
+              {(el.glow_on_start ?? true) ? '✦ Glow' : '○ No glow'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Price + lock + delete row */}
       {(() => {
