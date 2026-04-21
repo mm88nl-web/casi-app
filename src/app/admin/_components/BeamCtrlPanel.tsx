@@ -57,9 +57,12 @@ export default function BeamCtrlPanel({
 
   return (
     <div className="beam-ctrl">
-      {/* Header */}
+      {/* Header — label reflects the slot's role so backdrops don't
+          confusingly say "Beam" when the streamer's looking at one. */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <span style={{ fontFamily:"'Syne',sans-serif", fontSize:13, fontWeight:700, color:'var(--casi-accent)' }}>✦ Beam</span>
+        <span style={{ fontFamily:"'Syne',sans-serif", fontSize:13, fontWeight:700, color: el.is_background ? '#c084fc' : 'var(--casi-accent)' }}>
+          {el.is_background ? '🖼 Backdrop' : el.shape === 'banner' ? '▰ Banner' : '✦ Beam'}
+        </span>
         <button onClick={onDone}
           style={{ background:'rgba(255,255,255,0.04)', border:'1px solid #222', borderRadius:8, color:'#888', fontFamily:"'DM Mono',monospace", fontSize:11, padding:'8px 14px', cursor:'pointer', textTransform:'uppercase', letterSpacing:1 }}>
           Done

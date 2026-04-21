@@ -1547,11 +1547,13 @@ export default function AdminStudio() {
                     }}
                     onDragStop={(_e, d) => {
                       if (!isDragging.current) {
-                        // It was a tap — select beam, show sliders (not info panel)
-                        if (!el.is_background) {
-                          setSelectedSlotId(el.id);
-                          setShowInfoPanel(false);
-                        }
+                        // Tap-to-select for any slot including backdrops.
+                        // Backdrops need to be selectable so streamers can
+                        // reach the shape picker and convert back to a
+                        // beam — otherwise the "convert a beam → backdrop"
+                        // flow is a one-way trap.
+                        setSelectedSlotId(el.id);
+                        setShowInfoPanel(false);
                       } else {
                         updateLayer(el.id, { pos_x: (d.x / dimensions.width) * 100, pos_y: (d.y / dimensions.height) * 100 });
                       }
@@ -1622,8 +1624,12 @@ export default function AdminStudio() {
               })}
             </div>
 
-            {/* Beam control panel — movement + price + live info, all inline */}
-            {selectedEl && !selectedEl.is_background && (
+            {/* Inline panel — movement + price + shape + live info. Shown
+                for ANY selected slot, including backdrops, so the shape
+                picker (the way to convert a backdrop back into a beam)
+                stays reachable. Without this, flipping a beam to backdrop
+                hid the menu and the only escape was Clear. */}
+            {selectedEl && (
               <BeamCtrlPanel
                 el={selectedEl}
                 activeBooking={activeBookings.find(b => b.element_id === selectedEl.id) || null}
@@ -1641,8 +1647,10 @@ export default function AdminStudio() {
             <div className="canvas-hint">
               {elements.length === 0
                 ? 'No slots yet — hit + Beam above to let viewers tip to display an image or video here'
-                : selectedEl && !selectedEl.is_background
-                ? 'Drag beam to move · Use arrows to nudge · Edit price inline'
+                : selectedEl && selectedEl.is_background
+                ? 'Backdrop selected · change shape to convert back to a beam'
+                : selectedEl
+                ? 'Drag to move · Resize from corners · Edit inline'
                 : 'Tap a beam to select · Drag to move · Resize from corners'}
             </div>
         </div>
