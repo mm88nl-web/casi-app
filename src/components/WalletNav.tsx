@@ -5,6 +5,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
 import { NETWORK_LABEL } from '@/lib/solana-network';
 import { useWalletBalances, refreshWalletBalances } from '@/lib/wallet-balances';
+import { needsMobileHandoff, phantomBrowseUrl, solflareBrowseUrl } from '@/lib/mobile-wallet';
 
 // Back-compat export: every existing `refreshWalletNav()` call site now
 // routes through the shared balance store. Kept as a named export so the
@@ -218,6 +219,42 @@ export default function WalletNav() {
 
   /* ── Disconnected / connecting ── */
   if (!connected || !publicKey) {
+    // On a phone outside a wallet's in-app browser the deeplink flow
+    // for signing is broken (see src/lib/mobile-wallet.ts for the why).
+    // Swap the "Connect Wallet" button for a one-tap handoff that loads
+    // this same URL inside Phantom's in-app browser, where every
+    // subsequent connect/sign call is synchronous and reliable.
+    if (needsMobileHandoff()) {
+      const here = typeof window !== 'undefined' ? window.location.href : '';
+      return (
+        <>
+          <style>{CSS}</style>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+            <a
+              className="wn-connect"
+              href={phantomBrowseUrl(here)}
+              style={{ textDecoration: 'none' }}
+            >
+              <span className="wn-connect-icon" />
+              Open in Phantom
+            </a>
+            <a
+              href={solflareBrowseUrl(here)}
+              style={{
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 9,
+                letterSpacing: 1,
+                color: '#666',
+                textDecoration: 'none',
+              }}
+            >
+              or open in Solflare →
+            </a>
+          </div>
+        </>
+      );
+    }
+
     return (
       <>
         <style>{CSS}</style>
