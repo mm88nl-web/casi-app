@@ -179,8 +179,15 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 
 **Recovery surfaces**:
 - Viewer: `reclaimSolanaEscrow` in `overlay/page.tsx` — probes PDA, cancels if Pending, tells viewer "beam is live" if Active. Handles numeric booking ids. Shows for denied rows scoped by `viewer_name` (local-tab) OR `viewer_wallet` (cross-device same-wallet), so abandoning a tab and reconnecting from a new browser still surfaces the refund chip as long as the same wallet is used.
+- Viewer bulk: `POST /api/bookings/cleanup-stale-solana` + the "Clean up ended" button in the overlay's "Your beams" header. Probes every denied/expired/cancelled Solana row for a given `viewer_wallet` and nulls `escrow_pda` where the on-chain PDA is actually gone. No auth — only write is clearing a DB column on rows whose funds already left the vault. Used to wipe "ghost" RECOVER USDC chips left over from prior builds / aborted flows.
 - Streamer: none by design. Deny-on-Active settles immediately via `settleOrClearSolanaEscrow`, and the `cancel_stale_pending` crank in `/api/cron/solana-reconciler` refunds abandoned Pending escrows after 7 days. Admins don't need to babysit stuck escrows.
-- Shared helper: `settleOrClearSolanaEscrow` in `admin/page.tsx` — discriminated-outcome (`settled | closed | pending-chain | no-wallet | error`) so callers compose their own DB + toast logic without duplicating signing boilerplate.
+- Shared helper: `settleOrClearSolanaEscrow` in `admin/page.tsx` — discriminated-outcome (`settled | closed | pending-chain | no-wallet | error`) so callers compose their own DB + toast logic without duplicating signing boilerplate. `kickBeam` uses this too: DB only transitions to `expired` when outcome is `settled` or `closed`. Every other outcome leaves the beam live with a toast — this is load-bearing, since flipping DB while the escrow is still Active on-chain is how streamers end up with "Ended early — USDC recoverable" ghost chips and vesting clocks that keep ticking.
+
+**Delegate failure diagnostics**:
+- `trySolanaSettleDelegated` in `admin/page.tsx` returns a `DelegateSettleOutcome` discriminated union (`{ ok: true, alreadyProcessed? } | { ok: false, reason?, message?, status? }`). Never a bare boolean — every caller must branch on `.ok`.
+- `describeDelegateSettleFailure(outcome)` maps reason codes (`no_session | no_delegate | revoked | expired | no_cranker | decrypt_failed | key_mismatch | db_error | chain_error | network_error`) to user-facing strings. Admin callers toast this BEFORE the wallet-sign fallback so the streamer sees WHICH failure caused the popup.
+- `/api/solana/delegates/settle-beam` 502 responses carry `casiError` (parsed Anchor variant via `parseCasiError`) and a prefixed `message` — the toast names the on-chain revert (`NotActive`, `Unauthorized`, `DelegateExpired`, etc.) instead of a bare opaque string.
+- `no_cranker` (503) means `loadCrankerKeypair` returned null — env var unset / empty / wrong length / base58-decode failure. NOT a balance issue; the server never tries to submit when cranker can't load. If the env var IS set on Vercel but the route still returns `no_cranker`, the value is malformed (extra whitespace, wrong format, truncated paste).
 
 ## Migration workflow
 
