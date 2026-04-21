@@ -71,21 +71,8 @@ export default function BeamCtrlPanel({
         X {Math.round(el.pos_x)}% · Y {Math.round(el.pos_y)}% · W {Math.round(el.width)}% · H {Math.round(el.height)}%
       </div>
 
-      {/* D-pad + size controls */}
+      {/* Size steppers — position lives on the canvas (drag to move). */}
       <div style={{ display:'flex', alignItems:'center', gap:24, flexWrap:'wrap' }}>
-        {/* Position D-pad */}
-        <div>
-          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:2, textTransform:'uppercase', color:'#333', marginBottom:6 }}>Position</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,36px)', gridTemplateRows:'repeat(3,36px)', gap:4 }}>
-            <div /><button className="dpad-btn" onClick={() => updateSlider(el.id, { pos_y: Math.max(0, el.pos_y - 1) })}>↑</button><div />
-            <button className="dpad-btn" onClick={() => updateSlider(el.id, { pos_x: Math.max(0, el.pos_x - 1) })}>←</button>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, color:'#222', fontWeight:700 }}>✦</div>
-            <button className="dpad-btn" onClick={() => updateSlider(el.id, { pos_x: Math.min(80, el.pos_x + 1) })}>→</button>
-            <div /><button className="dpad-btn" onClick={() => updateSlider(el.id, { pos_y: Math.min(80, el.pos_y + 1) })}>↓</button><div />
-          </div>
-        </div>
-
-        {/* Size steppers */}
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:2, textTransform:'uppercase', color:'#333', marginBottom:2 }}>Size</div>
           {[

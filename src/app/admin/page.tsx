@@ -1265,7 +1265,6 @@ export default function AdminStudio() {
             {view === 'studio' && (
               <>
                 <button onClick={addBeam} className="btn-sm b-orange banner-add-beam-trigger">+ Beam</button>
-                <button onClick={addBanner} className="btn-sm b-outline studio-action-hide">+ Banner</button>
                 <button onClick={() => hasBackdrop && backdropEl ? (setSelectedSlotId(backdropEl.id), setShowInfoPanel(true)) : setShowBackdropModal(true)} className={`btn-sm ${hasBackdrop ? 'b-purple' : 'b-outline'} studio-action-hide`}>
                   {hasBackdrop ? '● Backdrop' : 'Backdrop'}
                 </button>
@@ -1543,20 +1542,42 @@ export default function AdminStudio() {
                     onResizeStop={(_e, _dir, ref, _delta, pos) => { updateLayer(el.id, { width: (ref.offsetWidth / dimensions.width) * 100, height: (ref.offsetHeight / dimensions.height) * 100, pos_x: (pos.x / dimensions.width) * 100, pos_y: (pos.y / dimensions.height) * 100 }); }}
                     disableDragging={el.is_background} enableResizing={!el.is_background} bounds="parent"
                     style={{ zIndex: el.is_background ? 0 : (isSelected ? 40 : 30) }}>
-                    <div
-                      style={{ position: 'relative', width: '100%', height: '100%', border: el.is_background ? 'none' : isSelected ? '2px solid var(--casi-accent)' : '1.5px solid rgba(var(--casi-accent-rgb),0.3)', borderRadius: el.is_background ? 0 : 6, opacity: el.locked ? 0.7 : 1 }}>
-                      {!el.image_url ? (
-                        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(var(--casi-accent-rgb),0.35)'}`, borderRadius: el.is_background ? 12 : 6, background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(var(--casi-accent-rgb),0.04)' }}>
-                          {el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>}
-                          <span style={{ fontSize: el.is_background ? 24 : 16, marginBottom: 4 }}>{el.is_background ? '🖼️' : '✦'}</span>
-                          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(var(--casi-accent-rgb),0.6)' }}>
-                            {el.locked ? 'No requests' : el.is_background ? 'Backdrop' : 'Beam'}
-                          </span>
-                          {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : 'var(--casi-accent)' }}>${el.price_value}/{el.price_unit}</span>}
-                        </div>
-                      ) : (
-                        <SlotMedia src={el.image_url} fileType={null} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'contain', pointerEvents: 'none' }} />
-                      )}
+                    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                      {/* Shape-masked content box. Isolated from the delete
+                          button and selection indicator below so clip-path
+                          doesn't chop the corner × or the outer glow. For
+                          `banner` the shape is a wide thin rect — no mask
+                          needed; the overlay render is what swaps image → marquee. */}
+                      <div
+                        style={{
+                          position: 'relative',
+                          width: '100%',
+                          height: '100%',
+                          border: el.is_background ? 'none' : isSelected ? '2px solid var(--casi-accent)' : '1.5px solid rgba(var(--casi-accent-rgb),0.3)',
+                          borderRadius:
+                            el.is_background ? 0 :
+                            el.shape === 'rounded' ? 14 :
+                            6,
+                          opacity: el.locked ? 0.7 : 1,
+                          clipPath:
+                            el.shape === 'circle' ? 'circle(50%)' :
+                            el.shape === 'hex'    ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' :
+                            undefined,
+                        }}
+                      >
+                        {!el.image_url ? (
+                          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(var(--casi-accent-rgb),0.35)'}`, borderRadius: el.is_background ? 12 : 6, background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(var(--casi-accent-rgb),0.04)' }}>
+                            {el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>}
+                            <span style={{ fontSize: el.is_background ? 24 : 16, marginBottom: 4 }}>{el.is_background ? '🖼️' : el.shape === 'banner' ? '▰' : '✦'}</span>
+                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(var(--casi-accent-rgb),0.6)' }}>
+                              {el.locked ? 'No requests' : el.is_background ? 'Backdrop' : el.shape === 'banner' ? 'Banner' : 'Beam'}
+                            </span>
+                            {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : 'var(--casi-accent)' }}>${el.price_value}/{el.price_unit}</span>}
+                          </div>
+                        ) : (
+                          <SlotMedia src={el.image_url} fileType={null} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'contain', pointerEvents: 'none' }} />
+                        )}
+                      </div>
                       {/* Selection glow */}
                       {isSelected && !el.is_background && (
                         <div style={{ position: 'absolute', top: -2, left: -2, right: -2, bottom: -2, border: '2px solid var(--casi-accent)', borderRadius: 8, pointerEvents: 'none', boxShadow: '0 0 0 3px rgba(var(--casi-accent-rgb),0.15)' }} />
