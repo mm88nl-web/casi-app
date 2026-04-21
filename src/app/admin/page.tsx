@@ -1147,6 +1147,14 @@ export default function AdminStudio() {
         /* ── BEAM CONTROL PANEL ── */
         .beam-ctrl { background:var(--casi-surface); border:1px solid rgba(var(--casi-accent-rgb),0.2); border-radius:12px; padding:16px 20px; display:flex; flex-direction:column; gap:14px; animation:fadeIn .2s ease; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+        /* Banner preview marquee — rendered on empty banner slots so the
+           slot visually scrolls (instead of looking like a dashed rect)
+           and the streamer can see what the shape does before any booking
+           lands. Same 20s timing as the real banner render in /overlay
+           so the editor preview matches what viewers see. */
+        @keyframes bannerPreview { from{transform:translateX(100%)} to{transform:translateX(-100%)} }
+        .banner-preview { display:flex; align-items:center; width:100%; height:100%; overflow:hidden; background:rgba(var(--casi-accent-rgb),0.06); border:1.5px dashed rgba(var(--casi-accent-rgb),0.35); border-radius:6px; white-space:nowrap; }
+        .banner-preview-track { display:inline-block; padding-left:100%; color:rgba(var(--casi-accent-rgb),0.7); font-family:'Syne',sans-serif; font-weight:800; font-size:16px; letter-spacing:1px; animation: bannerPreview 15s linear infinite; }
         .dpad-btn { width:36px; height:36px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); color:var(--casi-text); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s; user-select:none; -webkit-user-select:none; }
         .dpad-btn:hover { background:rgba(var(--casi-accent-rgb),0.12); border-color:rgba(var(--casi-accent-rgb),0.3); color:var(--casi-accent); }
         .dpad-btn:active { transform:scale(0.9); }
@@ -1571,14 +1579,25 @@ export default function AdminStudio() {
                         }}
                       >
                         {!el.image_url ? (
-                          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(var(--casi-accent-rgb),0.35)'}`, borderRadius: el.is_background ? 12 : 6, background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(var(--casi-accent-rgb),0.04)' }}>
-                            {el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>}
-                            <span style={{ fontSize: el.is_background ? 24 : 16, marginBottom: 4 }}>{el.is_background ? '🖼️' : el.shape === 'banner' ? '▰' : '✦'}</span>
-                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(var(--casi-accent-rgb),0.6)' }}>
-                              {el.locked ? 'No requests' : el.is_background ? 'Backdrop' : el.shape === 'banner' ? 'Banner' : 'Beam'}
-                            </span>
-                            {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : 'var(--casi-accent)' }}>${el.price_value}/{el.price_unit}</span>}
-                          </div>
+                          el.shape === 'banner' && !el.locked ? (
+                            // Empty banner → scrolling placeholder so the
+                            // slot is visually recognisable as a banner
+                            // instead of a static dashed rectangle.
+                            <div className="banner-preview">
+                              <span className="banner-preview-track">
+                                ▰ Banner · viewer messages scroll here · tip to try
+                              </span>
+                            </div>
+                          ) : (
+                            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(var(--casi-accent-rgb),0.35)'}`, borderRadius: el.is_background ? 12 : 6, background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(var(--casi-accent-rgb),0.04)' }}>
+                              {el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>}
+                              <span style={{ fontSize: el.is_background ? 24 : 16, marginBottom: 4 }}>{el.is_background ? '🖼️' : el.shape === 'banner' ? '▰' : '✦'}</span>
+                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(var(--casi-accent-rgb),0.6)' }}>
+                                {el.locked ? 'No requests' : el.is_background ? 'Backdrop' : el.shape === 'banner' ? 'Banner' : 'Beam'}
+                              </span>
+                              {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : 'var(--casi-accent)' }}>${el.price_value}/{el.price_unit}</span>}
+                            </div>
+                          )
                         ) : (
                           <SlotMedia src={el.image_url} fileType={null} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'contain', pointerEvents: 'none' }} />
                         )}

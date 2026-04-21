@@ -1831,6 +1831,16 @@ function OverlayContent() {
                       }
                       {viewerHasPreview && !isOBS && <div style={{ position:'absolute', inset:0, borderRadius:4, boxShadow:`inset 0 0 0 2px rgba(${accentColorRgb},0.5)`, pointerEvents:'none' }} />}
                     </div>
+                  ) : el.shape === 'banner' && !isOccupied && !isLocked && !isOBS ? (
+                    // Empty banner on the viewer overlay (but NOT on OBS —
+                    // stream shouldn't show placeholder text permanently).
+                    // Scroll a soft "tip to try" message so viewers can see
+                    // what the slot will do before they send a flash.
+                    <div className="beam-banner" style={{ opacity: 0.5, borderColor: `rgba(${tcRgb}, 0.3)` }}>
+                      <span className="beam-banner-track" style={{ color: `rgba(${tcRgb}, 0.7)` }}>
+                        ▰ Banner · your message scrolls here · tip to try
+                      </span>
+                    </div>
                   ) : (
                     <div className={shapeClass} style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:el.is_background?12:6, border:`1.5px dashed ${isLocked?'rgba(248,113,113,0.3)':isOccupied?`rgba(${tcRgb},0.31)`:el.is_background?'rgba(168,85,247,0.3)':`rgba(${tcRgb},0.25)`}`, background:isLocked?'rgba(248,113,113,0.03)':isOccupied?`rgba(${tcRgb},0.02)`:el.is_background?'rgba(168,85,247,0.03)':`rgba(${tcRgb},0.02)` }}>
                       <span style={{ fontSize:el.is_background?20:14, marginBottom:4 }}>{isLocked?'🔒':isOccupied?(el.shape==='banner'?'▰':''):el.is_background?'🖼':el.shape==='banner'?'▰':'✦'}</span>
