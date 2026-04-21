@@ -13,7 +13,6 @@ import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-net
 import Logo from './_components/Logo';
 import SlotMedia from '@/components/SlotMedia';
 import BeamTimer from './_components/BeamTimer';
-import BackdropModal from './_components/BackdropModal';
 import SlotInfoPanel from './_components/SlotInfoPanel';
 import BeamCtrlPanel from './_components/BeamCtrlPanel';
 import FlashCard from './_components/FlashCard';
@@ -114,7 +113,6 @@ export default function AdminStudio() {
   const [saveStatus, setSaveStatus] = useState('Ready');
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [previewBooking, setPreviewBooking] = useState<any>(null);
-  const [showBackdropModal, setShowBackdropModal] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [showInfoPanel, setShowInfoPanel] = useState(false);
@@ -392,9 +390,16 @@ export default function AdminStudio() {
   // width% / height% = 9/16. Keep the current height and shrink width
   // rather than the opposite, so the autosnap never pushes the slot off
   // the bottom edge. Banner snaps to a full-width strip at the bottom
-  // of the canvas; non-banner shape changes that had a banner before
-  // don't un-snap, which is fine — streamers can resize manually.
-  const handleUpdateShape = useCallback((id: string, shape: string) => {
+  // of the canvas; backdrop snaps to full-canvas + flips is_background
+  // so the /obs?layer=backdrop filter still picks it up. Non-target
+  // shape changes (rect/rounded) don't un-snap dimensions — streamers
+  // resize manually if they want.
+  //
+  // Backdrop has a special constraint: at most one per streamer. Picking
+  // "Backdrop" on a slot while another backdrop already exists swaps
+  // the flag over — the previous backdrop becomes a regular rect so
+  // we don't orphan an is_background=true row.
+  const handleUpdateShape = useCallback(async (id: string, shape: string) => {
     const el = elements.find(e => e.id === id);
     if (!el) return;
     const patch: Record<string, unknown> = { shape };
@@ -405,26 +410,32 @@ export default function AdminStudio() {
       patch.height = 8;
       patch.pos_x  = 0;
       patch.pos_y  = 92;
+      patch.is_background = false;
+    } else if (shape === 'backdrop') {
+      patch.width  = 100;
+      patch.height = 100;
+      patch.pos_x  = 0;
+      patch.pos_y  = 0;
+      patch.is_background = true;
+      // Demote the previous backdrop (if any) so at most one row has
+      // is_background=true at a time. We clear its shape too so it
+      // doesn't keep pretending to be a backdrop in the picker UI.
+      const prior = elements.find(e => e.id !== id && e.is_background);
+      if (prior) {
+        await updateLayer(prior.id, { is_background: false, shape: 'rect' });
+      }
+    } else {
+      // Shape-change to rect / rounded on a slot that WAS a backdrop
+      // needs to unflip is_background; otherwise the OBS filter keeps
+      // treating it as the backdrop and it still renders full-canvas.
+      if (el.is_background) patch.is_background = false;
     }
-    updateLayer(id, patch);
+    await updateLayer(id, patch);
   }, [elements, updateLayer]);
 
   const handleUpdateGlow = useCallback((id: string, glow: boolean) => {
     updateLayer(id, { glow_on_start: glow });
   }, [updateLayer]);
-
-  const createFullBackdrop = async (price: number, unit: string, maxDuration: number | null) => {
-    setShowBackdropModal(false);
-    setSaveStatus('Creating…');
-    const existing = elements.find(el => el.is_background);
-    if (existing) await supabase.from('overlay_elements').delete().eq('id', existing.id);
-    const { data } = await supabase.from('overlay_elements').insert({
-      profile_id: profile.id, image_url: '', pos_x: 0, pos_y: 0, width: 100, height: 100,
-      is_background: true, price_value: price, price_unit: unit, max_duration_minutes: maxDuration, locked: false,
-    }).select().single();
-    if (data) setElements(prev => [...prev.filter(el => !el.is_background), data]);
-    setSaveStatus('Ready');
-  };
 
   const addBeam = async () => {
     const backdrop = elements.find(el => el.is_background);
@@ -446,28 +457,6 @@ export default function AdminStudio() {
     if (data) {
       setElements(prev => [...prev, data]);
       setSelectedSlotId(data.id); // auto-select new beam, show sliders
-      setShowInfoPanel(false);
-    }
-  };
-
-  // One-click banner preset — full-width thin strip at the bottom of the
-  // canvas. Banner slots render the viewer's message as a scrolling
-  // marquee (see overlay/page.tsx) instead of their image, so streamers
-  // don't need to think about aspect ratio or pick a shape after the fact.
-  const addBanner = async () => {
-    const { data } = await supabase.from('overlay_elements').insert({
-      profile_id: profile.id, image_url: '',
-      pos_x: 0, pos_y: 92,
-      width: 100, height: 8,
-      is_background: false,
-      shape: 'banner',
-      glow_on_start: true,
-      price_value: 1, price_unit: 'min',
-      max_duration_minutes: null, locked: false,
-    }).select().single();
-    if (data) {
-      setElements(prev => [...prev, data]);
-      setSelectedSlotId(data.id);
       setShowInfoPanel(false);
     }
   };
@@ -1265,9 +1254,6 @@ export default function AdminStudio() {
             {view === 'studio' && (
               <>
                 <button onClick={addBeam} className="btn-sm b-orange banner-add-beam-trigger">+ Beam</button>
-                <button onClick={() => hasBackdrop && backdropEl ? (setSelectedSlotId(backdropEl.id), setShowInfoPanel(true)) : setShowBackdropModal(true)} className={`btn-sm ${hasBackdrop ? 'b-purple' : 'b-outline'} studio-action-hide`}>
-                  {hasBackdrop ? '● Backdrop' : 'Backdrop'}
-                </button>
                 <button onClick={clearAll} className="btn-sm b-danger studio-action-hide">Clear</button>
               </>
             )}
@@ -1303,7 +1289,6 @@ export default function AdminStudio() {
         )}
 
         {/* MODALS */}
-        {showBackdropModal && <BackdropModal onConfirm={createFullBackdrop} onClose={() => setShowBackdropModal(false)} />}
         {selectedEl && showInfoPanel && view === 'studio' && (
           <SlotInfoPanel
             el={selectedEl}
@@ -2172,14 +2157,10 @@ export default function AdminStudio() {
               <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{v}</span>
             </button>
           ))}
-          {/* Backdrop + Clear shown in bottom nav on mobile when in studio */}
-          {view === 'studio' && (
-            <button onClick={() => hasBackdrop && backdropEl ? (setSelectedSlotId(backdropEl.id), setShowInfoPanel(true)) : setShowBackdropModal(true)}
-              className="bot-tab" style={{ color: hasBackdrop ? '#c084fc' : '#444' }}>
-              <span style={{ fontSize: 18 }}>🖼️</span>
-              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{hasBackdrop ? 'Backdrop' : 'Add BG'}</span>
-            </button>
-          )}
+          {/* Mobile bottom nav no longer surfaces a Backdrop shortcut —
+              backdrops now live in the shape picker on any beam slot.
+              Streamer taps a beam, picks "Backdrop" in the shape row,
+              the slot flips to full-canvas with is_background=true. */}
         </div>
 
       </div>
