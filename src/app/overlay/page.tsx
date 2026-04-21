@@ -1440,6 +1440,49 @@ function OverlayContent() {
       'warning',
     );
   };
+
+  // Bulk-clear ghost RECOVER USDC chips — closed PDAs whose DB rows still
+  // carry escrow_pda from a previous build / aborted flow. The server probes
+  // each row's PDA and nulls escrow_pda on the ones that are actually gone;
+  // rows where the PDA is still alive require a real cancel/settle sign and
+  // are left alone.
+  const [cleanupBusy, setCleanupBusy] = useState(false);
+  const runStaleSolanaCleanup = async () => {
+    const wallet = viewerWalletRef.current;
+    if (!wallet || cleanupBusy) return;
+    setCleanupBusy(true);
+    try {
+      const res = await fetch('/api/bookings/cleanup-stale-solana', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ viewer_wallet: wallet, profile_id: profile?.id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showNotif('Cleanup failed — try again', 'denied');
+        return;
+      }
+      const cleaned = Number(body?.cleaned ?? 0);
+      const stillOpen = Number(body?.stillOpen ?? 0);
+      if (cleaned > 0 && profile?.id) {
+        await loadData(profile.id, savedViewerName ?? undefined);
+      }
+      if (cleaned === 0 && stillOpen === 0) {
+        showNotif('Nothing to clean — all chips are real', 'warning');
+      } else if (cleaned > 0 && stillOpen === 0) {
+        showNotif(`Cleared ${cleaned} ghost chip${cleaned === 1 ? '' : 's'}`, 'success');
+      } else if (cleaned > 0 && stillOpen > 0) {
+        showNotif(`Cleared ${cleaned}; ${stillOpen} still need manual recover`, 'warning');
+      } else {
+        showNotif(`${stillOpen} chip${stillOpen === 1 ? '' : 's'} still hold funds — click RECOVER USDC`, 'warning');
+      }
+    } catch (err) {
+      console.error('[cleanup] failed:', err);
+      showNotif('Cleanup failed — try again', 'denied');
+    } finally {
+      setCleanupBusy(false);
+    }
+  };
   // ──────────────────────────────────────────────────────────────────────────
 
   const estimatedCost = selectedSlot
@@ -1598,7 +1641,19 @@ function OverlayContent() {
           {/* MY BEAMS */}
           {!isOBS && visibleMyBookings.length > 0 && !selectedSlot && (
             <div className="my-beams">
-              <div className="my-beams-lbl">Your beams</div>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                <div className="my-beams-lbl" style={{ marginBottom:0 }}>Your beams</div>
+                {viewerWalletRef.current && visibleMyBookings.some((b:any) => b.payment_method === 'solana' && b.escrow_pda && (b.status === 'denied' || b.status === 'expired')) && (
+                  <button
+                    onClick={runStaleSolanaCleanup}
+                    disabled={cleanupBusy}
+                    style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', background:'none', border:'1px solid var(--casi-border)', borderRadius:8, padding:'4px 10px', color:'var(--casi-text-muted)', cursor:cleanupBusy?'default':'pointer', opacity:cleanupBusy?0.5:1 }}
+                    title="Probe each escrow and clear rows whose funds already left the vault"
+                  >
+                    {cleanupBusy ? '…' : 'Clean up ended'}
+                  </button>
+                )}
+              </div>
               <div className="my-beams-list">
                 {visibleMyBookings.map((booking: any) => {
                   const isLive     = booking.status==='active';

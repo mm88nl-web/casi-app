@@ -511,20 +511,23 @@ export default function AdminStudio() {
 
   /**
    * Try the server-held session key first for settle_beam_delegated. Returns
-   * true if the delegated crank succeeded; the caller should NOT fall back to
-   * wallet-signed settle. Returns false on any failure so the caller can pop
-   * the streamer's wallet as a fallback (missing delegate, expired, cranker
-   * unfunded, chain revert).
+   * a discriminated outcome so callers can both branch on success AND surface
+   * the failure reason to the streamer before falling back to a wallet popup
+   * (missing delegate, expired, cranker unfunded, chain revert).
    *
    * Why a separate helper instead of inlining: both `settleOrClearSolanaEscrow`
    * (deny path) and `kickBeam` (playNow + end-early) need the same
    * try-delegated-first semantics. Keeping it one place keeps the fallback
    * behavior identical across surfaces.
    */
-  const trySolanaSettleDelegated = async (bookingId: string): Promise<boolean> => {
+  type DelegateSettleOutcome =
+    | { ok: true; alreadyProcessed?: boolean }
+    | { ok: false; reason?: string; message?: string; status?: number };
+
+  const trySolanaSettleDelegated = async (bookingId: string): Promise<DelegateSettleOutcome> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return false;
+      if (!session?.access_token) return { ok: false, reason: 'no_session' };
       const res = await fetch('/api/solana/delegates/settle-beam', {
         method: 'POST',
         headers: {
@@ -533,10 +536,29 @@ export default function AdminStudio() {
         },
         body: JSON.stringify({ booking_id: bookingId }),
       });
-      return res.ok;
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) return { ok: true, alreadyProcessed: !!body?.alreadyProcessed };
+      return { ok: false, status: res.status, reason: body?.reason, message: body?.message };
     } catch (err) {
       console.warn('[trySolanaSettleDelegated] crank failed; falling back', err);
-      return false;
+      return { ok: false, reason: 'network_error', message: err instanceof Error ? err.message : String(err) };
+    }
+  };
+
+  /** Human-readable one-liner for a failed delegate settle. */
+  const describeDelegateSettleFailure = (o: Extract<DelegateSettleOutcome, { ok: false }>): string => {
+    switch (o.reason) {
+      case 'no_session':    return 'Not signed in — reconnecting…';
+      case 'no_delegate':   return 'Delegate not installed — sign this one manually, then install in Settings';
+      case 'revoked':       return 'Delegate revoked — sign this one, then reinstall in Settings';
+      case 'expired':       return 'Delegate expired — sign this one, then rotate in Settings';
+      case 'no_cranker':    return 'Server fee payer offline — signing with your wallet';
+      case 'decrypt_failed':
+      case 'key_mismatch':  return 'Delegate secret unreadable (env rotated?) — rotate in Settings';
+      case 'db_error':      return 'Delegate lookup failed — falling back to wallet';
+      case 'chain_error':   return `On-chain settle failed: ${o.message ?? 'unknown'}`;
+      case 'network_error': return 'Network error — retrying with wallet';
+      default:              return `Delegate settle failed (${o.reason ?? o.status ?? 'unknown'}) — falling back to wallet`;
     }
   };
 
@@ -646,11 +668,13 @@ export default function AdminStudio() {
 
     // Try the delegated crank first — if a healthy session key is installed,
     // the server settles without a wallet pop-up. On failure (no delegate,
-    // expired, cranker unfunded, chain revert) we fall through to the
-    // wallet-signed path below.
-    if (await trySolanaSettleDelegated(booking.id)) {
+    // expired, cranker unfunded, chain revert) we surface the reason and
+    // fall through to the wallet-signed path below.
+    const delegated = await trySolanaSettleDelegated(booking.id);
+    if (delegated.ok) {
       return { outcome: 'settled' };
     }
+    showFlashToast(describeDelegateSettleFailure(delegated), 'err');
 
     const canSign = !!booking.viewer_wallet && !!publicKey && !!profile?.solana_wallet
       && publicKey.toBase58() === profile.solana_wallet;
@@ -872,7 +896,8 @@ export default function AdminStudio() {
       // connected and matches their profile's solana_wallet.
       if (booking.escrow_pda && booking.viewer_wallet) {
         const delegated = await trySolanaSettleDelegated(booking.id);
-        if (!delegated) {
+        if (!delegated.ok) {
+          showFlashToast(describeDelegateSettleFailure(delegated), 'err');
           const canSignFallback = publicKey && profile?.solana_wallet
             && publicKey.toBase58() === profile.solana_wallet;
           if (canSignFallback) {
