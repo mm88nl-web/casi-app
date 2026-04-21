@@ -1,14 +1,16 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { useWallet, useConnection } from '@solana/wallet-adapter-react';
+import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
-import { USDC_MINT, NETWORK_LABEL } from '@/lib/solana-network';
+import { NETWORK_LABEL } from '@/lib/solana-network';
+import { useWalletBalances, refreshWalletBalances } from '@/lib/wallet-balances';
+import { needsMobileHandoff, phantomBrowseUrl, solflareBrowseUrl } from '@/lib/mobile-wallet';
 
-// Module-level refresh signal — allows any page (overlay, admin) to trigger
-// an immediate balance re-fetch without prop-drilling or React context.
-let _refreshFn: (() => void) | null = null;
-export function refreshWalletNav() { _refreshFn?.(); }
+// Back-compat export: every existing `refreshWalletNav()` call site now
+// routes through the shared balance store. Kept as a named export so the
+// overlay/admin pages don't need to change their imports.
+export function refreshWalletNav() { refreshWalletBalances(); }
 
 const CSS = `
   .wn-connect {
@@ -156,21 +158,16 @@ function truncate(pk: PublicKey): string {
 
 export default function WalletNav() {
   const { connected, publicKey, disconnect, wallet, connect, connecting } = useWallet();
-  const { connection } = useConnection();
   const { setVisible } = useWalletModal();
 
-  const [solBal, setSolBal]     = useState<number | null>(null);
-  const [usdcBal, setUsdcBal]   = useState<number | null>(null);
+  // Single source of truth — the same values feed every other balance
+  // surface in the app (the overlay booking-form "Your balance" line,
+  // any future admin card). Backed by one WS subscription + 10s poll.
+  const { sol: solBal, usdc: usdcBal } = useWalletBalances();
+
   const [dropOpen, setDropOpen]  = useState(false);
   const [dropPos, setDropPos]    = useState<{ top: number; right: number }>({ top: 56, right: 12 });
-  const [refreshTick, setRefreshTick] = useState(0);
   const dropRef = useRef<HTMLDivElement>(null);
-
-  // Register the module-level refresh function so any page can trigger it
-  useEffect(() => {
-    _refreshFn = () => setRefreshTick(t => t + 1);
-    return () => { _refreshFn = null; };
-  }, []);
 
   // Only connect() after an explicit user click — Wallet Standard auto-registers
   // Phantom into `wallet` on page load, but we must not auto-connect silently.
@@ -204,36 +201,6 @@ export default function WalletNav() {
     setDropOpen(o => !o);
   };
 
-  // Fetch balances on connect, on publicKey change, on manual refresh tick,
-  // and every 10 s. Uses 'confirmed' commitment for ~2 s faster visibility
-  // vs the default 'finalized' (32 blocks).
-  useEffect(() => {
-    if (!connected || !publicKey) { setSolBal(null); setUsdcBal(null); return; }
-    let cancelled = false;
-
-    const fetchBalances = async () => {
-      try {
-        const lamports = await connection.getBalance(publicKey, 'confirmed');
-        if (!cancelled) setSolBal(lamports / 1e9);
-      } catch { /* ignore */ }
-
-      try {
-        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-          publicKey,
-          { mint: new PublicKey(USDC_MINT) },
-          'confirmed',
-        );
-        const amount = tokenAccounts.value[0]
-          ?.account.data.parsed.info.tokenAmount.uiAmount ?? 0;
-        if (!cancelled) setUsdcBal(amount);
-      } catch { if (!cancelled) setUsdcBal(0); }
-    };
-
-    fetchBalances();
-    const interval = setInterval(fetchBalances, 10_000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [connected, publicKey, connection, refreshTick]);
-
   // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -252,6 +219,42 @@ export default function WalletNav() {
 
   /* ── Disconnected / connecting ── */
   if (!connected || !publicKey) {
+    // On a phone outside a wallet's in-app browser the deeplink flow
+    // for signing is broken (see src/lib/mobile-wallet.ts for the why).
+    // Swap the "Connect Wallet" button for a one-tap handoff that loads
+    // this same URL inside Phantom's in-app browser, where every
+    // subsequent connect/sign call is synchronous and reliable.
+    if (needsMobileHandoff()) {
+      const here = typeof window !== 'undefined' ? window.location.href : '';
+      return (
+        <>
+          <style>{CSS}</style>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+            <a
+              className="wn-connect"
+              href={phantomBrowseUrl(here)}
+              style={{ textDecoration: 'none' }}
+            >
+              <span className="wn-connect-icon" />
+              Open in Phantom
+            </a>
+            <a
+              href={solflareBrowseUrl(here)}
+              style={{
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 9,
+                letterSpacing: 1,
+                color: '#666',
+                textDecoration: 'none',
+              }}
+            >
+              or open in Solflare →
+            </a>
+          </div>
+        </>
+      );
+    }
+
     return (
       <>
         <style>{CSS}</style>

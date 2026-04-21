@@ -22,4 +22,4 @@ wallet = "~/.config/solana/id.json"
 casi_escrow = "6utjMbb5ovFHUdMcMWaGc5ovmVhLryVRLEzYPWzeBosg"
 
 [scripts]
-test = "npx ts-mocha -p tests/tsconfig.json -t 1000000 tests/**/*.ts"
+test = "npx ts-mocha -p tests/tsconfig.json -t 1000000 'tests/**/*.ts'"

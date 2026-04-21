@@ -11,7 +11,7 @@ import WalletNav from '@/components/WalletNav';
 import ChatPanel from '@/components/ChatPanel';
 import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 import Logo from './_components/Logo';
-import SlotMedia from './_components/SlotMedia';
+import SlotMedia from '@/components/SlotMedia';
 import BeamTimer from './_components/BeamTimer';
 import BackdropModal from './_components/BackdropModal';
 import SlotInfoPanel from './_components/SlotInfoPanel';
@@ -21,7 +21,7 @@ import PendingRequestCard from './_components/PendingRequestCard';
 import QueuedRequestCard from './_components/QueuedRequestCard';
 import ActiveCard from './_components/ActiveCard';
 import ApprovedQueueCard from './_components/ApprovedQueueCard';
-import StuckEscrowsPanel from './_components/StuckEscrowsPanel';
+import DelegateKeyCard from './_components/DelegateKeyCard';
 import { getSecondsRemaining, formatTime, fmtDuration } from './_components/time';
 
 // Explicit column list for bookings reads. Swapping `*` for this is belt +
@@ -102,10 +102,6 @@ export default function AdminStudio() {
   const [queuedBookings, setQueuedBookings] = useState<any[]>([]);
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [approvedQueued, setApprovedQueued] = useState<any[]>([]);
-  // Denied Solana bookings whose escrow_pda is still non-null — the on-chain
-  // vault may or may not hold funds. StuckEscrowsPanel probes each one and
-  // offers a streamer-signed settle for Active escrows. Typically empty.
-  const [stuckEscrows, setStuckEscrows] = useState<any[]>([]);
   const [pendingFlashes, setPendingFlashes] = useState<any[]>([]);
   // Keyed by flash id: true while the streamer is signing approve/deny on-chain.
   const [settlingSolana, setSettlingSolana] = useState<Record<string, boolean>>({});
@@ -243,19 +239,6 @@ export default function AdminStudio() {
     setApprovedQueued(aq || []);
   }, [supabase]);
 
-  const loadStuckEscrows = useCallback(async (profileId: string) => {
-    const { data } = await supabase
-      .from('bookings')
-      .select('id, viewer_name, escrow_pda, viewer_wallet, tx_signature, created_at, price_value, price_unit')
-      .eq('profile_id', profileId)
-      .eq('payment_method', 'solana')
-      .eq('status', 'denied')
-      .not('escrow_pda', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(20);
-    setStuckEscrows(data || []);
-  }, [supabase]);
-
   const loadFlashes = useCallback(async (profileId: string) => {
     const { data } = await supabase
       .from('flashes')
@@ -270,15 +253,13 @@ export default function AdminStudio() {
   useEffect(() => {
     if (!profile?.id) return;
     loadBookings(profile.id);
-    loadStuckEscrows(profile.id);
     const channel = supabase.channel(`admin_bookings_${profile.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `profile_id=eq.${profile.id}` }, () => {
         loadBookings(profile.id);
-        loadStuckEscrows(profile.id);
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [profile?.id, supabase, loadBookings, loadStuckEscrows]);
+  }, [profile?.id, supabase, loadBookings]);
 
   // Keep local `elements` in sync with overlay_elements DB writes from other
   // contexts (Vercel Cron janitor, queue advance, other admin sessions).
@@ -327,7 +308,11 @@ export default function AdminStudio() {
     setTogglingLive(false);
   };
 
-  const expireBooking = useCallback(async (booking: any) => {
+  // Not memoized: this closes over startSolanaBeamOnChain (declared below) and
+  // a useCallback wrapper here would need startSolanaBeamOnChain in its deps,
+  // which is itself unmemoized. The onExpire prop's identity churn is harmless
+  // — BeamTimer keys on booking.id, not callback identity.
+  const expireBooking = async (booking: any) => {
     // Stripe capture for natural expiry is handled by the Vercel Cron janitor
     // (/api/cron/stripe-janitor). We do NOT call the API here because a
     // fire-and-forget fetch races with the queue-advance logic below:
@@ -342,27 +327,41 @@ export default function AdminStudio() {
     }
     await supabase.from('bookings').update({ status: 'expired', image_url: null }).eq('id', booking.id);
     if (booking.element_id) {
-      const { data: next } = await supabase.from('bookings').select('id, element_id, image_url, payment_method')
+      const { data: next } = await supabase.from('bookings')
+        .select('id, element_id, image_url, payment_method, escrow_pda')
         .eq('element_id', booking.element_id).eq('status', 'approved_queued')
-        .order('approved_at', { ascending: true }).limit(1).single();
-      // Solana beams require an explicit start_beam signature from the streamer,
-      // so we CANNOT auto-promote them from a timer / background context — the
-      // streamer's wallet may not be connected here. Leave the next booking in
-      // approved_queued; the admin UI renders a "Start Beam" action for it.
-      if (next && next.payment_method !== 'solana') {
+        .order('approved_at', { ascending: true }).limit(1).maybeSingle();
+
+      if (!next) {
+        await supabase.from('overlay_elements').update({ image_url: '' }).eq('id', booking.element_id);
+        setElements(prev => prev.map(el => el.id === booking.element_id ? { ...el, image_url: '' } : el));
+      } else if (next.payment_method === 'solana') {
+        // Solana queue: on-chain Pending → Active MUST happen before the DB
+        // flip, or settle_beam will revert. startSolanaBeamOnChain tries the
+        // server-held delegate first (cranker pays fees, no popup) and falls
+        // back to a wallet-signed start_beam if the delegate is missing /
+        // revoked / expired / unfunded. If both fail we leave the row in
+        // approved_queued and nudge the streamer to click Play Now.
+        try {
+          await startSolanaBeamOnChain(next);
+          await supabase.from('bookings').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', next.id);
+          await supabase.from('overlay_elements').update({ image_url: next.image_url }).eq('id', next.element_id);
+          setElements(prev => prev.map(el => el.id === next.element_id ? { ...el, image_url: next.image_url } : el));
+        } catch (err) {
+          console.warn('[expireBooking] Solana auto-promote failed, leaving queued', err);
+          await supabase.from('overlay_elements').update({ image_url: '' }).eq('id', booking.element_id);
+          setElements(prev => prev.map(el => el.id === booking.element_id ? { ...el, image_url: '' } : el));
+          showFlashToast('Next Solana beam ready — click Play Now to start', 'ok');
+        }
+      } else {
         await supabase.from('bookings').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', next.id);
         await supabase.from('overlay_elements').update({ image_url: next.image_url }).eq('id', next.element_id);
         setElements(prev => prev.map(el => el.id === next.element_id ? { ...el, image_url: next.image_url } : el));
-      } else {
-        // No eligible auto-promotable next booking → clear the slot. For a
-        // Solana next-up the streamer will click Start Beam manually.
-        await supabase.from('overlay_elements').update({ image_url: '' }).eq('id', booking.element_id);
-        setElements(prev => prev.map(el => el.id === booking.element_id ? { ...el, image_url: '' } : el));
       }
     }
     setActiveBookings(prev => prev.filter(b => b.id !== booking.id));
     if (profile?.id) loadBookings(profile.id);
-  }, [supabase, profile?.id, loadBookings]);
+  };
 
   const updateLayer = useCallback(async (id: string, updates: any) => {
     setSaveStatus('Saving…');
@@ -471,6 +470,32 @@ export default function AdminStudio() {
       console.warn('[startSolanaBeam] booking has no escrow_pda — skipping');
       return;
     }
+
+    // Prefer the server-held session-key delegate. If it exists, is healthy,
+    // and the on-chain program accepts it (the server will probe all three
+    // constraints), the streamer doesn't need to pop open their wallet.
+    // Fall back to streamer-signed start_beam if the delegate is missing /
+    // expired / revoked / server errored.
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const res = await fetch('/api/solana/delegates/start-beam', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization:  `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ booking_id: booking.id }),
+        });
+        if (res.ok) return;
+        // Non-200 with known reasons means the delegate can't crank this tx.
+        // Fall through to wallet-signed path; any other status is also
+        // tolerated — the worst case is one extra wallet prompt.
+      }
+    } catch (err) {
+      console.warn('[startSolanaBeam] delegate crank failed; falling back', err);
+    }
+
     const anchorWallet = buildAnchorWalletForEscrow();
     if (!anchorWallet) {
       openWalletModal();
@@ -482,6 +507,92 @@ export default function AdminStudio() {
     const { CasiEscrowClient } = await import('@/lib/casi-escrow');
     const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
     await client.startBeam({ escrowId: booking.id, streamer: publicKey! });
+  };
+
+  /**
+   * Try the server-held session key first for settle_beam_delegated. Returns
+   * a discriminated outcome so callers can both branch on success AND surface
+   * the failure reason to the streamer before falling back to a wallet popup
+   * (missing delegate, expired, cranker unfunded, chain revert).
+   *
+   * Why a separate helper instead of inlining: both `settleOrClearSolanaEscrow`
+   * (deny path) and `kickBeam` (playNow + end-early) need the same
+   * try-delegated-first semantics. Keeping it one place keeps the fallback
+   * behavior identical across surfaces.
+   */
+  type DelegateSettleOutcome =
+    | { ok: true; alreadyProcessed?: boolean }
+    | { ok: false; reason?: string; message?: string; status?: number };
+
+  const trySolanaSettleDelegated = async (bookingId: string): Promise<DelegateSettleOutcome> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return { ok: false, reason: 'no_session' };
+      const res = await fetch('/api/solana/delegates/settle-beam', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization:  `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ booking_id: bookingId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) return { ok: true, alreadyProcessed: !!body?.alreadyProcessed };
+      return { ok: false, status: res.status, reason: body?.reason, message: body?.message };
+    } catch (err) {
+      console.warn('[trySolanaSettleDelegated] crank failed; falling back', err);
+      return { ok: false, reason: 'network_error', message: err instanceof Error ? err.message : String(err) };
+    }
+  };
+
+  /** Human-readable one-liner for a failed delegate settle. */
+  const describeDelegateSettleFailure = (o: Extract<DelegateSettleOutcome, { ok: false }>): string => {
+    switch (o.reason) {
+      case 'no_session':    return 'Not signed in — reconnecting…';
+      case 'no_delegate':   return 'Delegate not installed — sign this one manually, then install in Settings';
+      case 'revoked':       return 'Delegate revoked — sign this one, then reinstall in Settings';
+      case 'expired':       return 'Delegate expired — sign this one, then rotate in Settings';
+      case 'no_cranker':    return 'Server fee payer offline — signing with your wallet';
+      case 'decrypt_failed':
+      case 'key_mismatch':  return 'Delegate secret unreadable (env rotated?) — rotate in Settings';
+      case 'db_error':      return 'Delegate lookup failed — falling back to wallet';
+      case 'chain_error':   return `On-chain settle failed: ${o.message ?? 'unknown'}`;
+      case 'network_error': return 'Network error — retrying with wallet';
+      default:              return `Delegate settle failed (${o.reason ?? o.status ?? 'unknown'}) — falling back to wallet`;
+    }
+  };
+
+  /**
+   * Sign `set_delegate` on-chain after the server has generated + stored a
+   * session keypair. This is the ONE wallet pop-up in the session-key flow —
+   * every subsequent Approve is popup-free because the server signs
+   * `start_beam_delegated` with the registered session key.
+   *
+   * Returns the tx's Solscan URL so the card can surface a "view tx" link on
+   * success. Throws on signing failure so the card can transition to
+   * `needs-finalize` and offer a retry — NEVER regenerates a session key
+   * silently, that would leave an orphan secret in the DB.
+   */
+  const installDelegateOnChain = async (
+    sessionPubkey: string,
+    expiresAt: number,
+  ): Promise<{ solscanUrl: string }> => {
+    const anchorWallet = buildAnchorWalletForEscrow();
+    if (!anchorWallet) {
+      openWalletModal();
+      throw new Error('Connect your streamer wallet to finalize the session key');
+    }
+    if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
+      throw new Error('Connected wallet is not the streamer wallet on file');
+    }
+    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const { PublicKey }        = await import('@solana/web3.js');
+    const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
+    const { solscanUrl } = await client.setDelegate({
+      sessionKey: new PublicKey(sessionPubkey),
+      expiresAt,
+    });
+    return { solscanUrl };
   };
 
   const approveBooking = async (booking: any) => {
@@ -555,6 +666,16 @@ export default function AdminStudio() {
     // Status byte lives at offset 161; see EscrowState layout in lib.rs.
     if (pdaInfo.data[161] === 0) return { outcome: 'pending-chain' };
 
+    // Try the delegated crank first — if a healthy session key is installed,
+    // the server settles without a wallet pop-up. On failure (no delegate,
+    // expired, cranker unfunded, chain revert) we surface the reason and
+    // fall through to the wallet-signed path below.
+    const delegated = await trySolanaSettleDelegated(booking.id);
+    if (delegated.ok) {
+      return { outcome: 'settled' };
+    }
+    showFlashToast(describeDelegateSettleFailure(delegated), 'err');
+
     const canSign = !!booking.viewer_wallet && !!publicKey && !!profile?.solana_wallet
       && publicKey.toBase58() === profile.solana_wallet;
     if (!canSign) return { outcome: 'no-wallet' };
@@ -573,40 +694,15 @@ export default function AdminStudio() {
     } catch (err) {
       // NotActive = escrow is still Pending on-chain. Only the viewer can
       // close it via cancel_escrow; surface that to the caller.
-      const { parseCasiError } = await import('@/lib/casi-errors');
+      const { parseCasiError, isAlreadyProcessed } = await import('@/lib/casi-errors');
       if (parseCasiError(err) === 'NotActive') return { outcome: 'pending-chain' };
+      // "already processed" = our first submission already landed and the
+      // settle succeeded. Treat as success so the caller doesn't toast.
+      if (isAlreadyProcessed(err)) return { outcome: 'settled' };
       console.error('[settleOrClearSolanaEscrow] settle_beam failed:', err);
       return { outcome: 'error', error: err };
     }
   }, [walletConnection, publicKey, profile?.solana_wallet]);
-
-  /**
-   * Recover a stuck denied Solana booking by reusing the probe + settle helper
-   * plus DB cleanup. Used by the <StuckEscrowsPanel> rows. Outcomes:
-   *   - Active escrow → streamer signs settle_beam, viewer gets pro-rata refund
-   *   - Closed PDA    → just clear the stale escrow_pda pointer
-   *   - Pending       → no-op with toast (viewer must click recover)
-   */
-  const handleSettleStuckEscrow = useCallback(async (booking: {
-    id: string; escrow_pda: string | null; viewer_wallet: string | null;
-  }) => {
-    const result = await settleOrClearSolanaEscrow(booking);
-    if (result.outcome === 'settled' || result.outcome === 'closed') {
-      await supabase.from('bookings').update({ escrow_pda: null }).eq('id', booking.id);
-      showFlashToast(
-        result.outcome === 'settled' ? '◎ Settled — refund sent to viewer' : 'Row cleared',
-        'ok',
-      );
-      if (profile?.id) loadStuckEscrows(profile.id);
-    } else if (result.outcome === 'pending-chain') {
-      showFlashToast('Escrow is Pending — only the viewer can reclaim', 'err');
-    } else if (result.outcome === 'no-wallet') {
-      showFlashToast('Connect your streamer wallet first', 'err');
-    } else {
-      const { formatEscrowError } = await import('@/lib/casi-errors');
-      showFlashToast(formatEscrowError(result.error), 'err');
-    }
-  }, [settleOrClearSolanaEscrow, supabase, profile?.id, loadStuckEscrows]);
 
   const denyBooking = async (id: string, paymentMethod?: string) => {
   setPreviewBooking(null);
@@ -630,12 +726,27 @@ export default function AdminStudio() {
     if (result.outcome === 'settled' || result.outcome === 'closed') {
       update.escrow_pda = null;
     }
-    await supabase.from('bookings').update(update).eq('id', id);
+    const { error: updateErr, data: updateData } = await supabase
+      .from('bookings')
+      .update(update)
+      .eq('id', id)
+      .select('id, status, escrow_pda, profile_id')
+      .maybeSingle();
+    // TEMP diagnostic for deny-doesn't-propagate bug. Remove once fixed.
+    console.warn('[admin/deny/solana]', { id, outcome: result.outcome, updateErr, updateData });
 
     if (result.outcome === 'settled') {
       showFlashToast('✕ Denied & escrow settled on-chain', 'ok');
+    } else if (result.outcome === 'closed') {
+      // PDA was already closed by the time we probed — either viewer
+      // reclaimed first, cranker cancelled a stale pending, or the row had
+      // no escrow to begin with. Nothing left for anyone to do.
+      showFlashToast('✕ Denied — escrow already closed', 'ok');
     } else if (result.outcome === 'pending-chain') {
-      showFlashToast('✕ Denied — viewer must reclaim escrow (still Pending)', 'ok');
+      // Escrow is still Pending on-chain: only the viewer can cancel_escrow.
+      // They'll see "✕ Denied — USDC locked" with a RECOVER button the next
+      // time they open the overlay.
+      showFlashToast('✕ Denied — viewer can reclaim their USDC from the overlay', 'ok');
     } else if (result.outcome === 'no-wallet') {
       showFlashToast('✕ Denied — connect streamer wallet to settle escrow', 'err');
     } else if (result.outcome === 'error') {
@@ -769,34 +880,36 @@ export default function AdminStudio() {
     }
   };
 
-  const kickBeam = useCallback(async (booking: any) => {
+  // Plain function (not useCallback) because it closes over the unmemoized
+  // expireBooking + startSolanaBeamOnChain. Memoizing would capture stale refs.
+  const kickBeam = async (booking: any) => {
     setSelectedSlotId(null);
     setShowInfoPanel(false);
     if (booking.payment_method === 'solana') {
-      // Settle the on-chain escrow: streamer receives 100% of the vested
-      // portion, viewer receives the unvested portion as a refund. The
-      // vault ATA + EscrowState are closed in the same tx.
-      const canSettleOnChain =
-        booking.escrow_pda && booking.viewer_wallet && publicKey &&
-        profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet;
-
-      if (canSettleOnChain) {
-        try {
-          const anchorWallet = buildAnchorWalletForEscrow();
-          if (!anchorWallet) throw new Error('Wallet not ready to sign');
-          const { CasiEscrowClient } = await import('@/lib/casi-escrow');
-          const { PublicKey: PK }    = await import('@solana/web3.js');
-          const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
-          await client.settleBeam({
-            escrowId: booking.id,
-            viewer:   new PK(booking.viewer_wallet),
-            streamer: publicKey!,
-          });
-        } catch (err) {
-          // Log and continue to expireBooking — DB still needs to advance
-          // the queue even if on-chain settle failed (e.g. already settled
-          // by viewer). The escrow_pda remains so the viewer can see it.
-          console.error('[kickBeam] settleBeam failed:', err);
+      // Settle the on-chain escrow via the shared probe-first helper: it
+      // tries the cranker-signed delegate first, falls back to a wallet pop-
+      // up, and reports back WHICH state the escrow ended in. Only `settled`
+      // or `closed` are safe to expire in the DB — any other outcome means
+      // the PDA is still alive with funds and the beam must stay live until
+      // someone finishes the settle. This is the bug fix for the case where
+      // the streamer cancels the wallet popup and the beam "disappeared"
+      // while funds were still locked on-chain.
+      if (booking.escrow_pda && booking.viewer_wallet) {
+        const result = await settleOrClearSolanaEscrow({
+          id:            booking.id,
+          escrow_pda:    booking.escrow_pda,
+          viewer_wallet: booking.viewer_wallet,
+        });
+        if (result.outcome !== 'settled' && result.outcome !== 'closed') {
+          if (result.outcome === 'pending-chain') {
+            showFlashToast('Escrow still Pending on-chain — viewer must reclaim from overlay', 'err');
+          } else if (result.outcome === 'no-wallet') {
+            showFlashToast('Connect streamer wallet to end this beam', 'err');
+          } else {
+            const { formatEscrowError } = await import('@/lib/casi-errors');
+            showFlashToast(`End early failed — ${formatEscrowError(result.error)}; beam stays live`, 'err');
+          }
+          return;
         }
       }
       await expireBooking(booking);
@@ -813,7 +926,7 @@ export default function AdminStudio() {
       });
       await expireBooking(booking);
     }
-  }, [expireBooking, publicKey, profile?.solana_wallet, walletConnection, supabase]);
+  };
 
   // Force-advance a queued booking to active: end the current one on the
   // same slot (settles on-chain for Solana / prorates for Stripe), then
@@ -1391,7 +1504,7 @@ export default function AdminStudio() {
                           {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : 'var(--casi-accent)' }}>${el.price_value}/{el.price_unit}</span>}
                         </div>
                       ) : (
-                        <SlotMedia src={el.image_url} fileType={null} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'fill', pointerEvents: 'none' }} />
+                        <SlotMedia src={el.image_url} fileType={null} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'contain', pointerEvents: 'none' }} />
                       )}
                       {/* Selection glow */}
                       {isSelected && !el.is_background && (
@@ -1438,14 +1551,6 @@ export default function AdminStudio() {
         {/* ── REQUESTS — separated by beam vs backdrop ── */}
         {view === 'requests' && (
           <div className="req-body">
-
-            {/* ── STUCK SOLANA ESCROWS ── */}
-            <StuckEscrowsPanel
-              bookings={stuckEscrows}
-              connection={walletConnection}
-              walletReady={!!publicKey && !!profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet}
-              onSettle={handleSettleStuckEscrow}
-            />
 
             {/* ── FLASH MESSAGES ── */}
             {pendingFlashes.length > 0 && (
@@ -1863,6 +1968,13 @@ export default function AdminStudio() {
                     </div>
                     <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>Connect your wallet then click Save to link it to your profile.</div>
                   </div>
+
+                  {/* Session key delegate — optional server-side start_beam */}
+                  <DelegateKeyCard
+                    supabase={supabase}
+                    walletReady={!!publicKey && !!profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet}
+                    onInstalled={installDelegateOnChain}
+                  />
 
                   {/* Free Flashes toggle — gates the Test Flash button on Studio */}
                   <div>

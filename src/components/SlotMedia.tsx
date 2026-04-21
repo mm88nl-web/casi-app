@@ -1,6 +1,8 @@
-// Admin canvas + request cards show whatever the viewer uploaded. Overlay
-// already branches on file_type; admin used <img> everywhere, so mp4/webm
-// uploads showed as broken images on the streamer's side.
+// Renders viewer-uploaded media that may be an image or a video. A raw
+// <img> with an mp4/webm src renders as a broken/blank square; this
+// component branches on file_type (falling back to a URL regex) so
+// every surface — admin canvas, request cards, overlay thumbnails,
+// slot previews — displays the media correctly.
 export default function SlotMedia({
   src,
   fileType,

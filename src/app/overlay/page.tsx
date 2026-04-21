@@ -2,10 +2,12 @@
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { useWallet, useConnection } from '@solana/wallet-adapter-react';
+import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import WalletNav, { refreshWalletNav } from '@/components/WalletNav';
+import SlotMedia from '@/components/SlotMedia';
+import { useWalletBalances } from '@/lib/wallet-balances';
 import ChatPanel from '@/components/ChatPanel';
 import SendFlashSection from '@/components/overlay/SendFlashSection';
 import TurnstileWidget from '@/components/TurnstileWidget';
@@ -395,7 +397,10 @@ function OverlayContent() {
   const onTurnstileExpire = useCallback(() => setTurnstileToken(null), []);
   const [cancelling, setCancelling]     = useState<string|null>(null);
   const [notification, setNotification] = useState<{text:string;type:string}|null>(null);
-  const [usdcBalance, setUsdcBalance]   = useState<number|null>(null);
+  // Pulled from the shared wallet-balance store (same source the top-right
+  // WalletNav reads from, so the booking-form "Your balance" line and the
+  // nav are guaranteed in lockstep). One WS sub + 10s poll for the whole app.
+  const { usdc: usdcBalance } = useWalletBalances();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [txStatus, setTxStatus]         = useState<TxStatus>('idle');
   const [txError, setTxError]           = useState<string|null>(null);
@@ -410,7 +415,6 @@ function OverlayContent() {
   // ─────────────────────────────────────────────────────────────────────────
 
   // ── Wallet state ──────────────────────────────────────────────────────────
-  const { connection: walletConn }      = useConnection();
   const { wallet, connected, connecting, connect, publicKey, signTransaction, signAllTransactions } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
 
@@ -435,24 +439,13 @@ function OverlayContent() {
   };
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Proactively fetch USDC balance for live cost preview
-  useEffect(() => {
-    if (!publicKey) { setUsdcBalance(null); return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const { PublicKey: PK } = await import('@solana/web3.js');
-        const { value: accs } = await walletConn.getParsedTokenAccountsByOwner(
-          publicKey, { mint: new PK(USDC_MINT) }
-        );
-        if (!cancelled) setUsdcBalance(accs[0]?.account.data.parsed.info.tokenAmount.uiAmount ?? 0);
-      } catch { if (!cancelled) setUsdcBalance(null); }
-    })();
-    return () => { cancelled = true; };
-  }, [publicKey, walletConn]);
-
   const supabase = useRef(createClient()).current;
   const viewerNameRef = useRef('');
+  // Mirrors the connected wallet pubkey into a ref so loadData can pick up
+  // cross-device denied rows (viewer_name lives in localStorage, wallet does
+  // not). Updated by an effect below; reading via ref avoids reconstructing
+  // the loadData callback on every wallet change.
+  const viewerWalletRef = useRef<string | null>(null);
   const lastRealtimeEventAt = useRef(Date.now());
 
   // Theme color tokens — CSS vars, set by SkinProvider
@@ -482,6 +475,7 @@ function OverlayContent() {
 
   const loadData = useCallback(async (profId: string, nameOverride?: string) => {
     const name = nameOverride ?? viewerNameRef.current;
+    const wallet = viewerWalletRef.current;
     const [{ data: els }, { data: active }, { data: aq }, { data: queued }] = await Promise.all([
       supabase.from('overlay_elements').select('*').eq('profile_id', profId),
       supabase.from('bookings').select(BOOKING_COLS).eq('profile_id', profId).eq('status','active').limit(BOOKING_PAGE_LIMIT),
@@ -495,24 +489,73 @@ function OverlayContent() {
     const counts: Record<string,number> = {};
     (queued||[]).forEach((b:any) => { if (b.element_id) counts[b.element_id]=(counts[b.element_id]||0)+1; });
     setQueueCounts(counts);
-    if (name) {
+    if (name || wallet) {
       // Load the viewer's active + recent rows. Denied rows are included so
       // the visibility filter at visibleMyBookings can surface "recover USDC"
       // for Solana bookings whose escrow PDA still holds funds. Without this,
       // a viewer who can't recover within the 30s grace window below is stuck.
-      const { data: mine } = await supabase.from('bookings').select(BOOKING_COLS)
-        .eq('profile_id', profId).eq('viewer_name', name)
-        .in('status',['pending','active','approved_queued','denied'])
-        .order('created_at',{ascending:false})
-        .limit(50);
-      const relevant = (mine||[]).filter((b:any) =>
-        b.status !== 'denied'
-        || (b.payment_method === 'solana' && b.escrow_pda)
-        || Date.now() - new Date(b.created_at).getTime() < 30000,
-      );
+      //
+      // Two parallel queries, merged on id:
+      //   - by viewer_name: the full recent set (pending / active / queued /
+      //     denied / expired) for this browser's saved handle. `expired` is
+      //     included so a kick whose on-chain settle silently failed still
+      //     surfaces the RECOVER USDC chip — the DB says "done", the PDA still
+      //     holds funds, and only the viewer can close it out.
+      //   - by viewer_wallet: denied or expired Solana rows with a live escrow
+      //     PDA, so a viewer who abandoned recovery on one device and
+      //     reconnects the same wallet elsewhere still sees the chip. Scoped
+      //     to payment_method=solana + non-null escrow_pda so we don't drag in
+      //     unrelated history.
+      const [nameRes, walletRes] = await Promise.all([
+        name
+          ? supabase.from('bookings').select(BOOKING_COLS)
+              .eq('profile_id', profId).eq('viewer_name', name)
+              .in('status', ['pending', 'active', 'approved_queued', 'denied', 'expired'])
+              .order('created_at', { ascending: false })
+              .limit(50)
+          : Promise.resolve({ data: [] as any[] }),
+        wallet
+          ? supabase.from('bookings').select(BOOKING_COLS)
+              .eq('profile_id', profId).eq('viewer_wallet', wallet)
+              .eq('payment_method', 'solana')
+              .in('status', ['denied', 'expired'])
+              .not('escrow_pda', 'is', null)
+              .limit(20)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const byId = new Map<any, any>();
+      for (const b of (nameRes.data || [])) byId.set(b.id, b);
+      for (const b of (walletRes.data || [])) if (!byId.has(b.id)) byId.set(b.id, b);
+      const mine = Array.from(byId.values());
+      // Keep a row around if it's still actionable. `denied` with live PDA =
+      // recoverable via cancel_escrow; `expired` with live PDA = kick-leaked,
+      // recoverable via settle_beam; recently-denied gives Stripe viewers a
+      // moment to see the refund chip. Everything else drops out.
+      const relevant = mine.filter((b:any) => {
+        if (b.status === 'expired') {
+          return b.payment_method === 'solana' && b.escrow_pda;
+        }
+        if (b.status === 'denied') {
+          return (b.payment_method === 'solana' && b.escrow_pda)
+            || Date.now() - new Date(b.created_at).getTime() < 30000;
+        }
+        return true;
+      });
       setMyBookings(relevant);
     }
   }, [supabase]);
+
+  // Keep viewerWalletRef in sync with the adapter, and re-pull bookings when
+  // a wallet connects/disconnects. This is what lets a viewer open the page
+  // on a brand-new browser/device, connect the same wallet, and see their
+  // previously-denied Solana booking's RECOVER USDC chip — without this they
+  // would be locked out until the 7-day cancel_stale_pending crank fires.
+  useEffect(() => {
+    const next = publicKey?.toBase58() ?? null;
+    if (next === viewerWalletRef.current) return;
+    viewerWalletRef.current = next;
+    if (profile?.id) loadData(profile.id);
+  }, [publicKey, profile?.id, loadData]);
 
   useEffect(() => {
     if (!username) return;
@@ -539,8 +582,22 @@ function OverlayContent() {
         const bump = () => { lastRealtimeEventAt.current = Date.now(); };
         const channel = supabase.channel(`overlay_${prof.id}`)
           .on('postgres_changes',{event:'*',schema:'public',table:'overlay_elements',filter:`profile_id=eq.${prof.id}`},()=>{bump();loadData(prof.id);})
-          .on('postgres_changes',{event:'*',schema:'public',table:'bookings',filter:`profile_id=eq.${prof.id}`},()=>{bump();loadData(prof.id);})
-          .subscribe((status) => { if (status === 'SUBSCRIBED') bump(); });
+          .on('postgres_changes',{event:'*',schema:'public',table:'bookings',filter:`profile_id=eq.${prof.id}`},(payload)=>{
+            // TEMP diagnostic for deny-doesn't-propagate bug. Remove once fixed.
+            console.warn('[overlay/rt/bookings]', {
+              type: payload.eventType,
+              oldStatus: (payload.old as { status?: string } | null)?.status,
+              newStatus: (payload.new as { status?: string } | null)?.status,
+              id: (payload.new as { id?: string | number } | null)?.id
+                ?? (payload.old as { id?: string | number } | null)?.id,
+            });
+            bump();
+            loadData(prof.id);
+          })
+          .subscribe((status) => {
+            console.warn('[overlay/rt/subscribe]', status);
+            if (status === 'SUBSCRIBED') bump();
+          });
 
         // OBS heartbeat: if Realtime goes silent for 30 s, reload to reconnect
         let watchdog: ReturnType<typeof setInterval>|undefined;
@@ -560,6 +617,11 @@ function OverlayContent() {
   }, [username, supabase, loadData]);
 
   const prevMyBookingsRef = useRef<any[]>([]);
+  // Booking IDs that flipped to denied within the last minute. Used to keep
+  // Stripe-denied chips on screen briefly ("✕ Denied — refund on the way")
+  // since the viewer's payment is voided automatically and there's no button
+  // to click. Solana-denied rows stay visible via the escrow_pda signal.
+  const [recentlyDenied, setRecentlyDenied] = useState<Set<string>>(new Set());
 
   // 1. Status Change Notifications
   useEffect(() => {
@@ -568,20 +630,45 @@ function OverlayContent() {
       const old = prev.find((b: any) => b.id === booking.id);
       if (!old) return;
       if (old.status === 'pending' && booking.status === 'denied') {
-        showNotif('Your request was denied', 'denied');
-        // Auto-reclaim the escrow so USDC returns to viewer immediately. Only
-        // runs if the beam was still Pending on-chain (streamer hadn't started
-        // it yet); if Active, the admin's kickBeam already settled on-chain
-        // and the PDA is gone, so we skip.
+        // Solana deny on a Pending escrow leaves funds in the PDA — only the
+        // viewer can close it via cancel_escrow. We used to auto-pop the
+        // wallet here, but Phantom doesn't reliably foreground popups when
+        // the overlay tab isn't focused (streamer just denied, so attention
+        // is on the admin tab), and a popup the viewer doesn't see = a
+        // cancel tx that never lands. Point them at the persistent RECOVER
+        // USDC button on the chip instead — one deliberate click.
         if (booking.payment_method === 'solana' && booking.escrow_pda) {
-          reclaimSolanaEscrow(booking);
+          showNotif('Denied — click RECOVER USDC to reclaim your funds', 'denied');
+        } else {
+          showNotif('Your request was denied — refund on the way', 'denied');
         }
+        const id = String(booking.id);
+        setRecentlyDenied(prev => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+        setTimeout(() => {
+          setRecentlyDenied(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        }, 60_000);
       }
       if (old.status === 'pending' && booking.status === 'active')          showNotif('Your beam is live! 🎉', 'success');
       if (old.status === 'pending' && booking.status === 'approved_queued') showNotif("Approved — you're in the queue!", 'queue');
-      // Admin kicked an active Solana beam: kickBeam already ran settle_beam
-      // on-chain, so the PDA is closed and the viewer's pro-rata refund has
-      // already landed. No client-side follow-up is needed.
+      // Admin kicked an active beam. Two possibilities for Solana:
+      //   - settle_beam landed on-chain → the webhook clears escrow_pda, the
+      //     viewer's refund has already hit their wallet. No action needed.
+      //   - settle_beam failed (cranker hiccup, no wallet fallback) → DB
+      //     flipped to expired but the PDA still holds funds. Surface an
+      //     actionable nudge so the viewer can close it out themselves.
+      if (old.status === 'active' && booking.status === 'expired') {
+        if (booking.payment_method === 'solana' && booking.escrow_pda) {
+          showNotif('Beam ended early — click RECOVER USDC to reclaim your refund', 'warning');
+        }
+      }
     });
     prevMyBookingsRef.current = myBookings;
   }, [myBookings]);
@@ -677,9 +764,20 @@ function OverlayContent() {
   };
 
   // Upload a viewer's file to the beams Storage bucket before payment.
+  // Per-file-type caps: images are usually fine at 5 MB (a compressed
+  // 1080p JPEG is ~1 MB, a PNG ~3 MB), but videos need real headroom —
+  // a 10-second 1080p mp4 easily runs 8-15 MB. Accepting up to 20 MB
+  // lets streamers show clips that don't look like motion-blurred mush.
+  const MAX_IMAGE_BYTES = 5  * 1024 * 1024;
+  const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
   const handleFileSelect = async (file: File) => {
-    if (file.size > 5 * 1024 * 1024) { showNotif('File too large — max 5 MB', 'denied'); return; }
     const fileType: 'image'|'video' = file.type.startsWith('video/') ? 'video' : 'image';
+    const cap = fileType === 'video' ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+    if (file.size > cap) {
+      const mb = cap / (1024 * 1024);
+      showNotif(`File too large — max ${mb} MB for ${fileType}s`, 'denied');
+      return;
+    }
     // P0 guard: free slots are image-only until video moderation ships.
     if (fileType === 'video' && selectedSlot && Number(selectedSlot.price_value) === 0) {
       showNotif('Videos are paid-slots only for now — please upload an image', 'denied');
@@ -1162,10 +1260,15 @@ function OverlayContent() {
         streamer: new PK(profile.solana_wallet),
       });
     } catch (err) {
-      const { formatEscrowError } = await import('@/lib/casi-errors');
-      console.error('[beam] settleBeam failed:', err);
-      showNotif(formatEscrowError(err), 'denied');
-      return;
+      // "Transaction has already been processed" = Anchor's .rpc() resubmitted
+      // the signed tx after the first submission already landed. The refund
+      // went through; treat as success and fall through to the happy path.
+      const { formatEscrowError, isAlreadyProcessed } = await import('@/lib/casi-errors');
+      if (!isAlreadyProcessed(err)) {
+        console.error('[beam] settleBeam failed:', err);
+        showNotif(formatEscrowError(err), 'denied');
+        return;
+      }
     }
     refreshWalletNav();
     showNotif('◎ Beam ended — refund returned to your wallet', 'warning');
@@ -1173,34 +1276,55 @@ function OverlayContent() {
   };
 
   /**
-   * Reclaim USDC from a pending / denied beam via `cancel_escrow`. Only works
-   * while the beam is in Pending status on-chain (streamer has not called
-   * start_beam). Called when the viewer clicks "recover USDC" on a denied
-   * booking whose PDA still holds funds.
+   * Reclaim USDC from a stuck Solana escrow. Decodes the on-chain status byte
+   * and picks the right instruction:
+   *   - Pending → `cancel_escrow` → 100% refund. Happens when the streamer
+   *     denied a booking that was never started.
+   *   - Active → `settle_beam` → pro-rata refund (vested to streamer, rest
+   *     to viewer). Happens when the streamer kicked but the cranker-signed
+   *     `settle_beam_delegated` didn't land (no cranker / no delegate / chain
+   *     hiccup). Either party can settle at any time while Active, and anyone
+   *     can settle after the duration elapses.
    *
-   * The on-chain state is authoritative: DB-only cleanup if the PDA is already
-   * closed (funds previously returned / settled), cancel if it's still Pending,
-   * bail out with a message if it's Active (funds vesting — viewer can't cancel
-   * anymore, the streamer or expiry flow will settle).
+   * On-chain state is authoritative. DB status may say `denied` or `expired`
+   * but the PDA tells us what's actually possible to do with the funds.
    */
   const reclaimSolanaEscrow = async (booking: any) => {
     if (!booking.escrow_pda) return;
     const clearPdaInDb = async (): Promise<boolean> => {
-      const denyRes = await fetch('/api/bookings/viewer-deny', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          booking_id: booking.id,
-          cancel_token: readBookingTokens()[booking.id],
-          null_escrow: true,
-        }),
-      });
-      if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
-      return denyRes.ok;
+      try {
+        const denyRes = await fetch('/api/bookings/viewer-deny', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            booking_id: booking.id,
+            cancel_token: readBookingTokens()[booking.id],
+            null_escrow: true,
+          }),
+        });
+        if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+        return denyRes.ok;
+      } catch (err) {
+        console.error('[reclaim] clearPdaInDb failed:', err);
+        return false;
+      }
     };
 
     const { Connection, PublicKey } = await import('@solana/web3.js');
     const conn = new Connection(SOLANA_RPC);
+    // Poll-probe the PDA to tolerate RPC replica lag: a tx that just closed
+    // the account can take a beat to propagate to every replica we hit, and
+    // a single getAccountInfo can read the stale side and falsely report
+    // "still alive". Treat "gone on any attempt" as authoritative closure.
+    const isPdaClosed = async (attempts = 6, delayMs = 1000): Promise<boolean> => {
+      for (let i = 0; i < attempts; i++) {
+        const info = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
+        if (!info) return true;
+        if (i < attempts - 1) await new Promise(r => setTimeout(r, delayMs));
+      }
+      return false;
+    };
+
     const pdaInfo = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
     if (!pdaInfo) {
       // PDA already closed — funds have left the vault. Clean up the stale row.
@@ -1209,24 +1333,81 @@ function OverlayContent() {
       return;
     }
 
+    // EscrowState status byte sits at offset 161 (8 discriminator + 32+32+32+32
+    // pubkeys + 8+8+8 u64/i64 + 1 escrow_type). 0 = Pending, 1 = Active.
+    // Settled/Cancelled close the account, so a non-null read implies {0, 1}.
+    const STATUS_OFFSET = 161;
+    const statusByte = pdaInfo.data.length > STATUS_OFFSET ? pdaInfo.data[STATUS_OFFSET] : -1;
+    const isActive = statusByte === 1;
+
+    if (isActive) {
+      // settle_beam: program splits total pro-rata by elapsed/duration.
+      // Viewer's unvested portion lands in their USDC ATA in the same tx.
+      if (!booking.viewer_wallet || !profile?.solana_wallet) {
+        showNotif('Missing wallet info — refresh and try again', 'denied');
+        return;
+      }
+      try {
+        const client = await buildViewerCasiClient();
+        if (!client) throw new Error('Wallet not ready to sign');
+        const { PublicKey: PK } = await import('@solana/web3.js');
+        await client.settleBeam({
+          escrowId: booking.id,
+          viewer:   new PK(booking.viewer_wallet),
+          streamer: new PK(profile.solana_wallet),
+        });
+      } catch (err) {
+        const { formatEscrowError, isAlreadyProcessed } = await import('@/lib/casi-errors');
+        const msg = err instanceof Error ? err.message : String(err);
+        // AlreadySettled / AccountNotInitialized = the escrow closed between
+        // our probe and our tx (streamer retried, cranker caught up). Verify
+        // on-chain and treat as success if so.
+        if (isAlreadyProcessed(err) || /AlreadySettled|AccountNotInitialized/i.test(msg)) {
+          if (await isPdaClosed()) {
+            const ok = await clearPdaInDb();
+            refreshWalletNav();
+            showNotif(ok ? '◎ Refund returned to your wallet' : 'Refund returned — booking row needs a manual refresh', 'warning');
+            return;
+          }
+        }
+        console.error('[reclaim] settleBeam failed:', err);
+        showNotif(formatEscrowError(err), 'denied');
+        return;
+      }
+      const closed = await isPdaClosed();
+      const denyOk = await clearPdaInDb();
+      refreshWalletNav();
+      showNotif(
+        denyOk
+          ? (closed ? '◎ Prorated refund returned to your wallet' : '◎ Settle confirmed — refund landing in your wallet')
+          : '◎ Refund returned — this device will sync shortly',
+        'warning',
+      );
+      return;
+    }
+
+    // Status == Pending — original cancel_escrow path.
+    let cancelThrew = false;
     try {
       const client = await buildViewerCasiClient();
       if (!client) throw new Error('Wallet not ready to sign');
       await client.cancelEscrow({ escrowId: booking.id });
     } catch (err) {
+      cancelThrew = true;
       const { formatEscrowError } = await import('@/lib/casi-errors');
       console.error('[beam] cancelEscrow failed:', err);
       // AlreadySettled = escrow moved out of Pending between our probe and the
-      // cancel (approved / settled / cancelled elsewhere). AccountNotInitialized
-      // = Anchor couldn't find a valid EscrowState at the PDA (account closed,
-      // or an RPC race where our probe hit a stale replica). In both cases re-
-      // probe; if the PDA is gone, clean up the stale DB row.
+      // cancel (approved / settled / cancelled elsewhere). already-processed =
+      // Anchor's .rpc() resubmitted a tx that already landed; the underlying
+      // cancel likely succeeded. AccountNotInitialized = Anchor couldn't find
+      // a valid EscrowState (closed). In all three cases the tx may have
+      // actually closed the PDA — poll-probe before concluding otherwise.
       const msg = err instanceof Error ? err.message : String(err);
       if (/AlreadySettled|already.*processed|AccountNotInitialized/i.test(msg)) {
-        const after = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
-        if (!after) {
+        if (await isPdaClosed()) {
           const ok = await clearPdaInDb();
-          showNotif(ok ? 'Escrow already closed — cleared' : 'Escrow closed, but DB cleanup failed — refresh the page', 'warning');
+          refreshWalletNav();
+          showNotif(ok ? '◎ USDC returned to your wallet' : 'USDC returned, but booking row needs a manual refresh', 'warning');
           return;
         }
         showNotif('Beam is live — wait for it to finish', 'denied');
@@ -1236,21 +1417,70 @@ function OverlayContent() {
       return;
     }
 
-    // .rpc() resolved without throwing, but verify the PDA is actually closed
-    // before celebrating — RPC quirks can let a failed-but-confirmed tx slip
-    // through, and we don't want a green toast on top of locked funds.
-    const after = await conn.getAccountInfo(new PublicKey(booking.escrow_pda)).catch(() => null);
-    if (after) {
-      console.error('[beam] cancelEscrow returned but PDA still alive:', booking.escrow_pda);
-      showNotif('Cancel sent but escrow still holds funds — try again or contact support', 'denied');
-      return;
-    }
+    // .rpc() resolved — Anchor has awaited confirmed commitment, so the tx
+    // reached the leader and is fully on-chain. Any lingering "PDA still
+    // alive" read from here is RPC replica lag, not a failed cancel. Always
+    // try to clean the DB row (the Helius webhook would eventually do the
+    // same; we short-circuit for snappier UX on the device that signed).
+    // clearPdaInDb can fail with 403 when the viewer recovered from a
+    // different browser than they booked on (cancel_token lives in
+    // localStorage) — that's fine, the webhook will catch it.
+    if (cancelThrew) return; // belt-and-suspenders; handled above
+    const closed = await isPdaClosed();
     const denyOk = await clearPdaInDb();
     refreshWalletNav();
+    if (!closed) {
+      console.warn('[beam] cancelEscrow confirmed but PDA probe still reads alive (replica lag):', booking.escrow_pda);
+    }
     showNotif(
-      denyOk ? '◎ USDC returned to your wallet' : 'USDC returned, but booking row needs a manual refresh',
+      denyOk
+        ? (closed ? '◎ USDC returned to your wallet' : '◎ Cancel confirmed — USDC landing in your wallet')
+        : '◎ USDC returned — this device will sync shortly',
       'warning',
     );
+  };
+
+  // Bulk-clear ghost RECOVER USDC chips — closed PDAs whose DB rows still
+  // carry escrow_pda from a previous build / aborted flow. The server probes
+  // each row's PDA and nulls escrow_pda on the ones that are actually gone;
+  // rows where the PDA is still alive require a real cancel/settle sign and
+  // are left alone.
+  const [cleanupBusy, setCleanupBusy] = useState(false);
+  const runStaleSolanaCleanup = async () => {
+    const wallet = viewerWalletRef.current;
+    if (!wallet || cleanupBusy) return;
+    setCleanupBusy(true);
+    try {
+      const res = await fetch('/api/bookings/cleanup-stale-solana', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ viewer_wallet: wallet, profile_id: profile?.id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showNotif('Cleanup failed — try again', 'denied');
+        return;
+      }
+      const cleaned = Number(body?.cleaned ?? 0);
+      const stillOpen = Number(body?.stillOpen ?? 0);
+      if (cleaned > 0 && profile?.id) {
+        await loadData(profile.id, savedViewerName ?? undefined);
+      }
+      if (cleaned === 0 && stillOpen === 0) {
+        showNotif('Nothing to clean — all chips are real', 'warning');
+      } else if (cleaned > 0 && stillOpen === 0) {
+        showNotif(`Cleared ${cleaned} ghost chip${cleaned === 1 ? '' : 's'}`, 'success');
+      } else if (cleaned > 0 && stillOpen > 0) {
+        showNotif(`Cleared ${cleaned}; ${stillOpen} still need manual recover`, 'warning');
+      } else {
+        showNotif(`${stillOpen} chip${stillOpen === 1 ? '' : 's'} still hold funds — click RECOVER USDC`, 'warning');
+      }
+    } catch (err) {
+      console.error('[cleanup] failed:', err);
+      showNotif('Cleanup failed — try again', 'denied');
+    } finally {
+      setCleanupBusy(false);
+    }
   };
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -1270,9 +1500,21 @@ function OverlayContent() {
   const accentColorRgb = isExtend ? '234, 179, 8' : tcRgb;
   // Keep denied Solana bookings visible if their escrow PDA still holds funds
   // — the viewer may need to click "recover USDC" to reclaim from chain.
-  const visibleMyBookings = myBookings.filter((b:any) =>
-    b.status !== 'denied' || (b.payment_method === 'solana' && b.escrow_pda),
-  );
+  // Keep expired Solana bookings visible on the same condition — a kick whose
+  // on-chain settle silently failed leaves the PDA alive and only the viewer
+  // can close it via settle_beam. Keep denied Stripe bookings visible for
+  // ~60s so the viewer sees a "refund on the way" chip (Stripe cancel voids
+  // the PI automatically, no action needed).
+  const visibleMyBookings = myBookings.filter((b:any) => {
+    if (b.status === 'expired') {
+      return b.payment_method === 'solana' && b.escrow_pda;
+    }
+    if (b.status === 'denied') {
+      return (b.payment_method === 'solana' && b.escrow_pda)
+        || (b.payment_method === 'stripe' && recentlyDenied.has(String(b.id)));
+    }
+    return true;
+  });
 
   if (loading) return null;
   if (!isOBS && !nameConfirmed) return (
@@ -1398,27 +1640,52 @@ function OverlayContent() {
           {/* MY BEAMS */}
           {!isOBS && visibleMyBookings.length > 0 && !selectedSlot && (
             <div className="my-beams">
-              <div className="my-beams-lbl">Your beams</div>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                <div className="my-beams-lbl" style={{ marginBottom:0 }}>Your beams</div>
+                {viewerWalletRef.current && visibleMyBookings.some((b:any) => b.payment_method === 'solana' && b.escrow_pda && (b.status === 'denied' || b.status === 'expired')) && (
+                  <button
+                    onClick={runStaleSolanaCleanup}
+                    disabled={cleanupBusy}
+                    style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', background:'none', border:'1px solid var(--casi-border)', borderRadius:8, padding:'4px 10px', color:'var(--casi-text-muted)', cursor:cleanupBusy?'default':'pointer', opacity:cleanupBusy?0.5:1 }}
+                    title="Probe each escrow and clear rows whose funds already left the vault"
+                  >
+                    {cleanupBusy ? '…' : 'Clean up ended'}
+                  </button>
+                )}
+              </div>
               <div className="my-beams-list">
                 {visibleMyBookings.map((booking: any) => {
                   const isLive     = booking.status==='active';
                   const isApproved = booking.status==='approved_queued';
                   const isPending  = booking.status==='pending';
+                  const isDenied   = booking.status==='denied';
+                  const isExpired  = booking.status==='expired';
+                  const isSolanaLocked = isDenied && booking.payment_method === 'solana' && booking.escrow_pda;
+                  // Kick-leaked: streamer ended the beam but the on-chain
+                  // settle didn't go through, so the PDA still holds funds.
+                  // Visually distinct from a plain denial because the viewer
+                  // is owed a prorated refund, not a full one.
+                  const isSolanaKickLeaked = isExpired && booking.payment_method === 'solana' && booking.escrow_pda;
                   const isExpiring = isLive && expiringSoon.has(booking.id);
                   const activeBooking = activeBookings.find((b:any) => b.id===booking.id);
                   const canCancel = isPending || isApproved;
+                  const needsRecover = isSolanaLocked || isSolanaKickLeaked;
                   const chipStyle = isExpiring
                     ? { background:'rgba(234,179,8,0.08)', borderColor:'rgba(234,179,8,0.25)', color:'#facc15' }
                     : isLive
                     ? { background:`rgba(${tcRgb},0.07)`, borderColor:`rgba(${tcRgb},0.21)`, color:tc }
                     : isApproved
                     ? { background:`rgba(${tcRgb},0.06)`, borderColor:`rgba(${tcRgb},0.19)`, color:tc }
+                    : needsRecover
+                    ? { background:'rgba(192,132,252,0.06)', borderColor:'rgba(192,132,252,0.25)', color:'#c084fc' }
+                    : isDenied
+                    ? { background:'rgba(248,113,113,0.06)', borderColor:'rgba(248,113,113,0.22)', color:'#f87171' }
                     : { background:'rgba(255,255,255,0.03)', borderColor:'var(--casi-border)', color:'var(--casi-text-muted)' };
                   return (
                     <div key={booking.id} className="beam-chip" style={chipStyle}>
-                      {booking.image_url && <img src={booking.image_url} style={{ width:20, height:20, objectFit:'contain', borderRadius:4 }} alt="" />}
+                      {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width:20, height:20, objectFit:'contain', borderRadius:4 }} />}
                       <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, fontWeight:500 }}>
-                        {isExpiring?'⚠ Expiring':isLive?'● Live':isApproved?'⏳ Queued':'⌛ Pending'}
+                        {isExpiring?'⚠ Expiring':isLive?'● Live':isApproved?'⏳ Queued':isSolanaKickLeaked?'⚡ Ended early — USDC recoverable':isSolanaLocked?'✕ Denied — USDC locked':isDenied?'✕ Denied — refund on the way':'⌛ Pending'}
                       </span>
                       {isLive && activeBooking && (
                         <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, opacity:0.7 }}>
@@ -1457,7 +1724,7 @@ function OverlayContent() {
                           {cancelling===booking.id?'…':'✕ cancel'}
                         </button>
                       )}
-                      {booking.status === 'denied' && booking.payment_method === 'solana' && booking.escrow_pda && (
+                      {needsRecover && (
                         <button className="cancel-btn" style={{ color: '#c084fc', borderColor: 'rgba(192,132,252,0.3)' }}
                           onClick={() => reclaimSolanaEscrow(booking)}>
                           ◎ recover USDC
@@ -1505,9 +1772,13 @@ function OverlayContent() {
                 <div key={el.id} style={{ position:'absolute', left:`${el.pos_x}%`, top:`${el.pos_y}%`, width:`${el.width}%`, height:`${el.height}%`, zIndex:el.is_background?10:50, transition:'all 0.35s cubic-bezier(0.16,1,0.3,1)' }}>
                   {displayImage ? (
                     <div style={{ position:'relative', width:'100%', height:'100%' }}>
+                      {/* Backdrop fills (cover, crop as needed). Beam slots
+                          preserve the viewer's aspect ratio (contain) —
+                          `fill` stretches to the slot and visibly squishes
+                          any upload whose AR differs from the slot's. */}
                       {displayFileType === 'video'
-                        ? <video key={displayImage} src={displayImage} autoPlay loop muted playsInline style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'fill', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} />
-                        : <img key={displayImage ?? 'empty'} src={displayImage} style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'fill', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} alt="" />
+                        ? <video key={displayImage} src={displayImage} autoPlay loop muted playsInline style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'contain', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} />
+                        : <img key={displayImage ?? 'empty'} src={displayImage} style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'contain', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} alt="" />
                       }
                       {viewerHasPreview && !isOBS && <div style={{ position:'absolute', inset:0, borderRadius:4, boxShadow:`inset 0 0 0 2px rgba(${accentColorRgb},0.5)`, pointerEvents:'none' }} />}
                     </div>
@@ -1598,7 +1869,7 @@ function OverlayContent() {
                             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
                           <span style={{ fontSize:18 }}>{uploading ? '⟳' : uploadedUrl ? (uploadedFileType === 'video' ? '▶' : '🖼') : '↑'}</span>
                           <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color: uploadedUrl ? accentColor : '#555', letterSpacing:0.5, textAlign:'center' }}>
-                            {uploading ? 'Uploading…' : uploadedUrl ? `✓ ${uploadedFileType === 'video' ? 'Video' : 'Image'} ready` : 'Click to upload · max 5 MB'}
+                            {uploading ? 'Uploading…' : uploadedUrl ? `✓ ${uploadedFileType === 'video' ? 'Video' : 'Image'} ready` : 'Click to upload · img 5 MB · video 20 MB'}
                           </span>
                           {!uploadedUrl && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'#444' }}>jpg · png · gif · webp · mp4 · webm</span>}
                         </label>
@@ -1845,7 +2116,7 @@ function OverlayContent() {
                         </span>
                       )}
                       <div className="s-thumb" style={{ borderColor:isFree?'rgba(74,222,128,0.25)':isOccupied?`rgba(${tcRgb},0.21)`:`rgba(${tcRgb},0.14)` }}>
-                        {el.image_url?<img src={el.image_url} style={{ width:'100%',height:'100%',objectFit:'contain' }} alt="" />:<span>{isLocked?'🔒':el.is_background?'🖼':'✦'}</span>}
+                        {el.image_url?<SlotMedia src={el.image_url} fileType={null} style={{ width:'100%',height:'100%',objectFit:'contain' }} />:<span>{isLocked?'🔒':el.is_background?'🖼':'✦'}</span>}
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div className="s-type">{isLocked?'Locked':myBookingForSlot?String(myBookingForSlot.status||'pending').replace('_',' '):isOccupied?`In use${queueCount>0?` · ${queueCount} waiting`:''}`:el.is_background?'Full Backdrop':'Beam'}</div>

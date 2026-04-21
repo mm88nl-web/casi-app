@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import SlotMedia from './SlotMedia';
+import SlotMedia from '@/components/SlotMedia';
 import { fmtDuration, formatTime, getSecondsRemaining } from './time';
 
 export default function SlotInfoPanel({

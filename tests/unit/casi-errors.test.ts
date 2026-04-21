@@ -3,6 +3,7 @@ import {
   parseCasiError,
   isUserRejection,
   isTransientRpcError,
+  isAlreadyProcessed,
   formatEscrowError,
   CASI_ERROR_NAMES,
   CASI_ERROR_CODE_BASE,
@@ -80,6 +81,20 @@ describe('isTransientRpcError', () => {
   });
   it('returns false for unrelated errors', () => {
     expect(isTransientRpcError(new Error('User rejected the request'))).to.equal(false);
+  });
+});
+
+describe('isAlreadyProcessed', () => {
+  it('detects "This transaction has already been processed"', () => {
+    const err = new Error('Transaction simulation failed: This transaction has already been processed.');
+    expect(isAlreadyProcessed(err)).to.equal(true);
+  });
+  it('detects the shortened "already processed" phrasing', () => {
+    expect(isAlreadyProcessed(new Error('RPC: already processed'))).to.equal(true);
+  });
+  it('returns false for unrelated errors', () => {
+    expect(isAlreadyProcessed(new Error('Blockhash not found'))).to.equal(false);
+    expect(isAlreadyProcessed(new Error('User rejected the request'))).to.equal(false);
   });
 });
 
