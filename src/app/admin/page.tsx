@@ -438,15 +438,10 @@ export default function AdminStudio() {
   }, [updateLayer]);
 
   const addBeam = async () => {
-    const backdrop = elements.find(el => el.is_background);
-    if (backdrop) {
-      const backdropActive = activeBookings.some(b => b.element_id === backdrop.id) || approvedQueued.some(b => b.element_id === backdrop.id);
-      if (!backdropActive) {
-        await supabase.from('overlay_elements').delete().eq('id', backdrop.id);
-        setElements(prev => prev.filter(el => !el.is_background));
-      }
-    }
-    // Smart placement — find free spot
+    // Beams and backdrops now coexist freely — backdrop is just a shape,
+    // not a mutually exclusive top-level entity. Legacy eviction of the
+    // existing backdrop on "+ Beam" was a holdover from the old mental
+    // model and surprised streamers who had a backdrop set up.
     const freePos = findFreePosition(elements);
     const { data } = await supabase.from('overlay_elements').insert({
       profile_id: profile.id, image_url: '',
