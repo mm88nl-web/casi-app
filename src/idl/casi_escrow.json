@@ -449,6 +449,107 @@
       ]
     },
     {
+      "name": "settle_beam_delegated",
+      "docs": [
+        "Session-key path for early-ending a Beam. Identical effect to",
+        "`settle_beam` (pro-rata vest, vault closes, rent to streamer) except",
+        "the authorization comes from a pre-registered session key instead of",
+        "the streamer's own wallet. Extends the scoped-delegation trust model",
+        "to the high-frequency \"end early / play next\" action.",
+        "",
+        "Authorization is the delegate PDA's constraints:",
+        "* `delegate.session_key == session.key()` — ephemeral server key.",
+        "* `delegate.streamer    == escrow.streamer` — per-streamer scope.",
+        "* `now < delegate.expires_at` — time-bound.",
+        "",
+        "No caller-is-party check: the delegate binding IS the streamer's",
+        "authorization (equivalent to the streamer personally signing).",
+        "",
+        "Fee + ATA-init payer is a separate `cranker` signer: the session key",
+        "has no SOL (Solana rejects \"debit before credit\" on zero-balance",
+        "accounts), and init_if_needed for `streamer_ata`/`viewer_ata` needs a",
+        "funded payer. Cranker does not appear in the state machine otherwise."
+      ],
+      "discriminator": [
+        108,
+        137,
+        86,
+        59,
+        53,
+        140,
+        189,
+        92
+      ],
+      "accounts": [
+        {
+          "name": "session",
+          "docs": [
+            "The ephemeral session key. Must match `delegate.session_key`."
+          ],
+          "signer": true
+        },
+        {
+          "name": "cranker",
+          "docs": [
+            "Fee + ATA-init payer. The session key has no SOL; a funded co-signer",
+            "(the server-side \"cranker\") pays every delegated instruction's rent."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "streamer",
+          "writable": true
+        },
+        {
+          "name": "viewer",
+          "writable": true
+        },
+        {
+          "name": "delegate"
+        },
+        {
+          "name": "escrow_state",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "streamer_ata",
+          "writable": true
+        },
+        {
+          "name": "viewer_ata",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "escrow_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "set_delegate",
       "docs": [
         "Install or rotate a session-key delegate for a streamer.",
@@ -458,10 +559,14 @@
         "streamer can install one for themselves.",
         "* `session_key` is an ephemeral pubkey (the server generates a fresh",
         "keypair on each install; the secret stays server-side, encrypted).",
-        "* The delegate can ONLY call `start_beam_delegated` — it cannot",
-        "settle, cancel, deny, or move USDC. Worst-case server compromise",
-        "is a premature beam start, which still vests correctly for the",
-        "viewer (pro-rata on elapsed).",
+        "* The delegate can call `start_beam_delegated` (flip Pending → Active)",
+        "and `settle_beam_delegated` (end an Active beam early, pro-rata",
+        "vest). It CANNOT cancel Pending escrows, deny flashes, move its",
+        "own rent, or change delegation. Worst-case server compromise is",
+        "an attacker ending a live beam early — viewer gets the unvested",
+        "portion refunded, streamer loses the unvested portion. Bounded,",
+        "recoverable by `revoke_delegate`, never leaks funds to the",
+        "attacker.",
         "* Self-expires after `expires_at`; program caps expiry to",
         "`now + MAX_DELEGATE_LIFETIME_SECS`.",
         "* Streamer can revoke any time via `revoke_delegate`.",
