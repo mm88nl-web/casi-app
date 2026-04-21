@@ -2,6 +2,17 @@ import { useEffect, useState } from 'react';
 import SlotMedia from '@/components/SlotMedia';
 import { fmtDuration, formatTime, getSecondsRemaining } from './time';
 
+// Shape options surfaced in the editor. `banner` lives in the same picker
+// (so "convert a slot into a banner" is one click) but its render path is
+// totally different — see overlay/page.tsx for the marquee layout.
+const SHAPE_OPTIONS: { id: string; label: string }[] = [
+  { id: 'rect',    label: 'Rect'    },
+  { id: 'rounded', label: 'Rounded' },
+  { id: 'circle',  label: 'Circle'  },
+  { id: 'hex',     label: 'Hex'     },
+  { id: 'banner',  label: 'Banner'  },
+];
+
 export default function SlotInfoPanel({
   el,
   activeBooking,
@@ -11,6 +22,8 @@ export default function SlotInfoPanel({
   onLockToggle,
   onDelete,
   onUpdatePrice,
+  onUpdateShape,
+  onUpdateGlow,
 }: {
   el: any;
   activeBooking: any;
@@ -20,6 +33,10 @@ export default function SlotInfoPanel({
   onLockToggle: (id: string, locked: boolean) => void;
   onDelete: (id: string) => void;
   onUpdatePrice: (id: string, price: number, unit: string) => void;
+  // Parent is responsible for autosnapping dimensions (circle/hex → pixel-
+  // square, banner → full-width strip). This component just emits intent.
+  onUpdateShape?: (id: string, shape: string) => void;
+  onUpdateGlow?: (id: string, glow: boolean) => void;
 }) {
   const [seconds, setSeconds] = useState(activeBooking ? getSecondsRemaining(activeBooking) : 0);
   const [editPrice, setEditPrice] = useState(String(el.price_value || 0));
@@ -86,6 +103,43 @@ export default function SlotInfoPanel({
             </div>
             );
           })()}
+
+          {/* Shape + glow — beam slots only. Backdrops stay a full-canvas
+              rect. Shape changes are fire-and-forget; the parent autosnaps
+              dimensions for circle/hex (square) and banner (wide strip). */}
+          {!el.is_background && onUpdateShape && (
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #161616', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 10 }}>Shape</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {SHAPE_OPTIONS.map(s => {
+                  const active = (el.shape || 'rect') === s.id;
+                  return (
+                    <button key={s.id} onClick={() => onUpdateShape(el.id, s.id)}
+                      style={{ flex: '1 1 auto', background: active ? 'rgba(var(--casi-accent-rgb),0.15)' : 'rgba(255,255,255,0.04)', border: `1px solid ${active ? 'rgba(var(--casi-accent-rgb),0.5)' : '#222'}`, borderRadius: 8, padding: '7px 10px', fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: active ? 'var(--casi-accent)' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {el.shape === 'banner' && (
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#555', marginTop: 8, lineHeight: 1.5 }}>
+                  Banner slots scroll the viewer's message across the strip on stream. Uploads ignored; a short message is required.
+                </div>
+              )}
+              {onUpdateGlow && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, paddingTop: 12, borderTop: '1px solid #161616' }}>
+                  <div>
+                    <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 600, color: 'var(--casi-text)' }}>Glow on beam start</div>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 2 }}>3s accent-colour bloom when a new beam goes live.</div>
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); onUpdateGlow(el.id, !(el.glow_on_start ?? true)); }}
+                    style={{ position: 'relative', width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer', background: (el.glow_on_start ?? true) ? 'var(--casi-accent)' : 'rgba(255,255,255,0.1)', transition: 'background .2s', flexShrink: 0 }}>
+                    <span style={{ position: 'absolute', top: 3, width: 16, height: 16, borderRadius: '50%', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.3)', transition: 'left .2s', left: (el.glow_on_start ?? true) ? 21 : 3 }} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Active booking */}
           {activeBooking ? (

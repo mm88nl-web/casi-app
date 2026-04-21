@@ -19,6 +19,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createHash, randomUUID } from 'node:crypto';
 import { moderateText, LIMITS } from '@/lib/content-moderation';
 import { verifyTurnstileToken } from '@/lib/turnstile';
+import { validateBannerBooking } from '@/lib/banner';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -116,13 +117,20 @@ export async function POST(req: Request) {
   // (b) it really is free (price_value = 0), (c) duration is within max.
   const { data: element } = await supabase
     .from('overlay_elements')
-    .select('id, profile_id, price_value, price_unit, max_duration_minutes')
+    .select('id, profile_id, price_value, price_unit, max_duration_minutes, shape')
     .eq('id', element_id)
     .single();
 
   if (!element) return NextResponse.json({ error: 'Slot not found' }, { status: 404 });
   if (element.profile_id !== profile_id) {
     return NextResponse.json({ error: 'Slot does not belong to this streamer' }, { status: 400 });
+  }
+
+  // Banner slots require a non-empty message capped at BANNER_MAX_MESSAGE.
+  // Non-banner slots short-circuit inside the validator.
+  const bannerCheck = validateBannerBooking(element.shape, message);
+  if (!bannerCheck.ok) {
+    return NextResponse.json({ error: bannerCheck.error }, { status: 400 });
   }
   if (Number(element.price_value) !== 0) {
     return NextResponse.json({ error: 'This slot is not free — use paid checkout' }, { status: 400 });

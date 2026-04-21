@@ -387,6 +387,32 @@ export default function AdminStudio() {
     setElements(prev => prev.map(el => el.id === id ? { ...el, ...updates } : el));
   }, []);
 
+  // Shape-change autosnap. Canvas is 16:9 (OBS standard), so a "pixel-
+  // square" slot — what circle / hex need to look balanced — requires
+  // width% / height% = 9/16. Keep the current height and shrink width
+  // rather than the opposite, so the autosnap never pushes the slot off
+  // the bottom edge. Banner snaps to a full-width strip at the bottom
+  // of the canvas; non-banner shape changes that had a banner before
+  // don't un-snap, which is fine — streamers can resize manually.
+  const handleUpdateShape = useCallback((id: string, shape: string) => {
+    const el = elements.find(e => e.id === id);
+    if (!el) return;
+    const patch: Record<string, unknown> = { shape };
+    if (shape === 'circle' || shape === 'hex') {
+      patch.width = Math.round(Number(el.height) * 9 / 16 * 100) / 100;
+    } else if (shape === 'banner') {
+      patch.width  = 100;
+      patch.height = 8;
+      patch.pos_x  = 0;
+      patch.pos_y  = 92;
+    }
+    updateLayer(id, patch);
+  }, [elements, updateLayer]);
+
+  const handleUpdateGlow = useCallback((id: string, glow: boolean) => {
+    updateLayer(id, { glow_on_start: glow });
+  }, [updateLayer]);
+
   const createFullBackdrop = async (price: number, unit: string, maxDuration: number | null) => {
     setShowBackdropModal(false);
     setSaveStatus('Creating…');
@@ -420,6 +446,28 @@ export default function AdminStudio() {
     if (data) {
       setElements(prev => [...prev, data]);
       setSelectedSlotId(data.id); // auto-select new beam, show sliders
+      setShowInfoPanel(false);
+    }
+  };
+
+  // One-click banner preset — full-width thin strip at the bottom of the
+  // canvas. Banner slots render the viewer's message as a scrolling
+  // marquee (see overlay/page.tsx) instead of their image, so streamers
+  // don't need to think about aspect ratio or pick a shape after the fact.
+  const addBanner = async () => {
+    const { data } = await supabase.from('overlay_elements').insert({
+      profile_id: profile.id, image_url: '',
+      pos_x: 0, pos_y: 92,
+      width: 100, height: 8,
+      is_background: false,
+      shape: 'banner',
+      glow_on_start: true,
+      price_value: 1, price_unit: 'min',
+      max_duration_minutes: null, locked: false,
+    }).select().single();
+    if (data) {
+      setElements(prev => [...prev, data]);
+      setSelectedSlotId(data.id);
       setShowInfoPanel(false);
     }
   };
@@ -1217,6 +1265,7 @@ export default function AdminStudio() {
             {view === 'studio' && (
               <>
                 <button onClick={addBeam} className="btn-sm b-orange banner-add-beam-trigger">+ Beam</button>
+                <button onClick={addBanner} className="btn-sm b-outline studio-action-hide">+ Banner</button>
                 <button onClick={() => hasBackdrop && backdropEl ? (setSelectedSlotId(backdropEl.id), setShowInfoPanel(true)) : setShowBackdropModal(true)} className={`btn-sm ${hasBackdrop ? 'b-purple' : 'b-outline'} studio-action-hide`}>
                   {hasBackdrop ? '● Backdrop' : 'Backdrop'}
                 </button>
@@ -1264,6 +1313,8 @@ export default function AdminStudio() {
             onClose={() => setShowInfoPanel(false)}
             onKick={kickBeam} onLockToggle={toggleLock} onDelete={deleteLayer}
             onUpdatePrice={(id, price, unit) => { updateLayer(id, { price_value: price, price_unit: unit }); setShowInfoPanel(false); }}
+            onUpdateShape={handleUpdateShape}
+            onUpdateGlow={handleUpdateGlow}
           />
         )}
 

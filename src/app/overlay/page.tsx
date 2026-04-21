@@ -8,6 +8,7 @@ import SkinProvider from '@/components/SkinProvider';
 import WalletNav, { refreshWalletNav } from '@/components/WalletNav';
 import SlotMedia from '@/components/SlotMedia';
 import { useWalletBalances } from '@/lib/wallet-balances';
+import { BANNER_MAX_MESSAGE } from '@/lib/banner';
 import ChatPanel from '@/components/ChatPanel';
 import SendFlashSection from '@/components/overlay/SendFlashSection';
 import TurnstileWidget from '@/components/TurnstileWidget';
@@ -818,7 +819,18 @@ function OverlayContent() {
 
   const submitBooking = async () => {
   const hasMedia = uploadMode === 'upload' ? !!uploadedUrl : !!imageUrl;
-  if (!savedViewerName || !hasMedia || !selectedSlot) return;
+  // Banner slots swap the content requirement: the viewer's message is the
+  // primary content (renders as a scrolling marquee on stream), media is
+  // optional. Non-banner slots keep the original media-required contract.
+  const isBanner = selectedSlot?.shape === 'banner';
+  const hasBannerMessage = isBanner && message.trim().length > 0 && message.length <= BANNER_MAX_MESSAGE;
+  const hasRequiredContent = isBanner ? hasBannerMessage : hasMedia;
+  if (!savedViewerName || !hasRequiredContent || !selectedSlot) {
+    if (isBanner && !hasBannerMessage) {
+      showNotif(`Type a message (up to ${BANNER_MAX_MESSAGE} chars) — it'll scroll across the banner.`, 'denied');
+    }
+    return;
+  }
   setSubmitting(true);
 
   const currentQueue = queueCounts[selectedSlot.id] || 0;
@@ -1533,6 +1545,21 @@ function OverlayContent() {
         @keyframes blink     { 0%,100%{opacity:1} 50%{opacity:.2} }
         @keyframes fadeIn    { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         @keyframes springPop { from{opacity:0;transform:scale(0.88) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+        /* Fires once when a beam goes live: 3s bloom in the streamer's accent
+           colour, keyed on activeBooking.id so only the transition triggers it
+           (a fresh page mount with an already-active beam will also glow — OK
+           for v1; OBS rarely reloads). */
+        @keyframes beamGlow  { 0%{box-shadow:0 0 0 rgba(var(--casi-accent-rgb),0)} 15%{box-shadow:0 0 42px 8px rgba(var(--casi-accent-rgb),0.85)} 100%{box-shadow:0 0 0 rgba(var(--casi-accent-rgb),0)} }
+        /* Banner marquee: scrolls the viewer's message right-to-left over 20s.
+           Infinite loop within the beam's duration. Container clips, track is
+           inline-block so its width depends on content length. */
+        @keyframes beamMarquee { from{transform:translateX(100%)} to{transform:translateX(-100%)} }
+        .beam-shape-rounded { border-radius: 14px; overflow: hidden; }
+        .beam-shape-circle  { clip-path: circle(50%); }
+        .beam-shape-hex     { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+        .beam-glow          { animation: beamGlow 3s ease-out 1; will-change: box-shadow; }
+        .beam-banner        { display:flex; align-items:center; width:100%; height:100%; overflow:hidden; background:rgba(0,0,0,0.78); border-top:2px solid rgba(var(--casi-accent-rgb),0.4); border-bottom:2px solid rgba(var(--casi-accent-rgb),0.4); white-space:nowrap; }
+        .beam-banner-track  { display:inline-block; padding-left:100%; color:var(--casi-accent); font-family:'Syne',sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
         .ov { min-height:100vh; background:${isOBS?'transparent':'var(--casi-bg)'}; color:var(--casi-text); font-family:'Syne',sans-serif; }
 
         .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid var(--casi-surface); background:color-mix(in srgb,var(--casi-bg) 94%,transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
@@ -1768,10 +1795,32 @@ function OverlayContent() {
                 : (activeBooking?.file_type ?? null);
               const showExtend = myBookingForSlot?.status==='active' && expiringSoon.has(myBookingForSlot.id) && canExtend(el.id);
 
+              // Keying the media container on activeBooking.id re-mounts it
+              // on every pending→active transition so `.beam-glow`'s CSS
+              // animation plays fresh. Key stays stable while a single beam
+              // is live, then changes on the next one.
+              const mediaKey = `${el.id}-${activeBooking?.id ?? 'none'}`;
+              const shapeClass =
+                el.shape === 'rounded' ? 'beam-shape-rounded' :
+                el.shape === 'circle'  ? 'beam-shape-circle'  :
+                el.shape === 'hex'     ? 'beam-shape-hex'     :
+                '';
+              const glowClass = isOccupied && (el.glow_on_start ?? true) && !el.is_background ? 'beam-glow' : '';
+
+              // Banner slots render the viewer's message as a scrolling
+              // marquee in place of the normal image/video content. Falls
+              // back to the regular media path if the slot is a banner but
+              // no booking is active (just show the empty placeholder).
+              const isBannerActive = el.shape === 'banner' && isOccupied && !!activeBooking?.message;
+
               return (
                 <div key={el.id} style={{ position:'absolute', left:`${el.pos_x}%`, top:`${el.pos_y}%`, width:`${el.width}%`, height:`${el.height}%`, zIndex:el.is_background?10:50, transition:'all 0.35s cubic-bezier(0.16,1,0.3,1)' }}>
-                  {displayImage ? (
-                    <div style={{ position:'relative', width:'100%', height:'100%' }}>
+                  {isBannerActive ? (
+                    <div key={mediaKey} className={`beam-banner ${glowClass}`.trim()}>
+                      <span className="beam-banner-track">{activeBooking.message}</span>
+                    </div>
+                  ) : displayImage ? (
+                    <div key={mediaKey} className={`${shapeClass} ${glowClass}`.trim()} style={{ position:'relative', width:'100%', height:'100%' }}>
                       {/* Backdrop fills (cover, crop as needed). Beam slots
                           preserve the viewer's aspect ratio (contain) —
                           `fill` stretches to the slot and visibly squishes
@@ -1783,8 +1832,8 @@ function OverlayContent() {
                       {viewerHasPreview && !isOBS && <div style={{ position:'absolute', inset:0, borderRadius:4, boxShadow:`inset 0 0 0 2px rgba(${accentColorRgb},0.5)`, pointerEvents:'none' }} />}
                     </div>
                   ) : (
-                    <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:el.is_background?12:6, border:`1.5px dashed ${isLocked?'rgba(248,113,113,0.3)':isOccupied?`rgba(${tcRgb},0.31)`:el.is_background?'rgba(168,85,247,0.3)':`rgba(${tcRgb},0.25)`}`, background:isLocked?'rgba(248,113,113,0.03)':isOccupied?`rgba(${tcRgb},0.02)`:el.is_background?'rgba(168,85,247,0.03)':`rgba(${tcRgb},0.02)` }}>
-                      <span style={{ fontSize:el.is_background?20:14, marginBottom:4 }}>{isLocked?'🔒':isOccupied?'':el.is_background?'🖼':'✦'}</span>
+                    <div className={shapeClass} style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:el.is_background?12:6, border:`1.5px dashed ${isLocked?'rgba(248,113,113,0.3)':isOccupied?`rgba(${tcRgb},0.31)`:el.is_background?'rgba(168,85,247,0.3)':`rgba(${tcRgb},0.25)`}`, background:isLocked?'rgba(248,113,113,0.03)':isOccupied?`rgba(${tcRgb},0.02)`:el.is_background?'rgba(168,85,247,0.03)':`rgba(${tcRgb},0.02)` }}>
+                      <span style={{ fontSize:el.is_background?20:14, marginBottom:4 }}>{isLocked?'🔒':isOccupied?(el.shape==='banner'?'▰':''):el.is_background?'🖼':el.shape==='banner'?'▰':'✦'}</span>
                       {isOccupied && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:`rgba(${tcRgb},0.69)` }}><Countdown booking={activeBooking} onExpire={() => clientExpireBooking(activeBooking)} /></span>}
                     </div>
                   )}
@@ -1971,10 +2020,44 @@ function OverlayContent() {
                     })()}
                   </div>
                   <div>
-                    <label className="bf-lbl">Message (optional)</label>
-                    <textarea value={message} onChange={(e) => setMessage(e.target.value)}
-                      placeholder="Anything for the streamer…" rows={3}
-                      className="bf-inp" style={{ resize:'none' }} />
+                    {/* Banner slots render the viewer's message as a scrolling
+                        marquee on the overlay, so the text becomes load-
+                        bearing content (not an optional aside). Server-side
+                        validation at /api/bookings/create-* also requires
+                        message ≠ null for banner slots and caps length. */}
+                    {selectedSlot?.shape === 'banner' ? (
+                      <>
+                        <label className="bf-lbl">Your scrolling message · required</label>
+                        <textarea
+                          value={message}
+                          onChange={(e) => setMessage(e.target.value.slice(0, BANNER_MAX_MESSAGE))}
+                          placeholder="What should scroll across the banner?"
+                          rows={2}
+                          maxLength={BANNER_MAX_MESSAGE}
+                          className="bf-inp"
+                          style={{ resize:'none' }}
+                        />
+                        <div style={{ display:'flex', justifyContent:'space-between', marginTop:4, fontFamily:"'DM Mono',monospace", fontSize:9, color: message.length > BANNER_MAX_MESSAGE * 0.85 ? '#facc15' : '#555' }}>
+                          <span>Shows as a live scroll on stream</span>
+                          <span>{message.length}/{BANNER_MAX_MESSAGE}</span>
+                        </div>
+                        {message.trim().length > 0 && (
+                          <div style={{ marginTop:10, padding:0, borderRadius:6, overflow:'hidden', background:'rgba(0,0,0,0.65)', border:'1px solid rgba(var(--casi-accent-rgb),0.25)' }}>
+                            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, letterSpacing:2, textTransform:'uppercase', color:'#555', padding:'6px 10px 0' }}>Preview</div>
+                            <div className="beam-banner" style={{ height:44, borderTop:'none', borderBottom:'none' }}>
+                              <span className="beam-banner-track" style={{ fontSize:20 }}>{message}</span>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <label className="bf-lbl">Message (optional)</label>
+                        <textarea value={message} onChange={(e) => setMessage(e.target.value)}
+                          placeholder="Anything for the streamer…" rows={3}
+                          className="bf-inp" style={{ resize:'none' }} />
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
