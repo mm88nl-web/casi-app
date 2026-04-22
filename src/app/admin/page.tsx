@@ -768,21 +768,30 @@ export default function AdminStudio() {
       ? await settleOrClearSolanaEscrow(b)
       : { outcome: 'closed' as const };
 
-    // escrow_pda is nulled when the vault is known to be closed (either we
-    // just settled it, or it was already gone). For Pending/unsigned/error
-    // paths the pointer stays so the viewer or a later retry can act on it.
+    // Safe-to-deny outcomes:
+    //   settled / closed  — funds have moved or the vault is already empty
+    //   pending-chain     — escrow is still Pending, which can't over-vest;
+    //                       viewer keeps the recovery chip to cancel_escrow
+    // Unsafe outcomes (no-wallet, error) leave the escrow Active on-chain
+    // and the vesting clock runs toward 100% streamer on wall-clock. Flipping
+    // status='denied' there would hide the beam from the streamer while the
+    // program silently vests everything to them. Leave the row alone and
+    // force a retry — the beam stays live, the toast surfaces the reason.
+    if (result.outcome === 'no-wallet') {
+      showFlashToast('Connect streamer wallet to deny this beam', 'err');
+      return;
+    }
+    if (result.outcome === 'error') {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showFlashToast(`Deny failed — ${formatEscrowError(result.error)}; beam stays live`, 'err');
+      return;
+    }
+
     const update: Record<string, unknown> = { status: 'denied' };
     if (result.outcome === 'settled' || result.outcome === 'closed') {
       update.escrow_pda = null;
     }
-    const { error: updateErr, data: updateData } = await supabase
-      .from('bookings')
-      .update(update)
-      .eq('id', id)
-      .select('id, status, escrow_pda, profile_id')
-      .maybeSingle();
-    // TEMP diagnostic for deny-doesn't-propagate bug. Remove once fixed.
-    console.warn('[admin/deny/solana]', { id, outcome: result.outcome, updateErr, updateData });
+    await supabase.from('bookings').update(update).eq('id', id);
 
     if (result.outcome === 'settled') {
       showFlashToast('✕ Denied & escrow settled on-chain', 'ok');
@@ -791,16 +800,10 @@ export default function AdminStudio() {
       // reclaimed first, cranker cancelled a stale pending, or the row had
       // no escrow to begin with. Nothing left for anyone to do.
       showFlashToast('✕ Denied — escrow already closed', 'ok');
-    } else if (result.outcome === 'pending-chain') {
-      // Escrow is still Pending on-chain: only the viewer can cancel_escrow.
-      // They'll see "✕ Denied — USDC locked" with a RECOVER button the next
-      // time they open the overlay.
+    } else {
+      // pending-chain: only the viewer can cancel_escrow. They'll see
+      // "✕ Denied — USDC locked" with a RECOVER button on the overlay.
       showFlashToast('✕ Denied — viewer can reclaim their USDC from the overlay', 'ok');
-    } else if (result.outcome === 'no-wallet') {
-      showFlashToast('✕ Denied — connect streamer wallet to settle escrow', 'err');
-    } else if (result.outcome === 'error') {
-      const { formatEscrowError } = await import('@/lib/casi-errors');
-      showFlashToast(`Denied but on-chain settle failed — ${formatEscrowError(result.error)}`, 'err');
     }
   } else {
     // Stripe: void/refund PaymentIntent then mark denied
@@ -1048,9 +1051,12 @@ export default function AdminStudio() {
       }
       await expireBooking(booking);
     } else {
-      // Stripe: prorate via API, then clear image + advance queue
+      // Stripe: prorate via API, then clear image + advance queue. If the
+      // server fails to capture (flaky Stripe, disabled Connect account,
+      // etc.) it returns non-2xx — keep the beam live so the streamer can
+      // retry instead of silently losing the capture.
       const { data: { session } } = await supabase.auth.getSession();
-      await fetch('/api/stripe/end-early', {
+      const res = await fetch('/api/stripe/end-early', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1058,6 +1064,10 @@ export default function AdminStudio() {
         },
         body: JSON.stringify({ booking_id: booking.id }),
       });
+      if (!res.ok) {
+        showFlashToast('End early failed — beam stays live, try again', 'err');
+        return;
+      }
       await expireBooking(booking);
     }
   };
