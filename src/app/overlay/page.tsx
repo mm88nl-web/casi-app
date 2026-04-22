@@ -1501,10 +1501,14 @@ function OverlayContent() {
       : (selectedSlot.price_value * (durationSeconds / 3600)).toFixed(2)
     : '0';
 
-  // True when the viewer has a valid image/video ready to submit.
-  const canSubmit = uploadMode === 'upload'
-    ? !!uploadedUrl
-    : (!!imageUrl && imageUrl.startsWith('https://') && imageValid);
+  // True when the viewer has the content needed to submit a booking.
+  // Banner slots use the scrolling message as their content (media is
+  // optional). Every other shape requires a valid image/video.
+  const canSubmit = selectedSlot?.shape === 'banner'
+    ? message.trim().length > 0 && message.length <= BANNER_MAX_MESSAGE
+    : uploadMode === 'upload'
+      ? !!uploadedUrl
+      : (!!imageUrl && imageUrl.startsWith('https://') && imageValid);
 
   // For booking form accent: extend=yellow, queue/rent=skin accent
   const accentColor    = isExtend ? '#eab308' : tc;

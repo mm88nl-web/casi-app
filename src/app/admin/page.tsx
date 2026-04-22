@@ -118,7 +118,6 @@ export default function AdminStudio() {
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [togglingLive, setTogglingLive] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
-  const [sendingTestFlash, setSendingTestFlash] = useState(false);
   const dragStartPos = useRef<{x:number;y:number}|null>(null);
   const isDragging = useRef(false);
 
@@ -1012,37 +1011,6 @@ export default function AdminStudio() {
     setTimeout(() => setCopiedUrl(null), 2000);
   };
 
-  const sendTestFlash = async () => {
-    if (!profile || sendingTestFlash) return;
-    if (!profile.allow_free_flashes) {
-      showFlashToast('Enable free Flashes in your profile first, then try again.', 'err');
-      return;
-    }
-    setSendingTestFlash(true);
-    try {
-      const res = await fetch('/api/flashes/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: profile.id,
-          viewer_name: 'Test',
-          message: 'Test Flash from your admin panel ✦',
-          payment_method: 'free',
-        }),
-      });
-      if (!res.ok) {
-        const { error } = await res.json().catch(() => ({ error: 'Test failed' }));
-        showFlashToast(error || 'Test failed', 'err');
-      } else {
-        showFlashToast('Test Flash sent — approve it in Requests to see it fire on your overlay.', 'ok');
-      }
-    } catch {
-      showFlashToast('Test Flash failed — check your connection.', 'err');
-    } finally {
-      setSendingTestFlash(false);
-    }
-  };
-
   const calcTotal = (booking: any) => booking.price_unit === 'min'
     ? (booking.price_value * Number(booking.duration_minutes)).toFixed(0)
     : (booking.price_value * (Number(booking.duration_minutes) / 60)).toFixed(2);
@@ -1291,20 +1259,6 @@ export default function AdminStudio() {
               className="btn-sm b-outline"
               style={{ border: '1px solid rgba(var(--casi-accent-rgb),0.25)', color: 'var(--casi-accent)' }}>
               {copiedUrl === 'vlink' ? '✓ Copied' : 'Copy'}
-            </button>
-            <button
-              onClick={sendTestFlash}
-              disabled={sendingTestFlash}
-              className="btn-sm"
-              title={profile.allow_free_flashes ? 'Send a free test Flash to yourself to preview the overlay animation' : 'Enable free Flashes in your profile to test'}
-              style={{
-                background: 'rgba(var(--casi-accent2-rgb),0.1)',
-                color: 'var(--casi-accent2)',
-                border: '1px solid rgba(var(--casi-accent2-rgb),0.3)',
-                opacity: sendingTestFlash ? 0.6 : 1,
-                cursor: sendingTestFlash ? 'wait' : 'pointer',
-              }}>
-              {sendingTestFlash ? 'Sending…' : '⚡ Test Flash'}
             </button>
           </div>
         )}
