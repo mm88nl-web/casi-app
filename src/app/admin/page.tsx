@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
-import { SKINS } from '@/lib/skins';
 import WalletNav from '@/components/WalletNav';
 import FlashPanel from '@/components/FlashPanel';
 import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
@@ -20,10 +19,13 @@ import PendingRequestCard from './_components/PendingRequestCard';
 import QueuedRequestCard from './_components/QueuedRequestCard';
 import ActiveCard from './_components/ActiveCard';
 import ApprovedQueueCard from './_components/ApprovedQueueCard';
-import DelegateKeyCard from './_components/DelegateKeyCard';
+import ProfileEditCard from './_components/ProfileEditCard';
 import { getSecondsRemaining, formatTime, fmtDuration } from './_components/time';
 import PreviewBookingModal from './_components/PreviewBookingModal';
 import OnboardingBanner from './_components/OnboardingBanner';
+import SkinPickerCard from './_components/SkinPickerCard';
+import ViewerOverlayCard from './_components/ViewerOverlayCard';
+import OBSSetupCard from './_components/OBSSetupCard';
 
 // Explicit column list for bookings reads. Swapping `*` for this is belt +
 // suspenders alongside the column-level GRANT in 20260423 — if a new
@@ -58,18 +60,6 @@ function findFreePosition(elements: any[]): { pos_x: number; pos_y: number } {
   return { pos_x: Math.min(75, (last?.pos_x ?? 5) + 5), pos_y: Math.min(70, (last?.pos_y ?? 5) + 5) };
 }
 
-/* ── Profile edit accent presets ── */
-const THEME_PRESETS = [
-  { name: 'Casi Orange',   color: '#F58220' },
-  { name: 'Twitch Purple', color: '#9146FF' },
-  { name: 'Cyber Cyan',    color: '#06b6d4' },
-  { name: 'YouTube Red',   color: '#FF0000' },
-  { name: 'Matrix Green',  color: '#4ade80' },
-  { name: 'Kick Green',    color: '#53FC18' },
-  { name: 'Rose Pink',     color: '#f472b6' },
-  { name: 'Gold',          color: '#facc15' },
-  { name: 'Pure White',    color: '#e8e8e8' },
-];
 
 /* ══════════════════════════════════════════
    MAIN ADMIN PAGE
@@ -1819,326 +1809,102 @@ export default function AdminStudio() {
           <div className="set-body">
 
             {/* ── SKIN PICKER ── */}
-            <div className="set-card">
-              <div className="set-title">Studio skin</div>
-              <div className="set-sub">Changes the colour palette for your admin view and viewer overlay</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                {SKINS.map(s => {
-                  const isActive = (activeSkin ?? 'casi-dark') === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => setActiveSkin(s.id)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        background: isActive ? `rgba(var(--casi-accent-rgb),0.1)` : 'rgba(255,255,255,0.03)',
-                        border: isActive ? '1px solid rgba(var(--casi-accent-rgb),0.4)' : '1px solid var(--casi-border)',
-                        borderRadius: 10, padding: '8px 12px', cursor: 'pointer', transition: 'all .15s',
-                      }}
-                    >
-                      {/* Mini palette swatch */}
-                      <div style={{ display: 'flex', gap: 2 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: 2, background: s.accent }} />
-                        <div style={{ width: 10, height: 10, borderRadius: 2, background: s.accent2 }} />
-                        <div style={{ width: 10, height: 10, borderRadius: 2, background: s.bg, border: '1px solid rgba(255,255,255,0.1)' }} />
-                      </div>
-                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: isActive ? 'var(--casi-accent)' : 'var(--casi-text-muted)', letterSpacing: 0.5 }}>{s.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <button
-                onClick={async () => {
-                  if (!profile || savingSkin) return;
-                  setSavingSkin(true);
-                  await supabase.from('profiles').update({ skin: activeSkin }).eq('id', profile.id);
-                  setProfile((p: any) => ({ ...p, skin: activeSkin }));
-                  setSavingSkin(false);
-                }}
-                disabled={savingSkin || (activeSkin ?? 'casi-dark') === (profile?.skin ?? 'casi-dark')}
-                className="btn-sm b-orange"
-                style={{ minWidth: 120, opacity: savingSkin || (activeSkin ?? 'casi-dark') === (profile?.skin ?? 'casi-dark') ? 0.5 : 1 }}
-              >
-                {savingSkin ? 'Saving…' : 'Save skin'}
-              </button>
-            </div>
+            <SkinPickerCard
+              activeSkin={activeSkin}
+              savedSkin={profile?.skin ?? null}
+              saving={savingSkin}
+              onSelect={setActiveSkin}
+              onSave={async () => {
+                if (!profile || savingSkin) return;
+                setSavingSkin(true);
+                await supabase.from('profiles').update({ skin: activeSkin }).eq('id', profile.id);
+                setProfile((p: any) => ({ ...p, skin: activeSkin }));
+                setSavingSkin(false);
+              }}
+            />
 
-            <div className="set-card">
-              {/* ── Profile summary row ── */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', border: `1px solid rgba(var(--casi-accent-rgb),0.25)`, overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-                  {(editAvatarValid && editAvatar) || profile.avatar_url
-                    ? <img src={editAvatarValid && editAvatar ? editAvatar : profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                    : '👤'}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)' }}>
-                    {editOpen ? (editName || profile.username) : (profile.display_name || profile.username)}
-                  </div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>@{profile.username}</div>
-                  {!editOpen && profile.bio && <div style={{ fontSize: 12, color: 'var(--casi-text-muted)', marginTop: 4 }}>{profile.bio}</div>}
-                </div>
-                <button
-                  onClick={() => setEditOpen(o => !o)}
-                  style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: 'var(--casi-accent)', background: editOpen ? 'rgba(var(--casi-accent-rgb),0.08)' : 'none', border: editOpen ? '1px solid rgba(var(--casi-accent-rgb),0.2)' : '1px solid transparent', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0, transition: 'all .15s' }}>
-                  {editOpen ? '✕ Close' : 'Edit ↓'}
-                </button>
-              </div>
-
-              {/* ── Inline edit form ── */}
-              {editOpen && (
-                <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--casi-border)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-                  {/* Display name */}
-                  <div>
-                    <label className="pe-lbl">Display name</label>
-                    <input type="text" value={editName} maxLength={32} className="pe-inp"
-                      placeholder={profile.username}
-                      onChange={(e) => setEditName(e.target.value)} />
-                  </div>
-
-                  {/* Bio */}
-                  <div>
-                    <label className="pe-lbl">Bio</label>
-                    <textarea value={editBio} maxLength={160} rows={3} className="pe-inp"
-                      style={{ resize: 'none', lineHeight: 1.5 }}
-                      placeholder="What do you stream?"
-                      onChange={(e) => setEditBio(e.target.value)} />
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', textAlign: 'right', marginTop: 2 }}>{editBio.length}/160</div>
-                  </div>
-
-                  {/* Avatar */}
-                  <div>
-                    <label className="pe-lbl">Avatar URL</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
-                        {editAvatarValid && editAvatar ? <img src={editAvatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : '👤'}
-                      </div>
-                      <input type="text" value={editAvatar} className="pe-inp" style={{ flex: 1 }}
-                        placeholder="https://your-image.png"
-                        onChange={(e) => { setEditAvatar(e.target.value); setEditAvatarValid(false); }} />
-                      {editAvatar && <img src={editAvatar} style={{ display: 'none' }} alt=""
-                        onLoad={() => setEditAvatarValid(true)} onError={() => setEditAvatarValid(false)} />}
-                    </div>
-                    {editAvatar && (
-                      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, marginTop: 4, color: editAvatarValid ? '#4ade80' : '#f87171' }}>
-                        {editAvatarValid ? '✓ Image loaded' : 'Image not loading — check URL'}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Silhouette preview background */}
-                  <div>
-                    <label className="pe-lbl">
-                      Preview background
-                      <span style={{ fontFamily: 'inherit', letterSpacing: 0, textTransform: 'none', color: 'var(--casi-text-muted)', opacity: 0.6 }}> — OBS screenshot shown to viewers</span>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '10px 14px', cursor: uploadingPreviewBg ? 'wait' : 'pointer' }}>
-                      <input type="file" accept="image/*" style={{ display: 'none' }}
-                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePreviewBgUpload(f); }} />
-                      {previewBgUrl
-                        ? <img src={previewBgUrl} style={{ width: 48, height: 27, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--casi-border)', flexShrink: 0 }} alt="" />
-                        : <div style={{ width: 48, height: 27, borderRadius: 4, border: '1px dashed var(--casi-border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>🖥</div>
-                      }
-                      <div>
-                        <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, color: previewBgUrl ? '#4ade80' : 'var(--casi-text)', marginBottom: 2 }}>
-                          {uploadingPreviewBg ? 'Uploading…' : previewBgUrl ? '✓ Preview set' : 'Upload screenshot'}
-                        </div>
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--casi-text-muted)' }}>
-                          {previewBgUrl ? 'Click to replace' : 'jpg · png · max 5 MB'}
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-
-                  {/* Accent color */}
-                  <div>
-                    <label className="pe-lbl">Accent color <span style={{ fontFamily: 'inherit', letterSpacing: 0, textTransform: 'none', color: 'var(--casi-text-muted)', opacity: 0.6 }}>— overlays skin accent</span></label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 10 }}>
-                      {THEME_PRESETS.map(p => (
-                        <button key={p.color} type="button" title={p.name}
-                          className={`pe-swatch${editThemeColor === p.color ? ' active' : ''}`}
-                          style={{ background: p.color }}
-                          onClick={() => { setEditThemeColor(p.color); setEditCustomColor(''); }} />
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 6, background: editThemeColor, border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0, boxShadow: `0 0 10px ${editThemeColor}50` }} />
-                      <input type="text" value={editCustomColor || editThemeColor} placeholder="#F58220" maxLength={7}
-                        className="pe-inp" style={{ flex: 1, fontFamily: "'DM Mono',monospace", fontSize: 12 }}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setEditCustomColor(v);
-                          if (/^#[0-9A-Fa-f]{6}$/.test(v)) setEditThemeColor(v);
-                        }} />
-                    </div>
-                    <div style={{ height: 3, borderRadius: 2, background: `linear-gradient(90deg, ${editThemeColor}, ${editThemeColor}40)`, marginTop: 10 }} />
-                  </div>
-
-                  {/* Stripe */}
-                  <div>
-                    <label className="pe-lbl">Payments — Stripe</label>
-                    <div style={{ background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: stripeConnected ? '#4ade80' : 'var(--casi-text)', marginBottom: 2 }}>
-                          {stripeConnected ? '✓ Connected to Stripe' : 'Connect Stripe to get paid'}
-                        </div>
-                        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
-                          {stripeConnected ? 'Viewers can pay for beam slots' : 'Required to accept card payments'}
-                        </div>
-                      </div>
-                      <button type="button" onClick={handleStripeConnect} disabled={stripeLoading}
-                        style={{ background: stripeConnected ? 'rgba(74,222,128,0.1)' : 'var(--casi-accent)', border: stripeConnected ? '1px solid rgba(74,222,128,0.25)' : 'none', borderRadius: 8, padding: '8px 14px', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: stripeConnected ? '#4ade80' : 'var(--casi-bg)', cursor: stripeLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                        {stripeLoading ? 'Redirecting…' : stripeConnected ? '↗ Manage' : 'Connect →'}
-                      </button>
-                    </div>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>100% of every tip lands in your Stripe account — no platform fee. Payouts go directly to your bank.</div>
-                  </div>
-
-                  {/* Solana wallet */}
-                  <div>
-                    <label className="pe-lbl">Solana wallet <span style={{ letterSpacing: 0, textTransform: 'none', opacity: 0.6 }}>— USDC streaming payments</span></label>
-                    <div style={{ background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: solanaWallet ? '#9945FF' : 'var(--casi-text)', marginBottom: 2 }}>
-                          {solanaWallet ? `◎ ${solanaWallet.slice(0,6)}…${solanaWallet.slice(-4)}` : 'No wallet linked'}
-                        </div>
-                        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
-                          {solanaWallet ? 'Viewers can pay with USDC on-chain' : 'Optional — Stripe works without this'}
-                        </div>
-                      </div>
-                      {walletConnected && publicKey ? (
-                        <button type="button" onClick={handleSaveWallet} disabled={savingWallet}
-                          style={{ background: walletSaved ? 'rgba(74,222,128,0.1)' : 'rgba(153,69,255,0.15)', border: walletSaved ? '1px solid rgba(74,222,128,0.3)' : '1px solid rgba(153,69,255,0.35)', borderRadius: 8, padding: '8px 14px', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: walletSaved ? '#4ade80' : '#9945FF', cursor: savingWallet ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                          {savingWallet ? 'Saving…' : walletSaved ? '✓ Saved!' : `Save ${publicKey.toBase58().slice(0,4)}…${publicKey.toBase58().slice(-4)}`}
-                        </button>
-                      ) : (
-                        <button type="button" onClick={openWalletModal} disabled={walletConnecting}
-                          style={{ background: 'rgba(153,69,255,0.1)', border: '1px solid rgba(153,69,255,0.3)', borderRadius: 8, padding: '8px 14px', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: '#9945FF', cursor: walletConnecting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0, opacity: walletConnecting ? 0.6 : 1 }}>
-                          {walletConnecting ? 'Connecting…' : 'Connect Wallet'}
-                        </button>
-                      )}
-                    </div>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>Connect your wallet then click Save to link it to your profile.</div>
-                  </div>
-
-                  {/* Session key delegate — optional server-side start_beam */}
-                  <DelegateKeyCard
-                    supabase={supabase}
-                    walletReady={!!publicKey && !!profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet}
-                    onInstalled={installDelegateOnChain}
-                  />
-
-                  {/* Free Flashes toggle — gates the Test Flash button on Studio */}
-                  <div>
-                    <label className="pe-lbl">Free tier <span style={{ letterSpacing: 0, textTransform: 'none', opacity: 0.6 }}>— let viewers send Flashes without paying</span></label>
-                    <div style={{ background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--casi-text)', marginBottom: 2 }}>Allow free Flashes</div>
-                        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>Chat messages without payment · 1 per minute per viewer</div>
-                      </div>
-                      <button type="button" role="switch" aria-checked={editAllowFreeFlashes}
-                        onClick={() => setEditAllowFreeFlashes(v => !v)}
-                        style={{ position: 'relative', width: 44, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, background: editAllowFreeFlashes ? 'var(--casi-accent)' : 'rgba(255,255,255,0.12)', transition: 'background .15s' }}>
-                        <span style={{ position: 'absolute', top: 2, left: editAllowFreeFlashes ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .15s' }} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: 8, paddingTop: 2 }}>
-                    <button type="button" onClick={() => {
-                      // Reset to current saved values
-                      setEditName(profile.display_name || profile.username || '');
-                      setEditBio(profile.bio || '');
-                      setEditAvatar(profile.avatar_url || '');
-                      setEditAvatarValid(!!profile.avatar_url);
-                      setEditThemeColor(profile.theme_color || '#F58220');
-                      setEditCustomColor('');
-                      setEditAllowFreeFlashes(!!profile.allow_free_flashes);
-                      setEditOpen(false);
-                    }} style={{ flex: 1, padding: '10px 0', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--casi-border)', borderRadius: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 12, color: 'var(--casi-text-muted)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      Cancel
-                    </button>
-                    <button type="button" disabled={editSaving}
-                      onClick={async () => {
-                        if (!profile) return;
-                        setEditSaving(true);
-                        await supabase.from('profiles').update({
-                          display_name: editName || profile.username,
-                          bio: editBio || null,
-                          avatar_url: editAvatarValid ? editAvatar : null,
-                          theme_color: editThemeColor,
-                          allow_free_flashes: editAllowFreeFlashes,
-                        }).eq('id', profile.id);
-                        setProfile((p: any) => ({ ...p,
-                          display_name: editName || profile.username,
-                          bio: editBio || null,
-                          avatar_url: editAvatarValid ? editAvatar : null,
-                          theme_color: editThemeColor,
-                          allow_free_flashes: editAllowFreeFlashes,
-                        }));
-                        setEditSaving(false);
-                        setEditSaved(true);
-                        setEditOpen(false);
-                        setTimeout(() => setEditSaved(false), 2000);
-                      }}
-                      style={{ flex: 2, padding: '10px 0', background: editSaved ? '#4ade80' : 'var(--casi-accent)', border: 'none', borderRadius: 10, fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 12, color: 'var(--casi-bg)', cursor: editSaving ? 'not-allowed' : 'pointer', textTransform: 'uppercase', letterSpacing: 0.5, opacity: editSaving ? 0.7 : 1 }}>
-                      {editSaving ? 'Saving…' : 'Save profile'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="set-card">
-              <div className="set-title">Viewer overlay</div>
-              <div className="set-sub">Share with your audience</div>
-              <div className="code-row">
-                <div className="code-box">{origin}/overlay?s={profile.username}</div>
-                <button onClick={() => copyUrl(`${origin}/overlay?s=${profile.username}`, 'viewer')} className="btn-sm b-outline" style={{ border: '1px solid #222' }}>
-                  {copiedUrl === 'viewer' ? '✓ Copied' : 'Copy'}
-                </button>
-              </div>
-            </div>
-            <div className="set-card">
-              <div className="set-title">OBS Setup</div>
-              <div className="set-sub">Add two browser sources in OBS in this order</div>
-              <div style={{ marginBottom: 16, borderRadius: 10, border: '1px solid #161616', overflow: 'hidden' }}>
-                {[['TOP', 'Casi Beams', '#06b6d4', 'floating overlay, transparent bg'], ['MID', 'Your Camera', '#444', 'with chroma key / bg removal'], ['BTM', 'Casi Backdrop', '#c084fc', 'full screen, transparent bg']].map(([pos, name, color, desc]) => (
-                  <div key={pos} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid #0d0d0d', background: 'rgba(255,255,255,0.02)' }}>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color, background: `${color}15`, border: `1px solid ${color}30`, borderRadius: 4, padding: '2px 7px', letterSpacing: 1, flexShrink: 0 }}>{pos}</span>
-                    <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 600, fontSize: 13, color: 'var(--casi-text)' }}>{name}</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginLeft: 'auto' }}>{desc}</span>
-                  </div>
-                ))}
-              </div>
-              {[['beams', '#06b6d4', 'Beams URL'], ['backdrop', '#c084fc', 'Backdrop URL']].map(([layer, color, label]) => (
-                <div key={layer} style={{ marginBottom: 10 }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: '#444', marginBottom: 6 }}>{label}</div>
-                  <div className="code-row">
-                    <div className="code-box" style={{ borderColor: `${color}20`, color }}>{origin}/obs?s={profile.username}&layer={layer}</div>
-                    <button onClick={() => copyUrl(`${origin}/obs?s=${profile.username}&layer=${layer}`, layer)} className="btn-sm"
-                      style={{ background: `${color}15`, color, border: `1px solid ${color}30`, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, textTransform: 'uppercase', padding: '10px 16px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}>
-                      {copiedUrl === layer ? '✓' : 'Copy'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid #111', borderRadius: 8, padding: '10px 14px', marginTop: 8 }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginBottom: 4 }}>Custom CSS for both sources:</div>
-                <code style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>{"body { background-color: rgba(0,0,0,0); }"}</code>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
-                <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid #111', borderRadius: 8, padding: '10px 14px' }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>Dimensions</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>1920 × 1080</div>
-                </div>
-                <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid #111', borderRadius: 8, padding: '10px 14px' }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>Not updating?</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>Right-click source → Refresh cache</div>
-                </div>
-              </div>
-            </div>
+            <ProfileEditCard
+              profile={profile}
+              open={editOpen}
+              onOpenChange={setEditOpen}
+              name={editName}
+              onNameChange={setEditName}
+              bio={editBio}
+              onBioChange={setEditBio}
+              avatar={editAvatar}
+              avatarValid={editAvatarValid}
+              onAvatarChange={setEditAvatar}
+              onAvatarValidChange={setEditAvatarValid}
+              themeColor={editThemeColor}
+              onThemeColorChange={setEditThemeColor}
+              customColor={editCustomColor}
+              onCustomColorChange={setEditCustomColor}
+              allowFreeFlashes={editAllowFreeFlashes}
+              onAllowFreeFlashesChange={setEditAllowFreeFlashes}
+              saving={editSaving}
+              saved={editSaved}
+              onCancel={() => {
+                setEditName(profile.display_name || profile.username || '');
+                setEditBio(profile.bio || '');
+                setEditAvatar(profile.avatar_url || '');
+                setEditAvatarValid(!!profile.avatar_url);
+                setEditThemeColor(profile.theme_color || '#F58220');
+                setEditCustomColor('');
+                setEditAllowFreeFlashes(!!profile.allow_free_flashes);
+                setEditOpen(false);
+              }}
+              onSave={async () => {
+                if (!profile) return;
+                setEditSaving(true);
+                await supabase.from('profiles').update({
+                  display_name: editName || profile.username,
+                  bio: editBio || null,
+                  avatar_url: editAvatarValid ? editAvatar : null,
+                  theme_color: editThemeColor,
+                  allow_free_flashes: editAllowFreeFlashes,
+                }).eq('id', profile.id);
+                setProfile((p: any) => ({ ...p,
+                  display_name: editName || profile.username,
+                  bio: editBio || null,
+                  avatar_url: editAvatarValid ? editAvatar : null,
+                  theme_color: editThemeColor,
+                  allow_free_flashes: editAllowFreeFlashes,
+                }));
+                setEditSaving(false);
+                setEditSaved(true);
+                setEditOpen(false);
+                setTimeout(() => setEditSaved(false), 2000);
+              }}
+              previewBgUrl={previewBgUrl}
+              uploadingPreviewBg={uploadingPreviewBg}
+              onPreviewBgUpload={handlePreviewBgUpload}
+              stripeConnected={stripeConnected}
+              stripeLoading={stripeLoading}
+              onStripeConnect={handleStripeConnect}
+              solanaWallet={solanaWallet}
+              walletConnected={walletConnected}
+              walletConnecting={walletConnecting}
+              publicKey={publicKey}
+              savingWallet={savingWallet}
+              walletSaved={walletSaved}
+              onSaveWallet={handleSaveWallet}
+              onOpenWalletModal={openWalletModal}
+              delegateSupabase={supabase}
+              delegateWalletReady={!!publicKey && !!profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet}
+              onInstallDelegate={installDelegateOnChain}
+            />
+            <ViewerOverlayCard
+              origin={origin}
+              username={profile.username}
+              copiedUrl={copiedUrl}
+              onCopy={copyUrl}
+            />
+            <OBSSetupCard
+              origin={origin}
+              username={profile.username}
+              copiedUrl={copiedUrl}
+              onCopy={copyUrl}
+            />
           </div>
         )}
 
