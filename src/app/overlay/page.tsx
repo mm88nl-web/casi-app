@@ -1781,6 +1781,16 @@ function OverlayContent() {
               const myBookingForSlot = getMyBookingForSlot(el.id);
               const myIsExpiring    = myBookingForSlot && expiringSoon.has(myBookingForSlot.id);
               const isLocked        = !!el.locked;
+              // Estimated wait for a viewer joining the queue right now:
+              // remaining time on the live beam + sum of every queued
+              // booking's duration. Matches the booking-form estimate at
+              // line 2193 so slot pill and form agree. Clamp to ≥1 min so
+              // the pill never reads "0m wait" when there's genuinely a
+              // live beam and queue ahead.
+              const activeRemainingMin = activeBooking ? Math.max(0, getSecondsRemaining(activeBooking) / 60) : 0;
+              const queueOnSlot        = approvedQueuedBookings.filter((b:any) => b.element_id === el.id);
+              const queueDurationMin   = queueOnSlot.reduce((sum: number, b:any) => sum + Number(b.duration_minutes || 0), 0);
+              const waitMin            = Math.max(1, Math.round(activeRemainingMin + queueDurationMin));
               // Viewer has a preview ready (upload or validated URL)
               const viewerHasPreview = isSelected && (
                 (uploadMode === 'upload' && !!uploadedUrl) ||
@@ -1936,10 +1946,12 @@ function OverlayContent() {
                     </div>
                   )}
 
-                  {/* Queue count — occupied slot with a waitlist gets a hint
-                      so tappers know they'll be joining a queue rather than
-                      starting live immediately. */}
-                  {!isOBS && isOccupied && !myBookingForSlot && !isLocked && queueCount > 0 && (
+                  {/* Wait estimate — always shown on occupied slots (even
+                      with an empty queue) so viewers know how long they'd
+                      wait before clicking through to the booking form.
+                      Queue count joins the text when ≥1 viewer is already
+                      in line. */}
+                  {!isOBS && isOccupied && !myBookingForSlot && !isLocked && (
                     <div
                       style={{
                         position: 'absolute', bottom: 6, right: 6,
@@ -1949,9 +1961,10 @@ function OverlayContent() {
                         background: 'rgba(5,5,5,0.85)',
                         border: `1px solid rgba(${tcRgb},0.22)`,
                         borderRadius: 20, padding: '2px 8px',
+                        whiteSpace: 'nowrap',
                       }}
                     >
-                      ⏳ {queueCount} queued
+                      ⏳ {queueCount > 0 ? `${queueCount} queued · ` : ''}~{waitMin}m wait
                     </div>
                   )}
 
