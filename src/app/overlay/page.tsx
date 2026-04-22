@@ -1812,8 +1812,29 @@ function OverlayContent() {
               // no booking is active (just show the empty placeholder).
               const isBannerActive = el.shape === 'banner' && isOccupied && !!activeBooking?.message;
 
+              // The slot itself is the click target — tapping an open beam
+              // (or a queued occupied one) opens the booking form. Disabled
+              // when the viewer already has a booking here, the slot is
+              // locked, or another slot's form is already open (one at a
+              // time). Extend / Join queue / Book all route through the
+              // same openSlot call with different modes.
+              const clickable = !isOBS && !isLocked && !myBookingForSlot && !selectedSlot;
+              const handleSlotClick = clickable ? () => openSlot(el, isOccupied) : undefined;
+              const isSelectedHere = selectedSlot?.id === el.id;
+
               return (
-                <div key={el.id} style={{ position:'absolute', left:`${el.pos_x}%`, top:`${el.pos_y}%`, width:`${el.width}%`, height:`${el.height}%`, zIndex:el.is_background?10:50, transition:'all 0.35s cubic-bezier(0.16,1,0.3,1)' }}>
+                <div
+                  key={el.id}
+                  onClick={handleSlotClick}
+                  style={{
+                    position: 'absolute',
+                    left: `${el.pos_x}%`, top: `${el.pos_y}%`,
+                    width: `${el.width}%`, height: `${el.height}%`,
+                    zIndex: el.is_background ? 10 : 50,
+                    cursor: clickable ? 'pointer' : 'default',
+                    transition: 'all 0.35s cubic-bezier(0.16,1,0.3,1)',
+                  }}
+                >
                   {isBannerActive ? (
                     <div key={mediaKey} className={`beam-banner ${glowClass}`.trim()}>
                       <span className="beam-banner-track">{activeBooking.message}</span>
@@ -1847,43 +1868,110 @@ function OverlayContent() {
                     </div>
                   )}
 
+                  {/* Selection outline — mirrors the admin studio's selection
+                      glow so the booking-form modal below has a clear visual
+                      anchor back to the slot that triggered it. */}
+                  {isSelectedHere && !isOBS && (
+                    <div style={{ position:'absolute', inset:-3, borderRadius:10, border:`2px solid ${accentColor}`, boxShadow:`0 0 0 4px rgba(${accentColorRgb},0.15)`, pointerEvents:'none', zIndex:15 }} />
+                  )}
+
+                  {/* Price badge — corner-mounted inside the slot (bottom-
+                      centre on backdrops, top-right on beams) so slots
+                      pinned to the canvas edge don't have their price
+                      label hanging off-screen like the old stack did. */}
                   {el.price_value >= 0 && !isOBS && (
-                    <div style={{ position:'absolute', bottom:el.is_background?12:-54, left:'50%', transform:'translateX(-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:5, zIndex:100, whiteSpace:'nowrap' }}>
-                      <div style={{ background:'rgba(5,5,5,0.92)', border:`1px solid ${Number(el.price_value)===0?'rgba(74,222,128,0.35)':'rgba(255,255,255,0.08)'}`, borderRadius:20, padding:'3px 10px', display:'flex', alignItems:'center', gap:5 }}>
-                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:500, color: Number(el.price_value)===0 ? '#4ade80' : tc }}>
-                          {Number(el.price_value)===0 ? '★ Free' : `$${el.price_value}/${el.price_unit}`}
-                        </span>
-                        {el.max_duration_minutes && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'#444' }}>· max {el.max_duration_minutes}m</span>}
-                      </div>
-                      {isLocked ? (
-                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'rgba(248,113,113,0.5)', padding:'3px 8px', border:'1px solid rgba(248,113,113,0.15)', borderRadius:20 }}>🔒 Locked</span>
-                      ) : myBookingForSlot ? (
-                        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
-                          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, padding:'3px 10px', borderRadius:20, border:'1px solid', ...(myIsExpiring?{color:'#facc15',borderColor:'rgba(234,179,8,0.3)',background:'rgba(234,179,8,0.08)'}:myBookingForSlot.status==='active'?{color:tc,borderColor:`rgba(${tcRgb},0.31)`,background:`rgba(${tcRgb},0.07)`}:myBookingForSlot.status==='approved_queued'?{color:tc,borderColor:`rgba(${tcRgb},0.25)`,background:`rgba(${tcRgb},0.06)`}:{color:'var(--casi-text-muted)',borderColor:'var(--casi-border)',background:'rgba(255,255,255,0.03)'}) }}>
-                            {myIsExpiring?'⚠ Expiring':myBookingForSlot.status==='active'?'● Your beam is live':myBookingForSlot.status==='approved_queued'?'⏳ Queued':'⌛ Pending'}
-                          </span>
-                          {showExtend && (
-                            <button onClick={() => openSlot(el, false, true)}
-                              style={{ background:'#eab308', border:'none', borderRadius:20, padding:'4px 12px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:10, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer' }}>
-                              Extend
-                            </button>
-                          )}
-                          {myIsExpiring && !canExtend(el.id) && (
-                            <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'rgba(234,179,8,0.5)' }}>Next viewer waiting</span>
-                          )}
-                        </div>
-                      ) : isOccupied ? (
-                        <button onClick={() => openSlot(el, true)}
-                          style={{ background:tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer' }}>
-                          Join queue{queueCount>0?` (${queueCount})`:''}
-                        </button>
-                      ) : !selectedSlot ? (
-                        <button onClick={() => openSlot(el, false)}
-                          style={{ background: Number(el.price_value)===0 ? '#4ade80' : tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer', boxShadow: Number(el.price_value)===0 ? '0 4px 14px rgba(74,222,128,0.19)' : `0 4px 14px rgba(${tcRgb},0.19)` }}>
-                          {Number(el.price_value)===0 ? 'Claim free slot' : 'Tip for this slot'}
-                        </button>
-                      ) : null}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        ...(el.is_background
+                          ? { bottom: 12, left: '50%', transform: 'translateX(-50%)' }
+                          : { top: 6, right: 6 }),
+                        background: 'rgba(5,5,5,0.92)',
+                        border: `1px solid ${Number(el.price_value)===0 ? 'rgba(74,222,128,0.35)' : 'rgba(255,255,255,0.08)'}`,
+                        borderRadius: 20,
+                        padding: '3px 10px',
+                        pointerEvents: 'none',
+                        zIndex: 20,
+                        fontFamily: "'DM Mono',monospace",
+                        fontSize: 10,
+                        color: Number(el.price_value)===0 ? '#4ade80' : tc,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {Number(el.price_value)===0 ? '★ Free' : `$${el.price_value}/${el.price_unit}`}
+                      {el.max_duration_minutes && <span style={{ color:'#555', marginLeft: 6, fontSize: 9 }}>· max {el.max_duration_minutes}m</span>}
                     </div>
+                  )}
+
+                  {/* Status badge — locked / my booking state, top-left so
+                      it doesn't collide with the price on the right. */}
+                  {!isOBS && (isLocked || myBookingForSlot) && (
+                    <div
+                      style={{
+                        position: 'absolute', top: 6, left: 6,
+                        zIndex: 20, pointerEvents: 'none',
+                        fontFamily: "'DM Mono',monospace", fontSize: 9,
+                        padding: '3px 10px', borderRadius: 20, border: '1px solid',
+                        ...(isLocked
+                          ? { color: 'rgba(248,113,113,0.6)', borderColor: 'rgba(248,113,113,0.25)', background: 'rgba(248,113,113,0.08)' }
+                          : myIsExpiring
+                            ? { color: '#facc15', borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.08)' }
+                            : myBookingForSlot!.status === 'active'
+                              ? { color: tc, borderColor: `rgba(${tcRgb},0.3)`, background: `rgba(${tcRgb},0.08)` }
+                              : myBookingForSlot!.status === 'approved_queued'
+                                ? { color: tc, borderColor: `rgba(${tcRgb},0.22)`, background: `rgba(${tcRgb},0.05)` }
+                                : { color: 'var(--casi-text-muted)', borderColor: 'var(--casi-border)', background: 'rgba(255,255,255,0.03)' }
+                        ),
+                      }}
+                    >
+                      {isLocked
+                        ? '🔒 Locked'
+                        : myIsExpiring
+                          ? '⚠ Expiring'
+                          : myBookingForSlot!.status === 'active'
+                            ? '● Your beam'
+                            : myBookingForSlot!.status === 'approved_queued'
+                              ? '⏳ Queued'
+                              : '⌛ Pending'}
+                    </div>
+                  )}
+
+                  {/* Queue count — occupied slot with a waitlist gets a hint
+                      so tappers know they'll be joining a queue rather than
+                      starting live immediately. */}
+                  {!isOBS && isOccupied && !myBookingForSlot && !isLocked && queueCount > 0 && (
+                    <div
+                      style={{
+                        position: 'absolute', bottom: 6, right: 6,
+                        zIndex: 20, pointerEvents: 'none',
+                        fontFamily: "'DM Mono',monospace", fontSize: 9,
+                        color: `rgba(${tcRgb},0.8)`,
+                        background: 'rgba(5,5,5,0.85)',
+                        border: `1px solid rgba(${tcRgb},0.22)`,
+                        borderRadius: 20, padding: '2px 8px',
+                      }}
+                    >
+                      ⏳ {queueCount} queued
+                    </div>
+                  )}
+
+                  {/* Extend — viewer's own beam is expiring and eligible.
+                      Separate button so it doesn't collapse into the slot
+                      click (which would just re-open the booking form in
+                      book-new mode). */}
+                  {!isOBS && showExtend && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openSlot(el, false, true); }}
+                      style={{
+                        position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)',
+                        background: '#eab308', border: 'none', borderRadius: 20,
+                        padding: '4px 14px', fontFamily: "'Syne',sans-serif",
+                        fontWeight: 700, fontSize: 10, textTransform: 'uppercase',
+                        color: 'var(--casi-bg)', cursor: 'pointer', zIndex: 25,
+                      }}
+                    >
+                      Extend
+                    </button>
                   )}
                 </div>
               );
