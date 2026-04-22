@@ -1550,7 +1550,19 @@ export default function AdminStudio() {
                     onResizeStop={(_e, _dir, ref, _delta, pos) => { updateLayer(el.id, { width: (ref.offsetWidth / dimensions.width) * 100, height: (ref.offsetHeight / dimensions.height) * 100, pos_x: (pos.x / dimensions.width) * 100, pos_y: (pos.y / dimensions.height) * 100 }); }}
                     disableDragging={el.is_background} enableResizing={!el.is_background} bounds="parent"
                     style={{ zIndex: el.is_background ? 0 : (isSelected ? 40 : 30) }}>
-                    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                    <div
+                      style={{ position: 'relative', width: '100%', height: '100%' }}
+                      // Backdrops have `disableDragging` which also kills
+                      // Rnd's `onDragStop`, so tap-to-select never fires
+                      // for them. Route their selection through a plain
+                      // React onClick on the content div instead. Beams
+                      // keep using onDragStop so drag-vs-tap distinction
+                      // is preserved (a drag shouldn't select).
+                      onClick={el.is_background
+                        ? (e) => { e.stopPropagation(); setSelectedSlotId(el.id); setShowInfoPanel(false); }
+                        : undefined
+                      }
+                    >
                       {/* Shape-masked content box. Isolated from the delete
                           button and selection indicator below so clip-path
                           doesn't chop the corner × or the outer glow. For
