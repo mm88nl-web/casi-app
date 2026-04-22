@@ -379,6 +379,13 @@ function OverlayContent() {
   const [queueCounts, setQueueCounts]   = useState<Record<string,number>>({});
   const [loading, setLoading]           = useState(true);
   const [myBookings, setMyBookings]     = useState<any[]>([]);
+  // Stuck Solana flashes the viewer paid for but that never settled —
+  // either the streamer hasn't moderated yet OR a prior moderation
+  // closed the PDA but the DB row is stale (drift). Surfaces a
+  // viewer-driven recovery card on the overlay so users aren't waiting
+  // on the streamer to unstick something.
+  const [myStuckFlashes, setMyStuckFlashes] = useState<any[]>([]);
+  const [reclaimingFlash, setReclaimingFlash] = useState<string | null>(null);
   const [expiringSoon, setExpiringSoon] = useState<Set<string>>(new Set());
   const [savedViewerName, setSavedViewerName] = useState<string|null>(null);
   const [nameConfirmed, setNameConfirmed]     = useState(false);
@@ -542,6 +549,35 @@ function OverlayContent() {
         return true;
       });
       setMyBookings(relevant);
+
+      // Stuck Solana flashes: pending rows with an escrow_pda. Same dual
+      // query as bookings (by viewer_name + viewer_wallet) so a viewer
+      // who paid on one device + reconnected on another still sees the
+      // recovery card. The streamer-side stuck-flash class is moderated
+      // via admin/page.tsx::moderateSolanaFlash drift recovery; this
+      // surface is for the viewer who'd rather get their USDC back than
+      // wait for the streamer to act.
+      const FLASH_COLS = 'id, viewer_name, message, amount_cents, status, escrow_pda, viewer_wallet, payment_method, created_at';
+      const [nameFlashRes, walletFlashRes] = await Promise.all([
+        name
+          ? supabase.from('flashes').select(FLASH_COLS)
+              .eq('profile_id', profId).eq('viewer_name', name)
+              .eq('payment_method', 'solana').eq('status', 'pending')
+              .not('escrow_pda', 'is', null)
+              .limit(20)
+          : Promise.resolve({ data: [] as any[] }),
+        wallet
+          ? supabase.from('flashes').select(FLASH_COLS)
+              .eq('profile_id', profId).eq('viewer_wallet', wallet)
+              .eq('payment_method', 'solana').eq('status', 'pending')
+              .not('escrow_pda', 'is', null)
+              .limit(20)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const stuckById = new Map<any, any>();
+      for (const f of (nameFlashRes.data || [])) stuckById.set(f.id, f);
+      for (const f of (walletFlashRes.data || [])) if (!stuckById.has(f.id)) stuckById.set(f.id, f);
+      setMyStuckFlashes(Array.from(stuckById.values()));
     }
   }, [supabase]);
 
@@ -1451,6 +1487,90 @@ function OverlayContent() {
     );
   };
 
+  /**
+   * Viewer-side recovery for a stuck Solana flash. Mirror of
+   * reclaimSolanaEscrow above, but for the flashes table:
+   *
+   *   - Probe the escrow PDA. If it's already closed (a prior moderate
+   *     tx settled or denied without the DB catching up), call the
+   *     viewer-recover route which re-probes server-side and flips the
+   *     flash row to `denied`. No wallet popup — there's nothing to sign.
+   *   - If the PDA is alive, viewer signs `cancel_escrow` (the program-
+   *     level cancel works for any Pending escrow regardless of beam
+   *     vs flash type — same EscrowState). After it lands, server route
+   *     reflects the closure.
+   *   - Handles the race where the PDA closes between probe and tx:
+   *     catch AlreadySettled / AccountNotInitialized, fall through to
+   *     server-side reconcile.
+   */
+  const reclaimFlashEscrow = async (flash: any) => {
+    if (!flash.escrow_pda || reclaimingFlash) return;
+    setReclaimingFlash(flash.id);
+    try {
+      const reflectClosed = async (toastOk: string, toastFail: string): Promise<void> => {
+        const res = await fetch('/api/flashes/viewer-recover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ flash_id: flash.id }),
+        });
+        if (res.ok) {
+          showNotif(toastOk, 'warning');
+          if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          showNotif(err?.error || toastFail, 'denied');
+        }
+      };
+
+      const { Connection, PublicKey } = await import('@solana/web3.js');
+      const conn = new Connection(SOLANA_RPC, 'confirmed');
+      const pdaInfo = await conn.getAccountInfo(new PublicKey(flash.escrow_pda)).catch(() => null);
+
+      // PDA already gone → server-side reconcile, no wallet sign.
+      if (!pdaInfo) {
+        await reflectClosed(
+          '◎ Recovery confirmed — funds already returned',
+          'Recovery failed — try again',
+        );
+        return;
+      }
+
+      // PDA still alive → viewer signs cancel_escrow for a full refund.
+      const client = await buildViewerCasiClient();
+      if (!client) {
+        showNotif('Connect your wallet to recover this flash', 'denied');
+        return;
+      }
+      try {
+        await client.cancelEscrow({ escrowId: flash.id });
+      } catch (err) {
+        const { isAlreadyProcessed, formatEscrowError } = await import('@/lib/casi-errors');
+        const msg = err instanceof Error ? err.message : String(err);
+        if (isAlreadyProcessed(err) || /AlreadySettled|AccountNotInitialized/i.test(msg)) {
+          // Race: PDA closed between our probe and our tx. Reconcile.
+          await reflectClosed(
+            '◎ Already settled — DB synced',
+            'Settled on-chain but DB sync failed — refresh',
+          );
+          return;
+        }
+        showNotif(formatEscrowError(err), 'denied');
+        return;
+      }
+
+      // Cancel landed. Tell the server the PDA is closed so the row flips
+      // to denied. refreshWalletNav fires the live USDC balance update so
+      // the viewer sees their refund land instantly in the nav.
+      refreshWalletNav();
+      await reflectClosed(
+        '◎ USDC refunded',
+        'Refund confirmed on-chain — refresh in a moment',
+      );
+    } finally {
+      setReclaimingFlash(null);
+    }
+  };
+
   // Bulk-clear ghost RECOVER USDC chips — closed PDAs whose DB rows still
   // carry escrow_pda from a previous build / aborted flow. The server probes
   // each row's PDA and nulls escrow_pda on the ones that are actually gone;
@@ -2337,6 +2457,58 @@ function OverlayContent() {
               a slot booking form is open so the two modals don't fight for
               focus. Rail gating is handled inside FlashPanel via
               streamerProfile. */}
+          {/* Stuck-flash recovery — only renders when this viewer (by name
+              or wallet) has pending Solana flashes with a live escrow_pda
+              that haven't been moderated. Lets the viewer reclaim their
+              USDC without waiting on the streamer to act. Hidden in OBS
+              mode (this is viewer chrome, not stream content). */}
+          {!isOBS && !selectedSlot && myStuckFlashes.length > 0 && (
+            <div style={{ marginTop: 24, background: 'rgba(192,132,252,0.05)', border: '1px solid rgba(192,132,252,0.2)', borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#c084fc' }}>
+                  ⚡ Your pending flashes
+                </span>
+                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--casi-text-muted)' }}>
+                  {myStuckFlashes.length} unmoderated
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {myStuckFlashes.map((f: any) => (
+                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(192,132,252,0.15)' }}>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, color: '#c084fc', background: 'rgba(192,132,252,0.1)', padding: '2px 6px', borderRadius: 4, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                      {(f.amount_cents / 100).toFixed(0)} USDC
+                    </span>
+                    <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, color: 'var(--casi-text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {f.message || '(no message)'}
+                    </span>
+                    <button
+                      onClick={() => reclaimFlashEscrow(f)}
+                      disabled={reclaimingFlash === f.id}
+                      style={{
+                        background: reclaimingFlash === f.id ? 'rgba(192,132,252,0.2)' : '#c084fc',
+                        color: reclaimingFlash === f.id ? '#c084fc' : 'var(--casi-bg)',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        fontFamily: "'DM Mono', monospace",
+                        fontSize: 9,
+                        letterSpacing: 1,
+                        textTransform: 'uppercase',
+                        cursor: reclaimingFlash === f.id ? 'wait' : 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {reclaimingFlash === f.id ? '…' : 'Recover'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 8, lineHeight: 1.5 }}>
+                Streamer hasn&apos;t moderated yet, OR the escrow already settled and the row didn&apos;t sync. Recover to refund your USDC + clear the row.
+              </div>
+            </div>
+          )}
+
           {!isOBS && profile?.id && !selectedSlot && (
             <div style={{ marginTop:24 }}>
               <FlashPanel
