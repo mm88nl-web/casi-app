@@ -22,6 +22,8 @@ import ActiveCard from './_components/ActiveCard';
 import ApprovedQueueCard from './_components/ApprovedQueueCard';
 import DelegateKeyCard from './_components/DelegateKeyCard';
 import { getSecondsRemaining, formatTime, fmtDuration } from './_components/time';
+import PreviewBookingModal from './_components/PreviewBookingModal';
+import OnboardingBanner from './_components/OnboardingBanner';
 
 // Explicit column list for bookings reads. Swapping `*` for this is belt +
 // suspenders alongside the column-level GRANT in 20260423 — if a new
@@ -1379,159 +1381,31 @@ export default function AdminStudio() {
 
         {/* PREVIEW MODAL */}
         {previewBooking && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 24 }}
-            onClick={(e) => { if (e.target === e.currentTarget) setPreviewBooking(null); }}>
-            <div style={{ background: 'var(--casi-surface)', border: '1px solid #222', borderRadius: 16, padding: 28, width: '100%', maxWidth: 520 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <div>
-                  <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 800, color: 'var(--casi-text)' }}>Review Request</h2>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: isBackdropBooking(previewBooking) ? '#c084fc' : 'var(--casi-accent2)', marginTop: 4, letterSpacing: 1 }}>
-                    {isBackdropBooking(previewBooking) ? '🖼 Full Backdrop' : '✦ Beam Slot'}
-                    {slotOccupiedForPreview && <span style={{ color: 'var(--casi-accent)', marginLeft: 8 }}>— slot occupied, will queue</span>}
-                  </div>
-                </div>
-                <button onClick={() => setPreviewBooking(null)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
-              </div>
-              <div style={{ aspectRatio: '16/9', background: 'var(--casi-bg)', border: '1px solid #1c1c1c', borderRadius: 10, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-                {previewBooking.image_url ? <SlotMedia src={previewBooking.image_url} fileType={previewBooking.file_type} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#333' }}>No image</span>}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-                {[['From', previewBooking.viewer_name, 'var(--casi-text)'], ['Price', `$${previewBooking.price_value}/${previewBooking.price_unit}`, 'var(--casi-accent2)'], ['Duration', fmtDuration(previewBooking.duration_minutes), 'var(--casi-text)'], ['Total', `$${calcTotal(previewBooking)}`, '#4ade80']].map(([l, v, c]) => (
-                  <div key={l} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #161616', borderRadius: 8, padding: '10px 14px' }}>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#444', marginBottom: 4 }}>{l}</div>
-                    <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 15, fontWeight: 700, color: c }}>{v}</div>
-                  </div>
-                ))}
-              </div>
-              {previewBooking.message && (
-                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #161616', borderRadius: 8, padding: 14, marginBottom: 20 }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#444', marginBottom: 6 }}>Message</div>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, color: '#888', fontStyle: 'italic' }}>"{previewBooking.message}"</div>
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => denyBooking(previewBooking.id, previewBooking.payment_method)} style={{ flex: 1, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: 12, color: '#f87171', fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, textTransform: 'uppercase', cursor: 'pointer' }}>Deny</button>
-                <button
-  onClick={() => approveBooking(previewBooking)}
-  className="act-btn"
-  disabled={!isPaymentConfirmed(previewBooking)}
-  style={{
-    background: !isPaymentConfirmed(previewBooking) ? 'var(--casi-border)' : slotOccupiedForPreview ? 'var(--casi-accent)' : 'var(--casi-accent2)',
-    color: !isPaymentConfirmed(previewBooking) ? '#444' : 'var(--casi-bg)',
-    cursor: !isPaymentConfirmed(previewBooking) ? 'not-allowed' : 'pointer',
-    flex: 1, border: 'none', borderRadius: 10, padding: 12, fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 13, textTransform: 'uppercase'
-  }}
->
-  {!isPaymentConfirmed(previewBooking) ? 'Awaiting payment' : slotOccupiedForPreview ? 'Approve → Queue' : 'Approve → Live'}
-                </button>
-              </div>
-            </div>
-          </div>
+          <PreviewBookingModal
+            booking={previewBooking}
+            isBackdrop={isBackdropBooking(previewBooking)}
+            slotOccupied={slotOccupiedForPreview}
+            paymentConfirmed={isPaymentConfirmed(previewBooking)}
+            totalDisplay={`$${calcTotal(previewBooking)}`}
+            durationDisplay={fmtDuration(previewBooking.duration_minutes)}
+            onClose={() => setPreviewBooking(null)}
+            onDeny={() => denyBooking(previewBooking.id, previewBooking.payment_method)}
+            onApprove={() => approveBooking(previewBooking)}
+          />
         )}
 
         {/* ── ONBOARDING BANNER ── */}
         {showBanner && view === 'studio' && (
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(var(--casi-accent-rgb),0.07) 0%, rgba(var(--casi-accent2-rgb),0.05) 100%)',
-            borderBottom: '1px solid rgba(var(--casi-accent-rgb),0.15)',
-            padding: '0',
-            position: 'relative',
-          }}>
-            {/* Header row */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px 0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)' }}>
-                  ✦ Quick&nbsp;setup
-                </span>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333' }}>— 3 steps to go live</span>
-              </div>
-              <button
-                onClick={() => { try { localStorage.setItem('casi_onboarding_dismissed', '1'); } catch {} setShowBanner(false); }}
-                style={{ background: 'none', border: 'none', color: '#333', cursor: 'pointer', fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, padding: '4px 8px', borderRadius: 4, transition: 'color .2s' }}
-                onMouseOver={(e) => (e.currentTarget.style.color = '#888')}
-                onMouseOut={(e) => (e.currentTarget.style.color = '#333')}>
-                Dismiss ✕
-              </button>
-            </div>
-
-            {/* 3-surface explainer row */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '8px 24px 4px', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
-              <span><span style={{ color: '#facc15' }}>⚡ Flash</span> = one-shot popup message</span>
-              <span><span style={{ color: 'var(--casi-accent2)' }}>✦ Beam</span> = timed image/video in a slot</span>
-              <span><span style={{ color: '#c084fc' }}>🖼 Backdrop</span> = full-screen takeover</span>
-            </div>
-
-            {/* Steps */}
-            <div className="banner-steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, padding: '12px 24px 20px' }}>
-              {[
-                {
-                  num: '01',
-                  color: 'var(--casi-accent)',
-                  title: 'Add a beam slot',
-                  body: 'Hit + Beam above to add a slot to your canvas. Drag it where you want it on screen, then set a price.',
-                  action: (
-                    <button
-                      onClick={async () => {
-                        // Trigger addBeam — find the + Beam button and click it
-                        const btn = document.querySelector('.banner-add-beam-trigger') as HTMLButtonElement;
-                        if (btn) btn.click();
-                      }}
-                      style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--casi-accent)', border: 'none', borderRadius: 6, padding: '7px 14px', color: 'var(--casi-bg)', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', letterSpacing: 0.3 }}>
-                      + Add beam
-                    </button>
-                  ),
-                },
-                {
-                  num: '02',
-                  color: '#06b6d4',
-                  title: 'Add OBS browser source',
-                  body: 'In OBS, add a Browser Source. Paste your overlay URL from Settings. Set background to transparent.',
-                  action: (
-                    <button
-                      onClick={() => setView('settings')}
-                      style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(var(--casi-accent2-rgb),0.1)', border: '1px solid rgba(var(--casi-accent2-rgb),0.25)', borderRadius: 6, padding: '7px 14px', color: 'var(--casi-accent2)', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', letterSpacing: 0.3 }}>
-                      Get URL →
-                    </button>
-                  ),
-                },
-                {
-                  num: '03',
-                  color: '#4ade80',
-                  title: 'Go live and share',
-                  body: 'Hit Go Live, copy your viewer link, and share it in your stream chat. Viewers can now tip to display their image or video in your slots.',
-                  action: (
-                    <span style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', letterSpacing: 0.5 }}>
-                      Use the Go Live button above ↑
-                    </span>
-                  ),
-                },
-              ].map((step, i) => (
-                <div key={step.num} style={{
-                  padding: '16px 20px',
-                  borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                  display: 'flex', flexDirection: 'column',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, color: step.color, background: `${step.color}22`, border: `1px solid ${step.color}40`, borderRadius: 4, padding: '2px 6px' }}>{step.num}</span>
-                    <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 700, color: 'var(--casi-text)' }}>{step.title}</span>
-                  </div>
-                  <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, lineHeight: 1.6, color: 'var(--casi-text-muted)', flex: 1 }}>{step.body}</p>
-                  {step.action}
-                </div>
-              ))}
-            </div>
-
-            {/* Progress indicator — dims steps as elements are added */}
-            <div style={{ display: 'flex', gap: 4, padding: '0 24px 14px' }}>
-              {[
-                elements.length > 0,
-                false, // OBS step — can't auto-detect
-                profile?.is_live,
-              ].map((done, i) => (
-                <div key={i} style={{ height: 2, flex: 1, borderRadius: 1, background: done ? 'var(--casi-accent)' : 'var(--casi-border)', transition: 'background .4s' }} />
-              ))}
-            </div>
-          </div>
+          <OnboardingBanner
+            elementsCount={elements.length}
+            isLive={!!profile?.is_live}
+            onAddBeam={addBeam}
+            onGoToSettings={() => setView('settings')}
+            onDismiss={() => {
+              try { localStorage.setItem('casi_onboarding_dismissed', '1'); } catch {}
+              setShowBanner(false);
+            }}
+          />
         )}
 
         {/* ACTIVE BEAMS BAR */}
