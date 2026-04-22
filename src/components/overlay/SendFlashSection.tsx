@@ -53,9 +53,12 @@ const AMOUNT_PRESETS = [2, 5, 10, 20];
 export default function SendFlashSection({
   profileId, username, viewerName, showNotif, profile, embedded = false, onSent,
 }: Props) {
-  // Collapsed by default in standalone mode; forced open in embedded mode
-  // since the caller controls visibility.
-  const [open, setOpen] = useState(embedded);
+  // Collapsed by default in both modes — embedded FlashPanel uses a small
+  // toggle bar to expand, standalone mode uses its own summary card.
+  // Starting open only ever made sense in a dedicated send-flash surface;
+  // inside the chat box the feed is primary and composing is a side
+  // action, so same default makes sense.
+  const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [amount, setAmount] = useState('5');
   const [submitting, setSubmitting] = useState(false);
@@ -147,9 +150,12 @@ export default function SendFlashSection({
         showNotif('⚡ Free flash sent — awaiting approval', 'success');
         setMessage('');
       }
-      // Let the parent react to a successful send (e.g. ChatPanel collapses
-      // tip-mode back to the regular chat composer). Only fires on the
-      // non-redirecting paths — Stripe's redirect exits via window.location.
+      // Collapse the composer after a successful non-redirecting send so
+      // the feed (in embedded mode) or summary card (standalone) is
+      // visible again. Stripe-redirect path exits early via window.location
+      // above and is handled by the composer starting collapsed on the
+      // returning page.
+      setOpen(false);
       onSent?.();
     } catch (err: unknown) {
       const { formatEscrowError } = await import('@/lib/casi-errors');
@@ -191,19 +197,48 @@ export default function SendFlashSection({
           </div>
           <span style={{ marginLeft: 'auto', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>→</span>
         </button>
+      ) : embedded && !open ? (
+        // Compact collapsed bar for embedded mode — lives inside FlashPanel
+        // as a single thin row so the feed takes up most of the space.
+        // Tapping expands into the full composer below.
+        <button
+          onClick={() => setOpen(true)}
+          style={{
+            width: '100%',
+            background: 'rgba(var(--casi-accent-rgb),0.08)',
+            border: '1px solid rgba(var(--casi-accent-rgb),0.2)',
+            borderRadius: 8,
+            padding: '8px 12px',
+            display: 'flex', alignItems: 'center', gap: 10,
+            cursor: 'pointer', transition: 'background .15s',
+            fontFamily: "'DM Mono',monospace", fontSize: 11,
+            color: 'var(--casi-accent)',
+          }}
+          onMouseOver={e => (e.currentTarget.style.background = 'rgba(var(--casi-accent-rgb),0.14)')}
+          onMouseOut={e => (e.currentTarget.style.background = 'rgba(var(--casi-accent-rgb),0.08)')}
+        >
+          <span style={{ fontSize: 14 }}>⚡</span>
+          <span style={{ flex: 1, textAlign: 'left' }}>Send a flash{freeAllowed ? ' · free or paid' : ''}</span>
+          <span style={{ fontSize: 12 }}>→</span>
+        </button>
       ) : (
         <div style={bodyStyle}>
-          {/* Header — standalone mode shows the big "Send a Flash" title +
-              close button. Embedded mode hides it; ChatPanel owns its own
-              header/close affordance. */}
-          {!embedded && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)', marginBottom: 3 }}>⚡ Flash</div>
-              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 17, fontWeight: 800, color: 'var(--casi-text)' }}>Send a Flash</div>
+          {/* Embedded header: just a close ✕ on the right since the caller's
+              frame (FlashPanel) already provides context. Standalone mode
+              shows the big "⚡ Flash · Send a Flash" title + ✕ as before. */}
+          {embedded ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)' }}>⚡ Flash</span>
+              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 14, padding: 2 }}>✕</button>
             </div>
-            <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
-          </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)', marginBottom: 3 }}>⚡ Flash</div>
+                <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 17, fontWeight: 800, color: 'var(--casi-text)' }}>Send a Flash</div>
+              </div>
+              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
+            </div>
           )}
 
           {/* Live status feedback */}
