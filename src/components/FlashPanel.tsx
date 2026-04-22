@@ -157,14 +157,18 @@ export default function FlashPanel({
     );
 
   const compact = variant === 'compact';
+  // No hard `height` cap — when the composer expands it needs room and
+  // overflow:hidden was clipping the Pay button off the bottom. Frame
+  // has a minHeight for visual presence; feed caps its own scroll area
+  // so it doesn't push the composer out of view.
   const frame: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     background: 'var(--casi-surface)',
     border: '1px solid var(--casi-border)',
     borderRadius: 12,
-    overflow: 'hidden',
-    height: compact ? 360 : 460,
+    overflow: 'visible',
+    minHeight: compact ? 320 : 420,
     fontFamily: "'Syne', sans-serif",
   };
   const header: React.CSSProperties = {
@@ -179,12 +183,14 @@ export default function FlashPanel({
     justifyContent: 'space-between',
   };
   const list: React.CSSProperties = {
-    flex: 1,
     overflowY: 'auto',
     padding: '10px 12px',
     display: 'flex',
     flexDirection: 'column',
     gap: 8,
+    maxHeight: compact ? 220 : 300,
+    minHeight: 80,
+    flexShrink: 0,
   };
   const composerFrame: React.CSSProperties = {
     borderTop: '1px solid var(--casi-border)',

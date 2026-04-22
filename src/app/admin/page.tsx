@@ -1027,7 +1027,12 @@ export default function AdminStudio() {
   };
 
   const confirmedFlashes = pendingFlashes.filter(f => !!(f.payment_intent_id || f.tx_signature));
-  const totalPending = pendingBookings.length + queuedBookings.length + confirmedFlashes.length;
+  // Badge count includes EVERY pending flash, not just paid ones. Free
+  // flashes are still real moderation work (the streamer sees them,
+  // decides if they air) so they belong in the "you have things to do"
+  // count. Old behaviour hid the badge for free-only traffic, which
+  // made streamers miss pending messages entirely.
+  const totalPending = pendingBookings.length + queuedBookings.length + pendingFlashes.length;
   const slotOccupiedForPreview = previewBooking ? activeBookings.some(b => b.element_id === previewBooking.element_id) : false;
   const backdropEl = elements.find(el => el.is_background);
   const hasBackdrop = !!backdropEl;
