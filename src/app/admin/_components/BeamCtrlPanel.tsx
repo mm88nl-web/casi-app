@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import SlotMedia from '@/components/SlotMedia';
+import { SHAPE_OPTIONS } from '@/lib/banner';
 import { formatTime, getSecondsRemaining } from './time';
 
-/* Inline beam control panel (D-pad + price + lock + delete + active strip) */
+/* Inline beam control panel (D-pad + shape + price + lock + delete + active strip).
+   Mirrors SlotInfoPanel's shape/glow controls so streamers can reshape a
+   slot without popping open the full modal — the modal is still the place
+   for deeper edits (queue view, end-early, delete confirmation). */
 export default function BeamCtrlPanel({
   el,
   activeBooking,
@@ -12,6 +16,8 @@ export default function BeamCtrlPanel({
   deleteLayer,
   kickBeam,
   onDone,
+  onUpdateShape,
+  onUpdateGlow,
 }: {
   el: any;
   activeBooking: any | null;
@@ -21,6 +27,10 @@ export default function BeamCtrlPanel({
   deleteLayer: (id: string) => void;
   kickBeam: (booking: any) => void;
   onDone: () => void;
+  // Same autosnap-aware handlers SlotInfoPanel gets. Optional so the
+  // inline panel still renders if a parent forgets to pass them.
+  onUpdateShape?: (id: string, shape: string) => void;
+  onUpdateGlow?:  (id: string, glow: boolean) => void;
 }) {
   const [editPrice, setEditPrice] = useState(String(el.price_value || 0));
   const [editUnit, setEditUnit] = useState(el.price_unit || 'min');
@@ -47,50 +57,47 @@ export default function BeamCtrlPanel({
 
   return (
     <div className="beam-ctrl">
-      {/* Header */}
+      {/* Header — label reflects the slot's role so backdrops don't
+          confusingly say "Beam" when the streamer's looking at one. */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <span style={{ fontFamily:"'Syne',sans-serif", fontSize:13, fontWeight:700, color:'var(--casi-accent)' }}>✦ Beam</span>
+        <span style={{ fontFamily:"'Syne',sans-serif", fontSize:13, fontWeight:700, color: el.is_background ? '#c084fc' : 'var(--casi-accent)' }}>
+          {el.is_background ? '🖼 Backdrop' : el.shape === 'banner' ? '▰ Banner' : '✦ Beam'}
+        </span>
         <button onClick={onDone}
           style={{ background:'rgba(255,255,255,0.04)', border:'1px solid #222', borderRadius:8, color:'#888', fontFamily:"'DM Mono',monospace", fontSize:11, padding:'8px 14px', cursor:'pointer', textTransform:'uppercase', letterSpacing:1 }}>
           Done
         </button>
       </div>
 
-      {/* Coordinate readout */}
-      <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#444', letterSpacing:1 }}>
-        X {Math.round(el.pos_x)}% · Y {Math.round(el.pos_y)}% · W {Math.round(el.width)}% · H {Math.round(el.height)}%
-      </div>
+      {/* Coordinate readout + size steppers removed — drag + resize on
+          the canvas itself are more responsive now and covered the same
+          need. `updateSlider` prop stays in the signature for future
+          numeric inputs (e.g. banner height tuning) without a breaking
+          API change. */}
 
-      {/* D-pad + size controls */}
-      <div style={{ display:'flex', alignItems:'center', gap:24, flexWrap:'wrap' }}>
-        {/* Position D-pad */}
-        <div>
-          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:2, textTransform:'uppercase', color:'#333', marginBottom:6 }}>Position</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,36px)', gridTemplateRows:'repeat(3,36px)', gap:4 }}>
-            <div /><button className="dpad-btn" onClick={() => updateSlider(el.id, { pos_y: Math.max(0, el.pos_y - 1) })}>↑</button><div />
-            <button className="dpad-btn" onClick={() => updateSlider(el.id, { pos_x: Math.max(0, el.pos_x - 1) })}>←</button>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, color:'#222', fontWeight:700 }}>✦</div>
-            <button className="dpad-btn" onClick={() => updateSlider(el.id, { pos_x: Math.min(80, el.pos_x + 1) })}>→</button>
-            <div /><button className="dpad-btn" onClick={() => updateSlider(el.id, { pos_y: Math.min(80, el.pos_y + 1) })}>↓</button><div />
-          </div>
+      {/* Shape + glow row. Shape buttons autosnap dimensions in the parent
+          (circle/hex → pixel-square; banner → full-width strip). Glow is a
+          pill toggle — on by default. */}
+      {onUpdateShape && (
+        <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', paddingTop:12, borderTop:'1px solid rgba(255,255,255,0.05)' }}>
+          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1, textTransform:'uppercase', color:'#444', marginRight:4 }}>Shape</span>
+          {SHAPE_OPTIONS.map(s => {
+            const active = (el.shape || 'rect') === s.id;
+            return (
+              <button key={s.id} onClick={() => onUpdateShape(el.id, s.id)}
+                style={{ background: active ? 'rgba(var(--casi-accent-rgb),0.15)' : 'rgba(255,255,255,0.04)', border: `1px solid ${active ? 'rgba(var(--casi-accent-rgb),0.5)' : '#222'}`, borderRadius: 6, padding: '5px 10px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: active ? 'var(--casi-accent)' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
+                {s.label}
+              </button>
+            );
+          })}
+          {onUpdateGlow && (
+            <button onClick={() => onUpdateGlow(el.id, !(el.glow_on_start ?? true))}
+              style={{ marginLeft:'auto', background: (el.glow_on_start ?? true) ? 'rgba(var(--casi-accent-rgb),0.1)' : 'rgba(255,255,255,0.04)', border:`1px solid ${(el.glow_on_start ?? true) ? 'rgba(var(--casi-accent-rgb),0.3)' : '#222'}`, borderRadius:7, padding:'5px 10px', color: (el.glow_on_start ?? true) ? 'var(--casi-accent)' : '#555', fontFamily:"'DM Mono',monospace", fontSize:10, textTransform:'uppercase', letterSpacing:1, cursor:'pointer' }}>
+              {(el.glow_on_start ?? true) ? '✦ Glow' : '○ No glow'}
+            </button>
+          )}
         </div>
-
-        {/* Size steppers */}
-        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:2, textTransform:'uppercase', color:'#333', marginBottom:2 }}>Size</div>
-          {[
-            { label:'W', field:'width',  min:5, max:60, val:el.width  },
-            { label:'H', field:'height', min:5, max:60, val:el.height },
-          ].map(({ label, field, min, max, val }) => (
-            <div key={field} style={{ display:'flex', alignItems:'center', gap:6 }}>
-              <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#444', width:10 }}>{label}</span>
-              <button className="step-btn" onClick={() => updateSlider(el.id, { [field]: Math.max(min, val - 2) })}>−</button>
-              <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, color:'var(--casi-text)', width:34, textAlign:'center' }}>{Math.round(val)}%</span>
-              <button className="step-btn" onClick={() => updateSlider(el.id, { [field]: Math.min(max, val + 2) })}>+</button>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Price + lock + delete row */}
       {(() => {

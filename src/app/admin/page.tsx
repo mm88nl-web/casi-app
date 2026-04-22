@@ -13,7 +13,6 @@ import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-net
 import Logo from './_components/Logo';
 import SlotMedia from '@/components/SlotMedia';
 import BeamTimer from './_components/BeamTimer';
-import BackdropModal from './_components/BackdropModal';
 import SlotInfoPanel from './_components/SlotInfoPanel';
 import BeamCtrlPanel from './_components/BeamCtrlPanel';
 import FlashCard from './_components/FlashCard';
@@ -114,7 +113,6 @@ export default function AdminStudio() {
   const [saveStatus, setSaveStatus] = useState('Ready');
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [previewBooking, setPreviewBooking] = useState<any>(null);
-  const [showBackdropModal, setShowBackdropModal] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [showInfoPanel, setShowInfoPanel] = useState(false);
@@ -387,29 +385,63 @@ export default function AdminStudio() {
     setElements(prev => prev.map(el => el.id === id ? { ...el, ...updates } : el));
   }, []);
 
-  const createFullBackdrop = async (price: number, unit: string, maxDuration: number | null) => {
-    setShowBackdropModal(false);
-    setSaveStatus('Creating…');
-    const existing = elements.find(el => el.is_background);
-    if (existing) await supabase.from('overlay_elements').delete().eq('id', existing.id);
-    const { data } = await supabase.from('overlay_elements').insert({
-      profile_id: profile.id, image_url: '', pos_x: 0, pos_y: 0, width: 100, height: 100,
-      is_background: true, price_value: price, price_unit: unit, max_duration_minutes: maxDuration, locked: false,
-    }).select().single();
-    if (data) setElements(prev => [...prev.filter(el => !el.is_background), data]);
-    setSaveStatus('Ready');
-  };
+  // Shape-change autosnap. Canvas is 16:9 (OBS standard), so a "pixel-
+  // square" slot — what circle / hex need to look balanced — requires
+  // width% / height% = 9/16. Keep the current height and shrink width
+  // rather than the opposite, so the autosnap never pushes the slot off
+  // the bottom edge. Banner snaps to a full-width strip at the bottom
+  // of the canvas; backdrop snaps to full-canvas + flips is_background
+  // so the /obs?layer=backdrop filter still picks it up. Non-target
+  // shape changes (rect/rounded) don't un-snap dimensions — streamers
+  // resize manually if they want.
+  //
+  // Backdrop has a special constraint: at most one per streamer. Picking
+  // "Backdrop" on a slot while another backdrop already exists swaps
+  // the flag over — the previous backdrop becomes a regular rect so
+  // we don't orphan an is_background=true row.
+  const handleUpdateShape = useCallback(async (id: string, shape: string) => {
+    const el = elements.find(e => e.id === id);
+    if (!el) return;
+    const patch: Record<string, unknown> = { shape };
+    if (shape === 'circle' || shape === 'hex') {
+      patch.width = Math.round(Number(el.height) * 9 / 16 * 100) / 100;
+    } else if (shape === 'banner') {
+      patch.width  = 100;
+      patch.height = 8;
+      patch.pos_x  = 0;
+      patch.pos_y  = 92;
+      patch.is_background = false;
+    } else if (shape === 'backdrop') {
+      patch.width  = 100;
+      patch.height = 100;
+      patch.pos_x  = 0;
+      patch.pos_y  = 0;
+      patch.is_background = true;
+      // Demote the previous backdrop (if any) so at most one row has
+      // is_background=true at a time. We clear its shape too so it
+      // doesn't keep pretending to be a backdrop in the picker UI.
+      const prior = elements.find(e => e.id !== id && e.is_background);
+      if (prior) {
+        await updateLayer(prior.id, { is_background: false, shape: 'rect' });
+      }
+    } else {
+      // Shape-change to rect / rounded on a slot that WAS a backdrop
+      // needs to unflip is_background; otherwise the OBS filter keeps
+      // treating it as the backdrop and it still renders full-canvas.
+      if (el.is_background) patch.is_background = false;
+    }
+    await updateLayer(id, patch);
+  }, [elements, updateLayer]);
+
+  const handleUpdateGlow = useCallback((id: string, glow: boolean) => {
+    updateLayer(id, { glow_on_start: glow });
+  }, [updateLayer]);
 
   const addBeam = async () => {
-    const backdrop = elements.find(el => el.is_background);
-    if (backdrop) {
-      const backdropActive = activeBookings.some(b => b.element_id === backdrop.id) || approvedQueued.some(b => b.element_id === backdrop.id);
-      if (!backdropActive) {
-        await supabase.from('overlay_elements').delete().eq('id', backdrop.id);
-        setElements(prev => prev.filter(el => !el.is_background));
-      }
-    }
-    // Smart placement — find free spot
+    // Beams and backdrops now coexist freely — backdrop is just a shape,
+    // not a mutually exclusive top-level entity. Legacy eviction of the
+    // existing backdrop on "+ Beam" was a holdover from the old mental
+    // model and surprised streamers who had a backdrop set up.
     const freePos = findFreePosition(elements);
     const { data } = await supabase.from('overlay_elements').insert({
       profile_id: profile.id, image_url: '',
@@ -425,6 +457,24 @@ export default function AdminStudio() {
   };
 
   const deleteLayer = async (id: string) => {
+    // Guard against deleting a slot that still has bookings attached.
+    // The ✕ on the canvas is already hidden for this case in the UI, but
+    // the SlotInfoPanel and BeamCtrlPanel Delete buttons also call this —
+    // plus the UI check races the realtime feed. Doing it here is the
+    // single source of truth: dropping the row without settling leaves
+    // USDC locked in the on-chain escrow and orphans queued bookings
+    // whose element_id FK becomes dangling.
+    const hasActive = activeBookings.some(b => b.element_id === id);
+    const hasQueued = approvedQueued.some(b => b.element_id === id);
+    if (hasActive || hasQueued) {
+      showFlashToast(
+        hasActive
+          ? 'End the live beam first — delete settles nothing on chain.'
+          : 'Clear the queue first — viewers in line have funds locked.',
+        'err',
+      );
+      return;
+    }
     if (selectedSlotId === id) { setSelectedSlotId(null); setShowInfoPanel(false); }
     await supabase.from('overlay_elements').delete().eq('id', id);
     setElements(prev => prev.filter(el => el.id !== id));
@@ -1092,6 +1142,14 @@ export default function AdminStudio() {
         /* ── BEAM CONTROL PANEL ── */
         .beam-ctrl { background:var(--casi-surface); border:1px solid rgba(var(--casi-accent-rgb),0.2); border-radius:12px; padding:16px 20px; display:flex; flex-direction:column; gap:14px; animation:fadeIn .2s ease; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+        /* Banner preview marquee — rendered on empty banner slots so the
+           slot visually scrolls (instead of looking like a dashed rect)
+           and the streamer can see what the shape does before any booking
+           lands. Same 20s timing as the real banner render in /overlay
+           so the editor preview matches what viewers see. */
+        @keyframes bannerPreview { from{transform:translateX(100%)} to{transform:translateX(-100%)} }
+        .banner-preview { display:flex; align-items:center; width:100%; height:100%; overflow:hidden; background:rgba(var(--casi-accent-rgb),0.06); border:1.5px dashed rgba(var(--casi-accent-rgb),0.35); border-radius:6px; white-space:nowrap; }
+        .banner-preview-track { display:inline-block; padding-left:100%; color:rgba(var(--casi-accent-rgb),0.7); font-family:'Syne',sans-serif; font-weight:800; font-size:16px; letter-spacing:1px; animation: bannerPreview 15s linear infinite; }
         .dpad-btn { width:36px; height:36px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); color:var(--casi-text); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s; user-select:none; -webkit-user-select:none; }
         .dpad-btn:hover { background:rgba(var(--casi-accent-rgb),0.12); border-color:rgba(var(--casi-accent-rgb),0.3); color:var(--casi-accent); }
         .dpad-btn:active { transform:scale(0.9); }
@@ -1217,9 +1275,6 @@ export default function AdminStudio() {
             {view === 'studio' && (
               <>
                 <button onClick={addBeam} className="btn-sm b-orange banner-add-beam-trigger">+ Beam</button>
-                <button onClick={() => hasBackdrop && backdropEl ? (setSelectedSlotId(backdropEl.id), setShowInfoPanel(true)) : setShowBackdropModal(true)} className={`btn-sm ${hasBackdrop ? 'b-purple' : 'b-outline'} studio-action-hide`}>
-                  {hasBackdrop ? '● Backdrop' : 'Backdrop'}
-                </button>
                 <button onClick={clearAll} className="btn-sm b-danger studio-action-hide">Clear</button>
               </>
             )}
@@ -1255,7 +1310,6 @@ export default function AdminStudio() {
         )}
 
         {/* MODALS */}
-        {showBackdropModal && <BackdropModal onConfirm={createFullBackdrop} onClose={() => setShowBackdropModal(false)} />}
         {selectedEl && showInfoPanel && view === 'studio' && (
           <SlotInfoPanel
             el={selectedEl}
@@ -1264,6 +1318,8 @@ export default function AdminStudio() {
             onClose={() => setShowInfoPanel(false)}
             onKick={kickBeam} onLockToggle={toggleLock} onDelete={deleteLayer}
             onUpdatePrice={(id, price, unit) => { updateLayer(id, { price_value: price, price_unit: unit }); setShowInfoPanel(false); }}
+            onUpdateShape={handleUpdateShape}
+            onUpdateGlow={handleUpdateGlow}
           />
         )}
 
@@ -1479,11 +1535,13 @@ export default function AdminStudio() {
                     }}
                     onDragStop={(_e, d) => {
                       if (!isDragging.current) {
-                        // It was a tap — select beam, show sliders (not info panel)
-                        if (!el.is_background) {
-                          setSelectedSlotId(el.id);
-                          setShowInfoPanel(false);
-                        }
+                        // Tap-to-select for any slot including backdrops.
+                        // Backdrops need to be selectable so streamers can
+                        // reach the shape picker and convert back to a
+                        // beam — otherwise the "convert a beam → backdrop"
+                        // flow is a one-way trap.
+                        setSelectedSlotId(el.id);
+                        setShowInfoPanel(false);
                       } else {
                         updateLayer(el.id, { pos_x: (d.x / dimensions.width) * 100, pos_y: (d.y / dimensions.height) * 100 });
                       }
@@ -1492,26 +1550,66 @@ export default function AdminStudio() {
                     onResizeStop={(_e, _dir, ref, _delta, pos) => { updateLayer(el.id, { width: (ref.offsetWidth / dimensions.width) * 100, height: (ref.offsetHeight / dimensions.height) * 100, pos_x: (pos.x / dimensions.width) * 100, pos_y: (pos.y / dimensions.height) * 100 }); }}
                     disableDragging={el.is_background} enableResizing={!el.is_background} bounds="parent"
                     style={{ zIndex: el.is_background ? 0 : (isSelected ? 40 : 30) }}>
-                    <div
-                      style={{ position: 'relative', width: '100%', height: '100%', border: el.is_background ? 'none' : isSelected ? '2px solid var(--casi-accent)' : '1.5px solid rgba(var(--casi-accent-rgb),0.3)', borderRadius: el.is_background ? 0 : 6, opacity: el.locked ? 0.7 : 1 }}>
-                      {!el.image_url ? (
-                        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(var(--casi-accent-rgb),0.35)'}`, borderRadius: el.is_background ? 12 : 6, background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(var(--casi-accent-rgb),0.04)' }}>
-                          {el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>}
-                          <span style={{ fontSize: el.is_background ? 24 : 16, marginBottom: 4 }}>{el.is_background ? '🖼️' : '✦'}</span>
-                          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(var(--casi-accent-rgb),0.6)' }}>
-                            {el.locked ? 'No requests' : el.is_background ? 'Backdrop' : 'Beam'}
-                          </span>
-                          {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : 'var(--casi-accent)' }}>${el.price_value}/{el.price_unit}</span>}
-                        </div>
-                      ) : (
-                        <SlotMedia src={el.image_url} fileType={null} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'contain', pointerEvents: 'none' }} />
-                      )}
+                    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                      {/* Shape-masked content box. Isolated from the delete
+                          button and selection indicator below so clip-path
+                          doesn't chop the corner × or the outer glow. For
+                          `banner` the shape is a wide thin rect — no mask
+                          needed; the overlay render is what swaps image → marquee. */}
+                      <div
+                        style={{
+                          position: 'relative',
+                          width: '100%',
+                          height: '100%',
+                          border: el.is_background ? 'none' : isSelected ? '2px solid var(--casi-accent)' : '1.5px solid rgba(var(--casi-accent-rgb),0.3)',
+                          borderRadius:
+                            el.is_background ? 0 :
+                            el.shape === 'rounded' ? 14 :
+                            6,
+                          opacity: el.locked ? 0.7 : 1,
+                          clipPath:
+                            el.shape === 'circle' ? 'circle(50%)' :
+                            el.shape === 'hex'    ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' :
+                            undefined,
+                        }}
+                      >
+                        {!el.image_url ? (
+                          el.shape === 'banner' && !el.locked ? (
+                            // Empty banner → scrolling placeholder so the
+                            // slot is visually recognisable as a banner
+                            // instead of a static dashed rectangle.
+                            <div className="banner-preview">
+                              <span className="banner-preview-track">
+                                ▰ Banner · viewer messages scroll here · tip to try
+                              </span>
+                            </div>
+                          ) : (
+                            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(var(--casi-accent-rgb),0.35)'}`, borderRadius: el.is_background ? 12 : 6, background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(var(--casi-accent-rgb),0.04)' }}>
+                              {el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>}
+                              <span style={{ fontSize: el.is_background ? 24 : 16, marginBottom: 4 }}>{el.is_background ? '🖼️' : el.shape === 'banner' ? '▰' : '✦'}</span>
+                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(var(--casi-accent-rgb),0.6)' }}>
+                                {el.locked ? 'No requests' : el.is_background ? 'Backdrop' : el.shape === 'banner' ? 'Banner' : 'Beam'}
+                              </span>
+                              {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : 'var(--casi-accent)' }}>${el.price_value}/{el.price_unit}</span>}
+                            </div>
+                          )
+                        ) : (
+                          <SlotMedia src={el.image_url} fileType={null} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'contain', pointerEvents: 'none' }} />
+                        )}
+                      </div>
                       {/* Selection glow */}
                       {isSelected && !el.is_background && (
                         <div style={{ position: 'absolute', top: -2, left: -2, right: -2, bottom: -2, border: '2px solid var(--casi-accent)', borderRadius: 8, pointerEvents: 'none', boxShadow: '0 0 0 3px rgba(var(--casi-accent-rgb),0.15)' }} />
                       )}
-                      {/* Delete button — large touch target */}
-                      {!el.is_background && (
+                      {/* Delete button — only surface when the slot is
+                          idle. Deleting a slot with a live or queued
+                          booking drops the row without settling the
+                          escrow, which leaves USDC stuck in the on-chain
+                          vault AND orphans queue rows that still point
+                          at a now-missing element_id. If the streamer
+                          wants to end the beam, the End Early flow is
+                          the right path; deletion is for cleanup only. */}
+                      {!el.is_background && !activeBookings.some(b => b.element_id === el.id) && !approvedQueued.some(b => b.element_id === el.id) && (
                         <button
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => { e.stopPropagation(); deleteLayer(el.id); }}
@@ -1525,8 +1623,12 @@ export default function AdminStudio() {
               })}
             </div>
 
-            {/* Beam control panel — movement + price + live info, all inline */}
-            {selectedEl && !selectedEl.is_background && (
+            {/* Inline panel — movement + price + shape + live info. Shown
+                for ANY selected slot, including backdrops, so the shape
+                picker (the way to convert a backdrop back into a beam)
+                stays reachable. Without this, flipping a beam to backdrop
+                hid the menu and the only escape was Clear. */}
+            {selectedEl && (
               <BeamCtrlPanel
                 el={selectedEl}
                 activeBooking={activeBookings.find(b => b.element_id === selectedEl.id) || null}
@@ -1536,14 +1638,18 @@ export default function AdminStudio() {
                 deleteLayer={deleteLayer}
                 kickBeam={kickBeam}
                 onDone={() => setSelectedSlotId(null)}
+                onUpdateShape={handleUpdateShape}
+                onUpdateGlow={handleUpdateGlow}
               />
             )}
 
             <div className="canvas-hint">
               {elements.length === 0
                 ? 'No slots yet — hit + Beam above to let viewers tip to display an image or video here'
-                : selectedEl && !selectedEl.is_background
-                ? 'Drag beam to move · Use arrows to nudge · Edit price inline'
+                : selectedEl && selectedEl.is_background
+                ? 'Backdrop selected · change shape to convert back to a beam'
+                : selectedEl
+                ? 'Drag to move · Resize from corners · Edit inline'
                 : 'Tap a beam to select · Drag to move · Resize from corners'}
             </div>
         </div>
@@ -2098,14 +2204,10 @@ export default function AdminStudio() {
               <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{v}</span>
             </button>
           ))}
-          {/* Backdrop + Clear shown in bottom nav on mobile when in studio */}
-          {view === 'studio' && (
-            <button onClick={() => hasBackdrop && backdropEl ? (setSelectedSlotId(backdropEl.id), setShowInfoPanel(true)) : setShowBackdropModal(true)}
-              className="bot-tab" style={{ color: hasBackdrop ? '#c084fc' : '#444' }}>
-              <span style={{ fontSize: 18 }}>🖼️</span>
-              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{hasBackdrop ? 'Backdrop' : 'Add BG'}</span>
-            </button>
-          )}
+          {/* Mobile bottom nav no longer surfaces a Backdrop shortcut —
+              backdrops now live in the shape picker on any beam slot.
+              Streamer taps a beam, picks "Backdrop" in the shape row,
+              the slot flips to full-canvas with is_background=true. */}
         </div>
 
       </div>
