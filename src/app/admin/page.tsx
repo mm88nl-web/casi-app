@@ -839,42 +839,111 @@ export default function AdminStudio() {
   };
 
   /**
-   * Moderate a flash on the Solana rail: viewer-funded escrow PDA is settled
-   * by calling `approve_flash` or `deny_flash` on-chain, then the streamer's
-   * session tells the DB (/api/flashes/moderate) to flip status after
-   * server-side tx verification.
+   * Moderate a flash on the Solana rail.
+   *
+   * Nominal path: broadcast `approve_flash` / `deny_flash` on-chain with
+   * the streamer's wallet, then tell `/api/flashes/moderate` to verify
+   * the tx and flip DB status. On-chain state is authoritative; DB
+   * never transitions ahead of chain.
+   *
+   * Two drift-recovery paths handle stuck flashes:
+   *
+   *   1. No escrow metadata yet (viewer paid but attach-escrow failed,
+   *      or never paid at all). Approving is impossible — there's no
+   *      vault. Deny is a DB-only flip; there's nothing on-chain to
+   *      unwind. Streamer gets the row off their queue without a
+   *      pointless chain call or wallet popup.
+   *
+   *   2. PDA already closed on-chain (a prior approve/deny succeeded
+   *      but /api/flashes/moderate failed to land the DB update, so
+   *      the row looks pending but the escrow is gone). Pre-probe via
+   *      getAccountInfo; if the PDA is missing, route to the DB-only
+   *      path instead of trying to sign a tx that will revert with
+   *      AccountNotInitialized. Also handle the race where the PDA
+   *      disappears mid-flight by catching the Anchor error + falling
+   *      back to DB-only.
    */
   const moderateSolanaFlash = async (flash: any, action: 'approve' | 'deny') => {
-    const anchorWallet = buildAnchorWalletForEscrow();
-    if (!anchorWallet) {
-      openWalletModal();
-      throw new Error('Connect your streamer wallet');
-    }
-    if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
-      throw new Error('Connected wallet is not the streamer wallet on file');
-    }
-    if (!flash.viewer_wallet || !flash.escrow_pda) {
-      throw new Error('Flash is missing on-chain metadata');
-    }
-
     setSettlingSolana(prev => ({ ...prev, [flash.id]: true }));
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = `Bearer ${session?.access_token}`;
+
+      // Helper: tell the server to flip DB status WITHOUT a chain tx.
+      // Used when there's nothing to do on-chain (either never paid or
+      // already processed). The server still audits via on-chain probe
+      // in db_only mode, so a viewer can't trick the route into denying
+      // a flash whose escrow is still live.
+      const dbOnlyModerate = async () => {
+        const res = await fetch('/api/flashes/moderate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+          body: JSON.stringify({ flash_id: flash.id, action, db_only: true }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json?.error) throw new Error(json?.error || 'Server update failed');
+      };
+
+      // Case 1: no escrow metadata. Approve is impossible; deny is DB-only.
+      if (!flash.viewer_wallet || !flash.escrow_pda) {
+        if (action === 'deny') {
+          await dbOnlyModerate();
+          return null;
+        }
+        throw new Error("Flash hasn't been paid yet — nothing to approve");
+      }
+
+      // Case 2: pre-probe the PDA. If it's gone, the flash has already
+      // been settled on-chain — skip straight to the DB flip.
+      const { PublicKey: PK } = await import('@solana/web3.js');
+      const escrowPk = new PK(flash.escrow_pda);
+      const pdaInfo = await walletConnection.getAccountInfo(escrowPk).catch(() => null);
+      if (!pdaInfo) {
+        await dbOnlyModerate();
+        return null;
+      }
+
+      // Normal path: wallet-signed approve_flash / deny_flash.
+      const anchorWallet = buildAnchorWalletForEscrow();
+      if (!anchorWallet) {
+        openWalletModal();
+        throw new Error('Connect your streamer wallet');
+      }
+      if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
+        throw new Error('Connected wallet is not the streamer wallet on file');
+      }
+
       const { CasiEscrowClient } = await import('@/lib/casi-escrow');
-      const { PublicKey: PK }    = await import('@solana/web3.js');
       const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
 
       const viewerPk   = new PK(flash.viewer_wallet);
       const streamerPk = publicKey!;
 
-      const { sig } =
-        action === 'approve'
+      let sig: string;
+      try {
+        const result = action === 'approve'
           ? await client.approveFlash({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk })
           : await client.denyFlash   ({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk });
+        sig = result.sig;
+      } catch (err) {
+        // Mid-flight drift: PDA disappeared between probe and tx (another
+        // tx landed in the gap). Anchor raises AccountNotInitialized /
+        // account does not exist variants. Fall back to DB-only.
+        const { isAlreadyProcessed } = await import('@/lib/casi-errors');
+        const msg = err instanceof Error ? err.message : String(err);
+        if (isAlreadyProcessed(err) || /AccountNotInitialized|account.*not.*exist|AlreadySettled/i.test(msg)) {
+          const stillThere = await walletConnection.getAccountInfo(escrowPk).catch(() => null);
+          if (!stillThere) {
+            await dbOnlyModerate();
+            return null;
+          }
+        }
+        throw err;
+      }
 
-      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/flashes/moderate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
         body: JSON.stringify({ flash_id: flash.id, action, tx_signature: sig }),
       });
       const json = await res.json().catch(() => ({}));
@@ -889,7 +958,15 @@ export default function AdminStudio() {
     try {
       if (flash.payment_method === 'solana') {
         const sig = await moderateSolanaFlash(flash, 'approve');
-        showFlashToast(`⚡ Approved on-chain · ${sig.slice(0, 8)}…`, 'ok');
+        // sig is null on the DB-only drift-recovery path (PDA was
+        // already closed on-chain before we got here). Toast reflects
+        // that it was reconciled rather than newly approved.
+        showFlashToast(
+          sig
+            ? `⚡ Approved on-chain · ${sig.slice(0, 8)}…`
+            : '⚡ Approved (flash was already settled on-chain)',
+          'ok',
+        );
       } else {
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch('/api/flashes/moderate', {
@@ -911,7 +988,15 @@ export default function AdminStudio() {
     try {
       if (flash.payment_method === 'solana') {
         const sig = await moderateSolanaFlash(flash, 'deny');
-        showFlashToast(`✕ Denied & refunded · ${sig.slice(0, 8)}…`, 'ok');
+        // sig is null on the DB-only path (either the flash never had
+        // an escrow PDA — viewer never completed payment — or the PDA
+        // was already closed on-chain by a prior settle).
+        showFlashToast(
+          sig
+            ? `✕ Denied & refunded · ${sig.slice(0, 8)}…`
+            : '✕ Denied (no on-chain funds to return)',
+          'ok',
+        );
       } else {
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch('/api/flashes/moderate', {
