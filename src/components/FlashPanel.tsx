@@ -81,7 +81,9 @@ export default function FlashPanel({
 }: Props) {
   const supabase = createClient();
   const [flashes, setFlashes] = useState<FlashRow[]>([]);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load the approved flash history + subscribe for new ones. Denied /
   // pending rows are deliberately excluded from the feed — the feed is a
@@ -135,11 +137,29 @@ export default function FlashPanel({
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [flashes]);
 
-  const onDelete = async (id: string) => {
+  // Two-step delete: first click arms the row (button turns red + shows
+  // "delete?"), second click within 3s actually deletes. Clicking another
+  // row's button cancels the arm. Prevents thumb-slip deletes on mobile.
+  const onDelete = (id: string) => {
     if (!isAdmin) return;
+    if (confirmingId !== id) {
+      setConfirmingId(id);
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+      confirmTimerRef.current = setTimeout(() => setConfirmingId(null), 3000);
+      return;
+    }
+    if (confirmTimerRef.current) {
+      clearTimeout(confirmTimerRef.current);
+      confirmTimerRef.current = null;
+    }
+    setConfirmingId(null);
     setFlashes((prev) => prev.filter((f) => f.id !== id));
-    await supabase.from('flashes').delete().eq('id', id);
+    void supabase.from('flashes').delete().eq('id', id);
   };
+
+  useEffect(() => () => {
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+  }, []);
 
   // Composer renders only with everything it needs: viewer name, a
   // streamer profile with at least one payment rail, a toast channel.
@@ -255,18 +275,27 @@ export default function FlashPanel({
                 {isAdmin && (
                   <button
                     onClick={() => onDelete(f.id)}
-                    title="Delete flash from log"
+                    title={confirmingId === f.id ? 'Click again to confirm' : 'Delete flash from log'}
                     style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--casi-text-muted)',
+                      background: confirmingId === f.id ? 'rgba(248,113,113,0.12)' : 'none',
+                      border: confirmingId === f.id ? '1px solid rgba(248,113,113,0.3)' : '1px solid transparent',
+                      color: confirmingId === f.id ? '#f87171' : 'var(--casi-text-muted)',
                       cursor: 'pointer',
-                      fontSize: 11,
-                      padding: '0 4px',
+                      fontSize: confirmingId === f.id ? 10 : 14,
+                      fontWeight: confirmingId === f.id ? 700 : 400,
+                      padding: confirmingId === f.id ? '4px 8px' : 0,
+                      minWidth: 28,
+                      minHeight: 28,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: 6,
                       flexShrink: 0,
+                      textTransform: confirmingId === f.id ? 'uppercase' : 'none',
+                      letterSpacing: confirmingId === f.id ? 0.5 : 0,
                     }}
                   >
-                    ×
+                    {confirmingId === f.id ? 'delete?' : '×'}
                   </button>
                 )}
               </div>
