@@ -8,7 +8,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import { SKINS } from '@/lib/skins';
 import WalletNav from '@/components/WalletNav';
-import ChatPanel from '@/components/ChatPanel';
+import FlashPanel from '@/components/FlashPanel';
 import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 import Logo from './_components/Logo';
 import SlotMedia from '@/components/SlotMedia';
@@ -73,7 +73,7 @@ const THEME_PRESETS = [
    MAIN ADMIN PAGE
 ══════════════════════════════════════════ */
 export default function AdminStudio() {
-  const [view, setView] = useState<'studio' | 'requests' | 'chat' | 'settings'>('studio');
+  const [view, setView] = useState<'studio' | 'requests' | 'settings'>('studio');
   const [profile, setProfile] = useState<any>(null);
   const [activeSkin, setActiveSkin] = useState<string | null>(null);
   const [savingSkin, setSavingSkin] = useState(false);
@@ -1259,7 +1259,7 @@ export default function AdminStudio() {
               <span className="nav-wm">casi</span>
             </a>
             <div className="nav-tabs">
-              {(['studio', 'requests', 'chat', 'settings'] as const).map(v => (
+              {(['studio', 'requests', 'settings'] as const).map(v => (
                 <button key={v} onClick={() => setView(v)} className={`nav-tab ${view === v ? 'active' : ''}`}>
                   {v}
                   {v === 'requests' && totalPending > 0 && <span className="nav-badge">{totalPending}</span>}
@@ -1652,6 +1652,22 @@ export default function AdminStudio() {
                 ? 'Drag to move · Resize from corners · Edit inline'
                 : 'Tap a beam to select · Drag to move · Resize from corners'}
             </div>
+
+            {/* Flash feed — sits right under the studio canvas so streamers
+                see incoming paid / free messages live while editing slots.
+                Admin mode: composer hidden, feed gets delete affordances.
+                Replaces the standalone CHAT tab that used to live in the
+                top-nav; flashes are the only message surface in CASI. */}
+            {profile?.id && (
+              <div style={{ marginTop: 20, maxWidth: 800, marginLeft: 'auto', marginRight: 'auto', width: '100%' }}>
+                <FlashPanel
+                  profileId={profile.id}
+                  viewerName={null}
+                  isAdmin
+                  variant="compact"
+                />
+              </div>
+            )}
         </div>
 
         {/* ── REQUESTS — separated by beam vs backdrop ── */}
@@ -1854,18 +1870,9 @@ export default function AdminStudio() {
           </div>
         )}
 
-        {/* ── CHAT ── */}
-        {view === 'chat' && profile?.id && (
-          <div className="set-body">
-            <div className="set-card">
-              <div className="set-title">Live chat</div>
-              <div className="set-sub" style={{ marginBottom: 12 }}>
-                Viewer messages update in real time. Click × to delete.
-              </div>
-              <ChatPanel profileId={profile.id} viewerName={null} isAdmin variant="compact" />
-            </div>
-          </div>
-        )}
+        {/* Standalone CHAT tab removed — flashes are the only message
+            surface now, and FlashPanel lives under the studio canvas
+            (below) so streamers see incoming flashes while editing. */}
 
         {/* ── SETTINGS ── */}
         {view === 'settings' && (
@@ -2197,10 +2204,10 @@ export default function AdminStudio() {
 
         {/* MOBILE BOTTOM NAV */}
         <div className="bot-nav">
-          {(['studio', 'requests', 'chat', 'settings'] as const).map(v => (
+          {(['studio', 'requests', 'settings'] as const).map(v => (
             <button key={v} onClick={() => setView(v)} className={`bot-tab ${view === v ? 'active' : ''}`}>
               {v === 'requests' && totalPending > 0 && <span className="bot-badge">{totalPending}</span>}
-              <span style={{ fontSize: 18 }}>{v === 'studio' ? '🎬' : v === 'requests' ? '📥' : v === 'chat' ? '💬' : '⚙️'}</span>
+              <span style={{ fontSize: 18 }}>{v === 'studio' ? '🎬' : v === 'requests' ? '📥' : '⚙️'}</span>
               <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{v}</span>
             </button>
           ))}

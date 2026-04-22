@@ -9,8 +9,7 @@ import WalletNav, { refreshWalletNav } from '@/components/WalletNav';
 import SlotMedia from '@/components/SlotMedia';
 import { useWalletBalances } from '@/lib/wallet-balances';
 import { BANNER_MAX_MESSAGE } from '@/lib/banner';
-import ChatPanel from '@/components/ChatPanel';
-import SendFlashSection from '@/components/overlay/SendFlashSection';
+import FlashPanel from '@/components/FlashPanel';
 import TurnstileWidget from '@/components/TurnstileWidget';
 import {
   SOLANA_RPC,
@@ -2225,21 +2224,23 @@ function OverlayContent() {
             </div>
           )}
 
-          {/* FLASH FORM — shown when the streamer has at least one flash rail enabled */}
-          {!isOBS && !selectedSlot && savedViewerName && profile?.id &&
-            (profile?.stripe_account_id || profile?.allow_free_flashes || (profile?.solana_wallet && process.env.NEXT_PUBLIC_CASI_SOLANA_ENABLED === 'true')) && (
-            <SendFlashSection
-              profileId={profile.id}
-              username={username}
-              viewerName={savedViewerName}
-              showNotif={showNotif}
-              profile={profile}
-            />
-          )}
-
-          {!isOBS && profile?.id && (
+          {/* Flash feed + composer. FlashPanel is the single "chat-box-but-
+              for-flashes" surface: renders approved flashes chat-style AND
+              embeds the SendFlashSection composer inline. No separate
+              send-a-flash card above it, no plain text chat — CASI is
+              deliberately flash-only. FlashPanel hides the composer when
+              a slot booking form is open so the two modals don't fight for
+              focus. Rail gating is handled inside FlashPanel via
+              streamerProfile. */}
+          {!isOBS && profile?.id && !selectedSlot && (
             <div style={{ marginTop:24 }}>
-              <ChatPanel profileId={profile.id} viewerName={savedViewerName || null} />
+              <FlashPanel
+                profileId={profile.id}
+                viewerName={savedViewerName || null}
+                streamerProfile={profile}
+                username={username}
+                showNotif={showNotif}
+              />
             </div>
           )}
 

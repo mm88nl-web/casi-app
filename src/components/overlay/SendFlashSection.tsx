@@ -38,14 +38,24 @@ interface Props {
   viewerName: string;
   showNotif: (text: string, type: string) => void;
   profile: StreamerProfileLite;
+  /**
+   * Render the composer body directly, skipping the collapsed "Send a Flash"
+   * summary card + open/close header. Used by ChatPanel when tip-mode is
+   * active so the flash composer sits inline with the chat input.
+   */
+  embedded?: boolean;
+  /** Fires after a successful send — caller can collapse tip-mode, clear UI, etc. */
+  onSent?: () => void;
 }
 
 const AMOUNT_PRESETS = [2, 5, 10, 20];
 
 export default function SendFlashSection({
-  profileId, username, viewerName, showNotif, profile,
+  profileId, username, viewerName, showNotif, profile, embedded = false, onSent,
 }: Props) {
-  const [open, setOpen] = useState(false);
+  // Collapsed by default in standalone mode; forced open in embedded mode
+  // since the caller controls visibility.
+  const [open, setOpen] = useState(embedded);
   const [message, setMessage] = useState('');
   const [amount, setAmount] = useState('5');
   const [submitting, setSubmitting] = useState(false);
@@ -137,6 +147,10 @@ export default function SendFlashSection({
         showNotif('⚡ Free flash sent — awaiting approval', 'success');
         setMessage('');
       }
+      // Let the parent react to a successful send (e.g. ChatPanel collapses
+      // tip-mode back to the regular chat composer). Only fires on the
+      // non-redirecting paths — Stripe's redirect exits via window.location.
+      onSent?.();
     } catch (err: unknown) {
       const { formatEscrowError } = await import('@/lib/casi-errors');
       showNotif(formatEscrowError(err), 'denied');
@@ -151,9 +165,19 @@ export default function SendFlashSection({
   if (solanaAllowed) methods.push('solana');
   if (freeAllowed)   methods.push('free');
 
+  // Embedded mode: strip the outer margin + the collapsed-summary / header
+  // chrome. The caller (ChatPanel) owns the "am I showing the flash
+  // composer right now?" decision and its own close affordance.
+  const containerStyle: React.CSSProperties = embedded
+    ? { background: 'transparent', padding: 0 }
+    : { marginTop: 20 };
+  const bodyStyle: React.CSSProperties = embedded
+    ? { padding: '12px 14px', background: 'rgba(var(--casi-accent-rgb),0.04)', border: '1px solid rgba(var(--casi-accent-rgb),0.14)', borderRadius: 10, animation: 'fadeIn .2s ease' }
+    : { background: 'var(--casi-surface)', border: '1px solid rgba(var(--casi-accent-rgb),0.14)', borderRadius: 14, padding: 20, animation: 'fadeIn .25s ease' };
+
   return (
-    <div style={{ marginTop: 20 }}>
-      {!open ? (
+    <div style={containerStyle}>
+      {!embedded && !open ? (
         <button onClick={() => setOpen(true)}
           style={{ width: '100%', background: 'rgba(var(--casi-accent-rgb),0.06)', border: '1px solid rgba(var(--casi-accent-rgb),0.14)', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'background .2s' }}
           onMouseOver={e => (e.currentTarget.style.background = 'rgba(var(--casi-accent-rgb),0.1)')}
@@ -168,8 +192,11 @@ export default function SendFlashSection({
           <span style={{ marginLeft: 'auto', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>→</span>
         </button>
       ) : (
-        <div style={{ background: 'var(--casi-surface)', border: '1px solid rgba(var(--casi-accent-rgb),0.14)', borderRadius: 14, padding: 20, animation: 'fadeIn .25s ease' }}>
-          {/* Header */}
+        <div style={bodyStyle}>
+          {/* Header — standalone mode shows the big "Send a Flash" title +
+              close button. Embedded mode hides it; ChatPanel owns its own
+              header/close affordance. */}
+          {!embedded && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <div>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)', marginBottom: 3 }}>⚡ Flash</div>
@@ -177,6 +204,7 @@ export default function SendFlashSection({
             </div>
             <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
           </div>
+          )}
 
           {/* Live status feedback */}
           {myFlash?.status === 'approved' && (
