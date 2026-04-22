@@ -38,13 +38,26 @@ interface Props {
   viewerName: string;
   showNotif: (text: string, type: string) => void;
   profile: StreamerProfileLite;
+  /**
+   * Render the composer body directly, skipping the collapsed "Send a Flash"
+   * summary card + open/close header. Used by ChatPanel when tip-mode is
+   * active so the flash composer sits inline with the chat input.
+   */
+  embedded?: boolean;
+  /** Fires after a successful send — caller can collapse tip-mode, clear UI, etc. */
+  onSent?: () => void;
 }
 
 const AMOUNT_PRESETS = [2, 5, 10, 20];
 
 export default function SendFlashSection({
-  profileId, username, viewerName, showNotif, profile,
+  profileId, username, viewerName, showNotif, profile, embedded = false, onSent,
 }: Props) {
+  // Collapsed by default in both modes — embedded FlashPanel uses a small
+  // toggle bar to expand, standalone mode uses its own summary card.
+  // Starting open only ever made sense in a dedicated send-flash surface;
+  // inside the chat box the feed is primary and composing is a side
+  // action, so same default makes sense.
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [amount, setAmount] = useState('5');
@@ -137,6 +150,13 @@ export default function SendFlashSection({
         showNotif('⚡ Free flash sent — awaiting approval', 'success');
         setMessage('');
       }
+      // Collapse the composer after a successful non-redirecting send so
+      // the feed (in embedded mode) or summary card (standalone) is
+      // visible again. Stripe-redirect path exits early via window.location
+      // above and is handled by the composer starting collapsed on the
+      // returning page.
+      setOpen(false);
+      onSent?.();
     } catch (err: unknown) {
       const { formatEscrowError } = await import('@/lib/casi-errors');
       showNotif(formatEscrowError(err), 'denied');
@@ -151,9 +171,19 @@ export default function SendFlashSection({
   if (solanaAllowed) methods.push('solana');
   if (freeAllowed)   methods.push('free');
 
+  // Embedded mode: strip the outer margin + the collapsed-summary / header
+  // chrome. The caller (ChatPanel) owns the "am I showing the flash
+  // composer right now?" decision and its own close affordance.
+  const containerStyle: React.CSSProperties = embedded
+    ? { background: 'transparent', padding: 0 }
+    : { marginTop: 20 };
+  const bodyStyle: React.CSSProperties = embedded
+    ? { padding: '12px 14px', background: 'rgba(var(--casi-accent-rgb),0.04)', border: '1px solid rgba(var(--casi-accent-rgb),0.14)', borderRadius: 10, animation: 'fadeIn .2s ease' }
+    : { background: 'var(--casi-surface)', border: '1px solid rgba(var(--casi-accent-rgb),0.14)', borderRadius: 14, padding: 20, animation: 'fadeIn .25s ease' };
+
   return (
-    <div style={{ marginTop: 20 }}>
-      {!open ? (
+    <div style={containerStyle}>
+      {!embedded && !open ? (
         <button onClick={() => setOpen(true)}
           style={{ width: '100%', background: 'rgba(var(--casi-accent-rgb),0.06)', border: '1px solid rgba(var(--casi-accent-rgb),0.14)', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'background .2s' }}
           onMouseOver={e => (e.currentTarget.style.background = 'rgba(var(--casi-accent-rgb),0.1)')}
@@ -167,16 +197,49 @@ export default function SendFlashSection({
           </div>
           <span style={{ marginLeft: 'auto', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>→</span>
         </button>
+      ) : embedded && !open ? (
+        // Compact collapsed bar for embedded mode — lives inside FlashPanel
+        // as a single thin row so the feed takes up most of the space.
+        // Tapping expands into the full composer below.
+        <button
+          onClick={() => setOpen(true)}
+          style={{
+            width: '100%',
+            background: 'rgba(var(--casi-accent-rgb),0.08)',
+            border: '1px solid rgba(var(--casi-accent-rgb),0.2)',
+            borderRadius: 8,
+            padding: '8px 12px',
+            display: 'flex', alignItems: 'center', gap: 10,
+            cursor: 'pointer', transition: 'background .15s',
+            fontFamily: "'DM Mono',monospace", fontSize: 11,
+            color: 'var(--casi-accent)',
+          }}
+          onMouseOver={e => (e.currentTarget.style.background = 'rgba(var(--casi-accent-rgb),0.14)')}
+          onMouseOut={e => (e.currentTarget.style.background = 'rgba(var(--casi-accent-rgb),0.08)')}
+        >
+          <span style={{ fontSize: 14 }}>⚡</span>
+          <span style={{ flex: 1, textAlign: 'left' }}>Send a flash{freeAllowed ? ' · free or paid' : ''}</span>
+          <span style={{ fontSize: 12 }}>→</span>
+        </button>
       ) : (
-        <div style={{ background: 'var(--casi-surface)', border: '1px solid rgba(var(--casi-accent-rgb),0.14)', borderRadius: 14, padding: 20, animation: 'fadeIn .25s ease' }}>
-          {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)', marginBottom: 3 }}>⚡ Flash</div>
-              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 17, fontWeight: 800, color: 'var(--casi-text)' }}>Send a Flash</div>
+        <div style={bodyStyle}>
+          {/* Embedded header: just a close ✕ on the right since the caller's
+              frame (FlashPanel) already provides context. Standalone mode
+              shows the big "⚡ Flash · Send a Flash" title + ✕ as before. */}
+          {embedded ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)' }}>⚡ Flash</span>
+              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 14, padding: 2 }}>✕</button>
             </div>
-            <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
-          </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)', marginBottom: 3 }}>⚡ Flash</div>
+                <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 17, fontWeight: 800, color: 'var(--casi-text)' }}>Send a Flash</div>
+              </div>
+              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
+            </div>
+          )}
 
           {/* Live status feedback */}
           {myFlash?.status === 'approved' && (

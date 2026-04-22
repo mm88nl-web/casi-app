@@ -144,10 +144,20 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { flash_id, action, tx_signature } = body as {
+  const { flash_id, action, tx_signature, db_only } = body as {
     flash_id?: string;
     action?: 'approve' | 'deny';
     tx_signature?: string;
+    /**
+     * Drift-recovery path: admin saw a pending flash whose on-chain PDA
+     * is either missing (never paid, attach-escrow failed) or already
+     * closed (prior approve/deny succeeded but this route failed to
+     * update the DB). Request asks us to flip DB status WITHOUT
+     * expecting a tx_signature — but we still audit on-chain to make
+     * sure the escrow really is gone, so a viewer can't trick us into
+     * denying a live flash they paid for.
+     */
+    db_only?: boolean;
   };
 
   if (!flash_id || !action || !['approve', 'deny'].includes(action)) {
@@ -172,6 +182,68 @@ export async function POST(req: Request) {
 
   // ── Solana branch ──────────────────────────────────────────────────────
   if (flash.payment_method === 'solana') {
+    // Drift-recovery: no tx_signature means the client probed the PDA
+    // and found it already closed (or never paid). We re-verify that
+    // on-chain before flipping the DB, so the route is still trust-
+    // minimised — a client can't lie about PDA state.
+    if (db_only) {
+      // Case A: flash never got an escrow_pda (viewer abandoned / attach
+      // failed). Only deny makes sense — there's nothing to approve.
+      if (!flash.escrow_pda) {
+        if (action !== 'deny') {
+          return NextResponse.json(
+            { error: 'Cannot approve a flash that was never paid' },
+            { status: 409 },
+          );
+        }
+        const { error: updErr } = await supabase
+          .from('flashes')
+          .update({ status: 'denied' })
+          .eq('id', flash.id)
+          .eq('status', 'pending');
+        if (updErr) {
+          console.error('[flashes/moderate] db-only deny (no escrow) update failed:', updErr);
+          return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+        }
+        return NextResponse.json({ success: true, mode: 'db_only' });
+      }
+
+      // Case B: flash has an escrow_pda but the PDA is closed on-chain.
+      // Probe to confirm, then flip DB. Also validate the stored pda
+      // matches what the program would derive — guards against a
+      // tampered row pointing somewhere else.
+      let derivedPda: PublicKey;
+      try {
+        derivedPda = deriveEscrowPda(flash.id);
+      } catch {
+        return NextResponse.json({ error: 'Unable to derive escrow PDA' }, { status: 500 });
+      }
+      if (derivedPda.toBase58() !== flash.escrow_pda) {
+        return NextResponse.json({ error: 'escrow_pda mismatch' }, { status: 409 });
+      }
+
+      const conn = new Connection(SOLANA_RPC, 'confirmed');
+      const info = await conn.getAccountInfo(derivedPda).catch(() => null);
+      if (info) {
+        return NextResponse.json(
+          { error: 'Escrow is still live on-chain — use the normal approve/deny path' },
+          { status: 409 },
+        );
+      }
+
+      const nextStatus = action === 'approve' ? 'approved' : 'denied';
+      const { error: updErr } = await supabase
+        .from('flashes')
+        .update({ status: nextStatus })
+        .eq('id', flash.id)
+        .eq('status', 'pending');
+      if (updErr) {
+        console.error('[flashes/moderate] db-only update failed:', updErr);
+        return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, mode: 'db_only' });
+    }
+
     if (!tx_signature || !TX_SIG_RE.test(tx_signature)) {
       return NextResponse.json({ error: 'Missing or invalid tx_signature' }, { status: 400 });
     }

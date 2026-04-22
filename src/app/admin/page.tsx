@@ -8,7 +8,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
 import { SKINS } from '@/lib/skins';
 import WalletNav from '@/components/WalletNav';
-import ChatPanel from '@/components/ChatPanel';
+import FlashPanel from '@/components/FlashPanel';
 import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 import Logo from './_components/Logo';
 import SlotMedia from '@/components/SlotMedia';
@@ -73,7 +73,7 @@ const THEME_PRESETS = [
    MAIN ADMIN PAGE
 ══════════════════════════════════════════ */
 export default function AdminStudio() {
-  const [view, setView] = useState<'studio' | 'requests' | 'chat' | 'settings'>('studio');
+  const [view, setView] = useState<'studio' | 'requests' | 'settings'>('studio');
   const [profile, setProfile] = useState<any>(null);
   const [activeSkin, setActiveSkin] = useState<string | null>(null);
   const [savingSkin, setSavingSkin] = useState(false);
@@ -118,7 +118,6 @@ export default function AdminStudio() {
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [togglingLive, setTogglingLive] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
-  const [sendingTestFlash, setSendingTestFlash] = useState(false);
   const dragStartPos = useRef<{x:number;y:number}|null>(null);
   const isDragging = useRef(false);
 
@@ -840,42 +839,111 @@ export default function AdminStudio() {
   };
 
   /**
-   * Moderate a flash on the Solana rail: viewer-funded escrow PDA is settled
-   * by calling `approve_flash` or `deny_flash` on-chain, then the streamer's
-   * session tells the DB (/api/flashes/moderate) to flip status after
-   * server-side tx verification.
+   * Moderate a flash on the Solana rail.
+   *
+   * Nominal path: broadcast `approve_flash` / `deny_flash` on-chain with
+   * the streamer's wallet, then tell `/api/flashes/moderate` to verify
+   * the tx and flip DB status. On-chain state is authoritative; DB
+   * never transitions ahead of chain.
+   *
+   * Two drift-recovery paths handle stuck flashes:
+   *
+   *   1. No escrow metadata yet (viewer paid but attach-escrow failed,
+   *      or never paid at all). Approving is impossible — there's no
+   *      vault. Deny is a DB-only flip; there's nothing on-chain to
+   *      unwind. Streamer gets the row off their queue without a
+   *      pointless chain call or wallet popup.
+   *
+   *   2. PDA already closed on-chain (a prior approve/deny succeeded
+   *      but /api/flashes/moderate failed to land the DB update, so
+   *      the row looks pending but the escrow is gone). Pre-probe via
+   *      getAccountInfo; if the PDA is missing, route to the DB-only
+   *      path instead of trying to sign a tx that will revert with
+   *      AccountNotInitialized. Also handle the race where the PDA
+   *      disappears mid-flight by catching the Anchor error + falling
+   *      back to DB-only.
    */
   const moderateSolanaFlash = async (flash: any, action: 'approve' | 'deny') => {
-    const anchorWallet = buildAnchorWalletForEscrow();
-    if (!anchorWallet) {
-      openWalletModal();
-      throw new Error('Connect your streamer wallet');
-    }
-    if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
-      throw new Error('Connected wallet is not the streamer wallet on file');
-    }
-    if (!flash.viewer_wallet || !flash.escrow_pda) {
-      throw new Error('Flash is missing on-chain metadata');
-    }
-
     setSettlingSolana(prev => ({ ...prev, [flash.id]: true }));
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = `Bearer ${session?.access_token}`;
+
+      // Helper: tell the server to flip DB status WITHOUT a chain tx.
+      // Used when there's nothing to do on-chain (either never paid or
+      // already processed). The server still audits via on-chain probe
+      // in db_only mode, so a viewer can't trick the route into denying
+      // a flash whose escrow is still live.
+      const dbOnlyModerate = async () => {
+        const res = await fetch('/api/flashes/moderate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+          body: JSON.stringify({ flash_id: flash.id, action, db_only: true }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json?.error) throw new Error(json?.error || 'Server update failed');
+      };
+
+      // Case 1: no escrow metadata. Approve is impossible; deny is DB-only.
+      if (!flash.viewer_wallet || !flash.escrow_pda) {
+        if (action === 'deny') {
+          await dbOnlyModerate();
+          return null;
+        }
+        throw new Error("Flash hasn't been paid yet — nothing to approve");
+      }
+
+      // Case 2: pre-probe the PDA. If it's gone, the flash has already
+      // been settled on-chain — skip straight to the DB flip.
+      const { PublicKey: PK } = await import('@solana/web3.js');
+      const escrowPk = new PK(flash.escrow_pda);
+      const pdaInfo = await walletConnection.getAccountInfo(escrowPk).catch(() => null);
+      if (!pdaInfo) {
+        await dbOnlyModerate();
+        return null;
+      }
+
+      // Normal path: wallet-signed approve_flash / deny_flash.
+      const anchorWallet = buildAnchorWalletForEscrow();
+      if (!anchorWallet) {
+        openWalletModal();
+        throw new Error('Connect your streamer wallet');
+      }
+      if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
+        throw new Error('Connected wallet is not the streamer wallet on file');
+      }
+
       const { CasiEscrowClient } = await import('@/lib/casi-escrow');
-      const { PublicKey: PK }    = await import('@solana/web3.js');
       const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
 
       const viewerPk   = new PK(flash.viewer_wallet);
       const streamerPk = publicKey!;
 
-      const { sig } =
-        action === 'approve'
+      let sig: string;
+      try {
+        const result = action === 'approve'
           ? await client.approveFlash({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk })
           : await client.denyFlash   ({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk });
+        sig = result.sig;
+      } catch (err) {
+        // Mid-flight drift: PDA disappeared between probe and tx (another
+        // tx landed in the gap). Anchor raises AccountNotInitialized /
+        // account does not exist variants. Fall back to DB-only.
+        const { isAlreadyProcessed } = await import('@/lib/casi-errors');
+        const msg = err instanceof Error ? err.message : String(err);
+        if (isAlreadyProcessed(err) || /AccountNotInitialized|account.*not.*exist|AlreadySettled/i.test(msg)) {
+          const stillThere = await walletConnection.getAccountInfo(escrowPk).catch(() => null);
+          if (!stillThere) {
+            await dbOnlyModerate();
+            return null;
+          }
+        }
+        throw err;
+      }
 
-      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/flashes/moderate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
         body: JSON.stringify({ flash_id: flash.id, action, tx_signature: sig }),
       });
       const json = await res.json().catch(() => ({}));
@@ -890,7 +958,15 @@ export default function AdminStudio() {
     try {
       if (flash.payment_method === 'solana') {
         const sig = await moderateSolanaFlash(flash, 'approve');
-        showFlashToast(`⚡ Approved on-chain · ${sig.slice(0, 8)}…`, 'ok');
+        // sig is null on the DB-only drift-recovery path (PDA was
+        // already closed on-chain before we got here). Toast reflects
+        // that it was reconciled rather than newly approved.
+        showFlashToast(
+          sig
+            ? `⚡ Approved on-chain · ${sig.slice(0, 8)}…`
+            : '⚡ Approved (flash was already settled on-chain)',
+          'ok',
+        );
       } else {
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch('/api/flashes/moderate', {
@@ -912,7 +988,15 @@ export default function AdminStudio() {
     try {
       if (flash.payment_method === 'solana') {
         const sig = await moderateSolanaFlash(flash, 'deny');
-        showFlashToast(`✕ Denied & refunded · ${sig.slice(0, 8)}…`, 'ok');
+        // sig is null on the DB-only path (either the flash never had
+        // an escrow PDA — viewer never completed payment — or the PDA
+        // was already closed on-chain by a prior settle).
+        showFlashToast(
+          sig
+            ? `✕ Denied & refunded · ${sig.slice(0, 8)}…`
+            : '✕ Denied (no on-chain funds to return)',
+          'ok',
+        );
       } else {
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch('/api/flashes/moderate', {
@@ -1012,37 +1096,6 @@ export default function AdminStudio() {
     setTimeout(() => setCopiedUrl(null), 2000);
   };
 
-  const sendTestFlash = async () => {
-    if (!profile || sendingTestFlash) return;
-    if (!profile.allow_free_flashes) {
-      showFlashToast('Enable free Flashes in your profile first, then try again.', 'err');
-      return;
-    }
-    setSendingTestFlash(true);
-    try {
-      const res = await fetch('/api/flashes/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: profile.id,
-          viewer_name: 'Test',
-          message: 'Test Flash from your admin panel ✦',
-          payment_method: 'free',
-        }),
-      });
-      if (!res.ok) {
-        const { error } = await res.json().catch(() => ({ error: 'Test failed' }));
-        showFlashToast(error || 'Test failed', 'err');
-      } else {
-        showFlashToast('Test Flash sent — approve it in Requests to see it fire on your overlay.', 'ok');
-      }
-    } catch {
-      showFlashToast('Test Flash failed — check your connection.', 'err');
-    } finally {
-      setSendingTestFlash(false);
-    }
-  };
-
   const calcTotal = (booking: any) => booking.price_unit === 'min'
     ? (booking.price_value * Number(booking.duration_minutes)).toFixed(0)
     : (booking.price_value * (Number(booking.duration_minutes) / 60)).toFixed(2);
@@ -1059,7 +1112,12 @@ export default function AdminStudio() {
   };
 
   const confirmedFlashes = pendingFlashes.filter(f => !!(f.payment_intent_id || f.tx_signature));
-  const totalPending = pendingBookings.length + queuedBookings.length + confirmedFlashes.length;
+  // Badge count includes EVERY pending flash, not just paid ones. Free
+  // flashes are still real moderation work (the streamer sees them,
+  // decides if they air) so they belong in the "you have things to do"
+  // count. Old behaviour hid the badge for free-only traffic, which
+  // made streamers miss pending messages entirely.
+  const totalPending = pendingBookings.length + queuedBookings.length + pendingFlashes.length;
   const slotOccupiedForPreview = previewBooking ? activeBookings.some(b => b.element_id === previewBooking.element_id) : false;
   const backdropEl = elements.find(el => el.is_background);
   const hasBackdrop = !!backdropEl;
@@ -1259,7 +1317,7 @@ export default function AdminStudio() {
               <span className="nav-wm">casi</span>
             </a>
             <div className="nav-tabs">
-              {(['studio', 'requests', 'chat', 'settings'] as const).map(v => (
+              {(['studio', 'requests', 'settings'] as const).map(v => (
                 <button key={v} onClick={() => setView(v)} className={`nav-tab ${view === v ? 'active' : ''}`}>
                   {v}
                   {v === 'requests' && totalPending > 0 && <span className="nav-badge">{totalPending}</span>}
@@ -1291,20 +1349,6 @@ export default function AdminStudio() {
               className="btn-sm b-outline"
               style={{ border: '1px solid rgba(var(--casi-accent-rgb),0.25)', color: 'var(--casi-accent)' }}>
               {copiedUrl === 'vlink' ? '✓ Copied' : 'Copy'}
-            </button>
-            <button
-              onClick={sendTestFlash}
-              disabled={sendingTestFlash}
-              className="btn-sm"
-              title={profile.allow_free_flashes ? 'Send a free test Flash to yourself to preview the overlay animation' : 'Enable free Flashes in your profile to test'}
-              style={{
-                background: 'rgba(var(--casi-accent2-rgb),0.1)',
-                color: 'var(--casi-accent2)',
-                border: '1px solid rgba(var(--casi-accent2-rgb),0.3)',
-                opacity: sendingTestFlash ? 0.6 : 1,
-                cursor: sendingTestFlash ? 'wait' : 'pointer',
-              }}>
-              {sendingTestFlash ? 'Sending…' : '⚡ Test Flash'}
             </button>
           </div>
         )}
@@ -1550,7 +1594,19 @@ export default function AdminStudio() {
                     onResizeStop={(_e, _dir, ref, _delta, pos) => { updateLayer(el.id, { width: (ref.offsetWidth / dimensions.width) * 100, height: (ref.offsetHeight / dimensions.height) * 100, pos_x: (pos.x / dimensions.width) * 100, pos_y: (pos.y / dimensions.height) * 100 }); }}
                     disableDragging={el.is_background} enableResizing={!el.is_background} bounds="parent"
                     style={{ zIndex: el.is_background ? 0 : (isSelected ? 40 : 30) }}>
-                    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                    <div
+                      style={{ position: 'relative', width: '100%', height: '100%' }}
+                      // Backdrops have `disableDragging` which also kills
+                      // Rnd's `onDragStop`, so tap-to-select never fires
+                      // for them. Route their selection through a plain
+                      // React onClick on the content div instead. Beams
+                      // keep using onDragStop so drag-vs-tap distinction
+                      // is preserved (a drag shouldn't select).
+                      onClick={el.is_background
+                        ? (e) => { e.stopPropagation(); setSelectedSlotId(el.id); setShowInfoPanel(false); }
+                        : undefined
+                      }
+                    >
                       {/* Shape-masked content box. Isolated from the delete
                           button and selection indicator below so clip-path
                           doesn't chop the corner × or the outer glow. For
@@ -1652,6 +1708,22 @@ export default function AdminStudio() {
                 ? 'Drag to move · Resize from corners · Edit inline'
                 : 'Tap a beam to select · Drag to move · Resize from corners'}
             </div>
+
+            {/* Flash feed — sits right under the studio canvas so streamers
+                see incoming paid / free messages live while editing slots.
+                Admin mode: composer hidden, feed gets delete affordances.
+                Replaces the standalone CHAT tab that used to live in the
+                top-nav; flashes are the only message surface in CASI. */}
+            {profile?.id && (
+              <div style={{ marginTop: 20, maxWidth: 800, marginLeft: 'auto', marginRight: 'auto', width: '100%' }}>
+                <FlashPanel
+                  profileId={profile.id}
+                  viewerName={null}
+                  isAdmin
+                  variant="compact"
+                />
+              </div>
+            )}
         </div>
 
         {/* ── REQUESTS — separated by beam vs backdrop ── */}
@@ -1854,18 +1926,9 @@ export default function AdminStudio() {
           </div>
         )}
 
-        {/* ── CHAT ── */}
-        {view === 'chat' && profile?.id && (
-          <div className="set-body">
-            <div className="set-card">
-              <div className="set-title">Live chat</div>
-              <div className="set-sub" style={{ marginBottom: 12 }}>
-                Viewer messages update in real time. Click × to delete.
-              </div>
-              <ChatPanel profileId={profile.id} viewerName={null} isAdmin variant="compact" />
-            </div>
-          </div>
-        )}
+        {/* Standalone CHAT tab removed — flashes are the only message
+            surface now, and FlashPanel lives under the studio canvas
+            (below) so streamers see incoming flashes while editing. */}
 
         {/* ── SETTINGS ── */}
         {view === 'settings' && (
@@ -2197,10 +2260,10 @@ export default function AdminStudio() {
 
         {/* MOBILE BOTTOM NAV */}
         <div className="bot-nav">
-          {(['studio', 'requests', 'chat', 'settings'] as const).map(v => (
+          {(['studio', 'requests', 'settings'] as const).map(v => (
             <button key={v} onClick={() => setView(v)} className={`bot-tab ${view === v ? 'active' : ''}`}>
               {v === 'requests' && totalPending > 0 && <span className="bot-badge">{totalPending}</span>}
-              <span style={{ fontSize: 18 }}>{v === 'studio' ? '🎬' : v === 'requests' ? '📥' : v === 'chat' ? '💬' : '⚙️'}</span>
+              <span style={{ fontSize: 18 }}>{v === 'studio' ? '🎬' : v === 'requests' ? '📥' : '⚙️'}</span>
               <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{v}</span>
             </button>
           ))}
