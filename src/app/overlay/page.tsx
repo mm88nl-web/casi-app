@@ -31,6 +31,7 @@ import {
 import NameEntryScreen from './_components/NameEntryScreen';
 import SolanaConfirmModal, { type TxStatus } from './_components/SolanaConfirmModal';
 import FlashFeed from './_components/FlashFeed';
+import MyBeamsSection from './_components/MyBeamsSection';
 
 // Explicit column list for bookings reads. Belt + suspenders alongside the
 // column-level GRANT in 20260423 — if a new sensitive column lands on
@@ -1462,103 +1463,43 @@ function OverlayContent() {
         <main className={isOBS ? '' : 'ov-main'}>
 
           {/* MY BEAMS */}
-          {!isOBS && visibleMyBookings.length > 0 && !selectedSlot && (
-            <div className="my-beams">
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-                <div className="my-beams-lbl" style={{ marginBottom:0 }}>Your beams</div>
-                {viewerWalletRef.current && visibleMyBookings.some((b:any) => b.payment_method === 'solana' && b.escrow_pda && (b.status === 'denied' || b.status === 'expired')) && (
-                  <button
-                    onClick={runStaleSolanaCleanup}
-                    disabled={cleanupBusy}
-                    style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', background:'none', border:'1px solid var(--casi-border)', borderRadius:8, padding:'4px 10px', color:'var(--casi-text-muted)', cursor:cleanupBusy?'default':'pointer', opacity:cleanupBusy?0.5:1 }}
-                    title="Probe each escrow and clear rows whose funds already left the vault"
-                  >
-                    {cleanupBusy ? '…' : 'Clean up ended'}
-                  </button>
-                )}
-              </div>
-              <div className="my-beams-list">
-                {visibleMyBookings.map((booking: any) => {
-                  const isLive     = booking.status==='active';
-                  const isApproved = booking.status==='approved_queued';
-                  const isPending  = booking.status==='pending';
-                  const isDenied   = booking.status==='denied';
-                  const isExpired  = booking.status==='expired';
-                  const isSolanaLocked = isDenied && booking.payment_method === 'solana' && booking.escrow_pda;
-                  // Kick-leaked: streamer ended the beam but the on-chain
-                  // settle didn't go through, so the PDA still holds funds.
-                  // Visually distinct from a plain denial because the viewer
-                  // is owed a prorated refund, not a full one.
-                  const isSolanaKickLeaked = isExpired && booking.payment_method === 'solana' && booking.escrow_pda;
-                  const isExpiring = isLive && expiringSoon.has(booking.id);
-                  const activeBooking = activeBookings.find((b:any) => b.id===booking.id);
-                  const canCancel = isPending || isApproved;
-                  const needsRecover = isSolanaLocked || isSolanaKickLeaked;
-                  const chipStyle = isExpiring
-                    ? { background:'rgba(234,179,8,0.08)', borderColor:'rgba(234,179,8,0.25)', color:'#facc15' }
-                    : isLive
-                    ? { background:`rgba(${tcRgb},0.07)`, borderColor:`rgba(${tcRgb},0.21)`, color:tc }
-                    : isApproved
-                    ? { background:`rgba(${tcRgb},0.06)`, borderColor:`rgba(${tcRgb},0.19)`, color:tc }
-                    : needsRecover
-                    ? { background:'rgba(192,132,252,0.06)', borderColor:'rgba(192,132,252,0.25)', color:'#c084fc' }
-                    : isDenied
-                    ? { background:'rgba(248,113,113,0.06)', borderColor:'rgba(248,113,113,0.22)', color:'#f87171' }
-                    : { background:'rgba(255,255,255,0.03)', borderColor:'var(--casi-border)', color:'var(--casi-text-muted)' };
-                  return (
-                    <div key={booking.id} className="beam-chip" style={chipStyle}>
-                      {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width:20, height:20, objectFit:'contain', borderRadius:4 }} />}
-                      <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, fontWeight:500 }}>
-                        {isExpiring?'⚠ Expiring':isLive?'● Live':isApproved?'⏳ Queued':isSolanaKickLeaked?'⚡ Ended early — USDC recoverable':isSolanaLocked?'✕ Denied — USDC locked':isDenied?'✕ Denied — refund on the way':'⌛ Pending'}
-                      </span>
-                      {isLive && activeBooking && (
-                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, opacity:0.7 }}>
-                          <Countdown booking={activeBooking}
-                            onWarning={(s) => {
-                              if(s<=300&&s>0) setExpiringSoon(prev=>new Set(prev).add(booking.id));
-                              else if(s<=0) setExpiringSoon(prev=>{const n=new Set(prev);n.delete(booking.id);return n;});
-                            }}
-                            onExpire={() => clientExpireBooking(activeBooking)}
-                          />
-                        </span>
-                      )}
-                      {isLive && (
-  <button className="cancel-btn" onClick={async () => {
-    if (booking.payment_method === 'solana') {
-      // settle_beam pays streamer the vested portion on-chain and refunds
-      // the viewer the rest in a single tx. DB is updated after to advance
-      // the queue; settleSolanaBeam already surfaces its own toast on error.
-      await settleSolanaBeam(booking);
-      await clientExpireBooking(activeBooking);   // clear slot + advance queue
-    } else {
-      await fetch('/api/stripe/end-early', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ booking_id: booking.id }),
-      });
-      await clientExpireBooking(activeBooking);
-      showNotif('Beam ended — prorated refund issued', 'warning');
-    }
-  }}>
-    ✕ end early
-  </button>
-)}
-                      {canCancel && (
-                        <button className="cancel-btn" onClick={() => cancelBooking(booking.id)} disabled={cancelling===booking.id}>
-                          {cancelling===booking.id?'…':'✕ cancel'}
-                        </button>
-                      )}
-                      {needsRecover && (
-                        <button className="cancel-btn" style={{ color: '#c084fc', borderColor: 'rgba(192,132,252,0.3)' }}
-                          onClick={() => reclaimSolanaEscrow(booking)}>
-                          ◎ recover USDC
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+          {!isOBS && !selectedSlot && (
+            <MyBeamsSection
+              bookings={visibleMyBookings}
+              activeBookings={activeBookings}
+              expiringSoon={expiringSoon}
+              onExpiringWarning={(id, s) => {
+                if (s <= 300 && s > 0) setExpiringSoon(prev => new Set(prev).add(id));
+                else if (s <= 0) setExpiringSoon(prev => { const n = new Set(prev); n.delete(id); return n; });
+              }}
+              viewerWallet={viewerWalletRef.current}
+              cleanupBusy={cleanupBusy}
+              onStaleCleanup={runStaleSolanaCleanup}
+              tc={tc}
+              tcRgb={tcRgb}
+              cancelling={cancelling}
+              onEndEarly={async (booking, activeBooking) => {
+                if (booking.payment_method === 'solana') {
+                  // settle_beam pays streamer the vested portion on-chain and
+                  // refunds the viewer the rest in a single tx. DB is updated
+                  // after to advance the queue; settleSolanaBeam surfaces its
+                  // own toast on error.
+                  await settleSolanaBeam(booking);
+                  if (activeBooking) await clientExpireBooking(activeBooking);
+                } else {
+                  await fetch('/api/stripe/end-early', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ booking_id: booking.id }),
+                  });
+                  if (activeBooking) await clientExpireBooking(activeBooking);
+                  showNotif('Beam ended — prorated refund issued', 'warning');
+                }
+              }}
+              onCancel={cancelBooking}
+              onReclaim={reclaimSolanaEscrow}
+              onExpire={clientExpireBooking}
+            />
           )}
 
           {/* STREAM CANVAS */}
