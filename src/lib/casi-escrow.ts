@@ -310,20 +310,39 @@ export class CasiEscrowClient {
     const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer, false, tokenProgram);
     const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true, tokenProgram);
 
-    const sig = await (this.program.methods as any)
-      .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(0), 0)
-      .accounts({
-        viewer,
-        streamer,
-        escrowState:          escrowPda,
-        vault,
-        viewerAta,
-        usdcMint,
-        tokenProgram,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram:          SystemProgram.programId,
-      })
-      .rpc();
+    // Devnet RPC endpoints regularly miss the confirmation window even for
+    // transactions that did land on-chain — the wallet shows the balance
+    // deducted but Anchor's .rpc() throws a TransactionExpiredBlockheight
+    // ExceededError. That error carries the signature; we fall back to it
+    // so the caller still gets something to write into attach-escrow.
+    // If the tx really didn't land, admin's subsequent approve_flash will
+    // hit AccountNotInitialized and the existing drift-recovery path
+    // (probe PDA, run dbOnlyModerate if absent) takes over.
+    let sig: string;
+    try {
+      sig = await (this.program.methods as any)
+        .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(0), 0)
+        .accounts({
+          viewer,
+          streamer,
+          escrowState:          escrowPda,
+          vault,
+          viewerAta,
+          usdcMint,
+          tokenProgram,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram:          SystemProgram.programId,
+        })
+        .rpc();
+    } catch (err: unknown) {
+      const maybeSig = (err as { signature?: unknown })?.signature;
+      if (typeof maybeSig === 'string' && maybeSig.length >= 64) {
+        console.warn('[initializeFlash] confirmation timed out but sig recovered:', maybeSig);
+        sig = maybeSig;
+      } else {
+        throw err;
+      }
+    }
 
     return {
       sig,
