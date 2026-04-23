@@ -586,6 +586,39 @@ export default function AdminStudio() {
     }
   };
 
+  /**
+   * Flash analogue of trySolanaSettleDelegated. POSTs to the approve-flash or
+   * deny-flash delegate route; returns the same outcome union so callers can
+   * reuse describeDelegateSettleFailure for toasts and fall back to the
+   * wallet-signed path on any failure.
+   */
+  const trySolanaFlashDelegated = async (
+    flashId: string,
+    action: 'approve' | 'deny',
+  ): Promise<DelegateSettleOutcome> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return { ok: false, reason: 'no_session' };
+      const route = action === 'approve'
+        ? '/api/solana/delegates/approve-flash'
+        : '/api/solana/delegates/deny-flash';
+      const res = await fetch(route, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization:  `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ flash_id: flashId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) return { ok: true, alreadyProcessed: !!body?.alreadyProcessed };
+      return { ok: false, status: res.status, reason: body?.reason, message: body?.message };
+    } catch (err) {
+      console.warn('[trySolanaFlashDelegated] crank failed; falling back', err);
+      return { ok: false, reason: 'network_error', message: err instanceof Error ? err.message : String(err) };
+    }
+  };
+
   /** Human-readable one-liner for a failed delegate settle. */
   const describeDelegateSettleFailure = (o: Extract<DelegateSettleOutcome, { ok: false }>): string => {
     switch (o.reason) {
@@ -897,6 +930,17 @@ export default function AdminStudio() {
         await dbOnlyModerate();
         return null;
       }
+
+      // Case 3: try the delegate crank first. If it succeeds, the webhook
+      // will flip DB status — we just return the sig (null since the
+      // delegate response doesn't round-trip the signature in the same
+      // shape). On failure we toast the reason and fall through to the
+      // wallet-signed path below, which pops a wallet.
+      const delegated = await trySolanaFlashDelegated(flash.id, action);
+      if (delegated.ok) {
+        return null;
+      }
+      showFlashToast(describeDelegateSettleFailure(delegated), 'err');
 
       // Normal path: wallet-signed approve_flash / deny_flash.
       const anchorWallet = buildAnchorWalletForEscrow();

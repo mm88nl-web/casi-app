@@ -95,7 +95,9 @@ Phase 3 added a scoped delegation layer to the escrow program so the streamer do
 - `revoke_delegate` — streamer invalidates the delegate at any time.
 - `start_beam_delegated` — same effect as `start_beam`, but signed by the registered session key instead of the streamer wallet.
 - `settle_beam_delegated` — same effect as `settle_beam`, signed by the session key. Vesting math is identical to wallet-signed settle, so a compromised session key can at worst force an early settle at the current vested point; funds still split per the on-chain schedule.
-- Scoping summary: the session key can ONLY call the two delegated twins. It cannot withdraw funds outside the vesting schedule, cannot cancel pending escrows, cannot change delegation.
+- `approve_flash_delegated` — same effect as `approve_flash` (Pending → Settled, full amount → streamer ATA), signed by the session key. Cranker pays fees + one-time streamer-ATA rent.
+- `deny_flash_delegated` — same effect as `deny_flash` (Pending → Cancelled, full refund → viewer ATA), signed by the session key. Cranker pays fees (viewer almost always already has a USDC ATA since they funded from it).
+- Scoping summary: the session key can ONLY call the four delegated twins above. It cannot withdraw funds outside the escrow's declared destinations (approve always goes to `escrow.streamer`, deny always goes to `escrow.viewer`, settle splits per the on-chain vesting schedule), cannot cancel pending escrows on the viewer's behalf, cannot change delegation.
 - `cancel_stale_pending` — permissionless crank that refunds the viewer after a 7-day (`PENDING_TIMEOUT_SECS`) Pending timeout. Any signer can call it.
 
 **Server surface**:
@@ -105,6 +107,7 @@ Phase 3 added a scoped delegation layer to the escrow program so the streamer do
 - `/api/solana/delegates/revoke` — streamer-auth; stamps `revoked_at`. Admin should also fire `revoke_delegate` on-chain.
 - `/api/solana/delegates/start-beam` — called by the admin page's approve handler when a healthy delegate exists. Signs `start_beam_delegated` with the decrypted session key. **Uses the cranker as fee payer** (the session key has no SOL; Solana refuses to debit an un-credited account).
 - `/api/solana/delegates/settle-beam` — called by admin's `kickBeam` + `settleOrClearSolanaEscrow` (deny-on-Active). Signs `settle_beam_delegated` with the session key, cranker pays fees + ATA inits. On 503 `no_cranker` or any non-OK status, the admin page falls back to wallet-signed `settle_beam`.
+- `/api/solana/delegates/approve-flash` / `/api/solana/delegates/deny-flash` — called by admin's `moderateSolanaFlash` before the wallet-sign path. Sign `approve_flash_delegated` / `deny_flash_delegated`; same outcome shape as settle-beam so `describeDelegateSettleFailure` maps reasons to toasts. Webhook mirror: the Helius handler routes flash instructions through `applyFlashTransition` (parallel to the bookings path) to flip `flashes.status` — both wallet-signed and delegate-signed trips converge there.
 
 **The cranker** (`SOLANA_CRANKER_KEYPAIR` env var, loaded via `src/lib/cranker-keypair.ts`):
 
@@ -140,7 +143,7 @@ Install is a two-phase write — DB row (server) + on-chain `set_delegate` (stre
 - Don't make the install button callable without `walletReady` — you'll leave orphan DB rows when the streamer clicks before connecting.
 - Don't have the client sign `start_beam_delegated` / `settle_beam_delegated` with a user wallet. They're scoped to the session pubkey; a user-wallet sig will fail the `delegate.session_key == session` constraint.
 - Don't reuse the cranker as the escrow vault authority, the streamer, or anything else money-moving. It's a fee payer. Keep its balance small.
-- Don't skip the webhook for `start_beam_delegated` / `settle_beam_delegated` / `cancel_stale_pending` / `set_delegate` / `revoke_delegate` discriminators — the webhook is the only authoritative DB writer. `settle_beam_delegated` must share the `settle_beam` DB handler (Active → expired, clear overlay_elements.image_url).
+- Don't skip the webhook for `start_beam_delegated` / `settle_beam_delegated` / `approve_flash_delegated` / `deny_flash_delegated` / `cancel_stale_pending` / `set_delegate` / `revoke_delegate` discriminators. For bookings the webhook is the only authoritative DB writer; for flashes both the webhook AND `/api/flashes/moderate` can write, but both gate on `WHERE status = 'pending'` so first-writer-wins and duplicates no-op. Delegated variants must share the non-delegated handler (`settle_beam_delegated` → `settle_beam`'s Active → expired path; `approve_flash_delegated` → pending → approved; `deny_flash_delegated` → pending → denied).
 
 ## Solana escrow state machine (read this before touching deny / refund paths)
 

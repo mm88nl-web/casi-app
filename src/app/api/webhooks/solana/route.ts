@@ -123,21 +123,34 @@ async function processEvent(event: HeliusEvent, casiProgramId: string): Promise<
     // expected. Scanning accounts (instead of picking a fixed index by
     // instruction kind) insulates us from IDL account-order changes.
     const booking = await findBookingByPdaAccounts(parsed.accounts);
-    if (!booking) {
-      // No DB row matches. Either the webhook fired for an escrow we don't
-      // know about (foreign client, replay from dev) or create-solana hasn't
-      // committed yet. The daily reconciler will catch genuine misses.
+    if (booking) {
+      await applyTransition({
+        kind: parsed.kind,
+        booking,
+        txSignature,
+        feePayer: event.feePayer,
+      });
       continue;
     }
 
-    await applyTransition({
-      kind: parsed.kind,
-      booking,
-      txSignature,
-      feePayer: event.feePayer,
-    });
+    // No booking matched — could be a Flash (different table), or an escrow
+    // this app doesn't know about. Only try the flash lookup for
+    // flash-shaped instructions; everything else is a no-op.
+    if (FLASH_IX_KINDS.has(parsed.kind)) {
+      const flash = await findFlashByPdaAccounts(parsed.accounts);
+      if (flash) {
+        await applyFlashTransition({ kind: parsed.kind, flash, txSignature });
+      }
+    }
   }
 }
+
+const FLASH_IX_KINDS = new Set<CasiIxKind>([
+  'approve_flash',
+  'approve_flash_delegated',
+  'deny_flash',
+  'deny_flash_delegated',
+]);
 
 type BookingRow = {
   id: number | string;
@@ -279,9 +292,14 @@ async function applyTransition({
     }
 
     case 'approve_flash':
+    case 'approve_flash_delegated':
     case 'deny_flash':
-      // Flashes are written by /api/flashes/attach-escrow + moderate.
-      // Phase 1B will route them through here too; for now, no-op.
+    case 'deny_flash_delegated':
+      // Flash transitions run on a parallel path (applyFlashTransition)
+      // because the row lives in `flashes`, not `bookings`. If execution
+      // reaches this branch it means a flash-shaped instruction landed
+      // with a booking.escrow_pda match — treat as a no-op so a foreign
+      // tx can't scribble on an unrelated booking.
       return;
 
     case 'set_delegate':
@@ -290,4 +308,52 @@ async function applyTransition({
       // /api/solana/delegates/*); we don't mirror it onto bookings.
       return;
   }
+}
+
+type FlashRow = {
+  id: string;
+  status: string;
+  escrow_pda: string;
+};
+
+async function findFlashByPdaAccounts(accounts: string[]): Promise<FlashRow | null> {
+  if (accounts.length === 0) return null;
+  const { data, error } = await supabase
+    .from('flashes')
+    .select('id, status, escrow_pda')
+    .in('escrow_pda', accounts)
+    .eq('payment_method', 'solana')
+    .limit(1);
+  if (error) {
+    logError('solana-webhook', error, { scope: 'findFlashByPdaAccounts' });
+    return null;
+  }
+  return data?.[0] ?? null;
+}
+
+async function applyFlashTransition({
+  kind,
+  flash,
+}: {
+  kind: CasiIxKind;
+  flash: FlashRow;
+  txSignature: string;
+}): Promise<void> {
+  // Both wallet-signed and delegate-signed paths land here. Only advance
+  // from 'pending'; never regress a row that /api/flashes/moderate has
+  // already flipped via its tx_signature verification (races are OK —
+  // first writer wins via the status=pending WHERE clause).
+  if (flash.status !== 'pending') return;
+
+  const nextStatus =
+    kind === 'approve_flash' || kind === 'approve_flash_delegated'
+      ? 'approved'
+      : 'denied';
+
+  const { error } = await supabase
+    .from('flashes')
+    .update({ status: nextStatus })
+    .eq('id', flash.id)
+    .eq('status', 'pending');
+  if (error) logError('solana-webhook', error, { kind, flash_id: flash.id });
 }
