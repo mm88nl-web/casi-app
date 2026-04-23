@@ -19,7 +19,7 @@ use anchor_spl::{
     },
 };
 
-declare_id!("2LJF5LpCn653f4rsRxKC1fPbmH2P4snjo2p1sdP5okgX");
+declare_id!("2TfqzhwEqDyX54fyBw6pYxqgf2VYbRvt9XH6BZkLKGa8");
 
 // ---------------------------------------------------------------------------
 // Constants
