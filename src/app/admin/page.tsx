@@ -931,13 +931,17 @@ export default function AdminStudio() {
         return null;
       }
 
-      // Case 3: try the delegate crank first. If it succeeds, the webhook
-      // will flip DB status — we just return the sig (null since the
-      // delegate response doesn't round-trip the signature in the same
-      // shape). On failure we toast the reason and fall through to the
-      // wallet-signed path below, which pops a wallet.
+      // Case 3: try the delegate crank first. On success, the chain tx
+      // closes the PDA, but the DB flip runs on a different path:
+      //   - production: Helius webhook's approve_flash_delegated /
+      //     deny_flash_delegated case in /api/webhooks/solana
+      //   - local dev (no webhook tunnel): nothing — so we fall through
+      //     to dbOnlyModerate, which probes the PDA (now closed) and
+      //     flips DB directly. Both paths gate on `status = 'pending'`
+      //     so double-writes are idempotent.
       const delegated = await trySolanaFlashDelegated(flash.id, action);
       if (delegated.ok) {
+        await dbOnlyModerate();
         return null;
       }
       showFlashToast(describeDelegateSettleFailure(delegated), 'err');
