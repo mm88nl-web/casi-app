@@ -206,6 +206,37 @@ export interface SettleBeamDelegatedIxParams {
   tokenProgram?: PublicKey;
 }
 
+export interface ApproveFlashDelegatedIxParams {
+  escrowId: string | number | bigint;
+  /** Streamer wallet this delegate belongs to. Receives the full amount +
+   *  the EscrowState rent (via close = streamer) + the vault ATA rent. */
+  streamer: PublicKey;
+  /** Viewer wallet — passed for event-indexing parity with `approve_flash`;
+   *  not functionally used on-chain. */
+  viewer: PublicKey;
+  /** Session-key pubkey (authorization signer, attached server-side). */
+  sessionKey: PublicKey;
+  /** Cranker pubkey — fee + ATA-init payer, attached server-side. */
+  cranker: PublicKey;
+  usdcMint?: PublicKey;
+  tokenProgram?: PublicKey;
+}
+
+export interface DenyFlashDelegatedIxParams {
+  escrowId: string | number | bigint;
+  /** Streamer wallet this delegate belongs to. Used for the delegate PDA
+   *  seed; not a funds destination on deny. */
+  streamer: PublicKey;
+  /** Viewer wallet — refund destination + EscrowState close recipient. */
+  viewer: PublicKey;
+  /** Session-key pubkey (authorization signer, attached server-side). */
+  sessionKey: PublicKey;
+  /** Cranker pubkey — fee + ATA-init payer, attached server-side. */
+  cranker: PublicKey;
+  usdcMint?: PublicKey;
+  tokenProgram?: PublicKey;
+}
+
 export interface CancelStalePendingParams {
   escrowId: string | number | bigint;
   /** Viewer wallet — refund destination (bound by the escrow's `has_one`). */
@@ -616,6 +647,83 @@ export class CasiEscrowClient {
         escrowState: escrowPda,
         vault,
         streamerAta,
+        viewerAta,
+        usdcMint,
+        tokenProgram,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram:          SystemProgram.programId,
+      })
+      .instruction();
+  }
+
+  // -------------------------------------------------------------------------
+  // approve_flash_delegated  (server-side: built here, signed with session
+  // key + cranker; mirrors buildSettleBeamDelegatedIx)
+  // -------------------------------------------------------------------------
+
+  async buildApproveFlashDelegatedIx(
+    params: ApproveFlashDelegatedIxParams,
+  ): Promise<TransactionInstruction> {
+    const { escrowId, streamer, viewer, sessionKey, cranker } = params;
+    const usdcMint     = params.usdcMint     ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
+
+    const escrowIdBytes = uuidToBytes(escrowId);
+    const [escrowPda]   = deriveEscrowPda(escrowId);
+    const [delegatePda] = deriveDelegatePda(streamer);
+
+    const vault       = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
+    const streamerAta = getAssociatedTokenAddressSync(usdcMint, streamer,  false, tokenProgram);
+
+    return (this.program.methods as any)
+      .approveFlashDelegated(escrowIdBytes)
+      .accounts({
+        session:     sessionKey,
+        cranker,
+        streamer,
+        viewer,
+        delegate:    delegatePda,
+        escrowState: escrowPda,
+        vault,
+        streamerAta,
+        usdcMint,
+        tokenProgram,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram:          SystemProgram.programId,
+      })
+      .instruction();
+  }
+
+  // -------------------------------------------------------------------------
+  // deny_flash_delegated  (server-side: refund path; cranker pays any
+  // viewer-ATA init rent, though the viewer almost always has one already
+  // since they funded the flash from it)
+  // -------------------------------------------------------------------------
+
+  async buildDenyFlashDelegatedIx(
+    params: DenyFlashDelegatedIxParams,
+  ): Promise<TransactionInstruction> {
+    const { escrowId, streamer, viewer, sessionKey, cranker } = params;
+    const usdcMint     = params.usdcMint     ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
+
+    const escrowIdBytes = uuidToBytes(escrowId);
+    const [escrowPda]   = deriveEscrowPda(escrowId);
+    const [delegatePda] = deriveDelegatePda(streamer);
+
+    const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
+    const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer,    false, tokenProgram);
+
+    return (this.program.methods as any)
+      .denyFlashDelegated(escrowIdBytes)
+      .accounts({
+        session:     sessionKey,
+        cranker,
+        streamer,
+        viewer,
+        delegate:    delegatePda,
+        escrowState: escrowPda,
+        vault,
         viewerAta,
         usdcMint,
         tokenProgram,
