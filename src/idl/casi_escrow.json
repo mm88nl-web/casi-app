@@ -550,6 +550,169 @@
       ]
     },
     {
+      "name": "approve_flash_delegated",
+      "docs": [
+        "Delegated Flash approval. Same effect as `approve_flash` (full amount →",
+        "streamer ATA, vault + EscrowState closed, rent to streamer), signed by",
+        "the registered session key instead of the streamer wallet. Cranker pays",
+        "fees and the one-time streamer-ATA rent on first approval to a new",
+        "wallet. Worst case on a compromised session key: forced capture of a",
+        "flash that would have been captured anyway — funds still follow the",
+        "escrow's declared streamer field."
+      ],
+      "discriminator": [
+        95,
+        196,
+        73,
+        135,
+        138,
+        39,
+        3,
+        114
+      ],
+      "accounts": [
+        {
+          "name": "session",
+          "docs": [
+            "The ephemeral session key. Must match `delegate.session_key`."
+          ],
+          "signer": true
+        },
+        {
+          "name": "cranker",
+          "docs": [
+            "Fee + ATA-init payer. Same role as in settle_beam_delegated."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "streamer",
+          "writable": true
+        },
+        {
+          "name": "viewer",
+          "writable": true
+        },
+        {
+          "name": "delegate"
+        },
+        {
+          "name": "escrow_state",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "streamer_ata",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "escrow_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "deny_flash_delegated",
+      "docs": [
+        "Delegated Flash denial. Same effect as `deny_flash` (full refund →",
+        "viewer ATA, vault + EscrowState closed, rent to viewer), signed by the",
+        "session key. Cranker pays fees and any viewer ATA-init rent (viewer",
+        "almost always already has a USDC ATA since they funded from it)."
+      ],
+      "discriminator": [
+        45,
+        240,
+        57,
+        94,
+        62,
+        69,
+        5,
+        73
+      ],
+      "accounts": [
+        {
+          "name": "session",
+          "docs": [
+            "The ephemeral session key. Must match `delegate.session_key`."
+          ],
+          "signer": true
+        },
+        {
+          "name": "cranker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "streamer"
+        },
+        {
+          "name": "viewer",
+          "writable": true
+        },
+        {
+          "name": "delegate"
+        },
+        {
+          "name": "escrow_state",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "viewer_ata",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "escrow_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "set_delegate",
       "docs": [
         "Install or rotate a session-key delegate for a streamer.",
