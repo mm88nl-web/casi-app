@@ -95,7 +95,9 @@ Phase 3 added a scoped delegation layer to the escrow program so the streamer do
 - `revoke_delegate` — streamer invalidates the delegate at any time.
 - `start_beam_delegated` — same effect as `start_beam`, but signed by the registered session key instead of the streamer wallet.
 - `settle_beam_delegated` — same effect as `settle_beam`, signed by the session key. Vesting math is identical to wallet-signed settle, so a compromised session key can at worst force an early settle at the current vested point; funds still split per the on-chain schedule.
-- Scoping summary: the session key can ONLY call the two delegated twins. It cannot withdraw funds outside the vesting schedule, cannot cancel pending escrows, cannot change delegation.
+- `approve_flash_delegated` — same effect as `approve_flash` (Pending → Settled, full amount → streamer ATA), signed by the session key. Cranker pays fees + one-time streamer-ATA rent.
+- `deny_flash_delegated` — same effect as `deny_flash` (Pending → Cancelled, full refund → viewer ATA), signed by the session key. Cranker pays fees (viewer almost always already has a USDC ATA since they funded from it).
+- Scoping summary: the session key can ONLY call the four delegated twins above. It cannot withdraw funds outside the escrow's declared destinations (approve always goes to `escrow.streamer`, deny always goes to `escrow.viewer`, settle splits per the on-chain vesting schedule), cannot cancel pending escrows on the viewer's behalf, cannot change delegation.
 - `cancel_stale_pending` — permissionless crank that refunds the viewer after a 7-day (`PENDING_TIMEOUT_SECS`) Pending timeout. Any signer can call it.
 
 **Server surface**:
@@ -105,12 +107,13 @@ Phase 3 added a scoped delegation layer to the escrow program so the streamer do
 - `/api/solana/delegates/revoke` — streamer-auth; stamps `revoked_at`. Admin should also fire `revoke_delegate` on-chain.
 - `/api/solana/delegates/start-beam` — called by the admin page's approve handler when a healthy delegate exists. Signs `start_beam_delegated` with the decrypted session key. **Uses the cranker as fee payer** (the session key has no SOL; Solana refuses to debit an un-credited account).
 - `/api/solana/delegates/settle-beam` — called by admin's `kickBeam` + `settleOrClearSolanaEscrow` (deny-on-Active). Signs `settle_beam_delegated` with the session key, cranker pays fees + ATA inits. On 503 `no_cranker` or any non-OK status, the admin page falls back to wallet-signed `settle_beam`.
+- `/api/solana/delegates/approve-flash` / `/api/solana/delegates/deny-flash` — called by admin's `moderateSolanaFlash` before the wallet-sign path. Sign `approve_flash_delegated` / `deny_flash_delegated`; same outcome shape as settle-beam so `describeDelegateSettleFailure` maps reasons to toasts. Webhook mirror: the Helius handler routes flash instructions through `applyFlashTransition` (parallel to the bookings path) to flip `flashes.status` — both wallet-signed and delegate-signed trips converge there.
 
 **The cranker** (`SOLANA_CRANKER_KEYPAIR` env var, loaded via `src/lib/cranker-keypair.ts`):
 
 - Single shared keypair that pays fees for the delegated twins (`start_beam_delegated`, `settle_beam_delegated`) and signs the permissionless `cancel_stale_pending` crank from the daily reconciler.
 - Required if the delegate flow is enabled. Unset = both delegated routes return 503 `reason: 'no_cranker'` and admin falls back to wallet-signed start/settle (popup per action). This is a safe degradation; the program doesn't care.
-- Fund with ~0.05 SOL. Each delegated start costs one base fee + compute; delegated settle costs one base fee + up to two ATA-init rents (~0.004 SOL each) if the streamer/viewer ATAs don't exist; cancel-stale-pending cranks eat ~5k lamports each.
+- Fund with ~0.05 SOL. Steady-state cost per delegated start or settle is ~10k lamports (0.00001 SOL, two signatures × 5k base fee). First-ever settle to a brand-new streamer OR first-ever refund to a brand-new viewer adds a one-time ~2.04M lamports (0.00204 SOL) ATA rent-exempt reserve per fresh ATA; once created, subsequent flashes/beams to the same wallet skip it. Worst-case both-ATAs-fresh is ~0.00409 SOL. Cancel-stale-pending cranks eat ~5k lamports each. At steady state 0.05 SOL covers thousands of operations.
 - Loader returns `null` on missing/malformed env — never throws. Callers branch on null and either fall back or 503.
 
 **Install UX contract** (see `DelegateKeyCard.tsx` state machine):
@@ -140,7 +143,7 @@ Install is a two-phase write — DB row (server) + on-chain `set_delegate` (stre
 - Don't make the install button callable without `walletReady` — you'll leave orphan DB rows when the streamer clicks before connecting.
 - Don't have the client sign `start_beam_delegated` / `settle_beam_delegated` with a user wallet. They're scoped to the session pubkey; a user-wallet sig will fail the `delegate.session_key == session` constraint.
 - Don't reuse the cranker as the escrow vault authority, the streamer, or anything else money-moving. It's a fee payer. Keep its balance small.
-- Don't skip the webhook for `start_beam_delegated` / `settle_beam_delegated` / `cancel_stale_pending` / `set_delegate` / `revoke_delegate` discriminators — the webhook is the only authoritative DB writer. `settle_beam_delegated` must share the `settle_beam` DB handler (Active → expired, clear overlay_elements.image_url).
+- Don't skip the webhook for `start_beam_delegated` / `settle_beam_delegated` / `approve_flash_delegated` / `deny_flash_delegated` / `cancel_stale_pending` / `set_delegate` / `revoke_delegate` discriminators. For bookings the webhook is the only authoritative DB writer; for flashes both the webhook AND `/api/flashes/moderate` can write, but both gate on `WHERE status = 'pending'` so first-writer-wins and duplicates no-op. Delegated variants must share the non-delegated handler (`settle_beam_delegated` → `settle_beam`'s Active → expired path; `approve_flash_delegated` → pending → approved; `deny_flash_delegated` → pending → denied).
 
 ## Solana escrow state machine (read this before touching deny / refund paths)
 
@@ -211,7 +214,7 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 - **Numeric vs string `booking_id`**: PostgREST returns `bookings.id` as a JS number, but older server routes rejected `typeof booking_id !== 'string'`. Always accept either — `typeof x === 'number' ? x : String(x)` — or the viewer's client will silently 400. Affects `/api/bookings/viewer-deny`, `/api/bookings/attach-solana-tx`, `/api/bookings/expire-and-advance`.
 - **`NEXT_PUBLIC_CASI_PROGRAM_ID` unset**: `CasiEscrowClient` throws a loud error in its constructor. Without this guard, unset env → client falls back to `SystemProgram.programId` and signs txs that look fine to the wallet but land on the wrong program.
 - **Session key as fee payer**: neither `start_beam_delegated` nor `settle_beam_delegated` can be signed with the session key as fee payer — Solana returns `"Attempt to debit an account but found no record of a prior credit"` because the ephemeral key has never received SOL. Always pay fees with the cranker; co-sign with the session key. `loadCrankerKeypair` in `src/lib/cranker-keypair.ts` is the shared loader.
-- **Cranker balance drift**: the cranker is the silent single point of failure for the delegated approve/kick flow. Monitor its SOL balance; if it hits 0, every approve AND every kick starts popping a wallet prompt again (routes return 503, admin falls back). Delegated settle is more expensive than delegated start because it may init the streamer's or viewer's ATA — budget ~0.01 SOL per settle if the ATAs don't yet exist, vs ~0.00001 SOL per start.
+- **Cranker balance drift**: the cranker is the silent single point of failure for the delegated approve/kick flow. Monitor its SOL balance; if it hits 0, every approve AND every kick starts popping a wallet prompt again (routes return 503, admin falls back). Steady-state cost is ~10k lamports per start OR settle (base fee × 2 sigs); a one-time ~0.00204 SOL ATA rent is added the FIRST time a fresh streamer or viewer ATA is created. For a streamer with repeat viewers, subsequent operations are just the base fee — not 0.01 SOL each.
 
 ## Observability
 

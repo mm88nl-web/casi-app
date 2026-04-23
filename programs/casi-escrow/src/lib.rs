@@ -19,7 +19,7 @@ use anchor_spl::{
     },
 };
 
-declare_id!("6utjMbb5ovFHUdMcMWaGc5ovmVhLryVRLEzYPWzeBosg");
+declare_id!("CDunHmMe2KW8qmjoqWanuu3p1DsEYjqRA1yVmyXDtakM");
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -548,6 +548,138 @@ pub mod casi_escrow {
         Ok(())
     }
 
+    /// Delegated Flash approval. Same effect as `approve_flash` (full amount →
+    /// streamer ATA, vault + EscrowState closed, rent to streamer), but signed
+    /// by the session key instead of the streamer wallet. Cranker pays fees
+    /// and any ATA-init rent. Vesting math isn't involved — approval moves
+    /// the full balance, so the only attack surface on a compromised session
+    /// key is forcing a capture that would have happened anyway (or forcing
+    /// one for a flash the streamer hadn't reviewed). Bounded, recoverable
+    /// by `revoke_delegate`.
+    pub fn approve_flash_delegated(
+        ctx: Context<ApproveFlashDelegated>,
+        escrow_id: [u8; 32],
+    ) -> Result<()> {
+        require!(
+            ctx.accounts.escrow_state.version == ESCROW_STATE_VERSION,
+            CasiError::UnsupportedVersion
+        );
+        require!(
+            ctx.accounts.delegate.version == STREAMER_DELEGATE_VERSION,
+            CasiError::UnsupportedVersion
+        );
+        require!(
+            ctx.accounts.escrow_state.status == EscrowStatus::Pending,
+            CasiError::AlreadySettled
+        );
+        require!(
+            ctx.accounts.escrow_state.escrow_type == EscrowType::Flash,
+            CasiError::WrongEscrowType
+        );
+
+        let now = Clock::get()?.unix_timestamp;
+        require!(
+            now < ctx.accounts.delegate.expires_at,
+            CasiError::DelegateExpired
+        );
+
+        ctx.accounts.escrow_state.status = EscrowStatus::Settled;
+
+        let total = ctx.accounts.escrow_state.total_amount;
+        let bump  = ctx.accounts.escrow_state.bump;
+
+        let signer_seeds: &[&[u8]] = &[ESCROW_SEED, escrow_id.as_ref(), &[bump]];
+        let signer = &[signer_seeds];
+
+        pda_transfer_checked(
+            &ctx.accounts.vault,
+            &ctx.accounts.streamer_ata,
+            total,
+            &ctx.accounts.usdc_mint,
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
+            signer,
+        )?;
+
+        pda_close_account(
+            &ctx.accounts.vault,
+            ctx.accounts.streamer.to_account_info(),
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
+            signer,
+        )?;
+
+        emit!(FlashSettled {
+            escrow_id,
+            streamer_amount: total,
+            approved: true,
+        });
+
+        Ok(())
+    }
+
+    /// Delegated Flash denial. Same effect as `deny_flash` (full refund → viewer
+    /// ATA, vault + EscrowState closed, rent to viewer), signed by the session
+    /// key. Cranker pays fees and any viewer ATA-init rent (almost always the
+    /// viewer already has a USDC ATA since they funded from it).
+    pub fn deny_flash_delegated(
+        ctx: Context<DenyFlashDelegated>,
+        escrow_id: [u8; 32],
+    ) -> Result<()> {
+        require!(
+            ctx.accounts.escrow_state.version == ESCROW_STATE_VERSION,
+            CasiError::UnsupportedVersion
+        );
+        require!(
+            ctx.accounts.delegate.version == STREAMER_DELEGATE_VERSION,
+            CasiError::UnsupportedVersion
+        );
+        require!(
+            ctx.accounts.escrow_state.status == EscrowStatus::Pending,
+            CasiError::AlreadySettled
+        );
+
+        let now = Clock::get()?.unix_timestamp;
+        require!(
+            now < ctx.accounts.delegate.expires_at,
+            CasiError::DelegateExpired
+        );
+
+        ctx.accounts.escrow_state.status = EscrowStatus::Cancelled;
+
+        let total = ctx.accounts.escrow_state.total_amount;
+        let bump  = ctx.accounts.escrow_state.bump;
+
+        let signer_seeds: &[&[u8]] = &[ESCROW_SEED, escrow_id.as_ref(), &[bump]];
+        let signer = &[signer_seeds];
+
+        pda_transfer_checked(
+            &ctx.accounts.vault,
+            &ctx.accounts.viewer_ata,
+            total,
+            &ctx.accounts.usdc_mint,
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
+            signer,
+        )?;
+
+        pda_close_account(
+            &ctx.accounts.vault,
+            ctx.accounts.viewer.to_account_info(),
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.token_program,
+            signer,
+        )?;
+
+        emit!(FlashSettled {
+            escrow_id,
+            streamer_amount: 0,
+            approved: false,
+        });
+
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------
     // Session-key delegation
     // -----------------------------------------------------------------------
@@ -559,14 +691,16 @@ pub mod casi_escrow {
     ///     streamer can install one for themselves.
     ///   * `session_key` is an ephemeral pubkey (the server generates a fresh
     ///     keypair on each install; the secret stays server-side, encrypted).
-    ///   * The delegate can call `start_beam_delegated` (flip Pending → Active)
-    ///     and `settle_beam_delegated` (end an Active beam early, pro-rata
-    ///     vest). It CANNOT cancel Pending escrows, deny flashes, move its
-    ///     own rent, or change delegation. Worst-case server compromise is
-    ///     an attacker ending a live beam early — viewer gets the unvested
-    ///     portion refunded, streamer loses the unvested portion. Bounded,
-    ///     recoverable by `revoke_delegate`, never leaks funds to the
-    ///     attacker.
+    ///   * The delegate can call `start_beam_delegated` (Pending → Active),
+    ///     `settle_beam_delegated` (end an Active beam, pro-rata vest),
+    ///     `approve_flash_delegated` (Pending → Settled, full to streamer),
+    ///     and `deny_flash_delegated` (Pending → Cancelled, full refund to
+    ///     viewer). It CANNOT cancel Pending escrows on the viewer's behalf,
+    ///     move its own rent, or change delegation. Worst-case server
+    ///     compromise is an attacker forcing a flash capture/refund (either
+    ///     way the funds follow the escrow's declared destinations — streamer
+    ///     or viewer) or ending a live beam early. Bounded, recoverable by
+    ///     `revoke_delegate`, never leaks funds to the attacker.
     ///   * Self-expires after `expires_at`; program caps expiry to
     ///     `now + MAX_DELEGATE_LIFETIME_SECS`.
     ///   * Streamer can revoke any time via `revoke_delegate`.
@@ -1116,6 +1250,133 @@ pub struct SettleBeamDelegated<'info> {
         associated_token::token_program = token_program,
     )]
     pub streamer_ata: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        init_if_needed,
+        payer  = cranker,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = viewer,
+        associated_token::token_program = token_program,
+    )]
+    pub viewer_ata: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(mint::token_program = token_program)]
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
+
+    pub token_program:            Interface<'info, TokenInterface>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program:           Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(escrow_id: [u8; 32])]
+pub struct ApproveFlashDelegated<'info> {
+    /// The ephemeral session key. Must match `delegate.session_key`.
+    pub session: Signer<'info>,
+
+    /// Fee + ATA-init payer. The session key has no SOL; cranker co-signs.
+    #[account(mut)]
+    pub cranker: Signer<'info>,
+
+    /// CHECK: Receives the EscrowState rent (via close = streamer) and the
+    /// vault ATA rent (via pda_close_account). Bound to the escrow's
+    /// `streamer` field via `has_one` and to the delegate PDA's seed via
+    /// the `delegate` constraint, so a compromised session key cannot
+    /// redirect funds to an attacker-controlled address.
+    #[account(mut)]
+    pub streamer: SystemAccount<'info>,
+
+    /// CHECK: Kept in the account list for event-indexing parity with
+    /// `approve_flash`; not read on-chain.
+    #[account(mut)]
+    pub viewer: UncheckedAccount<'info>,
+
+    #[account(
+        seeds = [DELEGATE_SEED, streamer.key().as_ref()],
+        bump  = delegate.bump,
+        constraint = delegate.streamer    == streamer.key() @ CasiError::Unauthorized,
+        constraint = delegate.session_key == session.key()  @ CasiError::Unauthorized,
+    )]
+    pub delegate: Account<'info, StreamerDelegate>,
+
+    #[account(
+        mut,
+        seeds    = [ESCROW_SEED, escrow_id.as_ref()],
+        bump     = escrow_state.bump,
+        has_one  = streamer @ CasiError::Unauthorized,
+        close    = streamer,
+    )]
+    pub escrow_state: Account<'info, EscrowState>,
+
+    #[account(
+        mut,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = escrow_state,
+        associated_token::token_program = token_program,
+    )]
+    pub vault: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        init_if_needed,
+        payer  = cranker,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = streamer,
+        associated_token::token_program = token_program,
+    )]
+    pub streamer_ata: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(mint::token_program = token_program)]
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
+
+    pub token_program:            Interface<'info, TokenInterface>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program:           Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(escrow_id: [u8; 32])]
+pub struct DenyFlashDelegated<'info> {
+    /// The ephemeral session key. Must match `delegate.session_key`.
+    pub session: Signer<'info>,
+
+    /// Fee + ATA-init payer.
+    #[account(mut)]
+    pub cranker: Signer<'info>,
+
+    /// CHECK: Delegate-PDA seed; bound via the `delegate` constraint. Not a
+    /// funds destination here (deny sends everything back to `viewer`).
+    pub streamer: SystemAccount<'info>,
+
+    /// CHECK: Refund destination + EscrowState close recipient + vault rent
+    /// recipient. Bound to the escrow's `viewer` field via `has_one`.
+    #[account(mut)]
+    pub viewer: SystemAccount<'info>,
+
+    #[account(
+        seeds = [DELEGATE_SEED, streamer.key().as_ref()],
+        bump  = delegate.bump,
+        constraint = delegate.streamer    == streamer.key() @ CasiError::Unauthorized,
+        constraint = delegate.session_key == session.key()  @ CasiError::Unauthorized,
+    )]
+    pub delegate: Account<'info, StreamerDelegate>,
+
+    #[account(
+        mut,
+        seeds   = [ESCROW_SEED, escrow_id.as_ref()],
+        bump    = escrow_state.bump,
+        has_one = streamer @ CasiError::Unauthorized,
+        has_one = viewer   @ CasiError::Unauthorized,
+        close   = viewer,
+    )]
+    pub escrow_state: Account<'info, EscrowState>,
+
+    #[account(
+        mut,
+        associated_token::mint          = usdc_mint,
+        associated_token::authority     = escrow_state,
+        associated_token::token_program = token_program,
+    )]
+    pub vault: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         init_if_needed,

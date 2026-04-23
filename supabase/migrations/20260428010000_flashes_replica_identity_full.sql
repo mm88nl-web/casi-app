@@ -1,0 +1,24 @@
+-- Enable FULL replica identity on the flashes table.
+--
+-- Supabase realtime was already broadcasting INSERT / DELETE events on
+-- flashes (the table is in the supabase_realtime publication per the
+-- previous migration). But UPDATE events were being silently dropped
+-- for any client-side subscription that filtered on a non-PK column
+-- (e.g. `filter: profile_id=eq.${profileId}`) — which is every flash
+-- subscription we have.
+--
+-- Why: the default Postgres replica identity ships only the primary
+-- key in the pre-image of UPDATE events. Supabase's filter expressions
+-- can't evaluate `profile_id=eq.X` against a payload that contains no
+-- `profile_id`, so those events never reach the filtered subscriber.
+--
+-- Symptom this closes: admin pending flash card stuck at "Awaiting
+-- payment" even after /api/flashes/attach-escrow successfully wrote
+-- tx_signature to the row. Admin had to refresh to see the card
+-- become approvable; realtime events from the UPDATE never fired.
+--
+-- `REPLICA IDENTITY FULL` tells Postgres to include every column in
+-- the update pre-image, so filter expressions on any column work
+-- correctly. No schema or data change; just WAL payload format.
+
+alter table public.flashes replica identity full;

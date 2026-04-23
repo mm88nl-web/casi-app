@@ -181,6 +181,67 @@ export async function GET(req: Request) {
     }
   }
 
-  console.log(`[stripe-janitor] processed ${overdue.length} overdue, captured ${captured}; stale ${stale?.length ?? 0}, cancelled ${cancelled}`);
-  return NextResponse.json({ overdue: overdue.length, captured, stale: stale?.length ?? 0, cancelled });
+  // ── Abandoned Stripe flashes ────────────────────────────────────────────
+  // Flash PaymentIntents also sit in `requires_capture` until the streamer
+  // moderates (approve captures; deny cancels). If a flash is ignored long
+  // enough the PI will auto-void at Stripe's 7-day mark and the row will
+  // linger as `pending` forever. Sweep them alongside bookings: void any
+  // flash PI older than FLASH_PENDING_MAX_AGE_HOURS and flip the row to
+  // `denied` so the feed stays clean.
+  const FLASH_PENDING_MAX_AGE_HOURS = 48;
+  const flashCutoff = new Date(Date.now() - FLASH_PENDING_MAX_AGE_HOURS * 3600 * 1000).toISOString();
+  type StaleFlashRow = { id: string; profile_id: string; payment_intent_id: string };
+  const { data: staleFlashes } = await supabase
+    .from('flashes')
+    .select('id, profile_id, payment_intent_id')
+    .eq('status', 'pending')
+    .eq('payment_method', 'stripe')
+    .not('payment_intent_id', 'is', null)
+    .lt('created_at', flashCutoff)
+    .returns<StaleFlashRow[]>();
+
+  let flashesCancelled = 0;
+  if (staleFlashes?.length) {
+    const flashProfileIds = Array.from(new Set(staleFlashes.map((f) => f.profile_id).filter(Boolean)));
+    const missingF = flashProfileIds.filter(id => !stripeAccountByProfile.has(id));
+    if (missingF.length) {
+      const { data: profs } = await supabase
+        .from('profiles')
+        .select('id, stripe_account_id')
+        .in('id', missingF);
+      for (const p of profs || []) {
+        if (p.stripe_account_id) stripeAccountByProfile.set(p.id, p.stripe_account_id);
+      }
+    }
+
+    for (const f of staleFlashes) {
+      try {
+        const stripeAccount = stripeAccountByProfile.get(f.profile_id);
+        if (stripeAccount) {
+          const opts = { stripeAccount };
+          const pi = await stripe.paymentIntents.retrieve(f.payment_intent_id, undefined, opts);
+          if (pi.status === 'requires_capture' || pi.status === 'requires_payment_method' || pi.status === 'requires_confirmation' || pi.status === 'requires_action') {
+            await stripe.paymentIntents.cancel(f.payment_intent_id, undefined, opts);
+            flashesCancelled++;
+          }
+        }
+        await supabase
+          .from('flashes')
+          .update({ status: 'denied' })
+          .eq('id', f.id);
+      } catch (err) {
+        console.error(`[stripe-janitor] stale flash ${f.id} failed:`, err instanceof Error ? err.message : err);
+      }
+    }
+  }
+
+  console.log(`[stripe-janitor] processed ${overdue.length} overdue, captured ${captured}; stale bookings ${stale?.length ?? 0}, cancelled ${cancelled}; stale flashes ${staleFlashes?.length ?? 0}, cancelled ${flashesCancelled}`);
+  return NextResponse.json({
+    overdue: overdue.length,
+    captured,
+    stale: stale?.length ?? 0,
+    cancelled,
+    staleFlashes: staleFlashes?.length ?? 0,
+    flashesCancelled,
+  });
 }

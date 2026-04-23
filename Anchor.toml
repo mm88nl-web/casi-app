@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-casi_escrow = "6utjMbb5ovFHUdMcMWaGc5ovmVhLryVRLEzYPWzeBosg"
+casi_escrow = "CDunHmMe2KW8qmjoqWanuu3p1DsEYjqRA1yVmyXDtakM"
 
 [programs.mainnet]
 casi_escrow = "6utjMbb5ovFHUdMcMWaGc5ovmVhLryVRLEzYPWzeBosg"
@@ -19,7 +19,7 @@ cluster = "Localnet"
 wallet = "~/.config/solana/id.json"
 
 [programs.localnet]
-casi_escrow = "6utjMbb5ovFHUdMcMWaGc5ovmVhLryVRLEzYPWzeBosg"
+casi_escrow = "CDunHmMe2KW8qmjoqWanuu3p1DsEYjqRA1yVmyXDtakM"
 
 [scripts]
 test = "npx ts-mocha -p tests/tsconfig.json -t 1000000 'tests/**/*.ts'"

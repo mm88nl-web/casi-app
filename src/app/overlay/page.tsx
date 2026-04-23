@@ -9,8 +9,7 @@ import WalletNav, { refreshWalletNav } from '@/components/WalletNav';
 import SlotMedia from '@/components/SlotMedia';
 import { useWalletBalances } from '@/lib/wallet-balances';
 import { BANNER_MAX_MESSAGE } from '@/lib/banner';
-import ChatPanel from '@/components/ChatPanel';
-import SendFlashSection from '@/components/overlay/SendFlashSection';
+import FlashPanel from '@/components/FlashPanel';
 import TurnstileWidget from '@/components/TurnstileWidget';
 import {
   SOLANA_RPC,
@@ -19,6 +18,24 @@ import {
   IS_MAINNET,
   WALLET_ADAPTER_CLUSTER,
 } from '@/lib/solana-network';
+import Logo from './_components/Logo';
+import Countdown from './_components/Countdown';
+import { getSecondsRemaining, formatTime } from './_components/time';
+import {
+  VIEWER_NAME_KEY,
+  readBookingTokens,
+  rememberBookingToken,
+  forgetBookingToken,
+  generateRandomName,
+} from './_components/viewerStorage';
+import NameEntryScreen from './_components/NameEntryScreen';
+import SolanaConfirmModal, { type TxStatus } from './_components/SolanaConfirmModal';
+import FlashFeed from './_components/FlashFeed';
+import MyBeamsSection from './_components/MyBeamsSection';
+import SlotsList from './_components/SlotsList';
+import StuckFlashesPanel from './_components/StuckFlashesPanel';
+import BrandFooter from './_components/BrandFooter';
+import BookingForm from './_components/BookingForm';
 
 // Explicit column list for bookings reads. Belt + suspenders alongside the
 // column-level GRANT in 20260423 — if a new sensitive column lands on
@@ -27,345 +44,6 @@ import {
 const BOOKING_COLS = 'id, created_at, profile_id, element_id, viewer_name, status, image_url, storage_path, file_type, message, duration_minutes, price_value, price_unit, payment_method, tx_signature, payment_intent_id, original_amount_cents, approved_at, started_at, escrow_pda, viewer_wallet, is_queued, queue_position';
 const BOOKING_PAGE_LIMIT = 200;
 
-function Logo({ scale = 0.32, color = 'var(--casi-accent)', bg = 'var(--casi-bg)' }: { scale?: number; color?: string; bg?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width={400 * scale} height={200 * scale}>
-      <g stroke={color} fill={color} strokeWidth="16" strokeLinecap="round">
-        <line x1="50" y1="60" x2="350" y2="60" />
-        <line x1="20" y1="100" x2="380" y2="100" />
-        <line x1="50" y1="140" x2="350" y2="140" />
-      </g>
-      <path fill={color} stroke="none" d="M 90,100 C 130,30 270,30 310,100 C 270,170 130,170 90,100 Z" />
-      <circle fill={bg} cx="200" cy="100" r="45" />
-    </svg>
-  );
-}
-
-function getSecondsRemaining(booking: any): number {
-  if (!booking?.started_at || !booking?.duration_minutes) return 0;
-  const started = new Date(booking.started_at).getTime();
-  // Explicit Number() coercion: Postgres NUMERIC columns return as strings via PostgREST
-  const expiresAt = started + Number(booking.duration_minutes) * 60 * 1000;
-  return Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
-}
-function formatTime(seconds: number): string {
-  if (seconds <= 0) return '0:00';
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-function Countdown({ booking, onWarning, onExpire }: { booking: any; onWarning?: (s: number) => void; onExpire?: () => void }) {
-  const [seconds, setSeconds] = useState(getSecondsRemaining(booking));
-  const firedRef = useRef(false);
-  useEffect(() => {
-    firedRef.current = false;
-    const interval = setInterval(() => {
-      const s = getSecondsRemaining(booking);
-      setSeconds(s);
-      if (onWarning) onWarning(s);
-      if (s <= 0 && onExpire && !firedRef.current) {
-        firedRef.current = true;
-        onExpire();
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [booking, onWarning, onExpire]);
-  return <span>{formatTime(seconds)}</span>;
-}
-
-const VIEWER_NAME_KEY = 'casi_viewer_name';
-// Per-booking cancel_tokens keyed by booking_id. Stored here so the viewer
-// (who is anonymous) can later prove ownership to /api/stripe/cancel without
-// relying on the publicly-readable viewer_name column.
-const BOOKING_TOKENS_KEY = 'casi_booking_tokens';
-function readBookingTokens(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(BOOKING_TOKENS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
-}
-function rememberBookingToken(bookingId: string, token: string) {
-  try {
-    const map = readBookingTokens();
-    map[bookingId] = token;
-    localStorage.setItem(BOOKING_TOKENS_KEY, JSON.stringify(map));
-  } catch {}
-}
-function forgetBookingToken(bookingId: string) {
-  try {
-    const map = readBookingTokens();
-    delete map[bookingId];
-    localStorage.setItem(BOOKING_TOKENS_KEY, JSON.stringify(map));
-  } catch {}
-}
-const ADJECTIVES = ['Cool','Fast','Bold','Wild','Epic','Slick','Dark','Neon','Hyper','Ultra','Turbo','Mega','Swift','Storm','Blaze'];
-const ANIMALS    = ['Tiger','Panda','Fox','Wolf','Hawk','Bear','Shark','Eagle','Viper','Lynx','Raven','Cobra','Falcon','Bison','Orca'];
-function generateRandomName() {
-  const adj    = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-  const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
-  return `${adj}${animal}${Math.floor(Math.random() * 99) + 1}`;
-}
-
-function NameEntryScreen({ onConfirm, tc }: { onConfirm: (name: string) => void; tc: string }) {
-  const [name, setName] = useState(generateRandomName());
-  const [showNote, setShowNote] = useState(false);
-  return (
-    <>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@400;500&display=swap'); *{box-sizing:border-box;margin:0;padding:0}`}</style>
-      <div style={{ minHeight:'100vh', background:'var(--casi-bg)', display:'flex', alignItems:'center', justifyContent:'center', padding:24, fontFamily:"'Syne',sans-serif" }}>
-        <div style={{ width:'100%', maxWidth:380 }}>
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom:40 }}>
-            <Logo scale={0.5} color={tc} />
-            <div style={{ fontSize:28, fontWeight:800, color:tc, letterSpacing:-1, marginTop:8 }}>casi</div>
-            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:3, textTransform:'uppercase', color:'#444', marginTop:4 }}>Viewer</div>
-          </div>
-          <div style={{ background:'var(--casi-surface)', border:'1px solid var(--casi-border)', borderRadius:16, padding:28, marginBottom:12 }}>
-            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'var(--casi-text-muted)', marginBottom:16 }}>Pick a name for this stream</div>
-            <div style={{ position:'relative', marginBottom:8 }}>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key==='Enter' && name.trim() && onConfirm(name.trim())}
-                maxLength={24} autoFocus
-                style={{ width:'100%', background:'rgba(255,255,255,0.04)', border:'1px solid var(--casi-border)', borderRadius:10, padding:'13px 16px', paddingRight:90, fontSize:15, fontWeight:700, color:'var(--casi-text)', outline:'none', fontFamily:"'Syne',sans-serif" }}
-                onFocus={(e)=>e.target.style.borderColor='rgba(var(--casi-accent-rgb),0.38)'}
-                onBlur={(e)=>e.target.style.borderColor='var(--casi-border)'} />
-              <button onClick={() => setName(generateRandomName())}
-                style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', fontFamily:"'DM Mono',monospace", fontSize:10, color:'#555', cursor:'pointer', textTransform:'uppercase', letterSpacing:1 }}>
-                ↺ random
-              </button>
-            </div>
-            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#333', marginBottom:20 }}>A random name was generated — change it or keep it.</div>
-            <button onClick={() => name.trim() && onConfirm(name.trim())} disabled={!name.trim()}
-              style={{ width:'100%', background:name.trim()?tc:'var(--casi-border)', border:'none', borderRadius:10, padding:14, fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:14, textTransform:'uppercase', letterSpacing:0.5, color:'var(--casi-bg)', cursor:name.trim()?'pointer':'not-allowed', transition:'all .2s' }}>
-              Enter stream →
-            </button>
-          </div>
-          <button onClick={() => setShowNote(!showNote)}
-            style={{ width:'100%', background:'none', border:'none', fontFamily:"'DM Mono',monospace", fontSize:10, color:'#333', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5, padding:'10px 0' }}>
-            Have an account? Sign in
-          </button>
-          {showNote && (
-            <div style={{ background:'rgba(255,255,255,0.02)', border:'1px solid #111', borderRadius:10, padding:16, textAlign:'center', marginTop:8 }}>
-              <div style={{ fontFamily:"'DM Mono',monospace", fontSize:11, color:'#444', lineHeight:1.7 }}>Account sign-in coming soon.<br/>Your name is saved on this device for now.</div>
-            </div>
-          )}
-        </div>
-      </div>
-    </>
-  );
-}
-
-type TxStatus = 'idle' | 'booking' | 'streaming' | 'waiting' | 'error';
-
-function SolanaConfirmModal({ slot, duration, estimatedCost, username, recipientWallet, usdcBalance, txStatus, txError, txId, submitting, onConfirm, onCancel }: {
-  slot: any; duration: number; estimatedCost: string; username: string;
-  recipientWallet: string | null; usdcBalance: number | null;
-  txStatus: TxStatus; txError: string | null; txId: string | null;
-  submitting: boolean; onConfirm: () => void; onCancel: () => void;
-}) {
-  const hasInsufficient = usdcBalance !== null && usdcBalance < parseFloat(estimatedCost);
-  const inProgress = submitting && txStatus !== 'idle' && txStatus !== 'error';
-  const stepIcon = (active: boolean, done: boolean) => done ? '✓' : active ? '⟳' : '○';
-  const shortWallet = recipientWallet
-    ? `${recipientWallet.slice(0, 4)}…${recipientWallet.slice(-4)}`
-    : null;
-  const solscanUrl = txId
-    ? `https://solscan.io/tx/${txId}${EXPLORER_CLUSTER_QUERY}`
-    : null;
-
-  return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:"'DM Mono',monospace" }}>
-      <div style={{ background:'var(--casi-surface,#0d0d0d)', border:'1px solid rgba(153,69,255,0.35)', borderRadius:16, padding:28, width:'100%', maxWidth:380 }}>
-        <div style={{ fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'#9945FF', marginBottom:16 }}>Confirm your beam slot</div>
-
-        {/* Details receipt */}
-        <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:10, padding:'14px 16px', marginBottom:16 }}>
-          {[['Slot on', `@${username}${IS_MAINNET ? '' : ' (devnet)'}`], ['Duration', formatTime(Math.round(duration * 60))], ['Rate', `$${slot.price_value}/${slot.price_unit}`]].map(([l, v]) => (
-            <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666', marginBottom:6 }}>
-              <span>{l}</span><span style={{ color:'#e8e8e8' }}>{v}</span>
-            </div>
-          ))}
-          {shortWallet && (
-            <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666', marginBottom:6 }}>
-              <span>Recipient</span>
-              <span style={{ color:'#e8e8e8', fontFamily:"'DM Mono',monospace" }}>{shortWallet}</span>
-            </div>
-          )}
-          <div style={{ borderTop:'1px solid #1c1c1c', margin:'10px 0' }} />
-          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#555', marginBottom:8 }}>
-            <span>@{username} receives</span>
-            <span style={{ color:'#e8e8e8' }}>{parseFloat(estimatedCost).toFixed(2)} USDC <span style={{ color:'#6ee7b7' }}>(100%)</span></span>
-          </div>
-          <div style={{ borderTop:'1px solid #1a1a1a', margin:'6px 0 8px' }} />
-          <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666' }}>
-            <span>Total</span>
-            <span style={{ fontSize:18, fontWeight:800, color:'#9945FF' }}>{estimatedCost} USDC</span>
-          </div>
-          {usdcBalance !== null && (
-            <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginTop:8 }}>
-              <span style={{ color:'#555' }}>Your balance</span>
-              <span style={{ color: hasInsufficient ? '#f87171' : '#6ee7b7' }}>
-                {usdcBalance.toFixed(2)} USDC{hasInsufficient ? ' — insufficient' : ''}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* CASI escrow note + anti-phishing warning */}
-        {!inProgress && txStatus !== 'waiting' && (
-          <div style={{ fontSize:10, color:'#444', lineHeight:1.8, marginBottom:16 }}>
-            Funds held in CASI on-chain escrow and vest over the beam duration.<br />
-            Unused USDC returns if ended early.
-            {shortWallet && (
-              <>
-                <br />
-                <span style={{ color:'#facc15' }}>⚠ Verify recipient </span>
-                <span style={{ color:'#666' }}>{shortWallet}</span>
-                <span style={{ color:'#facc15' }}> in your wallet popup.</span>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* TX status steps */}
-        {(inProgress || txStatus === 'waiting') && (
-          <div style={{ background:'rgba(255,255,255,0.02)', borderRadius:10, padding:'12px 14px', marginBottom:16 }}>
-            {[
-              { label: 'Booking created',             active: txStatus === 'booking',   done: txStatus !== 'booking' },
-              { label: 'Funding CASI escrow…',        active: txStatus === 'streaming', done: txStatus === 'waiting' },
-              { label: 'Waiting for admin approval',  active: txStatus === 'waiting',   done: false },
-            ].map((step, i) => (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:10, fontSize:11,
-                color: step.done ? '#6ee7b7' : step.active ? '#9945FF' : '#444',
-                marginBottom: i < 2 ? 8 : 0 }}>
-                <span style={{ width:14, textAlign:'center', display:'inline-block',
-                  animation: step.active ? 'casi-blink 1.2s infinite' : 'none' }}>
-                  {stepIcon(step.active, step.done)}
-                </span>
-                {step.label}
-                {step.active && i === 2 && solscanUrl && (
-                  <a href={solscanUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ marginLeft:'auto', fontSize:10, color:'#9945FF', textDecoration:'none', opacity:0.8 }}>
-                    ↗ verify tx
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Error */}
-        {txStatus === 'error' && txError && (
-          <div style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.2)', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:11, color:'#f87171' }}>
-            {txError}
-          </div>
-        )}
-
-        {/* Buttons */}
-        <div style={{ display:'flex', gap:10 }}>
-          <button onClick={onCancel} disabled={inProgress}
-            style={{ flex:1, background:'none', border:'1px solid #1c1c1c', borderRadius:10, padding:'12px 0', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:13, color: inProgress ? '#333' : '#555', cursor: inProgress ? 'not-allowed' : 'pointer' }}>
-            Cancel
-          </button>
-          <button onClick={onConfirm} disabled={inProgress || hasInsufficient}
-            style={{ flex:2, background: inProgress || hasInsufficient ? '#1c1c1c' : '#9945FF', border:'none', borderRadius:10, padding:'12px 0', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:13, color: inProgress || hasInsufficient ? '#444' : '#fff', cursor: inProgress || hasInsufficient ? 'not-allowed' : 'pointer' }}>
-            {inProgress ? 'Signing…' : txStatus === 'error' ? 'Retry →' : 'Confirm & Sign →'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Flash Feed (OBS overlay) ────────────────────────────────────────────── */
-type FlashItem = { id: string; viewer_name: string; message: string; amount_cents: number; enteredAt: number; tx_signature?: string | null };
-
-function FlashFeed({ profileId }: { profileId: string }) {
-  const [items, setItems] = useState<FlashItem[]>([]);
-  const supabase = useRef(createClient()).current;
-  const DISPLAY_MS = 25_000;
-
-  // Hydrate with any flashes approved in the last DISPLAY_MS on mount
-  useEffect(() => {
-    const since = new Date(Date.now() - DISPLAY_MS).toISOString();
-    supabase
-      .from('flashes')
-      .select('id, viewer_name, message, amount_cents, tx_signature')
-      .eq('profile_id', profileId)
-      .eq('status', 'approved')
-      .gte('created_at', since)
-      .order('created_at', { ascending: true })
-      .limit(5)
-      .then(({ data }) => {
-        if (data?.length) setItems(data.map(f => ({ ...f, enteredAt: Date.now() })));
-      });
-  }, [profileId, supabase]);
-
-  // Real-time: listen for flashes being approved
-  useEffect(() => {
-    const channel = supabase
-      .channel(`flash_feed_${profileId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profileId}` },
-        (payload) => {
-          if (payload.new?.status === 'approved') {
-            setItems(prev => {
-              const n = payload.new as Record<string, unknown>;
-              const item: FlashItem = {
-                id:            n.id as string,
-                viewer_name:   n.viewer_name as string,
-                message:       n.message as string,
-                amount_cents:  n.amount_cents as number,
-                tx_signature:  n.tx_signature as string | null | undefined,
-                enteredAt:     Date.now(),
-              };
-              return [...prev.filter(f => f.id !== item.id), item].slice(-5);
-            });
-          }
-        })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [profileId, supabase]);
-
-  // Auto-expire items after DISPLAY_MS
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setItems(prev => prev.filter(f => Date.now() - f.enteredAt < DISPLAY_MS));
-    }, 1000);
-    return () => clearInterval(iv);
-  }, []);
-
-  if (!items.length) return null;
-
-  return (
-    <div style={{ position: 'absolute', bottom: 28, right: 28, width: 290, display: 'flex', flexDirection: 'column', gap: 10, zIndex: 200, pointerEvents: 'none' }}>
-      <style>{`@keyframes flashPop{from{opacity:0;transform:scale(0.82) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
-      {items.map(flash => (
-        <div key={flash.id} style={{ animation: 'flashPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
-          {/* Name + amount row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5, paddingLeft: 4 }}>
-            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500, color: 'var(--casi-accent)', textShadow: '0 1px 6px rgba(0,0,0,0.9)', letterSpacing: 0.5 }}>
-              ⚡ {flash.viewer_name}
-            </span>
-            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, background: 'rgba(var(--casi-accent-rgb),0.18)', color: 'var(--casi-accent)', border: '1px solid rgba(var(--casi-accent-rgb),0.35)', borderRadius: 20, padding: '1px 8px' }}>
-              ${(flash.amount_cents / 100).toFixed(2)}
-            </span>
-          </div>
-          {/* iMessage-style bubble */}
-          <div style={{ background: 'rgba(255,255,255,0.93)', borderRadius: '18px 18px 4px 18px', padding: '11px 15px', boxShadow: '0 6px 24px rgba(0,0,0,0.4)' }}>
-            <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 14, fontWeight: 600, color: '#0d0d0d', lineHeight: 1.45, margin: 0 }}>
-              {flash.message}
-            </p>
-            {flash.tx_signature && (
-              <a href={`https://solscan.io/tx/${flash.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'inline-block', marginTop: 6, fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none', opacity: 0.7, pointerEvents: 'auto' }}>
-                ↗ verify on Solscan
-              </a>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 
 function OverlayContent() {
@@ -380,6 +58,13 @@ function OverlayContent() {
   const [queueCounts, setQueueCounts]   = useState<Record<string,number>>({});
   const [loading, setLoading]           = useState(true);
   const [myBookings, setMyBookings]     = useState<any[]>([]);
+  // Stuck Solana flashes the viewer paid for but that never settled —
+  // either the streamer hasn't moderated yet OR a prior moderation
+  // closed the PDA but the DB row is stale (drift). Surfaces a
+  // viewer-driven recovery card on the overlay so users aren't waiting
+  // on the streamer to unstick something.
+  const [myStuckFlashes, setMyStuckFlashes] = useState<any[]>([]);
+  const [reclaimingFlash, setReclaimingFlash] = useState<string | null>(null);
   const [expiringSoon, setExpiringSoon] = useState<Set<string>>(new Set());
   const [savedViewerName, setSavedViewerName] = useState<string|null>(null);
   const [nameConfirmed, setNameConfirmed]     = useState(false);
@@ -543,6 +228,35 @@ function OverlayContent() {
         return true;
       });
       setMyBookings(relevant);
+
+      // Stuck Solana flashes: pending rows with an escrow_pda. Same dual
+      // query as bookings (by viewer_name + viewer_wallet) so a viewer
+      // who paid on one device + reconnected on another still sees the
+      // recovery card. The streamer-side stuck-flash class is moderated
+      // via admin/page.tsx::moderateSolanaFlash drift recovery; this
+      // surface is for the viewer who'd rather get their USDC back than
+      // wait for the streamer to act.
+      const FLASH_COLS = 'id, viewer_name, message, amount_cents, status, escrow_pda, viewer_wallet, payment_method, created_at';
+      const [nameFlashRes, walletFlashRes] = await Promise.all([
+        name
+          ? supabase.from('flashes').select(FLASH_COLS)
+              .eq('profile_id', profId).eq('viewer_name', name)
+              .eq('payment_method', 'solana').eq('status', 'pending')
+              .not('escrow_pda', 'is', null)
+              .limit(20)
+          : Promise.resolve({ data: [] as any[] }),
+        wallet
+          ? supabase.from('flashes').select(FLASH_COLS)
+              .eq('profile_id', profId).eq('viewer_wallet', wallet)
+              .eq('payment_method', 'solana').eq('status', 'pending')
+              .not('escrow_pda', 'is', null)
+              .limit(20)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const stuckById = new Map<any, any>();
+      for (const f of (nameFlashRes.data || [])) stuckById.set(f.id, f);
+      for (const f of (walletFlashRes.data || [])) if (!stuckById.has(f.id)) stuckById.set(f.id, f);
+      setMyStuckFlashes(Array.from(stuckById.values()));
     }
   }, [supabase]);
 
@@ -581,22 +295,24 @@ function OverlayContent() {
           }
         }
         const bump = () => { lastRealtimeEventAt.current = Date.now(); };
-        const channel = supabase.channel(`overlay_${prof.id}`)
-          .on('postgres_changes',{event:'*',schema:'public',table:'overlay_elements',filter:`profile_id=eq.${prof.id}`},()=>{bump();loadData(prof.id);})
-          .on('postgres_changes',{event:'*',schema:'public',table:'bookings',filter:`profile_id=eq.${prof.id}`},(payload)=>{
-            // TEMP diagnostic for deny-doesn't-propagate bug. Remove once fixed.
-            console.warn('[overlay/rt/bookings]', {
-              type: payload.eventType,
-              oldStatus: (payload.old as { status?: string } | null)?.status,
-              newStatus: (payload.new as { status?: string } | null)?.status,
-              id: (payload.new as { id?: string | number } | null)?.id
-                ?? (payload.old as { id?: string | number } | null)?.id,
-            });
-            bump();
+        // Debounce refetches: a single streamer action (approve, deny, etc.)
+        // fires both an overlay_elements UPDATE and a bookings UPDATE, plus
+        // reconnects replay bursts. Without coalescing that's one full
+        // loadData per event — trailing-debounce collapses the burst into
+        // one fetch ~200ms after quiet.
+        let refetchTimer: ReturnType<typeof setTimeout> | undefined;
+        const scheduleReload = () => {
+          bump();
+          if (refetchTimer) clearTimeout(refetchTimer);
+          refetchTimer = setTimeout(() => {
+            refetchTimer = undefined;
             loadData(prof.id);
-          })
+          }, 200);
+        };
+        const channel = supabase.channel(`overlay_${prof.id}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'overlay_elements', filter: `profile_id=eq.${prof.id}` }, scheduleReload)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings',         filter: `profile_id=eq.${prof.id}` }, scheduleReload)
           .subscribe((status) => {
-            console.warn('[overlay/rt/subscribe]', status);
             if (status === 'SUBSCRIBED') bump();
           });
 
@@ -610,7 +326,11 @@ function OverlayContent() {
           }, 30_000);
         }
 
-        cleanup = () => { supabase.removeChannel(channel); if (watchdog) clearInterval(watchdog); };
+        cleanup = () => {
+          supabase.removeChannel(channel);
+          if (watchdog) clearInterval(watchdog);
+          if (refetchTimer) clearTimeout(refetchTimer);
+        };
       } else { setLoading(false); }
     };
     init();
@@ -1452,6 +1172,90 @@ function OverlayContent() {
     );
   };
 
+  /**
+   * Viewer-side recovery for a stuck Solana flash. Mirror of
+   * reclaimSolanaEscrow above, but for the flashes table:
+   *
+   *   - Probe the escrow PDA. If it's already closed (a prior moderate
+   *     tx settled or denied without the DB catching up), call the
+   *     viewer-recover route which re-probes server-side and flips the
+   *     flash row to `denied`. No wallet popup — there's nothing to sign.
+   *   - If the PDA is alive, viewer signs `cancel_escrow` (the program-
+   *     level cancel works for any Pending escrow regardless of beam
+   *     vs flash type — same EscrowState). After it lands, server route
+   *     reflects the closure.
+   *   - Handles the race where the PDA closes between probe and tx:
+   *     catch AlreadySettled / AccountNotInitialized, fall through to
+   *     server-side reconcile.
+   */
+  const reclaimFlashEscrow = async (flash: any) => {
+    if (!flash.escrow_pda || reclaimingFlash) return;
+    setReclaimingFlash(flash.id);
+    try {
+      const reflectClosed = async (toastOk: string, toastFail: string): Promise<void> => {
+        const res = await fetch('/api/flashes/viewer-recover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ flash_id: flash.id }),
+        });
+        if (res.ok) {
+          showNotif(toastOk, 'warning');
+          if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          showNotif(err?.error || toastFail, 'denied');
+        }
+      };
+
+      const { Connection, PublicKey } = await import('@solana/web3.js');
+      const conn = new Connection(SOLANA_RPC, 'confirmed');
+      const pdaInfo = await conn.getAccountInfo(new PublicKey(flash.escrow_pda)).catch(() => null);
+
+      // PDA already gone → server-side reconcile, no wallet sign.
+      if (!pdaInfo) {
+        await reflectClosed(
+          '◎ Recovery confirmed — funds already returned',
+          'Recovery failed — try again',
+        );
+        return;
+      }
+
+      // PDA still alive → viewer signs cancel_escrow for a full refund.
+      const client = await buildViewerCasiClient();
+      if (!client) {
+        showNotif('Connect your wallet to recover this flash', 'denied');
+        return;
+      }
+      try {
+        await client.cancelEscrow({ escrowId: flash.id });
+      } catch (err) {
+        const { isAlreadyProcessed, formatEscrowError } = await import('@/lib/casi-errors');
+        const msg = err instanceof Error ? err.message : String(err);
+        if (isAlreadyProcessed(err) || /AlreadySettled|AccountNotInitialized/i.test(msg)) {
+          // Race: PDA closed between our probe and our tx. Reconcile.
+          await reflectClosed(
+            '◎ Already settled — DB synced',
+            'Settled on-chain but DB sync failed — refresh',
+          );
+          return;
+        }
+        showNotif(formatEscrowError(err), 'denied');
+        return;
+      }
+
+      // Cancel landed. Tell the server the PDA is closed so the row flips
+      // to denied. refreshWalletNav fires the live USDC balance update so
+      // the viewer sees their refund land instantly in the nav.
+      refreshWalletNav();
+      await reflectClosed(
+        '◎ USDC refunded',
+        'Refund confirmed on-chain — refresh in a moment',
+      );
+    } finally {
+      setReclaimingFlash(null);
+    }
+  };
+
   // Bulk-clear ghost RECOVER USDC chips — closed PDAs whose DB rows still
   // carry escrow_pda from a previous build / aborted flow. The server probes
   // each row's PDA and nulls escrow_pda on the ones that are actually gone;
@@ -1502,10 +1306,14 @@ function OverlayContent() {
       : (selectedSlot.price_value * (durationSeconds / 3600)).toFixed(2)
     : '0';
 
-  // True when the viewer has a valid image/video ready to submit.
-  const canSubmit = uploadMode === 'upload'
-    ? !!uploadedUrl
-    : (!!imageUrl && imageUrl.startsWith('https://') && imageValid);
+  // True when the viewer has the content needed to submit a booking.
+  // Banner slots use the scrolling message as their content (media is
+  // optional). Every other shape requires a valid image/video.
+  const canSubmit = selectedSlot?.shape === 'banner'
+    ? message.trim().length > 0 && message.length <= BANNER_MAX_MESSAGE
+    : uploadMode === 'upload'
+      ? !!uploadedUrl
+      : (!!imageUrl && imageUrl.startsWith('https://') && imageValid);
 
   // For booking form accent: extend=yellow, queue/rent=skin accent
   const accentColor    = isExtend ? '#eab308' : tc;
@@ -1665,103 +1473,43 @@ function OverlayContent() {
         <main className={isOBS ? '' : 'ov-main'}>
 
           {/* MY BEAMS */}
-          {!isOBS && visibleMyBookings.length > 0 && !selectedSlot && (
-            <div className="my-beams">
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-                <div className="my-beams-lbl" style={{ marginBottom:0 }}>Your beams</div>
-                {viewerWalletRef.current && visibleMyBookings.some((b:any) => b.payment_method === 'solana' && b.escrow_pda && (b.status === 'denied' || b.status === 'expired')) && (
-                  <button
-                    onClick={runStaleSolanaCleanup}
-                    disabled={cleanupBusy}
-                    style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', background:'none', border:'1px solid var(--casi-border)', borderRadius:8, padding:'4px 10px', color:'var(--casi-text-muted)', cursor:cleanupBusy?'default':'pointer', opacity:cleanupBusy?0.5:1 }}
-                    title="Probe each escrow and clear rows whose funds already left the vault"
-                  >
-                    {cleanupBusy ? '…' : 'Clean up ended'}
-                  </button>
-                )}
-              </div>
-              <div className="my-beams-list">
-                {visibleMyBookings.map((booking: any) => {
-                  const isLive     = booking.status==='active';
-                  const isApproved = booking.status==='approved_queued';
-                  const isPending  = booking.status==='pending';
-                  const isDenied   = booking.status==='denied';
-                  const isExpired  = booking.status==='expired';
-                  const isSolanaLocked = isDenied && booking.payment_method === 'solana' && booking.escrow_pda;
-                  // Kick-leaked: streamer ended the beam but the on-chain
-                  // settle didn't go through, so the PDA still holds funds.
-                  // Visually distinct from a plain denial because the viewer
-                  // is owed a prorated refund, not a full one.
-                  const isSolanaKickLeaked = isExpired && booking.payment_method === 'solana' && booking.escrow_pda;
-                  const isExpiring = isLive && expiringSoon.has(booking.id);
-                  const activeBooking = activeBookings.find((b:any) => b.id===booking.id);
-                  const canCancel = isPending || isApproved;
-                  const needsRecover = isSolanaLocked || isSolanaKickLeaked;
-                  const chipStyle = isExpiring
-                    ? { background:'rgba(234,179,8,0.08)', borderColor:'rgba(234,179,8,0.25)', color:'#facc15' }
-                    : isLive
-                    ? { background:`rgba(${tcRgb},0.07)`, borderColor:`rgba(${tcRgb},0.21)`, color:tc }
-                    : isApproved
-                    ? { background:`rgba(${tcRgb},0.06)`, borderColor:`rgba(${tcRgb},0.19)`, color:tc }
-                    : needsRecover
-                    ? { background:'rgba(192,132,252,0.06)', borderColor:'rgba(192,132,252,0.25)', color:'#c084fc' }
-                    : isDenied
-                    ? { background:'rgba(248,113,113,0.06)', borderColor:'rgba(248,113,113,0.22)', color:'#f87171' }
-                    : { background:'rgba(255,255,255,0.03)', borderColor:'var(--casi-border)', color:'var(--casi-text-muted)' };
-                  return (
-                    <div key={booking.id} className="beam-chip" style={chipStyle}>
-                      {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width:20, height:20, objectFit:'contain', borderRadius:4 }} />}
-                      <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, fontWeight:500 }}>
-                        {isExpiring?'⚠ Expiring':isLive?'● Live':isApproved?'⏳ Queued':isSolanaKickLeaked?'⚡ Ended early — USDC recoverable':isSolanaLocked?'✕ Denied — USDC locked':isDenied?'✕ Denied — refund on the way':'⌛ Pending'}
-                      </span>
-                      {isLive && activeBooking && (
-                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, opacity:0.7 }}>
-                          <Countdown booking={activeBooking}
-                            onWarning={(s) => {
-                              if(s<=300&&s>0) setExpiringSoon(prev=>new Set(prev).add(booking.id));
-                              else if(s<=0) setExpiringSoon(prev=>{const n=new Set(prev);n.delete(booking.id);return n;});
-                            }}
-                            onExpire={() => clientExpireBooking(activeBooking)}
-                          />
-                        </span>
-                      )}
-                      {isLive && (
-  <button className="cancel-btn" onClick={async () => {
-    if (booking.payment_method === 'solana') {
-      // settle_beam pays streamer the vested portion on-chain and refunds
-      // the viewer the rest in a single tx. DB is updated after to advance
-      // the queue; settleSolanaBeam already surfaces its own toast on error.
-      await settleSolanaBeam(booking);
-      await clientExpireBooking(activeBooking);   // clear slot + advance queue
-    } else {
-      await fetch('/api/stripe/end-early', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ booking_id: booking.id }),
-      });
-      await clientExpireBooking(activeBooking);
-      showNotif('Beam ended — prorated refund issued', 'warning');
-    }
-  }}>
-    ✕ end early
-  </button>
-)}
-                      {canCancel && (
-                        <button className="cancel-btn" onClick={() => cancelBooking(booking.id)} disabled={cancelling===booking.id}>
-                          {cancelling===booking.id?'…':'✕ cancel'}
-                        </button>
-                      )}
-                      {needsRecover && (
-                        <button className="cancel-btn" style={{ color: '#c084fc', borderColor: 'rgba(192,132,252,0.3)' }}
-                          onClick={() => reclaimSolanaEscrow(booking)}>
-                          ◎ recover USDC
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+          {!isOBS && !selectedSlot && (
+            <MyBeamsSection
+              bookings={visibleMyBookings}
+              activeBookings={activeBookings}
+              expiringSoon={expiringSoon}
+              onExpiringWarning={(id, s) => {
+                if (s <= 300 && s > 0) setExpiringSoon(prev => new Set(prev).add(id));
+                else if (s <= 0) setExpiringSoon(prev => { const n = new Set(prev); n.delete(id); return n; });
+              }}
+              viewerWallet={viewerWalletRef.current}
+              cleanupBusy={cleanupBusy}
+              onStaleCleanup={runStaleSolanaCleanup}
+              tc={tc}
+              tcRgb={tcRgb}
+              cancelling={cancelling}
+              onEndEarly={async (booking, activeBooking) => {
+                if (booking.payment_method === 'solana') {
+                  // settle_beam pays streamer the vested portion on-chain and
+                  // refunds the viewer the rest in a single tx. DB is updated
+                  // after to advance the queue; settleSolanaBeam surfaces its
+                  // own toast on error.
+                  await settleSolanaBeam(booking);
+                  if (activeBooking) await clientExpireBooking(activeBooking);
+                } else {
+                  await fetch('/api/stripe/end-early', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ booking_id: booking.id }),
+                  });
+                  if (activeBooking) await clientExpireBooking(activeBooking);
+                  showNotif('Beam ended — prorated refund issued', 'warning');
+                }
+              }}
+              onCancel={cancelBooking}
+              onReclaim={reclaimSolanaEscrow}
+              onExpire={clientExpireBooking}
+            />
           )}
 
           {/* STREAM CANVAS */}
@@ -1782,6 +1530,16 @@ function OverlayContent() {
               const myBookingForSlot = getMyBookingForSlot(el.id);
               const myIsExpiring    = myBookingForSlot && expiringSoon.has(myBookingForSlot.id);
               const isLocked        = !!el.locked;
+              // Estimated wait for a viewer joining the queue right now:
+              // remaining time on the live beam + sum of every queued
+              // booking's duration. Matches the booking-form estimate at
+              // line 2193 so slot pill and form agree. Clamp to ≥1 min so
+              // the pill never reads "0m wait" when there's genuinely a
+              // live beam and queue ahead.
+              const activeRemainingMin = activeBooking ? Math.max(0, getSecondsRemaining(activeBooking) / 60) : 0;
+              const queueOnSlot        = approvedQueuedBookings.filter((b:any) => b.element_id === el.id);
+              const queueDurationMin   = queueOnSlot.reduce((sum: number, b:any) => sum + Number(b.duration_minutes || 0), 0);
+              const waitMin            = Math.max(1, Math.round(activeRemainingMin + queueDurationMin));
               // Viewer has a preview ready (upload or validated URL)
               const viewerHasPreview = isSelected && (
                 (uploadMode === 'upload' && !!uploadedUrl) ||
@@ -1813,8 +1571,29 @@ function OverlayContent() {
               // no booking is active (just show the empty placeholder).
               const isBannerActive = el.shape === 'banner' && isOccupied && !!activeBooking?.message;
 
+              // The slot itself is the click target — tapping an open beam
+              // (or a queued occupied one) opens the booking form. Disabled
+              // when the viewer already has a booking here, the slot is
+              // locked, or another slot's form is already open (one at a
+              // time). Extend / Join queue / Book all route through the
+              // same openSlot call with different modes.
+              const clickable = !isOBS && !isLocked && !myBookingForSlot && !selectedSlot;
+              const handleSlotClick = clickable ? () => openSlot(el, isOccupied) : undefined;
+              const isSelectedHere = selectedSlot?.id === el.id;
+
               return (
-                <div key={el.id} style={{ position:'absolute', left:`${el.pos_x}%`, top:`${el.pos_y}%`, width:`${el.width}%`, height:`${el.height}%`, zIndex:el.is_background?10:50, transition:'all 0.35s cubic-bezier(0.16,1,0.3,1)' }}>
+                <div
+                  key={el.id}
+                  onClick={handleSlotClick}
+                  style={{
+                    position: 'absolute',
+                    left: `${el.pos_x}%`, top: `${el.pos_y}%`,
+                    width: `${el.width}%`, height: `${el.height}%`,
+                    zIndex: el.is_background ? 10 : 50,
+                    cursor: clickable ? 'pointer' : 'default',
+                    transition: 'all 0.35s cubic-bezier(0.16,1,0.3,1)',
+                  }}
+                >
                   {isBannerActive ? (
                     <div key={mediaKey} className={`beam-banner ${glowClass}`.trim()}>
                       <span className="beam-banner-track">{activeBooking.message}</span>
@@ -1848,43 +1627,113 @@ function OverlayContent() {
                     </div>
                   )}
 
+                  {/* Selection outline — mirrors the admin studio's selection
+                      glow so the booking-form modal below has a clear visual
+                      anchor back to the slot that triggered it. */}
+                  {isSelectedHere && !isOBS && (
+                    <div style={{ position:'absolute', inset:-3, borderRadius:10, border:`2px solid ${accentColor}`, boxShadow:`0 0 0 4px rgba(${accentColorRgb},0.15)`, pointerEvents:'none', zIndex:15 }} />
+                  )}
+
+                  {/* Price badge — corner-mounted inside the slot (bottom-
+                      centre on backdrops, top-right on beams) so slots
+                      pinned to the canvas edge don't have their price
+                      label hanging off-screen like the old stack did. */}
                   {el.price_value >= 0 && !isOBS && (
-                    <div style={{ position:'absolute', bottom:el.is_background?12:-54, left:'50%', transform:'translateX(-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:5, zIndex:100, whiteSpace:'nowrap' }}>
-                      <div style={{ background:'rgba(5,5,5,0.92)', border:`1px solid ${Number(el.price_value)===0?'rgba(74,222,128,0.35)':'rgba(255,255,255,0.08)'}`, borderRadius:20, padding:'3px 10px', display:'flex', alignItems:'center', gap:5 }}>
-                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:500, color: Number(el.price_value)===0 ? '#4ade80' : tc }}>
-                          {Number(el.price_value)===0 ? '★ Free' : `$${el.price_value}/${el.price_unit}`}
-                        </span>
-                        {el.max_duration_minutes && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'#444' }}>· max {el.max_duration_minutes}m</span>}
-                      </div>
-                      {isLocked ? (
-                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'rgba(248,113,113,0.5)', padding:'3px 8px', border:'1px solid rgba(248,113,113,0.15)', borderRadius:20 }}>🔒 Locked</span>
-                      ) : myBookingForSlot ? (
-                        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
-                          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, padding:'3px 10px', borderRadius:20, border:'1px solid', ...(myIsExpiring?{color:'#facc15',borderColor:'rgba(234,179,8,0.3)',background:'rgba(234,179,8,0.08)'}:myBookingForSlot.status==='active'?{color:tc,borderColor:`rgba(${tcRgb},0.31)`,background:`rgba(${tcRgb},0.07)`}:myBookingForSlot.status==='approved_queued'?{color:tc,borderColor:`rgba(${tcRgb},0.25)`,background:`rgba(${tcRgb},0.06)`}:{color:'var(--casi-text-muted)',borderColor:'var(--casi-border)',background:'rgba(255,255,255,0.03)'}) }}>
-                            {myIsExpiring?'⚠ Expiring':myBookingForSlot.status==='active'?'● Your beam is live':myBookingForSlot.status==='approved_queued'?'⏳ Queued':'⌛ Pending'}
-                          </span>
-                          {showExtend && (
-                            <button onClick={() => openSlot(el, false, true)}
-                              style={{ background:'#eab308', border:'none', borderRadius:20, padding:'4px 12px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:10, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer' }}>
-                              Extend
-                            </button>
-                          )}
-                          {myIsExpiring && !canExtend(el.id) && (
-                            <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'rgba(234,179,8,0.5)' }}>Next viewer waiting</span>
-                          )}
-                        </div>
-                      ) : isOccupied ? (
-                        <button onClick={() => openSlot(el, true)}
-                          style={{ background:tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer' }}>
-                          Join queue{queueCount>0?` (${queueCount})`:''}
-                        </button>
-                      ) : !selectedSlot ? (
-                        <button onClick={() => openSlot(el, false)}
-                          style={{ background: Number(el.price_value)===0 ? '#4ade80' : tc, border:'none', borderRadius:20, padding:'5px 14px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:11, textTransform:'uppercase', color:'var(--casi-bg)', cursor:'pointer', boxShadow: Number(el.price_value)===0 ? '0 4px 14px rgba(74,222,128,0.19)' : `0 4px 14px rgba(${tcRgb},0.19)` }}>
-                          {Number(el.price_value)===0 ? 'Claim free slot' : 'Tip for this slot'}
-                        </button>
-                      ) : null}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        ...(el.is_background
+                          ? { bottom: 12, left: '50%', transform: 'translateX(-50%)' }
+                          : { top: 6, right: 6 }),
+                        background: 'rgba(5,5,5,0.92)',
+                        border: `1px solid ${Number(el.price_value)===0 ? 'rgba(74,222,128,0.35)' : 'rgba(255,255,255,0.08)'}`,
+                        borderRadius: 20,
+                        padding: '3px 10px',
+                        pointerEvents: 'none',
+                        zIndex: 20,
+                        fontFamily: "'DM Mono',monospace",
+                        fontSize: 10,
+                        color: Number(el.price_value)===0 ? '#4ade80' : tc,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {Number(el.price_value)===0 ? '★ Free' : `$${el.price_value}/${el.price_unit}`}
+                      {el.max_duration_minutes && <span style={{ color:'#555', marginLeft: 6, fontSize: 9 }}>· max {el.max_duration_minutes}m</span>}
                     </div>
+                  )}
+
+                  {/* Status badge — locked / my booking state, top-left so
+                      it doesn't collide with the price on the right. */}
+                  {!isOBS && (isLocked || myBookingForSlot) && (
+                    <div
+                      style={{
+                        position: 'absolute', top: 6, left: 6,
+                        zIndex: 20, pointerEvents: 'none',
+                        fontFamily: "'DM Mono',monospace", fontSize: 9,
+                        padding: '3px 10px', borderRadius: 20, border: '1px solid',
+                        ...(isLocked
+                          ? { color: 'rgba(248,113,113,0.6)', borderColor: 'rgba(248,113,113,0.25)', background: 'rgba(248,113,113,0.08)' }
+                          : myIsExpiring
+                            ? { color: '#facc15', borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.08)' }
+                            : myBookingForSlot!.status === 'active'
+                              ? { color: tc, borderColor: `rgba(${tcRgb},0.3)`, background: `rgba(${tcRgb},0.08)` }
+                              : myBookingForSlot!.status === 'approved_queued'
+                                ? { color: tc, borderColor: `rgba(${tcRgb},0.22)`, background: `rgba(${tcRgb},0.05)` }
+                                : { color: 'var(--casi-text-muted)', borderColor: 'var(--casi-border)', background: 'rgba(255,255,255,0.03)' }
+                        ),
+                      }}
+                    >
+                      {isLocked
+                        ? '🔒 Locked'
+                        : myIsExpiring
+                          ? '⚠ Expiring'
+                          : myBookingForSlot!.status === 'active'
+                            ? '● Your beam'
+                            : myBookingForSlot!.status === 'approved_queued'
+                              ? '⏳ Queued'
+                              : '⌛ Pending'}
+                    </div>
+                  )}
+
+                  {/* Wait estimate — always shown on occupied slots (even
+                      with an empty queue) so viewers know how long they'd
+                      wait before clicking through to the booking form.
+                      Queue count joins the text when ≥1 viewer is already
+                      in line. */}
+                  {!isOBS && isOccupied && !myBookingForSlot && !isLocked && (
+                    <div
+                      style={{
+                        position: 'absolute', bottom: 6, right: 6,
+                        zIndex: 20, pointerEvents: 'none',
+                        fontFamily: "'DM Mono',monospace", fontSize: 9,
+                        color: `rgba(${tcRgb},0.8)`,
+                        background: 'rgba(5,5,5,0.85)',
+                        border: `1px solid rgba(${tcRgb},0.22)`,
+                        borderRadius: 20, padding: '2px 8px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      ⏳ {queueCount > 0 ? `${queueCount} queued · ` : ''}~{waitMin}m wait
+                    </div>
+                  )}
+
+                  {/* Extend — viewer's own beam is expiring and eligible.
+                      Separate button so it doesn't collapse into the slot
+                      click (which would just re-open the booking form in
+                      book-new mode). */}
+                  {!isOBS && showExtend && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openSlot(el, false, true); }}
+                      style={{
+                        position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)',
+                        background: '#eab308', border: 'none', borderRadius: 20,
+                        padding: '4px 14px', fontFamily: "'Syne',sans-serif",
+                        fontWeight: 700, fontSize: 10, textTransform: 'uppercase',
+                        color: 'var(--casi-bg)', cursor: 'pointer', zIndex: 25,
+                      }}
+                    >
+                      Extend
+                    </button>
                   )}
                 </div>
               );
@@ -1896,376 +1745,101 @@ function OverlayContent() {
 
           {/* BOOKING FORM */}
           {!isOBS && selectedSlot && (
-            <div className="bf" style={{ border:`1px solid rgba(${accentColorRgb},0.13)` }}>
-              <div className="bf-hdr">
-                <div>
-                  <div className="bf-type" style={{ color:accentColor }}>{isExtend?'⏱ Extend slot':isQueue?'⏳ Join queue':'🎯 Tip for slot'}</div>
-                  <div className="bf-price" style={{ color: Number(selectedSlot.price_value)===0 ? '#4ade80' : accentColor }}>
-                    {Number(selectedSlot.price_value)===0 ? '★ Free' : `$${selectedSlot.price_value}/${selectedSlot.price_unit}`}
-                  </div>
-                </div>
-                <button className="bf-x" onClick={closeSlot}>✕</button>
-              </div>
-              <div className="bf-grid">
-                <div>
-                  <div style={{ marginBottom:14 }}>
-                    <label className="bf-lbl">Beam media</label>
-                    {/* Mode toggle */}
-                    <div style={{ display:'flex', gap:0, marginBottom:8, border:'1px solid var(--casi-border)', borderRadius:8, overflow:'hidden' }}>
-                      {(['upload','url'] as const).map(m => (
-                        <button key={m} onClick={() => setUploadMode(m)}
-                          style={{ flex:1, padding:'5px 0', background: uploadMode===m ? accentColor : 'transparent', color: uploadMode===m ? 'var(--casi-bg)' : '#555', border:'none', fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1, textTransform:'uppercase', cursor:'pointer', fontWeight: uploadMode===m ? 700 : 400 }}>
-                          {m === 'upload' ? '↑ Upload' : '⇥ Link'}
-                        </button>
-                      ))}
-                    </div>
-
-                    {uploadMode === 'upload' ? (
-                      /* ── File upload mode ── */
-                      <div>
-                        <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, border:`1.5px dashed ${uploadedUrl ? `rgba(${accentColorRgb},0.4)` : 'var(--casi-border)'}`, borderRadius:8, padding:'18px 12px', cursor: uploading ? 'wait' : 'pointer', background: uploadedUrl ? `rgba(${accentColorRgb},0.04)` : 'transparent', transition:'border-color .15s' }}>
-                          <input type="file" accept="image/*,video/mp4,video/webm,video/quicktime" style={{ display:'none' }}
-                            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
-                          <span style={{ fontSize:18 }}>{uploading ? '⟳' : uploadedUrl ? (uploadedFileType === 'video' ? '▶' : '🖼') : '↑'}</span>
-                          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color: uploadedUrl ? accentColor : '#555', letterSpacing:0.5, textAlign:'center' }}>
-                            {uploading ? 'Uploading…' : uploadedUrl ? `✓ ${uploadedFileType === 'video' ? 'Video' : 'Image'} ready` : 'Click to upload · img 5 MB · video 20 MB'}
-                          </span>
-                          {!uploadedUrl && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'#444' }}>jpg · png · gif · webp · mp4 · webm</span>}
-                        </label>
-                        {uploadedUrl && (
-                          <button onClick={() => { setUploadedUrl(null); setUploadedPath(null); setUploadedFileType(null); }}
-                            style={{ background:'none', border:'none', fontFamily:"'DM Mono',monospace", fontSize:9, color:'#f87171', cursor:'pointer', marginTop:4 }}>
-                            ✕ Remove
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      /* ── URL link mode (HTTPS only) ── */
-                      <div>
-                        <input type="text" value={imageUrl} placeholder="https://your-image.png or .gif"
-                          className="bf-inp"
-                          style={{ borderColor: imageUrl ? (imageValid ? `rgba(${accentColorRgb},0.31)` : !imageUrl.startsWith('https://') ? '#f87171' : undefined) : undefined }}
-                          onChange={(e) => { setImageUrl(e.target.value); setImageValid(false); }} />
-                        {/* Hidden validators — img for images, video for video URLs */}
-                        {imageUrl && getUrlFileType(imageUrl) === 'image' && (
-                          <img src={imageUrl} style={{ display:'none' }} alt="" onLoad={() => setImageValid(true)} onError={() => setImageValid(false)} />
-                        )}
-                        {imageUrl && getUrlFileType(imageUrl) === 'video' && (
-                          <video src={imageUrl} style={{ display:'none' }} muted onLoadedMetadata={() => setImageValid(true)} onError={() => setImageValid(false)} />
-                        )}
-                        <div className="bf-hint" style={{ color: !imageUrl ? '#444' : !imageUrl.startsWith('https://') ? '#f87171' : imageValid ? accentColor : '#f87171' }}>
-                          {!imageUrl ? 'Paste a direct HTTPS image or GIF URL'
-                            : !imageUrl.startsWith('https://') ? '⚠ Only HTTPS URLs are accepted'
-                            : imageValid ? '✓ Media loaded'
-                            : 'Media not loading — check the URL'}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="bf-lbl">Viewing as</label>
-                    <div style={{ display:'flex', alignItems:'center', gap:10, background:'var(--casi-bg)', border:'1px solid var(--casi-border)', borderRadius:10, padding:'10px 14px' }}>
-                      <span className="vdot" />
-                      <span style={{ fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:14, flex:1 }}>@{savedViewerName}</span>
-                      <button onClick={() => setShowChangeName(true)} style={{ background:'none', border:'none', fontFamily:"'DM Mono',monospace", fontSize:9, color:'#444', cursor:'pointer', textTransform:'uppercase', letterSpacing:1 }}>change</button>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <div style={{ marginBottom:14 }}>
-                    {(() => {
-                      const maxSecs = selectedSlot.max_duration_minutes ? selectedSlot.max_duration_minutes * 60 : null;
-                      const presets = [
-                        { label:'30s', secs:30 },
-                        { label:'1m',  secs:60 },
-                        { label:'2m',  secs:120 },
-                        { label:'5m',  secs:300 },
-                        { label:'10m', secs:600 },
-                        { label:'30m', secs:1800 },
-                      ].filter(p => !maxSecs || p.secs <= maxSecs);
-                      return (
-                        <>
-                          <label className="bf-lbl">Duration{maxSecs ? ` — max ${selectedSlot.max_duration_minutes}m` : ''}</label>
-                          {/* Stepper row */}
-                          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
-                            <button onClick={() => setDurationSecsClamped(durationSeconds - 5)}
-                              style={{ width:36, height:36, borderRadius:8, border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.04)', color:'var(--casi-text)', fontSize:15, cursor:'pointer', flexShrink:0 }}>−</button>
-                            <div style={{ flex:1, textAlign:'center', fontFamily:"'DM Mono',monospace", fontSize:20, fontWeight:700, color:'var(--casi-text)', letterSpacing:1 }}>
-                              {formatTime(durationSeconds)}
-                            </div>
-                            <button onClick={() => setDurationSecsClamped(durationSeconds + 5)}
-                              style={{ width:36, height:36, borderRadius:8, border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.04)', color:'var(--casi-text)', fontSize:15, cursor:'pointer', flexShrink:0 }}>+</button>
-                          </div>
-                          {/* Preset chips */}
-                          <div className="dur-row">
-                            {presets.map(p => (
-                              <button key={p.secs} className="dur-btn"
-                                style={durationSeconds===p.secs?{background:accentColor,borderColor:accentColor,color:'var(--casi-bg)',fontWeight:700}:{}}
-                                onClick={() => setDurationSecsClamped(p.secs)}>{p.label}</button>
-                            ))}
-                          </div>
-                          {/* Custom duration input */}
-                          <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10 }}>
-                            <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:1, color:'#555', textTransform:'uppercase' }}>Custom</span>
-                            <input
-                              type="number" min="0.5" step="0.5" placeholder="minutes"
-                              style={{ width:80, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:7, padding:'5px 8px', fontSize:12, color:'var(--casi-text)', fontFamily:"'DM Mono',monospace", outline:'none', textAlign:'center', MozAppearance:'textfield' } as React.CSSProperties}
-                              onFocus={(e) => e.target.style.borderColor='rgba(var(--casi-accent-rgb),0.38)'}
-                              onBlur={(e) => {
-                                e.target.style.borderColor='rgba(255,255,255,0.08)';
-                                const mins = parseFloat(e.target.value);
-                                if (!isNaN(mins) && mins > 0) { setDurationSecsClamped(Math.round(mins * 60)); e.target.value = ''; }
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  const mins = parseFloat((e.target as HTMLInputElement).value);
-                                  if (!isNaN(mins) && mins > 0) { setDurationSecsClamped(Math.round(mins * 60)); (e.target as HTMLInputElement).value = ''; }
-                                }
-                              }}
-                            />
-                            <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#555' }}>min</span>
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                  <div>
-                    {/* Banner slots render the viewer's message as a scrolling
-                        marquee on the overlay, so the text becomes load-
-                        bearing content (not an optional aside). Server-side
-                        validation at /api/bookings/create-* also requires
-                        message ≠ null for banner slots and caps length. */}
-                    {selectedSlot?.shape === 'banner' ? (
-                      <>
-                        <label className="bf-lbl">Your scrolling message · required</label>
-                        <textarea
-                          value={message}
-                          onChange={(e) => setMessage(e.target.value.slice(0, BANNER_MAX_MESSAGE))}
-                          placeholder="What should scroll across the banner?"
-                          rows={2}
-                          maxLength={BANNER_MAX_MESSAGE}
-                          className="bf-inp"
-                          style={{ resize:'none' }}
-                        />
-                        <div style={{ display:'flex', justifyContent:'space-between', marginTop:4, fontFamily:"'DM Mono',monospace", fontSize:9, color: message.length > BANNER_MAX_MESSAGE * 0.85 ? '#facc15' : '#555' }}>
-                          <span>Shows as a live scroll on stream</span>
-                          <span>{message.length}/{BANNER_MAX_MESSAGE}</span>
-                        </div>
-                        {message.trim().length > 0 && (
-                          <div style={{ marginTop:10, padding:0, borderRadius:6, overflow:'hidden', background:'rgba(0,0,0,0.65)', border:'1px solid rgba(var(--casi-accent-rgb),0.25)' }}>
-                            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, letterSpacing:2, textTransform:'uppercase', color:'#555', padding:'6px 10px 0' }}>Preview</div>
-                            <div className="beam-banner" style={{ height:44, borderTop:'none', borderBottom:'none' }}>
-                              <span className="beam-banner-track" style={{ fontSize:20 }}>{message}</span>
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <label className="bf-lbl">Message (optional)</label>
-                        <textarea value={message} onChange={(e) => setMessage(e.target.value)}
-                          placeholder="Anything for the streamer…" rows={3}
-                          className="bf-inp" style={{ resize:'none' }} />
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* ── USDC cost preview (paid slots only) ── */}
-              {Number(selectedSlot.price_value) > 0 && (
-              <div style={{ background:'rgba(153,69,255,0.05)', border:'1px solid rgba(153,69,255,0.2)', borderRadius:10, padding:'12px 14px', margin:'12px 0', fontFamily:"'DM Mono',monospace", fontSize:11 }}>
-                {[['Duration', formatTime(durationSeconds)], ['Rate', `$${selectedSlot.price_value}/${selectedSlot.price_unit}`]].map(([l, v]) => (
-                  <div key={l} style={{ display:'flex', justifyContent:'space-between', color:'#555', marginBottom:5 }}>
-                    <span>{l}</span><span>{v}</span>
-                  </div>
-                ))}
-                <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid #1c1c1c', paddingTop:8, marginTop:4, fontSize:13, fontWeight:700, color:'#9945FF' }}>
-                  <span>Total</span><span>{estimatedCost} USDC</span>
-                </div>
-                {connected && usdcBalance !== null ? (
-                  <>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginTop:8, color:'#555' }}>
-                      <span>Your balance</span>
-                      <span style={{ color: usdcBalance < parseFloat(estimatedCost) ? '#f87171' : '#6ee7b7' }}>
-                        {usdcBalance.toFixed(2)} USDC
-                      </span>
-                    </div>
-                    {usdcBalance < parseFloat(estimatedCost) && (
-                      <div style={{ color:'#f87171', fontSize:10, marginTop:5, textAlign:'right' }}>⚠ Insufficient balance</div>
-                    )}
-                  </>
-                ) : connected ? (
-                  <div style={{ color:'#555', fontSize:10, marginTop:6 }}>Fetching balance…</div>
-                ) : (
-                  <div style={{ color:'#555', fontSize:10, marginTop:6 }}>Connect wallet to pay with USDC on-chain</div>
-                )}
-              </div>
-              )}
-
-{isQueue && (() => {
-  const active = activeBookings.find(b => b.element_id === selectedSlot?.id);
-  if (!active) return null;
-  const remaining = getSecondsRemaining(active) / 60;
-  const queue = approvedQueuedBookings.filter(b => b.element_id === selectedSlot?.id);
-  const queueMinutes = queue.reduce((sum, b) => sum + Number(b.duration_minutes), 0);
-  const wait = Math.round(remaining + queueMinutes);
-  const ahead = queue.length;
-  return (
-    <div style={{ background: `rgba(${tcRgb},0.06)`, border: `1px solid rgba(${tcRgb},0.15)`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 4 }}>Estimated wait</div>
-      <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 15, fontWeight: 700, color: 'var(--casi-accent)' }}>~{wait} min</div>
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', marginTop: 2 }}>{ahead} booking{ahead !== 1 ? 's' : ''} ahead of you</div>
-    </div>
-  );
-})()}
-              {(() => {
-                const isFreeSlot = Number(selectedSlot.price_value) === 0;
-                const freeBlocked = isFreeSlot && !turnstileToken;
-                return (
-                <>
-                {isFreeSlot && (
-                  <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'flex-end' }}>
-                    <TurnstileWidget
-                      onVerify={onTurnstileVerify}
-                      onExpire={onTurnstileExpire}
-                      theme="dark"
-                      compact
-                    />
-                  </div>
-                )}
-                <div className="bf-footer">
-                  <div>
-                    <div className="bf-cost-lbl">{isFreeSlot ? 'Cost' : 'Estimated cost'}</div>
-                    <div className="bf-cost-val" style={{ color: isFreeSlot ? '#4ade80' : accentColor }}>
-                      {isFreeSlot ? 'Free' : `$${estimatedCost}`}
-                    </div>
-                  </div>
-                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', justifyContent:'flex-end' }}>
-                    {/* ── Stripe / Free ── */}
-                    <button onClick={submitBooking} disabled={!canSubmit||submitting||freeBlocked} className="bf-sub"
-                      style={{ background: isFreeSlot ? '#4ade80' : accentColor, color:'var(--casi-bg)', display:'flex', alignItems:'center', gap:7, opacity: (!canSubmit||submitting||freeBlocked) ? 0.5 : 1 }}>
-                      {isFreeSlot ? (
-                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M6.5 1l1.545 3.13L11.5 4.635 9 7.073l.59 3.442L6.5 8.89 3.41 10.515 4 7.073 1.5 4.635l3.455-.505L6.5 1z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/>
-                        </svg>
-                      ) : (
-                        <svg width="14" height="11" viewBox="0 0 14 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <rect x="0.5" y="0.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeOpacity="0.6"/>
-                          <rect x="0" y="3" width="14" height="2.5" fill="currentColor" fillOpacity="0.5"/>
-                          <rect x="2" y="7" width="4" height="1.5" rx="0.5" fill="currentColor"/>
-                        </svg>
-                      )}
-                      {submitting?'Sending…':isExtend?'Extend':isFreeSlot?(isQueue?'Join Free Queue':'Send Free Request'):isQueue?'Join Queue':'Send Request'}
-                    </button>
-                    {/* ── Solana / CASI escrow (hidden for free slots) ── */}
-                    {!isFreeSlot && (
-                      <button
-                        disabled={connecting || submitting || (connected && !canSubmit)}
-                        className="bf-sub"
-                        style={{ background: connected ? '#9945FF' : 'rgba(153,69,255,0.12)', color: connected ? '#fff' : '#9945FF', border: connected ? 'none' : '1px solid rgba(153,69,255,0.35)', display:'flex', alignItems:'center', gap:7, opacity: (connecting||submitting||(connected&&!canSubmit)) ? 0.5 : 1 }}
-                        onClick={() => {
-                          if (!connected) {
-                            openWalletModal();
-                          } else {
-                            setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
-                          }
-                        }}
-                      >
-                        <svg width="13" height="11" viewBox="0 0 13 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M1.5 8.5h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33 8.87c-.14-.14-.04-.37.17-.37ZM1.5 0h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33.37C1.19.23 1.29 0 1.5 0ZM11.67 4.37 10.58 5.5H1.82c-.21 0-.31-.23-.17-.37l1.1-1.1c.1-.1.23-.16.38-.16h8.37c.21 0 .31.23.17.37Z" fill="currentColor"/>
-                        </svg>
-                        {connecting ? 'Connecting…' : connected ? 'Pay with SOL' : 'Connect & Pay SOL'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-                </>
-                );
-              })()}
-            </div>
-          )}
-
-          {/* SLOTS LIST */}
-          {!isOBS && !selectedSlot && elements.filter((el:any)=>el.price_value>=0).length>0 && (
-            <div className="slots-sec">
-              <div className="slots-lbl">Available slots</div>
-              <div className="slots-grid">
-                {elements.filter((el:any)=>el.price_value>=0).map((el:any) => {
-                  const activeBooking    = getActiveBookingForSlot(el.id);
-                  const isOccupied       = !!activeBooking;
-                  const queueCount       = queueCounts[el.id]||0;
-                  const myBookingForSlot = getMyBookingForSlot(el.id);
-                  const isLocked         = !!el.locked;
-                  const isFree           = Number(el.price_value) === 0;
-                  const priceColor       = isLocked?'#555':myBookingForSlot?'#555':isFree?'#4ade80':tc;
-                  return (
-                    <button key={el.id} className={`slot-card ${myBookingForSlot||isLocked?'s-disabled':''}`}
-                      style={{ borderColor:isFree?'rgba(74,222,128,0.22)':isOccupied&&!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.14)`:!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.09)`:undefined, position:'relative' }}
-                      onClick={() => !myBookingForSlot&&!isLocked&&openSlot(el,isOccupied)}>
-                      {isFree && !isLocked && (
-                        <span style={{ position:'absolute', top:8, right:8, background:'rgba(74,222,128,0.14)', border:'1px solid rgba(74,222,128,0.4)', color:'#4ade80', fontFamily:"'DM Mono', monospace", fontSize:8, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', padding:'2px 7px', borderRadius:4, pointerEvents:'none' }}>
-                          ★ Free
-                        </span>
-                      )}
-                      <div className="s-thumb" style={{ borderColor:isFree?'rgba(74,222,128,0.25)':isOccupied?`rgba(${tcRgb},0.21)`:`rgba(${tcRgb},0.14)` }}>
-                        {el.image_url?<SlotMedia src={el.image_url} fileType={null} style={{ width:'100%',height:'100%',objectFit:'contain' }} />:<span>{isLocked?'🔒':el.is_background?'🖼':'✦'}</span>}
-                      </div>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div className="s-type">{isLocked?'Locked':myBookingForSlot?String(myBookingForSlot.status||'pending').replace('_',' '):isOccupied?`In use${queueCount>0?` · ${queueCount} waiting`:''}`:el.is_background?'Full Backdrop':'Beam'}</div>
-                        <div className="s-price" style={{ color:priceColor }}>
-                          {isFree ? 'Free' : `$${el.price_value}/${el.price_unit}`}
-                          {el.max_duration_minutes?` · max ${el.max_duration_minutes}m`:''}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* FLASH FORM — shown when the streamer has at least one flash rail enabled */}
-          {!isOBS && !selectedSlot && savedViewerName && profile?.id &&
-            (profile?.stripe_account_id || profile?.allow_free_flashes || (profile?.solana_wallet && process.env.NEXT_PUBLIC_CASI_SOLANA_ENABLED === 'true')) && (
-            <SendFlashSection
-              profileId={profile.id}
-              username={username}
-              viewerName={savedViewerName}
-              showNotif={showNotif}
-              profile={profile}
+            <BookingForm
+              slot={selectedSlot}
+              accentColor={accentColor}
+              accentColorRgb={accentColorRgb}
+              tcRgb={tcRgb}
+              isExtend={isExtend}
+              isQueue={isQueue}
+              savedViewerName={savedViewerName ?? ''}
+              onChangeNameClick={() => setShowChangeName(true)}
+              onClose={closeSlot}
+              uploadMode={uploadMode}
+              onUploadModeChange={setUploadMode}
+              uploadedUrl={uploadedUrl}
+              uploadedFileType={uploadedFileType}
+              uploading={uploading}
+              onFileSelect={handleFileSelect}
+              onRemoveUpload={() => { setUploadedUrl(null); setUploadedPath(null); setUploadedFileType(null); }}
+              imageUrl={imageUrl}
+              imageValid={imageValid}
+              onImageUrlChange={setImageUrl}
+              onImageValidChange={setImageValid}
+              getUrlFileType={getUrlFileType}
+              durationSeconds={durationSeconds}
+              onDurationChange={setDurationSecsClamped}
+              message={message}
+              onMessageChange={setMessage}
+              estimatedCost={estimatedCost}
+              walletConnected={connected}
+              usdcBalance={usdcBalance}
+              activeBookings={activeBookings}
+              approvedQueuedBookings={approvedQueuedBookings}
+              turnstileToken={turnstileToken}
+              onTurnstileVerify={onTurnstileVerify}
+              onTurnstileExpire={onTurnstileExpire}
+              canSubmit={canSubmit}
+              submitting={submitting}
+              connecting={connecting}
+              onStripeSubmit={submitBooking}
+              onSolanaPay={() => {
+                if (!connected) {
+                  openWalletModal();
+                } else {
+                  setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
+                }
+              }}
             />
           )}
 
-          {!isOBS && profile?.id && (
+          {/* SLOTS LIST */}
+          {!isOBS && !selectedSlot && (
+            <SlotsList
+              elements={elements}
+              tc={tc}
+              tcRgb={tcRgb}
+              queueCounts={queueCounts}
+              getActiveBookingForSlot={getActiveBookingForSlot}
+              getMyBookingForSlot={getMyBookingForSlot}
+              onOpenSlot={openSlot}
+            />
+          )}
+
+          {/* Flash feed + composer. FlashPanel is the single "chat-box-but-
+              for-flashes" surface: renders approved flashes chat-style AND
+              embeds the SendFlashSection composer inline. No separate
+              send-a-flash card above it, no plain text chat — CASI is
+              deliberately flash-only. FlashPanel hides the composer when
+              a slot booking form is open so the two modals don't fight for
+              focus. Rail gating is handled inside FlashPanel via
+              streamerProfile. */}
+          {/* Stuck-flash recovery — only renders when this viewer (by name
+              or wallet) has pending Solana flashes with a live escrow_pda
+              that haven't been moderated. Lets the viewer reclaim their
+              USDC without waiting on the streamer to act. Hidden in OBS
+              mode (this is viewer chrome, not stream content). */}
+          {!isOBS && !selectedSlot && (
+            <StuckFlashesPanel
+              flashes={myStuckFlashes}
+              reclaimingId={reclaimingFlash}
+              onReclaim={reclaimFlashEscrow}
+            />
+          )}
+
+          {!isOBS && profile?.id && !selectedSlot && (
             <div style={{ marginTop:24 }}>
-              <ChatPanel profileId={profile.id} viewerName={savedViewerName || null} />
+              <FlashPanel
+                profileId={profile.id}
+                viewerName={savedViewerName || null}
+                streamerProfile={profile}
+                username={username}
+                showNotif={showNotif}
+              />
             </div>
           )}
 
-          {!isOBS && (
-            <div style={{ marginTop:36, paddingTop:20, borderTop:'1px solid var(--casi-surface)', textAlign:'center' }}>
-              <a href="/search" style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'#222', textDecoration:'none' }}>
-                Browse other streams →
-              </a>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:20 }}>
-                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', color:'#888' }}>Powered by</span>
-                {/* CASI escrow — on-chain Solana program */}
-                <svg width="14" height="14" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <defs>
-                    <linearGradient id="sf-grad" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#9945FF"/>
-                      <stop offset="100%" stopColor="#6E3FD4"/>
-                    </linearGradient>
-                  </defs>
-                  <path d="M15 30 Q50 10 85 30 Q50 50 15 30Z" fill="url(#sf-grad)"/>
-                  <path d="M15 50 Q50 30 85 50 Q50 70 15 50Z" fill="url(#sf-grad)" opacity="0.75"/>
-                  <path d="M15 70 Q50 50 85 70 Q50 90 15 70Z" fill="url(#sf-grad)" opacity="0.5"/>
-                </svg>
-                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', color:'#888' }}>Solana</span>
-              </div>
-            </div>
-          )}
+          {!isOBS && <BrandFooter />}
         </main>
       </div>
 

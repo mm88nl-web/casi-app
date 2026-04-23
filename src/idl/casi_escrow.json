@@ -1,5 +1,5 @@
 {
-  "address": "6utjMbb5ovFHUdMcMWaGc5ovmVhLryVRLEzYPWzeBosg",
+  "address": "CDunHmMe2KW8qmjoqWanuu3p1DsEYjqRA1yVmyXDtakM",
   "metadata": {
     "name": "casi_escrow",
     "version": "0.1.0",
@@ -7,87 +7,6 @@
     "description": "CASI Escrow Program — Flash and Beam payment escrow for Solana"
   },
   "instructions": [
-    {
-      "name": "initialize_escrow",
-      "docs": [
-        "Viewer locks USDC into a PDA-owned vault ATA.",
-        "",
-        "* `escrow_id`       — 32-byte UUID; used as PDA seed and stored for signing.",
-        "* `amount`          — USDC micro-units (6 decimals; 1 USDC = 1_000_000).",
-        "* `duration_secs`   — 0 for Flash, > 0 for Beam.",
-        "* `escrow_type_val` — 0 = Flash, 1 = Beam."
-      ],
-      "discriminator": [
-        243,
-        160,
-        77,
-        153,
-        11,
-        92,
-        48,
-        209
-      ],
-      "accounts": [
-        {
-          "name": "viewer",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "streamer"
-        },
-        {
-          "name": "escrow_state",
-          "writable": true
-        },
-        {
-          "name": "vault",
-          "docs": [
-            "PDA-owned vault ATA — holds viewer's USDC during escrow."
-          ],
-          "writable": true
-        },
-        {
-          "name": "viewer_ata",
-          "writable": true
-        },
-        {
-          "name": "usdc_mint"
-        },
-        {
-          "name": "token_program"
-        },
-        {
-          "name": "associated_token_program"
-        },
-        {
-          "name": "system_program"
-        }
-      ],
-      "args": [
-        {
-          "name": "escrow_id",
-          "type": {
-            "array": [
-              "u8",
-              32
-            ]
-          }
-        },
-        {
-          "name": "amount",
-          "type": "u64"
-        },
-        {
-          "name": "duration_secs",
-          "type": "u64"
-        },
-        {
-          "name": "escrow_type_val",
-          "type": "u8"
-        }
-      ]
-    },
     {
       "name": "approve_flash",
       "docs": [
@@ -108,7 +27,10 @@
         {
           "name": "streamer",
           "writable": true,
-          "signer": true
+          "signer": true,
+          "relations": [
+            "escrow_state"
+          ]
         },
         {
           "name": "viewer",
@@ -119,15 +41,145 @@
         },
         {
           "name": "escrow_state",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
         },
         {
           "name": "vault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "streamer_ata",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "streamer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "usdc_mint"
@@ -136,10 +188,12 @@
           "name": "token_program"
         },
         {
-          "name": "associated_token_program"
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         },
         {
-          "name": "system_program"
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -155,42 +209,233 @@
       ]
     },
     {
-      "name": "deny_flash",
+      "name": "approve_flash_delegated",
       "docs": [
-        "Streamer denies a Flash: full refund to viewer.",
-        "Vault + EscrowState are closed; rent returned to viewer."
+        "Delegated Flash approval. Same effect as `approve_flash` (full amount →",
+        "streamer ATA, vault + EscrowState closed, rent to streamer), but signed",
+        "by the session key instead of the streamer wallet. Cranker pays fees",
+        "and any ATA-init rent. Vesting math isn't involved — approval moves",
+        "the full balance, so the only attack surface on a compromised session",
+        "key is forcing a capture that would have happened anyway (or forcing",
+        "one for a flash the streamer hadn't reviewed). Bounded, recoverable",
+        "by `revoke_delegate`."
       ],
       "discriminator": [
-        29,
-        88,
-        56,
-        249,
-        152,
-        228,
-        136,
-        97
+        95,
+        196,
+        73,
+        135,
+        138,
+        39,
+        3,
+        114
       ],
       "accounts": [
         {
-          "name": "streamer",
+          "name": "session",
+          "docs": [
+            "The ephemeral session key. Must match `delegate.session_key`."
+          ],
+          "signer": true
+        },
+        {
+          "name": "cranker",
+          "docs": [
+            "Fee + ATA-init payer. The session key has no SOL; cranker co-signs."
+          ],
           "writable": true,
           "signer": true
         },
         {
+          "name": "streamer",
+          "docs": [
+            "vault ATA rent (via pda_close_account). Bound to the escrow's",
+            "`streamer` field via `has_one` and to the delegate PDA's seed via",
+            "the `delegate` constraint, so a compromised session key cannot",
+            "redirect funds to an attacker-controlled address."
+          ],
+          "writable": true,
+          "relations": [
+            "escrow_state"
+          ]
+        },
+        {
           "name": "viewer",
+          "docs": [
+            "`approve_flash`; not read on-chain."
+          ],
           "writable": true
+        },
+        {
+          "name": "delegate",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "streamer"
+              }
+            ]
+          }
         },
         {
           "name": "escrow_state",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
         },
         {
           "name": "vault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
-          "name": "viewer_ata",
-          "writable": true
+          "name": "streamer_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "streamer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "usdc_mint"
@@ -199,10 +444,12 @@
           "name": "token_program"
         },
         {
-          "name": "associated_token_program"
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         },
         {
-          "name": "system_program"
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -237,19 +484,152 @@
         {
           "name": "viewer",
           "writable": true,
-          "signer": true
+          "signer": true,
+          "relations": [
+            "escrow_state"
+          ]
         },
         {
           "name": "escrow_state",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
         },
         {
           "name": "vault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "viewer_ata",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "viewer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "usdc_mint"
@@ -258,10 +638,12 @@
           "name": "token_program"
         },
         {
-          "name": "associated_token_program"
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         },
         {
-          "name": "system_program"
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -277,33 +659,216 @@
       ]
     },
     {
-      "name": "start_beam",
+      "name": "cancel_stale_pending",
       "docs": [
-        "Streamer starts a Beam: records `start_timestamp`, sets status → Active."
+        "Permissionless refund for a Pending escrow that has sat untouched past",
+        "`PENDING_TIMEOUT_SECS` since creation.",
+        "",
+        "Anyone can crank this. The only effect is a 100% refund to the viewer",
+        "— the same outcome as `cancel_escrow` (viewer-signed), just unlocked",
+        "by the wall clock instead of the viewer's wallet. This protects users",
+        "from USDC being held hostage if the streamer goes offline without",
+        "approving / denying, or if the viewer themselves loses access to their",
+        "wallet.",
+        "",
+        "Safety: the refund destination is forced to `viewer_ata`, and the PDA",
+        "closes to the viewer as `cancel_escrow` does, so a third-party cranker",
+        "cannot redirect funds."
       ],
       "discriminator": [
-        187,
-        39,
-        92,
-        123,
-        231,
-        162,
-        107,
-        84
+        109,
+        239,
+        233,
+        36,
+        66,
+        98,
+        100,
+        244
       ],
       "accounts": [
         {
-          "name": "streamer",
+          "name": "cranker",
+          "docs": [
+            "Anyone may crank; they pay the tx fee but receive nothing."
+          ],
+          "writable": true,
           "signer": true
         },
         {
+          "name": "viewer",
+          "docs": [
+            "field below so a cranker can't redirect funds. Not a signer."
+          ],
+          "writable": true,
+          "relations": [
+            "escrow_state"
+          ]
+        },
+        {
           "name": "escrow_state",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "viewer_ata",
+          "docs": [
+            "Forced to the viewer's ATA for `usdc_mint` — a cranker cannot point",
+            "this anywhere else. `init_if_needed` so a viewer with a closed ATA",
+            "still gets refunded."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "viewer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "_escrow_id",
+          "name": "escrow_id",
           "type": {
             "array": [
               "u8",
@@ -314,58 +879,815 @@
       ]
     },
     {
-      "name": "start_beam_delegated",
+      "name": "deny_flash",
       "docs": [
-        "Session-key path for starting a Beam. Identical effect to `start_beam`",
-        "except the signer is a pre-authorized delegate instead of the streamer",
-        "themselves. See the `StreamerDelegate` docs for the trust model. The",
-        "delegate is constrained to call on escrows where the delegate's own",
-        "`streamer` field matches the escrow's `streamer` — so a compromised",
-        "delegate key can only start beams for the streamer who installed it,",
-        "and only until `expires_at` passes."
+        "Streamer denies a Flash: full refund to viewer.",
+        "Vault + EscrowState are closed; rent returned to viewer."
       ],
       "discriminator": [
-        195,
-        222,
-        233,
-        170,
-        211,
-        183,
-        120,
-        78
+        29,
+        88,
+        56,
+        249,
+        152,
+        228,
+        136,
+        97
       ],
       "accounts": [
         {
-          "name": "session",
-          "docs": [
-            "The ephemeral session key (server-held). Must match `delegate.session_key`."
-          ],
-          "signer": true
-        },
-        {
           "name": "streamer",
-          "docs": [
-            "constraints below bind this key to both the delegate PDA seed and the",
-            "escrow's own `streamer` field, preventing cross-streamer abuse."
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "escrow_state"
           ]
         },
         {
-          "name": "delegate"
+          "name": "viewer",
+          "writable": true,
+          "relations": [
+            "escrow_state"
+          ]
         },
         {
           "name": "escrow_state",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "viewer_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "viewer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "_escrow_id",
+          "name": "escrow_id",
           "type": {
             "array": [
               "u8",
               32
             ]
           }
+        }
+      ]
+    },
+    {
+      "name": "deny_flash_delegated",
+      "docs": [
+        "Delegated Flash denial. Same effect as `deny_flash` (full refund → viewer",
+        "ATA, vault + EscrowState closed, rent to viewer), signed by the session",
+        "key. Cranker pays fees and any viewer ATA-init rent (almost always the",
+        "viewer already has a USDC ATA since they funded from it)."
+      ],
+      "discriminator": [
+        45,
+        240,
+        57,
+        94,
+        62,
+        69,
+        5,
+        73
+      ],
+      "accounts": [
+        {
+          "name": "session",
+          "docs": [
+            "The ephemeral session key. Must match `delegate.session_key`."
+          ],
+          "signer": true
+        },
+        {
+          "name": "cranker",
+          "docs": [
+            "Fee + ATA-init payer."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "streamer",
+          "docs": [
+            "funds destination here (deny sends everything back to `viewer`)."
+          ],
+          "relations": [
+            "escrow_state"
+          ]
+        },
+        {
+          "name": "viewer",
+          "docs": [
+            "recipient. Bound to the escrow's `viewer` field via `has_one`."
+          ],
+          "writable": true,
+          "relations": [
+            "escrow_state"
+          ]
+        },
+        {
+          "name": "delegate",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "streamer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "viewer_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "viewer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "escrow_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize_escrow",
+      "docs": [
+        "Viewer locks USDC into a PDA-owned vault ATA.",
+        "",
+        "* `escrow_id`       — 32-byte UUID; used as PDA seed and stored for signing.",
+        "* `amount`          — USDC micro-units (6 decimals; 1 USDC = 1_000_000).",
+        "* `duration_secs`   — 0 for Flash, > 0 for Beam.",
+        "* `escrow_type_val` — 0 = Flash, 1 = Beam."
+      ],
+      "discriminator": [
+        243,
+        160,
+        77,
+        153,
+        11,
+        92,
+        48,
+        209
+      ],
+      "accounts": [
+        {
+          "name": "viewer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "streamer"
+        },
+        {
+          "name": "escrow_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "PDA-owned vault ATA — holds viewer's USDC during escrow."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "viewer_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "viewer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "escrow_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "duration_secs",
+          "type": "u64"
+        },
+        {
+          "name": "escrow_type_val",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "revoke_delegate",
+      "docs": [
+        "Streamer revokes their session-key delegate. The PDA closes and rent",
+        "refunds to the streamer. After this, any in-flight `start_beam_delegated`",
+        "calls from the revoked session key fail (delegate account missing)."
+      ],
+      "discriminator": [
+        142,
+        66,
+        98,
+        126,
+        102,
+        60,
+        92,
+        163
+      ],
+      "accounts": [
+        {
+          "name": "streamer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "delegate"
+          ]
+        },
+        {
+          "name": "delegate",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "streamer"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "set_delegate",
+      "docs": [
+        "Install or rotate a session-key delegate for a streamer.",
+        "",
+        "Trust model:",
+        "* The delegate PDA is seeded by the streamer's pubkey, so only the",
+        "streamer can install one for themselves.",
+        "* `session_key` is an ephemeral pubkey (the server generates a fresh",
+        "keypair on each install; the secret stays server-side, encrypted).",
+        "* The delegate can call `start_beam_delegated` (Pending → Active),",
+        "`settle_beam_delegated` (end an Active beam, pro-rata vest),",
+        "`approve_flash_delegated` (Pending → Settled, full to streamer),",
+        "and `deny_flash_delegated` (Pending → Cancelled, full refund to",
+        "viewer). It CANNOT cancel Pending escrows on the viewer's behalf,",
+        "move its own rent, or change delegation. Worst-case server",
+        "compromise is an attacker forcing a flash capture/refund (either",
+        "way the funds follow the escrow's declared destinations — streamer",
+        "or viewer) or ending a live beam early. Bounded, recoverable by",
+        "`revoke_delegate`, never leaks funds to the attacker.",
+        "* Self-expires after `expires_at`; program caps expiry to",
+        "`now + MAX_DELEGATE_LIFETIME_SECS`.",
+        "* Streamer can revoke any time via `revoke_delegate`.",
+        "",
+        "Re-calling overwrites the session_key / expires_at in-place, which is",
+        "how rotation works — no need to revoke-then-install."
+      ],
+      "discriminator": [
+        242,
+        30,
+        46,
+        76,
+        108,
+        235,
+        128,
+        181
+      ],
+      "accounts": [
+        {
+          "name": "streamer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "delegate",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "streamer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "session_key",
+          "type": "pubkey"
+        },
+        {
+          "name": "expires_at",
+          "type": "i64"
         }
       ]
     },
@@ -401,27 +1723,216 @@
         },
         {
           "name": "streamer",
-          "writable": true
+          "writable": true,
+          "relations": [
+            "escrow_state"
+          ]
         },
         {
           "name": "viewer",
-          "writable": true
+          "writable": true,
+          "relations": [
+            "escrow_state"
+          ]
         },
         {
           "name": "escrow_state",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
         },
         {
           "name": "vault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "streamer_ata",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "streamer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "viewer_ata",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "viewer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "usdc_mint"
@@ -430,10 +1941,12 @@
           "name": "token_program"
         },
         {
-          "name": "associated_token_program"
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         },
         {
-          "name": "system_program"
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -499,30 +2012,253 @@
         },
         {
           "name": "streamer",
-          "writable": true
+          "docs": [
+            "and the EscrowState rent. Not a signer; bound to the escrow's",
+            "`streamer` field via `has_one` below so the delegate cannot redirect",
+            "funds. Must match the streamer stored on the delegate PDA."
+          ],
+          "writable": true,
+          "relations": [
+            "escrow_state"
+          ]
         },
         {
           "name": "viewer",
-          "writable": true
+          "docs": [
+            "`has_one` below; cannot be redirected."
+          ],
+          "writable": true,
+          "relations": [
+            "escrow_state"
+          ]
         },
         {
-          "name": "delegate"
+          "name": "delegate",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "streamer"
+              }
+            ]
+          }
         },
         {
           "name": "escrow_state",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "escrow_id"
+              }
+            ]
+          }
         },
         {
           "name": "vault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow_state"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "streamer_ata",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "streamer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "viewer_ata",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "viewer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "usdc_mint"
@@ -531,10 +2267,12 @@
           "name": "token_program"
         },
         {
-          "name": "associated_token_program"
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         },
         {
-          "name": "system_program"
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -550,171 +2288,166 @@
       ]
     },
     {
-      "name": "set_delegate",
+      "name": "start_beam",
       "docs": [
-        "Install or rotate a session-key delegate for a streamer.",
-        "",
-        "Trust model:",
-        "* The delegate PDA is seeded by the streamer's pubkey, so only the",
-        "streamer can install one for themselves.",
-        "* `session_key` is an ephemeral pubkey (the server generates a fresh",
-        "keypair on each install; the secret stays server-side, encrypted).",
-        "* The delegate can call `start_beam_delegated` (flip Pending → Active)",
-        "and `settle_beam_delegated` (end an Active beam early, pro-rata",
-        "vest). It CANNOT cancel Pending escrows, deny flashes, move its",
-        "own rent, or change delegation. Worst-case server compromise is",
-        "an attacker ending a live beam early — viewer gets the unvested",
-        "portion refunded, streamer loses the unvested portion. Bounded,",
-        "recoverable by `revoke_delegate`, never leaks funds to the",
-        "attacker.",
-        "* Self-expires after `expires_at`; program caps expiry to",
-        "`now + MAX_DELEGATE_LIFETIME_SECS`.",
-        "* Streamer can revoke any time via `revoke_delegate`.",
-        "",
-        "Re-calling overwrites the session_key / expires_at in-place, which is",
-        "how rotation works — no need to revoke-then-install."
+        "Streamer starts a Beam: records `start_timestamp`, sets status → Active."
       ],
       "discriminator": [
-        242,
-        30,
-        46,
-        76,
-        108,
-        235,
-        128,
-        181
+        187,
+        39,
+        92,
+        123,
+        231,
+        162,
+        107,
+        84
       ],
       "accounts": [
         {
           "name": "streamer",
+          "signer": true,
+          "relations": [
+            "escrow_state"
+          ]
+        },
+        {
+          "name": "escrow_state",
           "writable": true,
-          "signer": true
-        },
-        {
-          "name": "delegate",
-          "writable": true
-        },
-        {
-          "name": "system_program"
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "_escrow_id"
+              }
+            ]
+          }
         }
       ],
       "args": [
         {
-          "name": "session_key",
-          "type": "pubkey"
-        },
-        {
-          "name": "expires_at",
-          "type": "i64"
+          "name": "_escrow_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
     {
-      "name": "revoke_delegate",
+      "name": "start_beam_delegated",
       "docs": [
-        "Streamer revokes their session-key delegate. The PDA closes and rent",
-        "refunds to the streamer. After this, any in-flight `start_beam_delegated`",
-        "calls from the revoked session key fail (delegate account missing)."
+        "Session-key path for starting a Beam. Identical effect to `start_beam`",
+        "except the signer is a pre-authorized delegate instead of the streamer",
+        "themselves. See the `StreamerDelegate` docs for the trust model. The",
+        "delegate is constrained to call on escrows where the delegate's own",
+        "`streamer` field matches the escrow's `streamer` — so a compromised",
+        "delegate key can only start beams for the streamer who installed it,",
+        "and only until `expires_at` passes."
       ],
       "discriminator": [
-        142,
-        66,
-        98,
-        126,
-        102,
-        60,
-        92,
-        163
+        195,
+        222,
+        233,
+        170,
+        211,
+        183,
+        120,
+        78
       ],
       "accounts": [
         {
-          "name": "streamer",
-          "writable": true,
+          "name": "session",
+          "docs": [
+            "The ephemeral session key (server-held). Must match `delegate.session_key`."
+          ],
           "signer": true
+        },
+        {
+          "name": "streamer",
+          "docs": [
+            "constraints below bind this key to both the delegate PDA seed and the",
+            "escrow's own `streamer` field, preventing cross-streamer abuse."
+          ]
         },
         {
           "name": "delegate",
-          "writable": true
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "cancel_stale_pending",
-      "docs": [
-        "Permissionless refund for a Pending escrow that has sat untouched past",
-        "`PENDING_TIMEOUT_SECS` since creation.",
-        "",
-        "Anyone can crank this. The only effect is a 100% refund to the viewer",
-        "— the same outcome as `cancel_escrow` (viewer-signed), just unlocked",
-        "by the wall clock instead of the viewer's wallet. This protects users",
-        "from USDC being held hostage if the streamer goes offline without",
-        "approving / denying, or if the viewer themselves loses access to their",
-        "wallet.",
-        "",
-        "Safety: the refund destination is forced to `viewer_ata`, and the PDA",
-        "closes to the viewer as `cancel_escrow` does, so a third-party cranker",
-        "cannot redirect funds."
-      ],
-      "discriminator": [
-        109,
-        239,
-        233,
-        36,
-        66,
-        98,
-        100,
-        244
-      ],
-      "accounts": [
-        {
-          "name": "cranker",
-          "docs": [
-            "Anyone may crank; they pay the tx fee but receive nothing."
-          ],
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "viewer",
-          "docs": [
-            "field below so a cranker can't redirect funds. Not a signer."
-          ],
-          "writable": true
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "streamer"
+              }
+            ]
+          }
         },
         {
           "name": "escrow_state",
-          "writable": true
-        },
-        {
-          "name": "vault",
-          "writable": true
-        },
-        {
-          "name": "viewer_ata",
-          "docs": [
-            "Forced to the viewer's ATA for `usdc_mint` — a cranker cannot point",
-            "this anywhere else. `init_if_needed` so a viewer with a closed ATA",
-            "still gets refunded."
-          ],
-          "writable": true
-        },
-        {
-          "name": "usdc_mint"
-        },
-        {
-          "name": "token_program"
-        },
-        {
-          "name": "associated_token_program"
-        },
-        {
-          "name": "system_program"
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  105,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "_escrow_id"
+              }
+            ]
+          }
         }
       ],
       "args": [
         {
-          "name": "escrow_id",
+          "name": "_escrow_id",
           "type": {
             "array": [
               "u8",
@@ -753,7 +2486,291 @@
       ]
     }
   ],
+  "events": [
+    {
+      "name": "BeamSettled",
+      "discriminator": [
+        27,
+        240,
+        23,
+        237,
+        102,
+        244,
+        150,
+        202
+      ]
+    },
+    {
+      "name": "BeamStarted",
+      "discriminator": [
+        167,
+        24,
+        130,
+        68,
+        20,
+        108,
+        55,
+        116
+      ]
+    },
+    {
+      "name": "DelegateInstalled",
+      "discriminator": [
+        230,
+        176,
+        167,
+        167,
+        132,
+        64,
+        98,
+        191
+      ]
+    },
+    {
+      "name": "DelegateRevoked",
+      "discriminator": [
+        10,
+        200,
+        133,
+        29,
+        238,
+        207,
+        193,
+        124
+      ]
+    },
+    {
+      "name": "EscrowInitialized",
+      "discriminator": [
+        222,
+        186,
+        157,
+        47,
+        145,
+        142,
+        176,
+        248
+      ]
+    },
+    {
+      "name": "FlashSettled",
+      "discriminator": [
+        187,
+        173,
+        214,
+        193,
+        111,
+        212,
+        137,
+        53
+      ]
+    },
+    {
+      "name": "StalePendingCancelled",
+      "discriminator": [
+        141,
+        254,
+        199,
+        64,
+        81,
+        208,
+        61,
+        26
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidDuration",
+      "msg": "Duration must be > 0 for Beam escrows"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidEscrowType",
+      "msg": "Invalid escrow type — expected 0 (Flash) or 1 (Beam)"
+    },
+    {
+      "code": 6003,
+      "name": "Unauthorized",
+      "msg": "Caller is not the authorized party for this escrow"
+    },
+    {
+      "code": 6004,
+      "name": "AlreadySettled",
+      "msg": "Escrow is not in Pending status"
+    },
+    {
+      "code": 6005,
+      "name": "NotActive",
+      "msg": "Escrow is not in Active status"
+    },
+    {
+      "code": 6006,
+      "name": "WrongEscrowType",
+      "msg": "This instruction requires a different escrow type"
+    },
+    {
+      "code": 6007,
+      "name": "MathOverflow",
+      "msg": "Arithmetic overflow or underflow"
+    },
+    {
+      "code": 6008,
+      "name": "UnsupportedVersion",
+      "msg": "Account layout version is not supported by this program"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidExpiry",
+      "msg": "Delegate expiry must be in the future"
+    },
+    {
+      "code": 6010,
+      "name": "DelegateLifetimeExceedsMax",
+      "msg": "Delegate expiry exceeds the maximum allowed lifetime"
+    },
+    {
+      "code": 6011,
+      "name": "DelegateExpired",
+      "msg": "Delegate has expired — streamer must re-install"
+    },
+    {
+      "code": 6012,
+      "name": "PendingNotStale",
+      "msg": "Pending escrow has not yet passed the stale timeout"
+    }
+  ],
   "types": [
+    {
+      "name": "BeamSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "streamer_amount",
+            "type": "u64"
+          },
+          {
+            "name": "viewer_refund",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BeamStarted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "streamer",
+            "type": "pubkey"
+          },
+          {
+            "name": "start_timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "delegated",
+            "docs": [
+              "True when the caller was a session-key delegate, false when the",
+              "streamer signed directly. Useful for off-chain analytics tracking",
+              "adoption of the delegation flow."
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DelegateInstalled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "streamer",
+            "type": "pubkey"
+          },
+          {
+            "name": "session_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DelegateRevoked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "streamer",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "viewer",
+            "type": "pubkey"
+          },
+          {
+            "name": "streamer",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "escrow_type_val",
+            "type": "u8"
+          }
+        ]
+      }
+    },
     {
       "name": "EscrowState",
       "type": {
@@ -867,6 +2884,52 @@
       }
     },
     {
+      "name": "FlashSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "streamer_amount",
+            "type": "u64"
+          },
+          {
+            "name": "approved",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StalePendingCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "age_secs",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "StreamerDelegate",
       "docs": [
         "Per-streamer session-key delegate. Seeded by `[DELEGATE_SEED, streamer]`",
@@ -898,336 +2961,6 @@
           }
         ]
       }
-    },
-    {
-      "name": "BeamSettled",
-      "type": {
-        "fields": [
-          {
-            "name": "escrow_id",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
-            "name": "streamer_amount",
-            "type": "u64"
-          },
-          {
-            "name": "viewer_refund",
-            "type": "u64"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "BeamStarted",
-      "type": {
-        "fields": [
-          {
-            "name": "escrow_id",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
-            "name": "streamer",
-            "type": "pubkey"
-          },
-          {
-            "name": "start_timestamp",
-            "type": "i64"
-          },
-          {
-            "docs": [
-              "True when the caller was a session-key delegate, false when the",
-              "streamer signed directly. Useful for off-chain analytics tracking",
-              "adoption of the delegation flow."
-            ],
-            "name": "delegated",
-            "type": "bool"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "DelegateInstalled",
-      "type": {
-        "fields": [
-          {
-            "name": "streamer",
-            "type": "pubkey"
-          },
-          {
-            "name": "session_key",
-            "type": "pubkey"
-          },
-          {
-            "name": "expires_at",
-            "type": "i64"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "DelegateRevoked",
-      "type": {
-        "fields": [
-          {
-            "name": "streamer",
-            "type": "pubkey"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "EscrowInitialized",
-      "type": {
-        "fields": [
-          {
-            "name": "escrow_id",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
-            "name": "viewer",
-            "type": "pubkey"
-          },
-          {
-            "name": "streamer",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "escrow_type_val",
-            "type": "u8"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "FlashSettled",
-      "type": {
-        "fields": [
-          {
-            "name": "escrow_id",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
-            "name": "streamer_amount",
-            "type": "u64"
-          },
-          {
-            "name": "approved",
-            "type": "bool"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "StalePendingCancelled",
-      "type": {
-        "fields": [
-          {
-            "name": "escrow_id",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
-            "name": "age_secs",
-            "type": "i64"
-          }
-        ],
-        "kind": "struct"
-      }
-    }
-  ],
-  "errors": [
-    {
-      "code": 6000,
-      "name": "InvalidAmount",
-      "msg": "Amount must be greater than zero"
-    },
-    {
-      "code": 6001,
-      "name": "InvalidDuration",
-      "msg": "Duration must be > 0 for Beam escrows"
-    },
-    {
-      "code": 6002,
-      "name": "InvalidEscrowType",
-      "msg": "Invalid escrow type — expected 0 (Flash) or 1 (Beam)"
-    },
-    {
-      "code": 6003,
-      "name": "Unauthorized",
-      "msg": "Caller is not the authorized party for this escrow"
-    },
-    {
-      "code": 6004,
-      "name": "AlreadySettled",
-      "msg": "Escrow is not in Pending status"
-    },
-    {
-      "code": 6005,
-      "name": "NotActive",
-      "msg": "Escrow is not in Active status"
-    },
-    {
-      "code": 6006,
-      "name": "WrongEscrowType",
-      "msg": "This instruction requires a different escrow type"
-    },
-    {
-      "code": 6007,
-      "name": "MathOverflow",
-      "msg": "Arithmetic overflow or underflow"
-    },
-    {
-      "code": 6008,
-      "name": "UnsupportedVersion",
-      "msg": "Account layout version is not supported by this program"
-    },
-    {
-      "code": 6009,
-      "name": "InvalidExpiry",
-      "msg": "Delegate expiry must be in the future"
-    },
-    {
-      "code": 6010,
-      "name": "DelegateLifetimeExceedsMax",
-      "msg": "Delegate expiry exceeds the maximum allowed lifetime"
-    },
-    {
-      "code": 6011,
-      "name": "DelegateExpired",
-      "msg": "Delegate has expired — streamer must re-install"
-    },
-    {
-      "code": 6012,
-      "name": "PendingNotStale",
-      "msg": "Pending escrow has not yet passed the stale timeout"
-    }
-  ],
-  "events": [
-    {
-      "discriminator": [
-        27,
-        240,
-        23,
-        237,
-        102,
-        244,
-        150,
-        202
-      ],
-      "name": "BeamSettled"
-    },
-    {
-      "discriminator": [
-        167,
-        24,
-        130,
-        68,
-        20,
-        108,
-        55,
-        116
-      ],
-      "name": "BeamStarted"
-    },
-    {
-      "discriminator": [
-        230,
-        176,
-        167,
-        167,
-        132,
-        64,
-        98,
-        191
-      ],
-      "name": "DelegateInstalled"
-    },
-    {
-      "discriminator": [
-        10,
-        200,
-        133,
-        29,
-        238,
-        207,
-        193,
-        124
-      ],
-      "name": "DelegateRevoked"
-    },
-    {
-      "discriminator": [
-        222,
-        186,
-        157,
-        47,
-        145,
-        142,
-        176,
-        248
-      ],
-      "name": "EscrowInitialized"
-    },
-    {
-      "discriminator": [
-        187,
-        173,
-        214,
-        193,
-        111,
-        212,
-        137,
-        53
-      ],
-      "name": "FlashSettled"
-    },
-    {
-      "discriminator": [
-        141,
-        254,
-        199,
-        64,
-        81,
-        208,
-        61,
-        26
-      ],
-      "name": "StalePendingCancelled"
     }
   ]
 }

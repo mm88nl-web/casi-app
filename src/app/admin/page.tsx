@@ -6,9 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
-import { SKINS } from '@/lib/skins';
 import WalletNav from '@/components/WalletNav';
-import ChatPanel from '@/components/ChatPanel';
+import FlashPanel from '@/components/FlashPanel';
 import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 import Logo from './_components/Logo';
 import SlotMedia from '@/components/SlotMedia';
@@ -20,8 +19,13 @@ import PendingRequestCard from './_components/PendingRequestCard';
 import QueuedRequestCard from './_components/QueuedRequestCard';
 import ActiveCard from './_components/ActiveCard';
 import ApprovedQueueCard from './_components/ApprovedQueueCard';
-import DelegateKeyCard from './_components/DelegateKeyCard';
+import ProfileEditCard from './_components/ProfileEditCard';
 import { getSecondsRemaining, formatTime, fmtDuration } from './_components/time';
+import PreviewBookingModal from './_components/PreviewBookingModal';
+import OnboardingBanner from './_components/OnboardingBanner';
+import SkinPickerCard from './_components/SkinPickerCard';
+import ViewerOverlayCard from './_components/ViewerOverlayCard';
+import OBSSetupCard from './_components/OBSSetupCard';
 
 // Explicit column list for bookings reads. Swapping `*` for this is belt +
 // suspenders alongside the column-level GRANT in 20260423 — if a new
@@ -56,24 +60,12 @@ function findFreePosition(elements: any[]): { pos_x: number; pos_y: number } {
   return { pos_x: Math.min(75, (last?.pos_x ?? 5) + 5), pos_y: Math.min(70, (last?.pos_y ?? 5) + 5) };
 }
 
-/* ── Profile edit accent presets ── */
-const THEME_PRESETS = [
-  { name: 'Casi Orange',   color: '#F58220' },
-  { name: 'Twitch Purple', color: '#9146FF' },
-  { name: 'Cyber Cyan',    color: '#06b6d4' },
-  { name: 'YouTube Red',   color: '#FF0000' },
-  { name: 'Matrix Green',  color: '#4ade80' },
-  { name: 'Kick Green',    color: '#53FC18' },
-  { name: 'Rose Pink',     color: '#f472b6' },
-  { name: 'Gold',          color: '#facc15' },
-  { name: 'Pure White',    color: '#e8e8e8' },
-];
 
 /* ══════════════════════════════════════════
    MAIN ADMIN PAGE
 ══════════════════════════════════════════ */
 export default function AdminStudio() {
-  const [view, setView] = useState<'studio' | 'requests' | 'chat' | 'settings'>('studio');
+  const [view, setView] = useState<'studio' | 'requests' | 'settings'>('studio');
   const [profile, setProfile] = useState<any>(null);
   const [activeSkin, setActiveSkin] = useState<string | null>(null);
   const [savingSkin, setSavingSkin] = useState(false);
@@ -118,7 +110,6 @@ export default function AdminStudio() {
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [togglingLive, setTogglingLive] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
-  const [sendingTestFlash, setSendingTestFlash] = useState(false);
   const dragStartPos = useRef<{x:number;y:number}|null>(null);
   const isDragging = useRef(false);
 
@@ -251,13 +242,45 @@ export default function AdminStudio() {
   useEffect(() => {
     if (!profile?.id) return;
     loadBookings(profile.id);
-    const channel = supabase.channel(`admin_bookings_${profile.id}`)
+    loadFlashes(profile.id);
+
+    // Bump timestamp on each realtime event — watchdog below reloads if
+    // the channel goes silent (dropped socket, devnet RPC flap, etc.)
+    // for too long, so a missed INSERT doesn't leave the queue stale.
+    const lastEventAt = { t: Date.now() };
+    const bump = () => { lastEventAt.t = Date.now(); };
+
+    const bookingsChannel = supabase.channel(`admin_bookings_${profile.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `profile_id=eq.${profile.id}` }, () => {
+        bump();
         loadBookings(profile.id);
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [profile?.id, supabase, loadBookings]);
+
+    const flashesChannel = supabase.channel(`admin_flashes_${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profile.id}` }, () => {
+        bump();
+        loadFlashes(profile.id);
+      })
+      .subscribe();
+
+    // Silence watchdog. If we haven't heard from realtime in 30 s, refetch
+    // both tables; the query result is authoritative so a dropped WebSocket
+    // can't indefinitely hide a new flash from the admin.
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastEventAt.t > 30_000) {
+        bump();
+        loadBookings(profile.id);
+        loadFlashes(profile.id);
+      }
+    }, 30_000);
+
+    return () => {
+      supabase.removeChannel(bookingsChannel);
+      supabase.removeChannel(flashesChannel);
+      clearInterval(watchdog);
+    };
+  }, [profile?.id, supabase, loadBookings, loadFlashes]);
 
   // Keep local `elements` in sync with overlay_elements DB writes from other
   // contexts (Vercel Cron janitor, queue advance, other admin sessions).
@@ -276,14 +299,6 @@ export default function AdminStudio() {
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id, supabase]);
 
-  useEffect(() => {
-    if (!profile?.id) return;
-    loadFlashes(profile.id);
-    const channel = supabase.channel(`admin_flashes_${profile.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profile.id}` }, () => loadFlashes(profile.id))
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [profile?.id, supabase, loadFlashes]);
 
   /* ── FIX: callback ref so canvas dimensions fire on first mount ── */
   const setMonitorRef = useCallback((node: HTMLDivElement | null) => {
@@ -595,6 +610,39 @@ export default function AdminStudio() {
     }
   };
 
+  /**
+   * Flash analogue of trySolanaSettleDelegated. POSTs to the approve-flash or
+   * deny-flash delegate route; returns the same outcome union so callers can
+   * reuse describeDelegateSettleFailure for toasts and fall back to the
+   * wallet-signed path on any failure.
+   */
+  const trySolanaFlashDelegated = async (
+    flashId: string,
+    action: 'approve' | 'deny',
+  ): Promise<DelegateSettleOutcome> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return { ok: false, reason: 'no_session' };
+      const route = action === 'approve'
+        ? '/api/solana/delegates/approve-flash'
+        : '/api/solana/delegates/deny-flash';
+      const res = await fetch(route, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization:  `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ flash_id: flashId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) return { ok: true, alreadyProcessed: !!body?.alreadyProcessed };
+      return { ok: false, status: res.status, reason: body?.reason, message: body?.message };
+    } catch (err) {
+      console.warn('[trySolanaFlashDelegated] crank failed; falling back', err);
+      return { ok: false, reason: 'network_error', message: err instanceof Error ? err.message : String(err) };
+    }
+  };
+
   /** Human-readable one-liner for a failed delegate settle. */
   const describeDelegateSettleFailure = (o: Extract<DelegateSettleOutcome, { ok: false }>): string => {
     switch (o.reason) {
@@ -769,21 +817,30 @@ export default function AdminStudio() {
       ? await settleOrClearSolanaEscrow(b)
       : { outcome: 'closed' as const };
 
-    // escrow_pda is nulled when the vault is known to be closed (either we
-    // just settled it, or it was already gone). For Pending/unsigned/error
-    // paths the pointer stays so the viewer or a later retry can act on it.
+    // Safe-to-deny outcomes:
+    //   settled / closed  — funds have moved or the vault is already empty
+    //   pending-chain     — escrow is still Pending, which can't over-vest;
+    //                       viewer keeps the recovery chip to cancel_escrow
+    // Unsafe outcomes (no-wallet, error) leave the escrow Active on-chain
+    // and the vesting clock runs toward 100% streamer on wall-clock. Flipping
+    // status='denied' there would hide the beam from the streamer while the
+    // program silently vests everything to them. Leave the row alone and
+    // force a retry — the beam stays live, the toast surfaces the reason.
+    if (result.outcome === 'no-wallet') {
+      showFlashToast('Connect streamer wallet to deny this beam', 'err');
+      return;
+    }
+    if (result.outcome === 'error') {
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      showFlashToast(`Deny failed — ${formatEscrowError(result.error)}; beam stays live`, 'err');
+      return;
+    }
+
     const update: Record<string, unknown> = { status: 'denied' };
     if (result.outcome === 'settled' || result.outcome === 'closed') {
       update.escrow_pda = null;
     }
-    const { error: updateErr, data: updateData } = await supabase
-      .from('bookings')
-      .update(update)
-      .eq('id', id)
-      .select('id, status, escrow_pda, profile_id')
-      .maybeSingle();
-    // TEMP diagnostic for deny-doesn't-propagate bug. Remove once fixed.
-    console.warn('[admin/deny/solana]', { id, outcome: result.outcome, updateErr, updateData });
+    await supabase.from('bookings').update(update).eq('id', id);
 
     if (result.outcome === 'settled') {
       showFlashToast('✕ Denied & escrow settled on-chain', 'ok');
@@ -792,16 +849,10 @@ export default function AdminStudio() {
       // reclaimed first, cranker cancelled a stale pending, or the row had
       // no escrow to begin with. Nothing left for anyone to do.
       showFlashToast('✕ Denied — escrow already closed', 'ok');
-    } else if (result.outcome === 'pending-chain') {
-      // Escrow is still Pending on-chain: only the viewer can cancel_escrow.
-      // They'll see "✕ Denied — USDC locked" with a RECOVER button the next
-      // time they open the overlay.
+    } else {
+      // pending-chain: only the viewer can cancel_escrow. They'll see
+      // "✕ Denied — USDC locked" with a RECOVER button on the overlay.
       showFlashToast('✕ Denied — viewer can reclaim their USDC from the overlay', 'ok');
-    } else if (result.outcome === 'no-wallet') {
-      showFlashToast('✕ Denied — connect streamer wallet to settle escrow', 'err');
-    } else if (result.outcome === 'error') {
-      const { formatEscrowError } = await import('@/lib/casi-errors');
-      showFlashToast(`Denied but on-chain settle failed — ${formatEscrowError(result.error)}`, 'err');
     }
   } else {
     // Stripe: void/refund PaymentIntent then mark denied
@@ -840,42 +891,126 @@ export default function AdminStudio() {
   };
 
   /**
-   * Moderate a flash on the Solana rail: viewer-funded escrow PDA is settled
-   * by calling `approve_flash` or `deny_flash` on-chain, then the streamer's
-   * session tells the DB (/api/flashes/moderate) to flip status after
-   * server-side tx verification.
+   * Moderate a flash on the Solana rail.
+   *
+   * Nominal path: broadcast `approve_flash` / `deny_flash` on-chain with
+   * the streamer's wallet, then tell `/api/flashes/moderate` to verify
+   * the tx and flip DB status. On-chain state is authoritative; DB
+   * never transitions ahead of chain.
+   *
+   * Two drift-recovery paths handle stuck flashes:
+   *
+   *   1. No escrow metadata yet (viewer paid but attach-escrow failed,
+   *      or never paid at all). Approving is impossible — there's no
+   *      vault. Deny is a DB-only flip; there's nothing on-chain to
+   *      unwind. Streamer gets the row off their queue without a
+   *      pointless chain call or wallet popup.
+   *
+   *   2. PDA already closed on-chain (a prior approve/deny succeeded
+   *      but /api/flashes/moderate failed to land the DB update, so
+   *      the row looks pending but the escrow is gone). Pre-probe via
+   *      getAccountInfo; if the PDA is missing, route to the DB-only
+   *      path instead of trying to sign a tx that will revert with
+   *      AccountNotInitialized. Also handle the race where the PDA
+   *      disappears mid-flight by catching the Anchor error + falling
+   *      back to DB-only.
    */
   const moderateSolanaFlash = async (flash: any, action: 'approve' | 'deny') => {
-    const anchorWallet = buildAnchorWalletForEscrow();
-    if (!anchorWallet) {
-      openWalletModal();
-      throw new Error('Connect your streamer wallet');
-    }
-    if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
-      throw new Error('Connected wallet is not the streamer wallet on file');
-    }
-    if (!flash.viewer_wallet || !flash.escrow_pda) {
-      throw new Error('Flash is missing on-chain metadata');
-    }
-
     setSettlingSolana(prev => ({ ...prev, [flash.id]: true }));
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = `Bearer ${session?.access_token}`;
+
+      // Helper: tell the server to flip DB status WITHOUT a chain tx.
+      // Used when there's nothing to do on-chain (either never paid or
+      // already processed). The server still audits via on-chain probe
+      // in db_only mode, so a viewer can't trick the route into denying
+      // a flash whose escrow is still live.
+      const dbOnlyModerate = async () => {
+        const res = await fetch('/api/flashes/moderate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+          body: JSON.stringify({ flash_id: flash.id, action, db_only: true }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json?.error) throw new Error(json?.error || 'Server update failed');
+      };
+
+      // Case 1: no escrow metadata. Approve is impossible; deny is DB-only.
+      if (!flash.viewer_wallet || !flash.escrow_pda) {
+        if (action === 'deny') {
+          await dbOnlyModerate();
+          return null;
+        }
+        throw new Error("Flash hasn't been paid yet — nothing to approve");
+      }
+
+      // Case 2: pre-probe the PDA. If it's gone, the flash has already
+      // been settled on-chain — skip straight to the DB flip.
+      const { PublicKey: PK } = await import('@solana/web3.js');
+      const escrowPk = new PK(flash.escrow_pda);
+      const pdaInfo = await walletConnection.getAccountInfo(escrowPk).catch(() => null);
+      if (!pdaInfo) {
+        await dbOnlyModerate();
+        return null;
+      }
+
+      // Case 3: try the delegate crank first. On success, the chain tx
+      // closes the PDA, but the DB flip runs on a different path:
+      //   - production: Helius webhook's approve_flash_delegated /
+      //     deny_flash_delegated case in /api/webhooks/solana
+      //   - local dev (no webhook tunnel): nothing — so we fall through
+      //     to dbOnlyModerate, which probes the PDA (now closed) and
+      //     flips DB directly. Both paths gate on `status = 'pending'`
+      //     so double-writes are idempotent.
+      const delegated = await trySolanaFlashDelegated(flash.id, action);
+      if (delegated.ok) {
+        await dbOnlyModerate();
+        return null;
+      }
+      showFlashToast(describeDelegateSettleFailure(delegated), 'err');
+
+      // Normal path: wallet-signed approve_flash / deny_flash.
+      const anchorWallet = buildAnchorWalletForEscrow();
+      if (!anchorWallet) {
+        openWalletModal();
+        throw new Error('Connect your streamer wallet');
+      }
+      if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
+        throw new Error('Connected wallet is not the streamer wallet on file');
+      }
+
       const { CasiEscrowClient } = await import('@/lib/casi-escrow');
-      const { PublicKey: PK }    = await import('@solana/web3.js');
       const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
 
       const viewerPk   = new PK(flash.viewer_wallet);
       const streamerPk = publicKey!;
 
-      const { sig } =
-        action === 'approve'
+      let sig: string;
+      try {
+        const result = action === 'approve'
           ? await client.approveFlash({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk })
           : await client.denyFlash   ({ escrowId: flash.id, viewer: viewerPk, streamer: streamerPk });
+        sig = result.sig;
+      } catch (err) {
+        // Mid-flight drift: PDA disappeared between probe and tx (another
+        // tx landed in the gap). Anchor raises AccountNotInitialized /
+        // account does not exist variants. Fall back to DB-only.
+        const { isAlreadyProcessed } = await import('@/lib/casi-errors');
+        const msg = err instanceof Error ? err.message : String(err);
+        if (isAlreadyProcessed(err) || /AccountNotInitialized|account.*not.*exist|AlreadySettled/i.test(msg)) {
+          const stillThere = await walletConnection.getAccountInfo(escrowPk).catch(() => null);
+          if (!stillThere) {
+            await dbOnlyModerate();
+            return null;
+          }
+        }
+        throw err;
+      }
 
-      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/flashes/moderate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
         body: JSON.stringify({ flash_id: flash.id, action, tx_signature: sig }),
       });
       const json = await res.json().catch(() => ({}));
@@ -890,7 +1025,15 @@ export default function AdminStudio() {
     try {
       if (flash.payment_method === 'solana') {
         const sig = await moderateSolanaFlash(flash, 'approve');
-        showFlashToast(`⚡ Approved on-chain · ${sig.slice(0, 8)}…`, 'ok');
+        // sig is null on the DB-only drift-recovery path (PDA was
+        // already closed on-chain before we got here). Toast reflects
+        // that it was reconciled rather than newly approved.
+        showFlashToast(
+          sig
+            ? `⚡ Approved on-chain · ${sig.slice(0, 8)}…`
+            : '⚡ Approved (flash was already settled on-chain)',
+          'ok',
+        );
       } else {
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch('/api/flashes/moderate', {
@@ -912,7 +1055,15 @@ export default function AdminStudio() {
     try {
       if (flash.payment_method === 'solana') {
         const sig = await moderateSolanaFlash(flash, 'deny');
-        showFlashToast(`✕ Denied & refunded · ${sig.slice(0, 8)}…`, 'ok');
+        // sig is null on the DB-only path (either the flash never had
+        // an escrow PDA — viewer never completed payment — or the PDA
+        // was already closed on-chain by a prior settle).
+        showFlashToast(
+          sig
+            ? `✕ Denied & refunded · ${sig.slice(0, 8)}…`
+            : '✕ Denied (no on-chain funds to return)',
+          'ok',
+        );
       } else {
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch('/api/flashes/moderate', {
@@ -964,9 +1115,12 @@ export default function AdminStudio() {
       }
       await expireBooking(booking);
     } else {
-      // Stripe: prorate via API, then clear image + advance queue
+      // Stripe: prorate via API, then clear image + advance queue. If the
+      // server fails to capture (flaky Stripe, disabled Connect account,
+      // etc.) it returns non-2xx — keep the beam live so the streamer can
+      // retry instead of silently losing the capture.
       const { data: { session } } = await supabase.auth.getSession();
-      await fetch('/api/stripe/end-early', {
+      const res = await fetch('/api/stripe/end-early', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -974,6 +1128,10 @@ export default function AdminStudio() {
         },
         body: JSON.stringify({ booking_id: booking.id }),
       });
+      if (!res.ok) {
+        showFlashToast('End early failed — beam stays live, try again', 'err');
+        return;
+      }
       await expireBooking(booking);
     }
   };
@@ -1012,37 +1170,6 @@ export default function AdminStudio() {
     setTimeout(() => setCopiedUrl(null), 2000);
   };
 
-  const sendTestFlash = async () => {
-    if (!profile || sendingTestFlash) return;
-    if (!profile.allow_free_flashes) {
-      showFlashToast('Enable free Flashes in your profile first, then try again.', 'err');
-      return;
-    }
-    setSendingTestFlash(true);
-    try {
-      const res = await fetch('/api/flashes/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: profile.id,
-          viewer_name: 'Test',
-          message: 'Test Flash from your admin panel ✦',
-          payment_method: 'free',
-        }),
-      });
-      if (!res.ok) {
-        const { error } = await res.json().catch(() => ({ error: 'Test failed' }));
-        showFlashToast(error || 'Test failed', 'err');
-      } else {
-        showFlashToast('Test Flash sent — approve it in Requests to see it fire on your overlay.', 'ok');
-      }
-    } catch {
-      showFlashToast('Test Flash failed — check your connection.', 'err');
-    } finally {
-      setSendingTestFlash(false);
-    }
-  };
-
   const calcTotal = (booking: any) => booking.price_unit === 'min'
     ? (booking.price_value * Number(booking.duration_minutes)).toFixed(0)
     : (booking.price_value * (Number(booking.duration_minutes) / 60)).toFixed(2);
@@ -1059,7 +1186,12 @@ export default function AdminStudio() {
   };
 
   const confirmedFlashes = pendingFlashes.filter(f => !!(f.payment_intent_id || f.tx_signature));
-  const totalPending = pendingBookings.length + queuedBookings.length + confirmedFlashes.length;
+  // Badge count includes EVERY pending flash, not just paid ones. Free
+  // flashes are still real moderation work (the streamer sees them,
+  // decides if they air) so they belong in the "you have things to do"
+  // count. Old behaviour hid the badge for free-only traffic, which
+  // made streamers miss pending messages entirely.
+  const totalPending = pendingBookings.length + queuedBookings.length + pendingFlashes.length;
   const slotOccupiedForPreview = previewBooking ? activeBookings.some(b => b.element_id === previewBooking.element_id) : false;
   const backdropEl = elements.find(el => el.is_background);
   const hasBackdrop = !!backdropEl;
@@ -1259,7 +1391,7 @@ export default function AdminStudio() {
               <span className="nav-wm">casi</span>
             </a>
             <div className="nav-tabs">
-              {(['studio', 'requests', 'chat', 'settings'] as const).map(v => (
+              {(['studio', 'requests', 'settings'] as const).map(v => (
                 <button key={v} onClick={() => setView(v)} className={`nav-tab ${view === v ? 'active' : ''}`}>
                   {v}
                   {v === 'requests' && totalPending > 0 && <span className="nav-badge">{totalPending}</span>}
@@ -1292,20 +1424,6 @@ export default function AdminStudio() {
               style={{ border: '1px solid rgba(var(--casi-accent-rgb),0.25)', color: 'var(--casi-accent)' }}>
               {copiedUrl === 'vlink' ? '✓ Copied' : 'Copy'}
             </button>
-            <button
-              onClick={sendTestFlash}
-              disabled={sendingTestFlash}
-              className="btn-sm"
-              title={profile.allow_free_flashes ? 'Send a free test Flash to yourself to preview the overlay animation' : 'Enable free Flashes in your profile to test'}
-              style={{
-                background: 'rgba(var(--casi-accent2-rgb),0.1)',
-                color: 'var(--casi-accent2)',
-                border: '1px solid rgba(var(--casi-accent2-rgb),0.3)',
-                opacity: sendingTestFlash ? 0.6 : 1,
-                cursor: sendingTestFlash ? 'wait' : 'pointer',
-              }}>
-              {sendingTestFlash ? 'Sending…' : '⚡ Test Flash'}
-            </button>
           </div>
         )}
 
@@ -1325,159 +1443,31 @@ export default function AdminStudio() {
 
         {/* PREVIEW MODAL */}
         {previewBooking && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 24 }}
-            onClick={(e) => { if (e.target === e.currentTarget) setPreviewBooking(null); }}>
-            <div style={{ background: 'var(--casi-surface)', border: '1px solid #222', borderRadius: 16, padding: 28, width: '100%', maxWidth: 520 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <div>
-                  <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 800, color: 'var(--casi-text)' }}>Review Request</h2>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: isBackdropBooking(previewBooking) ? '#c084fc' : 'var(--casi-accent2)', marginTop: 4, letterSpacing: 1 }}>
-                    {isBackdropBooking(previewBooking) ? '🖼 Full Backdrop' : '✦ Beam Slot'}
-                    {slotOccupiedForPreview && <span style={{ color: 'var(--casi-accent)', marginLeft: 8 }}>— slot occupied, will queue</span>}
-                  </div>
-                </div>
-                <button onClick={() => setPreviewBooking(null)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
-              </div>
-              <div style={{ aspectRatio: '16/9', background: 'var(--casi-bg)', border: '1px solid #1c1c1c', borderRadius: 10, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-                {previewBooking.image_url ? <SlotMedia src={previewBooking.image_url} fileType={previewBooking.file_type} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#333' }}>No image</span>}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-                {[['From', previewBooking.viewer_name, 'var(--casi-text)'], ['Price', `$${previewBooking.price_value}/${previewBooking.price_unit}`, 'var(--casi-accent2)'], ['Duration', fmtDuration(previewBooking.duration_minutes), 'var(--casi-text)'], ['Total', `$${calcTotal(previewBooking)}`, '#4ade80']].map(([l, v, c]) => (
-                  <div key={l} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #161616', borderRadius: 8, padding: '10px 14px' }}>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#444', marginBottom: 4 }}>{l}</div>
-                    <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 15, fontWeight: 700, color: c }}>{v}</div>
-                  </div>
-                ))}
-              </div>
-              {previewBooking.message && (
-                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #161616', borderRadius: 8, padding: 14, marginBottom: 20 }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#444', marginBottom: 6 }}>Message</div>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, color: '#888', fontStyle: 'italic' }}>"{previewBooking.message}"</div>
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => denyBooking(previewBooking.id, previewBooking.payment_method)} style={{ flex: 1, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: 12, color: '#f87171', fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, textTransform: 'uppercase', cursor: 'pointer' }}>Deny</button>
-                <button
-  onClick={() => approveBooking(previewBooking)}
-  className="act-btn"
-  disabled={!isPaymentConfirmed(previewBooking)}
-  style={{
-    background: !isPaymentConfirmed(previewBooking) ? 'var(--casi-border)' : slotOccupiedForPreview ? 'var(--casi-accent)' : 'var(--casi-accent2)',
-    color: !isPaymentConfirmed(previewBooking) ? '#444' : 'var(--casi-bg)',
-    cursor: !isPaymentConfirmed(previewBooking) ? 'not-allowed' : 'pointer',
-    flex: 1, border: 'none', borderRadius: 10, padding: 12, fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 13, textTransform: 'uppercase'
-  }}
->
-  {!isPaymentConfirmed(previewBooking) ? 'Awaiting payment' : slotOccupiedForPreview ? 'Approve → Queue' : 'Approve → Live'}
-                </button>
-              </div>
-            </div>
-          </div>
+          <PreviewBookingModal
+            booking={previewBooking}
+            isBackdrop={isBackdropBooking(previewBooking)}
+            slotOccupied={slotOccupiedForPreview}
+            paymentConfirmed={isPaymentConfirmed(previewBooking)}
+            totalDisplay={`$${calcTotal(previewBooking)}`}
+            durationDisplay={fmtDuration(previewBooking.duration_minutes)}
+            onClose={() => setPreviewBooking(null)}
+            onDeny={() => denyBooking(previewBooking.id, previewBooking.payment_method)}
+            onApprove={() => approveBooking(previewBooking)}
+          />
         )}
 
         {/* ── ONBOARDING BANNER ── */}
         {showBanner && view === 'studio' && (
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(var(--casi-accent-rgb),0.07) 0%, rgba(var(--casi-accent2-rgb),0.05) 100%)',
-            borderBottom: '1px solid rgba(var(--casi-accent-rgb),0.15)',
-            padding: '0',
-            position: 'relative',
-          }}>
-            {/* Header row */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px 0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)' }}>
-                  ✦ Quick&nbsp;setup
-                </span>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333' }}>— 3 steps to go live</span>
-              </div>
-              <button
-                onClick={() => { try { localStorage.setItem('casi_onboarding_dismissed', '1'); } catch {} setShowBanner(false); }}
-                style={{ background: 'none', border: 'none', color: '#333', cursor: 'pointer', fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, padding: '4px 8px', borderRadius: 4, transition: 'color .2s' }}
-                onMouseOver={(e) => (e.currentTarget.style.color = '#888')}
-                onMouseOut={(e) => (e.currentTarget.style.color = '#333')}>
-                Dismiss ✕
-              </button>
-            </div>
-
-            {/* 3-surface explainer row */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '8px 24px 4px', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
-              <span><span style={{ color: '#facc15' }}>⚡ Flash</span> = one-shot popup message</span>
-              <span><span style={{ color: 'var(--casi-accent2)' }}>✦ Beam</span> = timed image/video in a slot</span>
-              <span><span style={{ color: '#c084fc' }}>🖼 Backdrop</span> = full-screen takeover</span>
-            </div>
-
-            {/* Steps */}
-            <div className="banner-steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, padding: '12px 24px 20px' }}>
-              {[
-                {
-                  num: '01',
-                  color: 'var(--casi-accent)',
-                  title: 'Add a beam slot',
-                  body: 'Hit + Beam above to add a slot to your canvas. Drag it where you want it on screen, then set a price.',
-                  action: (
-                    <button
-                      onClick={async () => {
-                        // Trigger addBeam — find the + Beam button and click it
-                        const btn = document.querySelector('.banner-add-beam-trigger') as HTMLButtonElement;
-                        if (btn) btn.click();
-                      }}
-                      style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--casi-accent)', border: 'none', borderRadius: 6, padding: '7px 14px', color: 'var(--casi-bg)', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', letterSpacing: 0.3 }}>
-                      + Add beam
-                    </button>
-                  ),
-                },
-                {
-                  num: '02',
-                  color: '#06b6d4',
-                  title: 'Add OBS browser source',
-                  body: 'In OBS, add a Browser Source. Paste your overlay URL from Settings. Set background to transparent.',
-                  action: (
-                    <button
-                      onClick={() => setView('settings')}
-                      style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(var(--casi-accent2-rgb),0.1)', border: '1px solid rgba(var(--casi-accent2-rgb),0.25)', borderRadius: 6, padding: '7px 14px', color: 'var(--casi-accent2)', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', letterSpacing: 0.3 }}>
-                      Get URL →
-                    </button>
-                  ),
-                },
-                {
-                  num: '03',
-                  color: '#4ade80',
-                  title: 'Go live and share',
-                  body: 'Hit Go Live, copy your viewer link, and share it in your stream chat. Viewers can now tip to display their image or video in your slots.',
-                  action: (
-                    <span style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', letterSpacing: 0.5 }}>
-                      Use the Go Live button above ↑
-                    </span>
-                  ),
-                },
-              ].map((step, i) => (
-                <div key={step.num} style={{
-                  padding: '16px 20px',
-                  borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                  display: 'flex', flexDirection: 'column',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, color: step.color, background: `${step.color}22`, border: `1px solid ${step.color}40`, borderRadius: 4, padding: '2px 6px' }}>{step.num}</span>
-                    <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 700, color: 'var(--casi-text)' }}>{step.title}</span>
-                  </div>
-                  <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, lineHeight: 1.6, color: 'var(--casi-text-muted)', flex: 1 }}>{step.body}</p>
-                  {step.action}
-                </div>
-              ))}
-            </div>
-
-            {/* Progress indicator — dims steps as elements are added */}
-            <div style={{ display: 'flex', gap: 4, padding: '0 24px 14px' }}>
-              {[
-                elements.length > 0,
-                false, // OBS step — can't auto-detect
-                profile?.is_live,
-              ].map((done, i) => (
-                <div key={i} style={{ height: 2, flex: 1, borderRadius: 1, background: done ? 'var(--casi-accent)' : 'var(--casi-border)', transition: 'background .4s' }} />
-              ))}
-            </div>
-          </div>
+          <OnboardingBanner
+            elementsCount={elements.length}
+            isLive={!!profile?.is_live}
+            onAddBeam={addBeam}
+            onGoToSettings={() => setView('settings')}
+            onDismiss={() => {
+              try { localStorage.setItem('casi_onboarding_dismissed', '1'); } catch {}
+              setShowBanner(false);
+            }}
+          />
         )}
 
         {/* ACTIVE BEAMS BAR */}
@@ -1550,7 +1540,19 @@ export default function AdminStudio() {
                     onResizeStop={(_e, _dir, ref, _delta, pos) => { updateLayer(el.id, { width: (ref.offsetWidth / dimensions.width) * 100, height: (ref.offsetHeight / dimensions.height) * 100, pos_x: (pos.x / dimensions.width) * 100, pos_y: (pos.y / dimensions.height) * 100 }); }}
                     disableDragging={el.is_background} enableResizing={!el.is_background} bounds="parent"
                     style={{ zIndex: el.is_background ? 0 : (isSelected ? 40 : 30) }}>
-                    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                    <div
+                      style={{ position: 'relative', width: '100%', height: '100%' }}
+                      // Backdrops have `disableDragging` which also kills
+                      // Rnd's `onDragStop`, so tap-to-select never fires
+                      // for them. Route their selection through a plain
+                      // React onClick on the content div instead. Beams
+                      // keep using onDragStop so drag-vs-tap distinction
+                      // is preserved (a drag shouldn't select).
+                      onClick={el.is_background
+                        ? (e) => { e.stopPropagation(); setSelectedSlotId(el.id); setShowInfoPanel(false); }
+                        : undefined
+                      }
+                    >
                       {/* Shape-masked content box. Isolated from the delete
                           button and selection indicator below so clip-path
                           doesn't chop the corner × or the outer glow. For
@@ -1652,6 +1654,22 @@ export default function AdminStudio() {
                 ? 'Drag to move · Resize from corners · Edit inline'
                 : 'Tap a beam to select · Drag to move · Resize from corners'}
             </div>
+
+            {/* Flash feed — sits right under the studio canvas so streamers
+                see incoming paid / free messages live while editing slots.
+                Admin mode: composer hidden, feed gets delete affordances.
+                Replaces the standalone CHAT tab that used to live in the
+                top-nav; flashes are the only message surface in CASI. */}
+            {profile?.id && (
+              <div style={{ marginTop: 20, maxWidth: 800, marginLeft: 'auto', marginRight: 'auto', width: '100%' }}>
+                <FlashPanel
+                  profileId={profile.id}
+                  viewerName={null}
+                  isAdmin
+                  variant="compact"
+                />
+              </div>
+            )}
         </div>
 
         {/* ── REQUESTS — separated by beam vs backdrop ── */}
@@ -1854,353 +1872,120 @@ export default function AdminStudio() {
           </div>
         )}
 
-        {/* ── CHAT ── */}
-        {view === 'chat' && profile?.id && (
-          <div className="set-body">
-            <div className="set-card">
-              <div className="set-title">Live chat</div>
-              <div className="set-sub" style={{ marginBottom: 12 }}>
-                Viewer messages update in real time. Click × to delete.
-              </div>
-              <ChatPanel profileId={profile.id} viewerName={null} isAdmin variant="compact" />
-            </div>
-          </div>
-        )}
+        {/* Standalone CHAT tab removed — flashes are the only message
+            surface now, and FlashPanel lives under the studio canvas
+            (below) so streamers see incoming flashes while editing. */}
 
         {/* ── SETTINGS ── */}
         {view === 'settings' && (
           <div className="set-body">
 
             {/* ── SKIN PICKER ── */}
-            <div className="set-card">
-              <div className="set-title">Studio skin</div>
-              <div className="set-sub">Changes the colour palette for your admin view and viewer overlay</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                {SKINS.map(s => {
-                  const isActive = (activeSkin ?? 'casi-dark') === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => setActiveSkin(s.id)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        background: isActive ? `rgba(var(--casi-accent-rgb),0.1)` : 'rgba(255,255,255,0.03)',
-                        border: isActive ? '1px solid rgba(var(--casi-accent-rgb),0.4)' : '1px solid var(--casi-border)',
-                        borderRadius: 10, padding: '8px 12px', cursor: 'pointer', transition: 'all .15s',
-                      }}
-                    >
-                      {/* Mini palette swatch */}
-                      <div style={{ display: 'flex', gap: 2 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: 2, background: s.accent }} />
-                        <div style={{ width: 10, height: 10, borderRadius: 2, background: s.accent2 }} />
-                        <div style={{ width: 10, height: 10, borderRadius: 2, background: s.bg, border: '1px solid rgba(255,255,255,0.1)' }} />
-                      </div>
-                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: isActive ? 'var(--casi-accent)' : 'var(--casi-text-muted)', letterSpacing: 0.5 }}>{s.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <button
-                onClick={async () => {
-                  if (!profile || savingSkin) return;
-                  setSavingSkin(true);
-                  await supabase.from('profiles').update({ skin: activeSkin }).eq('id', profile.id);
-                  setProfile((p: any) => ({ ...p, skin: activeSkin }));
-                  setSavingSkin(false);
-                }}
-                disabled={savingSkin || (activeSkin ?? 'casi-dark') === (profile?.skin ?? 'casi-dark')}
-                className="btn-sm b-orange"
-                style={{ minWidth: 120, opacity: savingSkin || (activeSkin ?? 'casi-dark') === (profile?.skin ?? 'casi-dark') ? 0.5 : 1 }}
-              >
-                {savingSkin ? 'Saving…' : 'Save skin'}
-              </button>
-            </div>
+            <SkinPickerCard
+              activeSkin={activeSkin}
+              savedSkin={profile?.skin ?? null}
+              saving={savingSkin}
+              onSelect={setActiveSkin}
+              onSave={async () => {
+                if (!profile || savingSkin) return;
+                setSavingSkin(true);
+                await supabase.from('profiles').update({ skin: activeSkin }).eq('id', profile.id);
+                setProfile((p: any) => ({ ...p, skin: activeSkin }));
+                setSavingSkin(false);
+              }}
+            />
 
-            <div className="set-card">
-              {/* ── Profile summary row ── */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', border: `1px solid rgba(var(--casi-accent-rgb),0.25)`, overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-                  {(editAvatarValid && editAvatar) || profile.avatar_url
-                    ? <img src={editAvatarValid && editAvatar ? editAvatar : profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                    : '👤'}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)' }}>
-                    {editOpen ? (editName || profile.username) : (profile.display_name || profile.username)}
-                  </div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>@{profile.username}</div>
-                  {!editOpen && profile.bio && <div style={{ fontSize: 12, color: 'var(--casi-text-muted)', marginTop: 4 }}>{profile.bio}</div>}
-                </div>
-                <button
-                  onClick={() => setEditOpen(o => !o)}
-                  style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: 'var(--casi-accent)', background: editOpen ? 'rgba(var(--casi-accent-rgb),0.08)' : 'none', border: editOpen ? '1px solid rgba(var(--casi-accent-rgb),0.2)' : '1px solid transparent', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0, transition: 'all .15s' }}>
-                  {editOpen ? '✕ Close' : 'Edit ↓'}
-                </button>
-              </div>
-
-              {/* ── Inline edit form ── */}
-              {editOpen && (
-                <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--casi-border)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-                  {/* Display name */}
-                  <div>
-                    <label className="pe-lbl">Display name</label>
-                    <input type="text" value={editName} maxLength={32} className="pe-inp"
-                      placeholder={profile.username}
-                      onChange={(e) => setEditName(e.target.value)} />
-                  </div>
-
-                  {/* Bio */}
-                  <div>
-                    <label className="pe-lbl">Bio</label>
-                    <textarea value={editBio} maxLength={160} rows={3} className="pe-inp"
-                      style={{ resize: 'none', lineHeight: 1.5 }}
-                      placeholder="What do you stream?"
-                      onChange={(e) => setEditBio(e.target.value)} />
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', textAlign: 'right', marginTop: 2 }}>{editBio.length}/160</div>
-                  </div>
-
-                  {/* Avatar */}
-                  <div>
-                    <label className="pe-lbl">Avatar URL</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
-                        {editAvatarValid && editAvatar ? <img src={editAvatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : '👤'}
-                      </div>
-                      <input type="text" value={editAvatar} className="pe-inp" style={{ flex: 1 }}
-                        placeholder="https://your-image.png"
-                        onChange={(e) => { setEditAvatar(e.target.value); setEditAvatarValid(false); }} />
-                      {editAvatar && <img src={editAvatar} style={{ display: 'none' }} alt=""
-                        onLoad={() => setEditAvatarValid(true)} onError={() => setEditAvatarValid(false)} />}
-                    </div>
-                    {editAvatar && (
-                      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, marginTop: 4, color: editAvatarValid ? '#4ade80' : '#f87171' }}>
-                        {editAvatarValid ? '✓ Image loaded' : 'Image not loading — check URL'}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Silhouette preview background */}
-                  <div>
-                    <label className="pe-lbl">
-                      Preview background
-                      <span style={{ fontFamily: 'inherit', letterSpacing: 0, textTransform: 'none', color: 'var(--casi-text-muted)', opacity: 0.6 }}> — OBS screenshot shown to viewers</span>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '10px 14px', cursor: uploadingPreviewBg ? 'wait' : 'pointer' }}>
-                      <input type="file" accept="image/*" style={{ display: 'none' }}
-                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePreviewBgUpload(f); }} />
-                      {previewBgUrl
-                        ? <img src={previewBgUrl} style={{ width: 48, height: 27, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--casi-border)', flexShrink: 0 }} alt="" />
-                        : <div style={{ width: 48, height: 27, borderRadius: 4, border: '1px dashed var(--casi-border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>🖥</div>
-                      }
-                      <div>
-                        <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, color: previewBgUrl ? '#4ade80' : 'var(--casi-text)', marginBottom: 2 }}>
-                          {uploadingPreviewBg ? 'Uploading…' : previewBgUrl ? '✓ Preview set' : 'Upload screenshot'}
-                        </div>
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--casi-text-muted)' }}>
-                          {previewBgUrl ? 'Click to replace' : 'jpg · png · max 5 MB'}
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-
-                  {/* Accent color */}
-                  <div>
-                    <label className="pe-lbl">Accent color <span style={{ fontFamily: 'inherit', letterSpacing: 0, textTransform: 'none', color: 'var(--casi-text-muted)', opacity: 0.6 }}>— overlays skin accent</span></label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 10 }}>
-                      {THEME_PRESETS.map(p => (
-                        <button key={p.color} type="button" title={p.name}
-                          className={`pe-swatch${editThemeColor === p.color ? ' active' : ''}`}
-                          style={{ background: p.color }}
-                          onClick={() => { setEditThemeColor(p.color); setEditCustomColor(''); }} />
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 6, background: editThemeColor, border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0, boxShadow: `0 0 10px ${editThemeColor}50` }} />
-                      <input type="text" value={editCustomColor || editThemeColor} placeholder="#F58220" maxLength={7}
-                        className="pe-inp" style={{ flex: 1, fontFamily: "'DM Mono',monospace", fontSize: 12 }}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setEditCustomColor(v);
-                          if (/^#[0-9A-Fa-f]{6}$/.test(v)) setEditThemeColor(v);
-                        }} />
-                    </div>
-                    <div style={{ height: 3, borderRadius: 2, background: `linear-gradient(90deg, ${editThemeColor}, ${editThemeColor}40)`, marginTop: 10 }} />
-                  </div>
-
-                  {/* Stripe */}
-                  <div>
-                    <label className="pe-lbl">Payments — Stripe</label>
-                    <div style={{ background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: stripeConnected ? '#4ade80' : 'var(--casi-text)', marginBottom: 2 }}>
-                          {stripeConnected ? '✓ Connected to Stripe' : 'Connect Stripe to get paid'}
-                        </div>
-                        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
-                          {stripeConnected ? 'Viewers can pay for beam slots' : 'Required to accept card payments'}
-                        </div>
-                      </div>
-                      <button type="button" onClick={handleStripeConnect} disabled={stripeLoading}
-                        style={{ background: stripeConnected ? 'rgba(74,222,128,0.1)' : 'var(--casi-accent)', border: stripeConnected ? '1px solid rgba(74,222,128,0.25)' : 'none', borderRadius: 8, padding: '8px 14px', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: stripeConnected ? '#4ade80' : 'var(--casi-bg)', cursor: stripeLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                        {stripeLoading ? 'Redirecting…' : stripeConnected ? '↗ Manage' : 'Connect →'}
-                      </button>
-                    </div>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>100% of every tip lands in your Stripe account — no platform fee. Payouts go directly to your bank.</div>
-                  </div>
-
-                  {/* Solana wallet */}
-                  <div>
-                    <label className="pe-lbl">Solana wallet <span style={{ letterSpacing: 0, textTransform: 'none', opacity: 0.6 }}>— USDC streaming payments</span></label>
-                    <div style={{ background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: solanaWallet ? '#9945FF' : 'var(--casi-text)', marginBottom: 2 }}>
-                          {solanaWallet ? `◎ ${solanaWallet.slice(0,6)}…${solanaWallet.slice(-4)}` : 'No wallet linked'}
-                        </div>
-                        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
-                          {solanaWallet ? 'Viewers can pay with USDC on-chain' : 'Optional — Stripe works without this'}
-                        </div>
-                      </div>
-                      {walletConnected && publicKey ? (
-                        <button type="button" onClick={handleSaveWallet} disabled={savingWallet}
-                          style={{ background: walletSaved ? 'rgba(74,222,128,0.1)' : 'rgba(153,69,255,0.15)', border: walletSaved ? '1px solid rgba(74,222,128,0.3)' : '1px solid rgba(153,69,255,0.35)', borderRadius: 8, padding: '8px 14px', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: walletSaved ? '#4ade80' : '#9945FF', cursor: savingWallet ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                          {savingWallet ? 'Saving…' : walletSaved ? '✓ Saved!' : `Save ${publicKey.toBase58().slice(0,4)}…${publicKey.toBase58().slice(-4)}`}
-                        </button>
-                      ) : (
-                        <button type="button" onClick={openWalletModal} disabled={walletConnecting}
-                          style={{ background: 'rgba(153,69,255,0.1)', border: '1px solid rgba(153,69,255,0.3)', borderRadius: 8, padding: '8px 14px', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: '#9945FF', cursor: walletConnecting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0, opacity: walletConnecting ? 0.6 : 1 }}>
-                          {walletConnecting ? 'Connecting…' : 'Connect Wallet'}
-                        </button>
-                      )}
-                    </div>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>Connect your wallet then click Save to link it to your profile.</div>
-                  </div>
-
-                  {/* Session key delegate — optional server-side start_beam */}
-                  <DelegateKeyCard
-                    supabase={supabase}
-                    walletReady={!!publicKey && !!profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet}
-                    onInstalled={installDelegateOnChain}
-                  />
-
-                  {/* Free Flashes toggle — gates the Test Flash button on Studio */}
-                  <div>
-                    <label className="pe-lbl">Free tier <span style={{ letterSpacing: 0, textTransform: 'none', opacity: 0.6 }}>— let viewers send Flashes without paying</span></label>
-                    <div style={{ background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--casi-text)', marginBottom: 2 }}>Allow free Flashes</div>
-                        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>Chat messages without payment · 1 per minute per viewer</div>
-                      </div>
-                      <button type="button" role="switch" aria-checked={editAllowFreeFlashes}
-                        onClick={() => setEditAllowFreeFlashes(v => !v)}
-                        style={{ position: 'relative', width: 44, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, background: editAllowFreeFlashes ? 'var(--casi-accent)' : 'rgba(255,255,255,0.12)', transition: 'background .15s' }}>
-                        <span style={{ position: 'absolute', top: 2, left: editAllowFreeFlashes ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .15s' }} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: 8, paddingTop: 2 }}>
-                    <button type="button" onClick={() => {
-                      // Reset to current saved values
-                      setEditName(profile.display_name || profile.username || '');
-                      setEditBio(profile.bio || '');
-                      setEditAvatar(profile.avatar_url || '');
-                      setEditAvatarValid(!!profile.avatar_url);
-                      setEditThemeColor(profile.theme_color || '#F58220');
-                      setEditCustomColor('');
-                      setEditAllowFreeFlashes(!!profile.allow_free_flashes);
-                      setEditOpen(false);
-                    }} style={{ flex: 1, padding: '10px 0', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--casi-border)', borderRadius: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 12, color: 'var(--casi-text-muted)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      Cancel
-                    </button>
-                    <button type="button" disabled={editSaving}
-                      onClick={async () => {
-                        if (!profile) return;
-                        setEditSaving(true);
-                        await supabase.from('profiles').update({
-                          display_name: editName || profile.username,
-                          bio: editBio || null,
-                          avatar_url: editAvatarValid ? editAvatar : null,
-                          theme_color: editThemeColor,
-                          allow_free_flashes: editAllowFreeFlashes,
-                        }).eq('id', profile.id);
-                        setProfile((p: any) => ({ ...p,
-                          display_name: editName || profile.username,
-                          bio: editBio || null,
-                          avatar_url: editAvatarValid ? editAvatar : null,
-                          theme_color: editThemeColor,
-                          allow_free_flashes: editAllowFreeFlashes,
-                        }));
-                        setEditSaving(false);
-                        setEditSaved(true);
-                        setEditOpen(false);
-                        setTimeout(() => setEditSaved(false), 2000);
-                      }}
-                      style={{ flex: 2, padding: '10px 0', background: editSaved ? '#4ade80' : 'var(--casi-accent)', border: 'none', borderRadius: 10, fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 12, color: 'var(--casi-bg)', cursor: editSaving ? 'not-allowed' : 'pointer', textTransform: 'uppercase', letterSpacing: 0.5, opacity: editSaving ? 0.7 : 1 }}>
-                      {editSaving ? 'Saving…' : 'Save profile'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="set-card">
-              <div className="set-title">Viewer overlay</div>
-              <div className="set-sub">Share with your audience</div>
-              <div className="code-row">
-                <div className="code-box">{origin}/overlay?s={profile.username}</div>
-                <button onClick={() => copyUrl(`${origin}/overlay?s=${profile.username}`, 'viewer')} className="btn-sm b-outline" style={{ border: '1px solid #222' }}>
-                  {copiedUrl === 'viewer' ? '✓ Copied' : 'Copy'}
-                </button>
-              </div>
-            </div>
-            <div className="set-card">
-              <div className="set-title">OBS Setup</div>
-              <div className="set-sub">Add two browser sources in OBS in this order</div>
-              <div style={{ marginBottom: 16, borderRadius: 10, border: '1px solid #161616', overflow: 'hidden' }}>
-                {[['TOP', 'Casi Beams', '#06b6d4', 'floating overlay, transparent bg'], ['MID', 'Your Camera', '#444', 'with chroma key / bg removal'], ['BTM', 'Casi Backdrop', '#c084fc', 'full screen, transparent bg']].map(([pos, name, color, desc]) => (
-                  <div key={pos} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid #0d0d0d', background: 'rgba(255,255,255,0.02)' }}>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color, background: `${color}15`, border: `1px solid ${color}30`, borderRadius: 4, padding: '2px 7px', letterSpacing: 1, flexShrink: 0 }}>{pos}</span>
-                    <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 600, fontSize: 13, color: 'var(--casi-text)' }}>{name}</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginLeft: 'auto' }}>{desc}</span>
-                  </div>
-                ))}
-              </div>
-              {[['beams', '#06b6d4', 'Beams URL'], ['backdrop', '#c084fc', 'Backdrop URL']].map(([layer, color, label]) => (
-                <div key={layer} style={{ marginBottom: 10 }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: '#444', marginBottom: 6 }}>{label}</div>
-                  <div className="code-row">
-                    <div className="code-box" style={{ borderColor: `${color}20`, color }}>{origin}/obs?s={profile.username}&layer={layer}</div>
-                    <button onClick={() => copyUrl(`${origin}/obs?s=${profile.username}&layer=${layer}`, layer)} className="btn-sm"
-                      style={{ background: `${color}15`, color, border: `1px solid ${color}30`, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, textTransform: 'uppercase', padding: '10px 16px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}>
-                      {copiedUrl === layer ? '✓' : 'Copy'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid #111', borderRadius: 8, padding: '10px 14px', marginTop: 8 }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginBottom: 4 }}>Custom CSS for both sources:</div>
-                <code style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>{"body { background-color: rgba(0,0,0,0); }"}</code>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
-                <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid #111', borderRadius: 8, padding: '10px 14px' }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>Dimensions</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>1920 × 1080</div>
-                </div>
-                <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid #111', borderRadius: 8, padding: '10px 14px' }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>Not updating?</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>Right-click source → Refresh cache</div>
-                </div>
-              </div>
-            </div>
+            <ProfileEditCard
+              profile={profile}
+              open={editOpen}
+              onOpenChange={setEditOpen}
+              name={editName}
+              onNameChange={setEditName}
+              bio={editBio}
+              onBioChange={setEditBio}
+              avatar={editAvatar}
+              avatarValid={editAvatarValid}
+              onAvatarChange={setEditAvatar}
+              onAvatarValidChange={setEditAvatarValid}
+              themeColor={editThemeColor}
+              onThemeColorChange={setEditThemeColor}
+              customColor={editCustomColor}
+              onCustomColorChange={setEditCustomColor}
+              allowFreeFlashes={editAllowFreeFlashes}
+              onAllowFreeFlashesChange={setEditAllowFreeFlashes}
+              saving={editSaving}
+              saved={editSaved}
+              onCancel={() => {
+                setEditName(profile.display_name || profile.username || '');
+                setEditBio(profile.bio || '');
+                setEditAvatar(profile.avatar_url || '');
+                setEditAvatarValid(!!profile.avatar_url);
+                setEditThemeColor(profile.theme_color || '#F58220');
+                setEditCustomColor('');
+                setEditAllowFreeFlashes(!!profile.allow_free_flashes);
+                setEditOpen(false);
+              }}
+              onSave={async () => {
+                if (!profile) return;
+                setEditSaving(true);
+                await supabase.from('profiles').update({
+                  display_name: editName || profile.username,
+                  bio: editBio || null,
+                  avatar_url: editAvatarValid ? editAvatar : null,
+                  theme_color: editThemeColor,
+                  allow_free_flashes: editAllowFreeFlashes,
+                }).eq('id', profile.id);
+                setProfile((p: any) => ({ ...p,
+                  display_name: editName || profile.username,
+                  bio: editBio || null,
+                  avatar_url: editAvatarValid ? editAvatar : null,
+                  theme_color: editThemeColor,
+                  allow_free_flashes: editAllowFreeFlashes,
+                }));
+                setEditSaving(false);
+                setEditSaved(true);
+                setEditOpen(false);
+                setTimeout(() => setEditSaved(false), 2000);
+              }}
+              previewBgUrl={previewBgUrl}
+              uploadingPreviewBg={uploadingPreviewBg}
+              onPreviewBgUpload={handlePreviewBgUpload}
+              stripeConnected={stripeConnected}
+              stripeLoading={stripeLoading}
+              onStripeConnect={handleStripeConnect}
+              solanaWallet={solanaWallet}
+              walletConnected={walletConnected}
+              walletConnecting={walletConnecting}
+              publicKey={publicKey}
+              savingWallet={savingWallet}
+              walletSaved={walletSaved}
+              onSaveWallet={handleSaveWallet}
+              onOpenWalletModal={openWalletModal}
+              delegateSupabase={supabase}
+              delegateWalletReady={!!publicKey && !!profile?.solana_wallet && publicKey.toBase58() === profile.solana_wallet}
+              onInstallDelegate={installDelegateOnChain}
+            />
+            <ViewerOverlayCard
+              origin={origin}
+              username={profile.username}
+              copiedUrl={copiedUrl}
+              onCopy={copyUrl}
+            />
+            <OBSSetupCard
+              origin={origin}
+              username={profile.username}
+              copiedUrl={copiedUrl}
+              onCopy={copyUrl}
+            />
           </div>
         )}
 
         {/* MOBILE BOTTOM NAV */}
         <div className="bot-nav">
-          {(['studio', 'requests', 'chat', 'settings'] as const).map(v => (
+          {(['studio', 'requests', 'settings'] as const).map(v => (
             <button key={v} onClick={() => setView(v)} className={`bot-tab ${view === v ? 'active' : ''}`}>
               {v === 'requests' && totalPending > 0 && <span className="bot-badge">{totalPending}</span>}
-              <span style={{ fontSize: 18 }}>{v === 'studio' ? '🎬' : v === 'requests' ? '📥' : v === 'chat' ? '💬' : '⚙️'}</span>
+              <span style={{ fontSize: 18 }}>{v === 'studio' ? '🎬' : v === 'requests' ? '📥' : '⚙️'}</span>
               <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{v}</span>
             </button>
           ))}

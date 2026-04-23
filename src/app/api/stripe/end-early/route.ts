@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { stripe } from '@/lib/stripe';
+import { proRataCaptureCents } from '@/lib/payment-math';
+import { logError } from '@/lib/observability';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,24 +47,42 @@ export async function POST(req: Request) {
     .single();
   const stripeAccount = bookingProfile?.stripe_account_id;
 
-  // Prorated capture
+  // Prorated capture. Only fire if the PI is still capturable — if something
+  // else (janitor, dashboard, another end-early retry) already settled it we
+  // treat the row as already-handled and proceed to expire. Any capture
+  // failure on a capturable PI aborts with 502 so the caller keeps the beam
+  // live on-chain and in the DB; silent failure here used to make beams
+  // vanish while the streamer never got paid.
   if (booking.payment_intent_id && booking.original_amount_cents && booking.started_at && stripeAccount) {
-    const startedAt = new Date(booking.started_at).getTime();
-    const now = Date.now();
-    const actualMinutes = Math.max(1, (now - startedAt) / 1000 / 60);
-    const captureAmount = Math.min(
-      Math.round((actualMinutes / booking.duration_minutes) * booking.original_amount_cents),
-      booking.original_amount_cents
+    const opts = { stripeAccount };
+    const elapsedMinutes = (Date.now() - new Date(booking.started_at).getTime()) / 60_000;
+    const captureAmount = proRataCaptureCents(
+      booking.original_amount_cents,
+      Number(booking.duration_minutes),
+      elapsedMinutes,
     );
+
     try {
-      await stripe.paymentIntents.capture(
-        booking.payment_intent_id,
-        { amount_to_capture: captureAmount },
-        { stripeAccount },
+      const pi = await stripe.paymentIntents.retrieve(booking.payment_intent_id, undefined, opts);
+      if (pi.status === 'requires_capture' && captureAmount > 0) {
+        await stripe.paymentIntents.capture(
+          booking.payment_intent_id,
+          { amount_to_capture: captureAmount },
+          opts,
+        );
+        console.log('End early capture:', captureAmount, 'of', booking.original_amount_cents);
+      }
+      // pi.status in {succeeded, canceled, ...}: nothing to capture, fall through.
+    } catch (err) {
+      logError('stripe/end-early', err, {
+        booking_id: booking.id,
+        payment_intent_id: booking.payment_intent_id,
+        stripeAccount,
+      });
+      return NextResponse.json(
+        { error: 'capture_failed', message: err instanceof Error ? err.message : 'Stripe capture failed' },
+        { status: 502 },
       );
-      console.log('End early capture:', captureAmount, 'of', booking.original_amount_cents);
-    } catch (err: any) {
-      console.error('Stripe capture failed:', err.message);
     }
   }
 

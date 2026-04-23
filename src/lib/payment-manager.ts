@@ -135,20 +135,51 @@ async function sendFlashSolana(input: SendFlashInput): Promise<SendFlashResult> 
     amountUsdc,
   });
 
-  const attachRes = await fetch('/api/flashes/attach-escrow', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      flash_id,
-      tx_signature:  sig,
-      escrow_pda:    escrowPda,
-      viewer_wallet: publicKey.toBase58(),
-    }),
+  // Retry the attach a few times with exponential backoff. The chain state
+  // is already committed at this point — the only thing left is writing the
+  // tx_signature + escrow_pda back to the flash row so the admin dashboard
+  // can see it as paid. A single flaky network call shouldn't orphan the
+  // flash. If ALL retries fail we throw so the viewer sees an error (rather
+  // than a silent "Flash locked" chip while the admin sees nothing).
+  const attachBody = JSON.stringify({
+    flash_id,
+    tx_signature:  sig,
+    escrow_pda:    escrowPda,
+    viewer_wallet: publicKey.toBase58(),
   });
-  const attachJson = await attachRes.json().catch(() => ({}));
-  if (!attachRes.ok || attachJson?.error) {
-    // Chain state is already correct — don't scare the user, just log.
-    console.warn('[payment-manager] attach-escrow failed (chain ok):', attachJson?.error);
+  let attachErr: string | null = 'attach never attempted';
+  for (let i = 0; i < 4; i++) {
+    try {
+      const attachRes = await fetch('/api/flashes/attach-escrow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: attachBody,
+      });
+      const attachJson = await attachRes.json().catch(() => ({}));
+      if (attachRes.ok && !attachJson?.error) {
+        attachErr = null;
+        break;
+      }
+      // 409 "Escrow metadata already set" means a previous retry actually
+      // succeeded — treat it as success.
+      if (attachRes.status === 409 && typeof attachJson?.error === 'string' && attachJson.error.toLowerCase().includes('already set')) {
+        attachErr = null;
+        break;
+      }
+      attachErr = attachJson?.error ?? `HTTP ${attachRes.status}`;
+      console.warn(`[payment-manager] attach-escrow attempt ${i + 1}/4 failed:`, attachErr);
+    } catch (err) {
+      attachErr = err instanceof Error ? err.message : String(err);
+      console.warn(`[payment-manager] attach-escrow attempt ${i + 1}/4 threw:`, attachErr);
+    }
+    // Backoff: 500ms, 1s, 2s (last iteration doesn't sleep before the throw).
+    if (i < 3) await new Promise(r => setTimeout(r, 500 * Math.pow(2, i)));
+  }
+  if (attachErr) {
+    throw new Error(
+      `Payment confirmed on-chain (tx ${sig}) but we couldn't link it to the flash (${attachErr}). ` +
+      `The streamer can't see this flash yet. Contact support with the tx signature so they can approve it manually.`,
+    );
   }
 
   return { flashId: flash_id, solana: { sig, escrowPda, solscanUrl } };
