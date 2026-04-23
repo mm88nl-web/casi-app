@@ -32,6 +32,9 @@ import NameEntryScreen from './_components/NameEntryScreen';
 import SolanaConfirmModal, { type TxStatus } from './_components/SolanaConfirmModal';
 import FlashFeed from './_components/FlashFeed';
 import MyBeamsSection from './_components/MyBeamsSection';
+import SlotsList from './_components/SlotsList';
+import StuckFlashesPanel from './_components/StuckFlashesPanel';
+import BrandFooter from './_components/BrandFooter';
 
 // Explicit column list for bookings reads. Belt + suspenders alongside the
 // column-level GRANT in 20260423 — if a new sensitive column lands on
@@ -2026,42 +2029,16 @@ function OverlayContent() {
           )}
 
           {/* SLOTS LIST */}
-          {!isOBS && !selectedSlot && elements.filter((el:any)=>el.price_value>=0).length>0 && (
-            <div className="slots-sec">
-              <div className="slots-lbl">Available slots</div>
-              <div className="slots-grid">
-                {elements.filter((el:any)=>el.price_value>=0).map((el:any) => {
-                  const activeBooking    = getActiveBookingForSlot(el.id);
-                  const isOccupied       = !!activeBooking;
-                  const queueCount       = queueCounts[el.id]||0;
-                  const myBookingForSlot = getMyBookingForSlot(el.id);
-                  const isLocked         = !!el.locked;
-                  const isFree           = Number(el.price_value) === 0;
-                  const priceColor       = isLocked?'#555':myBookingForSlot?'#555':isFree?'#4ade80':tc;
-                  return (
-                    <button key={el.id} className={`slot-card ${myBookingForSlot||isLocked?'s-disabled':''}`}
-                      style={{ borderColor:isFree?'rgba(74,222,128,0.22)':isOccupied&&!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.14)`:!myBookingForSlot&&!isLocked?`rgba(${tcRgb},0.09)`:undefined, position:'relative' }}
-                      onClick={() => !myBookingForSlot&&!isLocked&&openSlot(el,isOccupied)}>
-                      {isFree && !isLocked && (
-                        <span style={{ position:'absolute', top:8, right:8, background:'rgba(74,222,128,0.14)', border:'1px solid rgba(74,222,128,0.4)', color:'#4ade80', fontFamily:"'DM Mono', monospace", fontSize:8, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', padding:'2px 7px', borderRadius:4, pointerEvents:'none' }}>
-                          ★ Free
-                        </span>
-                      )}
-                      <div className="s-thumb" style={{ borderColor:isFree?'rgba(74,222,128,0.25)':isOccupied?`rgba(${tcRgb},0.21)`:`rgba(${tcRgb},0.14)` }}>
-                        {el.image_url?<SlotMedia src={el.image_url} fileType={null} style={{ width:'100%',height:'100%',objectFit:'contain' }} />:<span>{isLocked?'🔒':el.is_background?'🖼':'✦'}</span>}
-                      </div>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div className="s-type">{isLocked?'Locked':myBookingForSlot?String(myBookingForSlot.status||'pending').replace('_',' '):isOccupied?`In use${queueCount>0?` · ${queueCount} waiting`:''}`:el.is_background?'Full Backdrop':'Beam'}</div>
-                        <div className="s-price" style={{ color:priceColor }}>
-                          {isFree ? 'Free' : `$${el.price_value}/${el.price_unit}`}
-                          {el.max_duration_minutes?` · max ${el.max_duration_minutes}m`:''}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          {!isOBS && !selectedSlot && (
+            <SlotsList
+              elements={elements}
+              tc={tc}
+              tcRgb={tcRgb}
+              queueCounts={queueCounts}
+              getActiveBookingForSlot={getActiveBookingForSlot}
+              getMyBookingForSlot={getMyBookingForSlot}
+              onOpenSlot={openSlot}
+            />
           )}
 
           {/* Flash feed + composer. FlashPanel is the single "chat-box-but-
@@ -2077,51 +2054,12 @@ function OverlayContent() {
               that haven't been moderated. Lets the viewer reclaim their
               USDC without waiting on the streamer to act. Hidden in OBS
               mode (this is viewer chrome, not stream content). */}
-          {!isOBS && !selectedSlot && myStuckFlashes.length > 0 && (
-            <div style={{ marginTop: 24, background: 'rgba(192,132,252,0.05)', border: '1px solid rgba(192,132,252,0.2)', borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#c084fc' }}>
-                  ⚡ Your pending flashes
-                </span>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--casi-text-muted)' }}>
-                  {myStuckFlashes.length} unmoderated
-                </span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {myStuckFlashes.map((f: any) => (
-                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(192,132,252,0.15)' }}>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, color: '#c084fc', background: 'rgba(192,132,252,0.1)', padding: '2px 6px', borderRadius: 4, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                      {(f.amount_cents / 100).toFixed(0)} USDC
-                    </span>
-                    <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, color: 'var(--casi-text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {f.message || '(no message)'}
-                    </span>
-                    <button
-                      onClick={() => reclaimFlashEscrow(f)}
-                      disabled={reclaimingFlash === f.id}
-                      style={{
-                        background: reclaimingFlash === f.id ? 'rgba(192,132,252,0.2)' : '#c084fc',
-                        color: reclaimingFlash === f.id ? '#c084fc' : 'var(--casi-bg)',
-                        border: 'none',
-                        borderRadius: 6,
-                        padding: '4px 10px',
-                        fontFamily: "'DM Mono', monospace",
-                        fontSize: 9,
-                        letterSpacing: 1,
-                        textTransform: 'uppercase',
-                        cursor: reclaimingFlash === f.id ? 'wait' : 'pointer',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {reclaimingFlash === f.id ? '…' : 'Recover'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 8, lineHeight: 1.5 }}>
-                Streamer hasn&apos;t moderated yet, OR the escrow already settled and the row didn&apos;t sync. Recover to refund your USDC + clear the row.
-              </div>
-            </div>
+          {!isOBS && !selectedSlot && (
+            <StuckFlashesPanel
+              flashes={myStuckFlashes}
+              reclaimingId={reclaimingFlash}
+              onReclaim={reclaimFlashEscrow}
+            />
           )}
 
           {!isOBS && profile?.id && !selectedSlot && (
@@ -2136,29 +2074,7 @@ function OverlayContent() {
             </div>
           )}
 
-          {!isOBS && (
-            <div style={{ marginTop:36, paddingTop:20, borderTop:'1px solid var(--casi-surface)', textAlign:'center' }}>
-              <a href="/search" style={{ fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'#222', textDecoration:'none' }}>
-                Browse other streams →
-              </a>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:20 }}>
-                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', color:'#888' }}>Powered by</span>
-                {/* CASI escrow — on-chain Solana program */}
-                <svg width="14" height="14" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <defs>
-                    <linearGradient id="sf-grad" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#9945FF"/>
-                      <stop offset="100%" stopColor="#6E3FD4"/>
-                    </linearGradient>
-                  </defs>
-                  <path d="M15 30 Q50 10 85 30 Q50 50 15 30Z" fill="url(#sf-grad)"/>
-                  <path d="M15 50 Q50 30 85 50 Q50 70 15 50Z" fill="url(#sf-grad)" opacity="0.75"/>
-                  <path d="M15 70 Q50 50 85 70 Q50 90 15 70Z" fill="url(#sf-grad)" opacity="0.5"/>
-                </svg>
-                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:1.5, textTransform:'uppercase', color:'#888' }}>Solana</span>
-              </div>
-            </div>
-          )}
+          {!isOBS && <BrandFooter />}
         </main>
       </div>
 
