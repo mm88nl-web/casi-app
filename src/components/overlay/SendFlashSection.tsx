@@ -27,6 +27,7 @@ interface StreamerProfileLite {
 
 // Matching the old `myFlash` shape returned by Supabase realtime.
 interface MyFlashRow {
+  id: string;
   status: 'pending' | 'approved' | 'denied';
   viewer_name?: string;
   tx_signature?: string | null;
@@ -63,6 +64,12 @@ export default function SendFlashSection({
   const [amount, setAmount] = useState('5');
   const [submitting, setSubmitting] = useState(false);
   const [myFlash, setMyFlash] = useState<MyFlashRow | null>(null);
+  // A pending flash chip can hog the UI indefinitely if the streamer goes
+  // offline before moderating — these refs let the viewer manually dismiss
+  // the status chips without fighting the realtime subscription (which would
+  // otherwise keep replacing a locally-cleared myFlash).
+  const [dismissedFlashId, setDismissedFlashId] = useState<string | null>(null);
+  const [dismissedOnChainTx, setDismissedOnChainTx] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('stripe');
   const [onChainStatus, setOnChainStatus] = useState<null | 'locking' | 'locked'>(null);
   const [onChainTx, setOnChainTx] = useState<string | null>(null);
@@ -258,9 +265,16 @@ export default function SendFlashSection({
               ✕ Flash was not approved — no charge.
             </div>
           )}
-          {myFlash?.status === 'pending' && (
-            <div style={{ background: 'rgba(var(--casi-accent-rgb),0.06)', border: '1px solid rgba(var(--casi-accent-rgb),0.18)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-accent)', animation: 'blink 2s infinite' }}>
-              ⌛ Flash sent — awaiting streamer approval
+          {myFlash?.status === 'pending' && myFlash.id !== dismissedFlashId && (
+            <div style={{ background: 'rgba(var(--casi-accent-rgb),0.06)', border: '1px solid rgba(var(--casi-accent-rgb),0.18)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-accent)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <span style={{ animation: 'blink 2s infinite' }}>⌛ Flash sent — awaiting streamer approval</span>
+              <button
+                onClick={() => setDismissedFlashId(myFlash.id)}
+                title="Hide this status"
+                style={{ background: 'none', border: 'none', color: 'var(--casi-accent)', cursor: 'pointer', fontSize: 14, opacity: 0.6, padding: 0 }}
+              >
+                ✕
+              </button>
             </div>
           )}
 
@@ -270,13 +284,22 @@ export default function SendFlashSection({
               ⛓ Locking USDC in escrow — confirm in your wallet…
             </div>
           )}
-          {onChainStatus === 'locked' && onChainTx && (
-            <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4ade80', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
-              ⚡ Flash locked on-chain — awaiting streamer approval
-              <a href={`https://solscan.io/tx/${onChainTx}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'block', marginTop: 4, fontSize: 9, color: '#9945FF', textDecoration: 'none', opacity: 0.8 }}>
-                ↗ verify on Solscan
-              </a>
+          {onChainStatus === 'locked' && onChainTx && onChainTx !== dismissedOnChainTx && (
+            <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4ade80', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                ⚡ Flash locked on-chain — awaiting streamer approval
+                <a href={`https://solscan.io/tx/${onChainTx}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'block', marginTop: 4, fontSize: 9, color: '#9945FF', textDecoration: 'none', opacity: 0.8 }}>
+                  ↗ verify on Solscan
+                </a>
+              </div>
+              <button
+                onClick={() => setDismissedOnChainTx(onChainTx)}
+                title="Hide this status"
+                style={{ background: 'none', border: 'none', color: '#4ade80', cursor: 'pointer', fontSize: 14, opacity: 0.6, padding: 0, flexShrink: 0 }}
+              >
+                ✕
+              </button>
             </div>
           )}
 

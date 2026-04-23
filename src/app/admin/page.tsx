@@ -242,13 +242,45 @@ export default function AdminStudio() {
   useEffect(() => {
     if (!profile?.id) return;
     loadBookings(profile.id);
-    const channel = supabase.channel(`admin_bookings_${profile.id}`)
+    loadFlashes(profile.id);
+
+    // Bump timestamp on each realtime event — watchdog below reloads if
+    // the channel goes silent (dropped socket, devnet RPC flap, etc.)
+    // for too long, so a missed INSERT doesn't leave the queue stale.
+    const lastEventAt = { t: Date.now() };
+    const bump = () => { lastEventAt.t = Date.now(); };
+
+    const bookingsChannel = supabase.channel(`admin_bookings_${profile.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `profile_id=eq.${profile.id}` }, () => {
+        bump();
         loadBookings(profile.id);
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [profile?.id, supabase, loadBookings]);
+
+    const flashesChannel = supabase.channel(`admin_flashes_${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profile.id}` }, () => {
+        bump();
+        loadFlashes(profile.id);
+      })
+      .subscribe();
+
+    // Silence watchdog. If we haven't heard from realtime in 30 s, refetch
+    // both tables; the query result is authoritative so a dropped WebSocket
+    // can't indefinitely hide a new flash from the admin.
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastEventAt.t > 30_000) {
+        bump();
+        loadBookings(profile.id);
+        loadFlashes(profile.id);
+      }
+    }, 30_000);
+
+    return () => {
+      supabase.removeChannel(bookingsChannel);
+      supabase.removeChannel(flashesChannel);
+      clearInterval(watchdog);
+    };
+  }, [profile?.id, supabase, loadBookings, loadFlashes]);
 
   // Keep local `elements` in sync with overlay_elements DB writes from other
   // contexts (Vercel Cron janitor, queue advance, other admin sessions).
@@ -267,14 +299,6 @@ export default function AdminStudio() {
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id, supabase]);
 
-  useEffect(() => {
-    if (!profile?.id) return;
-    loadFlashes(profile.id);
-    const channel = supabase.channel(`admin_flashes_${profile.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profile.id}` }, () => loadFlashes(profile.id))
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [profile?.id, supabase, loadFlashes]);
 
   /* ── FIX: callback ref so canvas dimensions fire on first mount ── */
   const setMonitorRef = useCallback((node: HTMLDivElement | null) => {
