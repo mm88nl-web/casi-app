@@ -294,22 +294,24 @@ function OverlayContent() {
           }
         }
         const bump = () => { lastRealtimeEventAt.current = Date.now(); };
-        const channel = supabase.channel(`overlay_${prof.id}`)
-          .on('postgres_changes',{event:'*',schema:'public',table:'overlay_elements',filter:`profile_id=eq.${prof.id}`},()=>{bump();loadData(prof.id);})
-          .on('postgres_changes',{event:'*',schema:'public',table:'bookings',filter:`profile_id=eq.${prof.id}`},(payload)=>{
-            // TEMP diagnostic for deny-doesn't-propagate bug. Remove once fixed.
-            console.warn('[overlay/rt/bookings]', {
-              type: payload.eventType,
-              oldStatus: (payload.old as { status?: string } | null)?.status,
-              newStatus: (payload.new as { status?: string } | null)?.status,
-              id: (payload.new as { id?: string | number } | null)?.id
-                ?? (payload.old as { id?: string | number } | null)?.id,
-            });
-            bump();
+        // Debounce refetches: a single streamer action (approve, deny, etc.)
+        // fires both an overlay_elements UPDATE and a bookings UPDATE, plus
+        // reconnects replay bursts. Without coalescing that's one full
+        // loadData per event — trailing-debounce collapses the burst into
+        // one fetch ~200ms after quiet.
+        let refetchTimer: ReturnType<typeof setTimeout> | undefined;
+        const scheduleReload = () => {
+          bump();
+          if (refetchTimer) clearTimeout(refetchTimer);
+          refetchTimer = setTimeout(() => {
+            refetchTimer = undefined;
             loadData(prof.id);
-          })
+          }, 200);
+        };
+        const channel = supabase.channel(`overlay_${prof.id}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'overlay_elements', filter: `profile_id=eq.${prof.id}` }, scheduleReload)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings',         filter: `profile_id=eq.${prof.id}` }, scheduleReload)
           .subscribe((status) => {
-            console.warn('[overlay/rt/subscribe]', status);
             if (status === 'SUBSCRIBED') bump();
           });
 
@@ -323,7 +325,11 @@ function OverlayContent() {
           }, 30_000);
         }
 
-        cleanup = () => { supabase.removeChannel(channel); if (watchdog) clearInterval(watchdog); };
+        cleanup = () => {
+          supabase.removeChannel(channel);
+          if (watchdog) clearInterval(watchdog);
+          if (refetchTimer) clearTimeout(refetchTimer);
+        };
       } else { setLoading(false); }
     };
     init();

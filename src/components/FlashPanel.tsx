@@ -84,6 +84,10 @@ export default function FlashPanel({
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Last commit_timestamp we've accepted per row id. Protects against the
+  // reconnect-replay case where Supabase redelivers old events and a stale
+  // payload would otherwise overwrite newer UI state.
+  const lastEventTsRef = useRef<Map<string, string>>(new Map());
 
   // Load the approved flash history + subscribe for new ones. Denied /
   // pending rows are deliberately excluded from the feed — the feed is a
@@ -110,6 +114,16 @@ export default function FlashPanel({
         (payload) => {
           const next = payload.new as FlashRow | undefined;
           const prev = payload.old as FlashRow | undefined;
+          const id = next?.id ?? prev?.id;
+          // Drop stale replays: ISO timestamps sort lexicographically, so
+          // "< prevTs" cleanly rejects any event that's older than one
+          // we've already applied for this id.
+          const ts = (payload as unknown as { commit_timestamp?: string }).commit_timestamp;
+          if (id && ts) {
+            const prevTs = lastEventTsRef.current.get(id);
+            if (prevTs && ts < prevTs) return;
+            lastEventTsRef.current.set(id, ts);
+          }
           // Approved row appeared / changed → merge into feed.
           if (next && next.status === 'approved') {
             setFlashes((cur) => {
@@ -121,8 +135,7 @@ export default function FlashPanel({
           }
           // Row deleted or flipped out of approved → drop from feed.
           if (payload.eventType === 'DELETE' || (next && next.status !== 'approved')) {
-            const dropId = next?.id ?? prev?.id;
-            if (dropId) setFlashes((cur) => cur.filter((f) => f.id !== dropId));
+            if (id) setFlashes((cur) => cur.filter((f) => f.id !== id));
           }
         },
       )

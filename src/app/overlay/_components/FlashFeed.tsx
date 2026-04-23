@@ -18,6 +18,9 @@ const DISPLAY_MS = 25_000;
 export default function FlashFeed({ profileId }: { profileId: string }) {
   const [items, setItems] = useState<FlashItem[]>([]);
   const supabase = useRef(createClient()).current;
+  // Commit-timestamp dedup so reconnect replays can't re-pop a flash
+  // that has already aged out of the feed.
+  const lastEventTsRef = useRef<Map<string, string>>(new Map());
 
   // Hydrate with any flashes approved in the last DISPLAY_MS on mount.
   useEffect(() => {
@@ -43,20 +46,26 @@ export default function FlashFeed({ profileId }: { profileId: string }) {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profileId}` },
         (payload) => {
-          if (payload.new?.status === 'approved') {
-            setItems(prev => {
-              const n = payload.new as Record<string, unknown>;
-              const item: FlashItem = {
-                id:            n.id as string,
-                viewer_name:   n.viewer_name as string,
-                message:       n.message as string,
-                amount_cents:  n.amount_cents as number,
-                tx_signature:  n.tx_signature as string | null | undefined,
-                enteredAt:     Date.now(),
-              };
-              return [...prev.filter(f => f.id !== item.id), item].slice(-5);
-            });
+          if (payload.new?.status !== 'approved') return;
+          const n = payload.new as Record<string, unknown>;
+          const id = n.id as string;
+          const ts = (payload as unknown as { commit_timestamp?: string }).commit_timestamp;
+          if (id && ts) {
+            const prevTs = lastEventTsRef.current.get(id);
+            if (prevTs && ts < prevTs) return;
+            lastEventTsRef.current.set(id, ts);
           }
+          setItems(prev => {
+            const item: FlashItem = {
+              id,
+              viewer_name:   n.viewer_name as string,
+              message:       n.message as string,
+              amount_cents:  n.amount_cents as number,
+              tx_signature:  n.tx_signature as string | null | undefined,
+              enteredAt:     Date.now(),
+            };
+            return [...prev.filter(f => f.id !== item.id), item].slice(-5);
+          });
         },
       )
       .subscribe();
