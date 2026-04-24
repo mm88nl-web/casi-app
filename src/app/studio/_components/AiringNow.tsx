@@ -1,5 +1,7 @@
 'use client';
 
+import SlotMedia from '@/components/SlotMedia';
+
 export type AiringItem = {
   id: string;
   icon: string;
@@ -13,6 +15,14 @@ export type AiringItem = {
   onEndEarly?: () => void;
   /** True while end-early is in flight. Disables the button. */
   endingEarly?: boolean;
+  /** The viewer's uploaded image / video URL. When present, renders as the
+   *  row thumbnail with the slot's shape mask so each airing row looks
+   *  distinct — "circle with cat pic" vs "hex with logo" at a glance. */
+  mediaUrl?: string | null;
+  /** File type hint for SlotMedia (image vs video branch). */
+  fileType?: string | null;
+  /** Slot shape for the mask: circle | hex | rounded | banner | backdrop | rect. */
+  shape?: string | null;
 };
 
 type Props = {
@@ -75,20 +85,12 @@ export default function AiringNow({ items }: Props) {
               borderRadius: '10px',
             }}
           >
-            <div
-              className="flex items-center justify-center"
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                background:
-                  'linear-gradient(135deg, rgba(var(--casi-accent2-rgb), 0.3), rgba(var(--casi-accent-rgb), 0.2))',
-                fontSize: '16px',
-              }}
-              aria-hidden
-            >
-              {item.icon}
-            </div>
+            <AiringThumb
+              mediaUrl={item.mediaUrl}
+              fileType={item.fileType}
+              shape={item.shape}
+              icon={item.icon}
+            />
             <div className="min-w-0">
               <div
                 className="font-semibold truncate"
@@ -163,5 +165,80 @@ export default function AiringNow({ items }: Props) {
         ))}
       </div>
     </section>
+  );
+}
+
+/**
+ * 36×36 slot thumbnail, masked to the element's shape. When the booking has
+ * no media (pending or a banner beam with text only) or no shape is known,
+ * falls back to the plain emoji icon tile we were rendering before.
+ */
+function AiringThumb({
+  mediaUrl,
+  fileType,
+  shape,
+  icon,
+}: {
+  mediaUrl?: string | null;
+  fileType?: string | null;
+  shape?: string | null;
+  icon: string;
+}) {
+  const size = 36;
+  const baseTile: React.CSSProperties = {
+    width: `${size}px`,
+    height: `${size}px`,
+    borderRadius: '8px',
+    background:
+      'linear-gradient(135deg, rgba(var(--casi-accent2-rgb), 0.3), rgba(var(--casi-accent-rgb), 0.2))',
+    fontSize: '16px',
+    flexShrink: 0,
+    overflow: 'hidden',
+    position: 'relative',
+  };
+
+  // No media (pending booking, banner text-only, detached row): plain icon tile.
+  if (!mediaUrl) {
+    return (
+      <div className="flex items-center justify-center" style={baseTile} aria-hidden>
+        {icon}
+      </div>
+    );
+  }
+
+  // Per-shape mask. Matches the overlay / StudioLiveEditor rules so the
+  // thumb looks like a miniature of what viewers see on stream.
+  const clipPath =
+    shape === 'circle' ? 'circle(50%)' :
+    shape === 'hex' ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' :
+    undefined;
+  const borderRadius =
+    shape === 'rounded' ? 8 :
+    shape === 'rect' || shape === 'banner' ? 4 :
+    shape === 'backdrop' ? 4 :
+    8;
+
+  return (
+    <div
+      style={{
+        ...baseTile,
+        borderRadius: shape === 'circle' || shape === 'hex' ? 0 : borderRadius,
+        background: '#0a0a0a',
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          clipPath,
+        }}
+      >
+        <SlotMedia
+          src={mediaUrl}
+          fileType={fileType ?? null}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      </div>
+    </div>
   );
 }

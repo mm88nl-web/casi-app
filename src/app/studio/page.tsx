@@ -551,10 +551,11 @@ export default function StudioPage() {
   const airing: AiringItem[] = activeBookings.map((b) => {
     const bookingId = String(b.id);
     const base = bookingToAiringItem(b);
-    // Inject the slot label into the subtitle so two beams in different
-    // slots don't look identical. Falls back to no-op if the element is
-    // gone or the row is detached (no element_id).
-    const label = b.element_id ? slotLabel(elementsById[b.element_id]) : null;
+    const element = b.element_id ? elementsById[b.element_id] : undefined;
+    // Prefix the subtitle with a short slot label ("hex · top-right") as a
+    // fallback for rows where the thumbnail didn't render; when the thumb
+    // is there it's the primary visual differentiator.
+    const label = slotLabel(element);
     const subtitle = label ? `${label} · ${base.subtitle}` : base.subtitle;
     return {
       ...base,
@@ -562,6 +563,9 @@ export default function StudioPage() {
       queueCount: b.element_id ? queueCountByElement[b.element_id] : undefined,
       onEndEarly: () => handleEndEarly(bookingId),
       endingEarly: endingEarly.has(bookingId),
+      mediaUrl: b.image_url,
+      fileType: b.file_type,
+      shape: element?.shape ?? null,
     };
   });
 
