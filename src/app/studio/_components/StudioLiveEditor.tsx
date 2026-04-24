@@ -40,6 +40,11 @@ type Props = {
 
 export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: Props) {
   const [elements, setElements] = useState<any[]>([]);
+  // Tracked so the corner × on a slot hides when something is live / queued
+  // on it — matches the delete guard in deleteLayer (belt + suspenders: the
+  // click handler would block it anyway, but hiding the button makes the
+  // "end early first" rule legible without a toast).
+  const [busySlotIds, setBusySlotIds] = useState<Set<string>>(new Set());
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [saveStatus, setSaveStatus] = useState<'Ready' | 'Saving…' | 'Saved'>('Ready');
@@ -56,14 +61,50 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
     setTimeout(() => setToast(null), 2800);
   };
 
-  // Initial fetch
+  // Initial fetch: elements + any live/queued bookings (so the corner ×
+  // can decide whether to render per-slot).
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await supabase.from('overlay_elements').select('*').eq('profile_id', profileId);
-      if (!cancelled) setElements(data || []);
+      const [elementsRes, bookingsRes] = await Promise.all([
+        supabase.from('overlay_elements').select('*').eq('profile_id', profileId),
+        supabase.from('bookings')
+          .select('element_id, status')
+          .eq('profile_id', profileId)
+          .in('status', ['active', 'approved_queued']),
+      ]);
+      if (cancelled) return;
+      setElements(elementsRes.data || []);
+      const ids = new Set<string>();
+      for (const b of bookingsRes.data || []) {
+        if (b.element_id) ids.add(b.element_id);
+      }
+      setBusySlotIds(ids);
     })();
     return () => { cancelled = true; };
+  }, [supabase, profileId]);
+
+  // Refresh busy-slot set whenever a booking changes status. Cheaper to
+  // re-query than maintain a full reducer here; bookings mutate rarely
+  // compared to drag events.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`studio_editor_bookings_${profileId}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'bookings', filter: `profile_id=eq.${profileId}` },
+        async () => {
+          const { data } = await supabase.from('bookings')
+            .select('element_id, status')
+            .eq('profile_id', profileId)
+            .in('status', ['active', 'approved_queued']);
+          const ids = new Set<string>();
+          for (const b of data || []) {
+            if (b.element_id) ids.add(b.element_id);
+          }
+          setBusySlotIds(ids);
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [supabase, profileId]);
 
   // Realtime sync — cron janitor, queue-advance, parallel admin tabs mutate
@@ -334,6 +375,46 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
                     border: '2px solid var(--casi-accent)', borderRadius: 8, pointerEvents: 'none',
                     boxShadow: '0 0 0 3px rgba(var(--casi-accent-rgb),0.15)',
                   }} />
+                ) : null}
+                {/* Corner delete — only surfaces when the slot is idle.
+                    Slots with an active beam or a queued booking hide this
+                    entirely so the streamer uses End Early from Dashboard
+                    (which settles the escrow first). deleteLayer itself
+                    also guards, so even if the button leaks out, the
+                    click is refused with a toast. */}
+                {!el.is_background && !busySlotIds.has(el.id) ? (
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); deleteLayer(el.id); }}
+                    title="Delete slot"
+                    style={{
+                      position: 'absolute', top: 0, right: 0, width: 28, height: 28,
+                      background: 'rgba(239, 68, 68, 0.85)', border: 'none',
+                      borderRadius: '0 6px 0 6px', color: '#fff',
+                      fontSize: 13, cursor: 'pointer', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center', zIndex: 50,
+                    }}
+                  >
+                    ✕
+                  </button>
+                ) : null}
+                {!el.is_background && busySlotIds.has(el.id) ? (
+                  <span
+                    aria-hidden
+                    className="font-mono uppercase"
+                    style={{
+                      position: 'absolute', top: 6, right: 6,
+                      padding: '3px 8px', borderRadius: 4,
+                      background: 'rgba(var(--casi-accent2-rgb), 0.12)',
+                      border: '1px solid rgba(var(--casi-accent2-rgb), 0.3)',
+                      color: 'var(--casi-accent2)',
+                      fontSize: 9, letterSpacing: '0.14em', zIndex: 50,
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    Live · end from Dashboard
+                  </span>
                 ) : null}
               </div>
             </Rnd>

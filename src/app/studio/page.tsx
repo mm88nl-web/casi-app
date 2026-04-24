@@ -92,13 +92,21 @@ function bookingToQueueItem(b: BookingRow): QueueItem {
       ? 'video clip'
       : 'image';
   const duration = Number(b.duration_minutes) || 0;
+  const rate = Number(b.price_value) || 0;
+  // price_unit is 'min' or 'hr'. The viewer's total in escrow == rate ×
+  // duration in the rate's unit. Default to per-minute since that's the
+  // common case on Casi.
+  const unitMinutes = b.price_unit === 'hr' ? 60 : 1;
+  const total = rate * (duration / unitMinutes);
   const isUsdc = b.payment_method === 'usdc' || b.payment_method === 'solana';
-  const priceLabel = isUsdc ? `${Number(b.price_value)} USDC` : `€${Number(b.price_value)}`;
+  const priceLabel = isUsdc
+    ? `${total.toFixed(total % 1 === 0 ? 0 : 2)} USDC`
+    : `€${total.toFixed(total % 1 === 0 ? 0 : 2)}`;
   return {
     id: `booking-${b.id}`,
     kind: 'beam',
     name: `${who} · ${snippet}`,
-    subtitle: `${timeAgo(b.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · ${duration}m${b.file_type === 'video' ? ' · video' : ''}`,
+    subtitle: `${timeAgo(b.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · ${duration}m${b.file_type === 'video' ? ' · video' : ''}${rate > 0 ? ` · ${rate}/${b.price_unit}` : ''}`,
     priceLabel,
     readOnly: false,
   };
