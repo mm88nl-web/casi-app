@@ -139,23 +139,6 @@ function bookingToAiringItem(b: BookingRow): AiringItem {
   };
 }
 
-function flashToAiringItem(f: FlashRow): AiringItem {
-  const who = f.viewer_name || 'anon';
-  const snippet = (f.message || '').slice(0, 40);
-  const isUsdc = f.payment_method === 'usdc' || f.payment_method === 'solana';
-  const priceLabel = f.payment_method === 'free'
-    ? 'Free'
-    : isUsdc
-      ? `${((f.amount_cents ?? 0) / 100).toFixed(2)} USDC`
-      : `€${((f.amount_cents ?? 0) / 100).toFixed(2)}`;
-  return {
-    id: `flash-${f.id}`,
-    icon: '⚡',
-    name: `${who} · "${snippet}"`,
-    subtitle: `Flash · ${priceLabel}`,
-  };
-}
-
 function flashToLogItem(f: FlashRow): FlashLogItem {
   const isUsdc = f.payment_method === 'usdc' || f.payment_method === 'solana';
   const isFree = f.payment_method === 'free';
@@ -196,7 +179,7 @@ export default function StudioPage() {
   const [pendingBookings, setPendingBookings] = useState<BookingRow[]>([]);
   const [pendingFlashes, setPendingFlashes] = useState<FlashRow[]>([]);
   const [activeBookings, setActiveBookings] = useState<BookingRow[]>([]);
-  const [recentFlashes, setRecentFlashes] = useState<FlashRow[]>([]);
+  const [queuedBookings, setQueuedBookings] = useState<BookingRow[]>([]);
   const [flashLog, setFlashLog] = useState<FlashLogItem[]>([]);
   const [flashTotals, setFlashTotals] = useState({ count: 0, eur: '€0', usdc: '0 USDC' });
   const [moderating, setModerating] = useState<Set<string>>(new Set());
@@ -213,7 +196,7 @@ export default function StudioPage() {
     const startOfDayIso = new Date();
     startOfDayIso.setHours(0, 0, 0, 0);
 
-    const [pendingBookingsRes, pendingFlashesRes, activeBookingsRes, airingFlashesRes, logFlashesRes] =
+    const [pendingBookingsRes, pendingFlashesRes, activeBookingsRes, queuedBookingsRes, logFlashesRes] =
       await Promise.all([
         supabase.from('bookings').select(BOOKING_COLS)
           .eq('profile_id', profileId).eq('status', 'pending')
@@ -224,9 +207,12 @@ export default function StudioPage() {
         supabase.from('bookings').select(BOOKING_COLS)
           .eq('profile_id', profileId).eq('status', 'active')
           .order('started_at', { ascending: false }).limit(10),
-        supabase.from('flashes').select(FLASH_COLS)
-          .eq('profile_id', profileId).eq('status', 'approved')
-          .order('created_at', { ascending: false }).limit(20),
+        // approved_queued = streamer OK'd the booking but the slot is still busy;
+        // auto-promotes when the active one ends. Count these per-element so
+        // airing rows can show "N in queue".
+        supabase.from('bookings').select(BOOKING_COLS)
+          .eq('profile_id', profileId).eq('status', 'approved_queued')
+          .order('approved_at', { ascending: true }).limit(50),
         supabase.from('flashes').select(FLASH_COLS)
           .eq('profile_id', profileId)
           .in('status', ['approved', 'denied'])
@@ -237,7 +223,7 @@ export default function StudioPage() {
     setPendingBookings((pendingBookingsRes.data ?? []) as BookingRow[]);
     setPendingFlashes((pendingFlashesRes.data ?? []) as FlashRow[]);
     setActiveBookings((activeBookingsRes.data ?? []) as BookingRow[]);
-    setRecentFlashes((airingFlashesRes.data ?? []) as FlashRow[]);
+    setQueuedBookings((queuedBookingsRes.data ?? []) as BookingRow[]);
 
     const logRows = (logFlashesRes.data ?? []) as FlashRow[];
     setFlashLog(logRows.map(flashToLogItem));
@@ -430,10 +416,19 @@ export default function StudioPage() {
     })),
   ].sort((a, b) => b.ts - a.ts).map(({ item }) => item);
 
-  const airing: AiringItem[] = [
-    ...activeBookings.map(bookingToAiringItem),
-    ...recentFlashes.map(flashToAiringItem),
-  ];
+  // Airing = active beams only. Approved flashes stay in the Flashes log
+  // below — mixing them into Airing was wrong (flashes don't have a slot
+  // they're blocking) and drowned out actual beams.
+  const queueCountByElement = queuedBookings.reduce<Record<string, number>>((acc, b) => {
+    if (!b.element_id) return acc;
+    acc[b.element_id] = (acc[b.element_id] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const airing: AiringItem[] = activeBookings.map((b) => ({
+    ...bookingToAiringItem(b),
+    queueCount: b.element_id ? queueCountByElement[b.element_id] : undefined,
+  }));
 
   return (
     <main className="min-h-screen" style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}>

@@ -5,8 +5,14 @@ export type AiringItem = {
   icon: string;
   name: string;
   subtitle: string;
-  /** Countdown for timed items (beams). Flashes and other untimed items omit this. */
+  /** Countdown for timed items (beams). */
   remaining?: string;
+  /** How many bookings are queued behind this active one. */
+  queueCount?: number;
+  /** End-early handler — only for items the streamer can actually kick. */
+  onEndEarly?: () => void;
+  /** True while end-early is in flight. Disables the button. */
+  endingEarly?: boolean;
 };
 
 type Props = {
@@ -100,27 +106,59 @@ export default function AiringNow({ items }: Props) {
                 }}
               >
                 {item.subtitle}
+                {item.queueCount && item.queueCount > 0 ? (
+                  <>
+                    <span style={{ opacity: 0.4, margin: '0 6px' }}>·</span>
+                    <span style={{ color: 'var(--casi-accent)' }}>
+                      {item.queueCount} in queue
+                    </span>
+                  </>
+                ) : null}
               </div>
             </div>
-            {item.remaining ? (
-              <div
-                className="font-mono font-medium"
-                style={{ fontSize: '14px', color: 'var(--casi-accent2)' }}
-              >
-                {item.remaining}
-              </div>
-            ) : (
-              <div
-                className="font-mono uppercase"
-                style={{
-                  fontSize: '10px',
-                  letterSpacing: '0.15em',
-                  color: 'var(--casi-accent2)',
-                }}
-              >
-                on stream
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {item.remaining ? (
+                <div
+                  className="font-mono font-medium"
+                  style={{ fontSize: '14px', color: 'var(--casi-accent2)' }}
+                >
+                  {item.remaining}
+                </div>
+              ) : (
+                <div
+                  className="font-mono uppercase"
+                  style={{
+                    fontSize: '10px',
+                    letterSpacing: '0.15em',
+                    color: 'var(--casi-accent2)',
+                  }}
+                >
+                  on stream
+                </div>
+              )}
+              {item.onEndEarly ? (
+                <button
+                  type="button"
+                  onClick={item.onEndEarly}
+                  disabled={item.endingEarly}
+                  title="End early · prorata refund to viewer"
+                  className="font-mono uppercase transition-colors"
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    background: 'transparent',
+                    border: '1px solid var(--casi-border-2)',
+                    color: 'var(--casi-text-dim)',
+                    fontSize: '10px',
+                    letterSpacing: '0.12em',
+                    cursor: item.endingEarly ? 'wait' : 'pointer',
+                    opacity: item.endingEarly ? 0.5 : 1,
+                  }}
+                >
+                  {item.endingEarly ? '…' : 'End early'}
+                </button>
+              ) : null}
+            </div>
           </div>
         ))}
       </div>
