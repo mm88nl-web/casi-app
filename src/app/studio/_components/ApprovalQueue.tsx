@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
 export type QueueItem = {
@@ -12,8 +13,12 @@ export type QueueItem = {
 
 type Props = {
   items: QueueItem[];
-  onApprove: (id: string) => void;
-  onReject: (id: string) => void;
+  onApprove?: (id: string) => void;
+  onReject?: (id: string) => void;
+  /** When true, renders a "Manage →" link to /admin instead of Approve/Reject. */
+  readOnly?: boolean;
+  /** Optional empty-state override — defaults to "Nothing waiting". */
+  emptyLabel?: string;
 };
 
 type FilterKey = 'all' | 'beam' | 'flash';
@@ -24,7 +29,7 @@ const FILTERS: { id: FilterKey; label: string }[] = [
   { id: 'flash', label: 'Flash' },
 ];
 
-export default function ApprovalQueue({ items, onApprove, onReject }: Props) {
+export default function ApprovalQueue({ items, onApprove, onReject, readOnly, emptyLabel }: Props) {
   const [filter, setFilter] = useState<FilterKey>('all');
 
   const counts = useMemo(
@@ -118,7 +123,7 @@ export default function ApprovalQueue({ items, onApprove, onReject }: Props) {
             color: 'var(--casi-text-faint)',
           }}
         >
-          Nothing waiting
+          {emptyLabel ?? 'Nothing waiting'}
         </div>
       ) : (
         visible.map((item, idx) => (
@@ -171,41 +176,63 @@ export default function ApprovalQueue({ items, onApprove, onReject }: Props) {
               >
                 {item.priceLabel}
               </span>
-              <button
-                type="button"
-                onClick={() => onReject(item.id)}
-                className="font-extrabold transition-colors"
-                title={`Reject · ${item.priceLabel} refunded`}
-                style={{
-                  padding: '7px 11px',
-                  borderRadius: '7px',
-                  background: 'transparent',
-                  color: 'var(--casi-text-dim)',
-                  border: '1px solid var(--casi-border-2)',
-                  fontFamily: 'var(--font-casi-sans)',
-                  fontSize: '11px',
-                  cursor: 'pointer',
-                }}
-              >
-                ✕
-              </button>
-              <button
-                type="button"
-                onClick={() => onApprove(item.id)}
-                className="font-extrabold"
-                style={{
-                  padding: '7px 11px',
-                  borderRadius: '7px',
-                  background: 'var(--casi-accent)',
-                  color: '#050505',
-                  border: 'none',
-                  fontFamily: 'var(--font-casi-sans)',
-                  fontSize: '11px',
-                  cursor: 'pointer',
-                }}
-              >
-                Approve
-              </button>
+              {readOnly ? (
+                <Link
+                  href="/admin"
+                  title="Approve or reject in the classic studio — the real payment + escrow flow runs there for now."
+                  className="font-mono uppercase"
+                  style={{
+                    padding: '7px 11px',
+                    borderRadius: '7px',
+                    background: 'transparent',
+                    border: '1px solid var(--casi-border-2)',
+                    color: 'var(--casi-text-dim)',
+                    fontSize: '10px',
+                    letterSpacing: '0.1em',
+                    textDecoration: 'none',
+                  }}
+                >
+                  Manage →
+                </Link>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onReject?.(item.id)}
+                    className="font-extrabold transition-colors"
+                    title={`Reject · ${item.priceLabel} refunded`}
+                    style={{
+                      padding: '7px 11px',
+                      borderRadius: '7px',
+                      background: 'transparent',
+                      color: 'var(--casi-text-dim)',
+                      border: '1px solid var(--casi-border-2)',
+                      fontFamily: 'var(--font-casi-sans)',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ✕
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onApprove?.(item.id)}
+                    className="font-extrabold"
+                    style={{
+                      padding: '7px 11px',
+                      borderRadius: '7px',
+                      background: 'var(--casi-accent)',
+                      color: '#050505',
+                      border: 'none',
+                      fontFamily: 'var(--font-casi-sans)',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Approve
+                  </button>
+                </>
+              )}
             </div>
           </div>
         ))
