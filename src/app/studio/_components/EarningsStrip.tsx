@@ -118,10 +118,7 @@ function LinkTile({ slug }: { slug: string }) {
 
 export default function EarningsStrip({ slug, earnedToday, earnedMonth, pendingCount }: Props) {
   return (
-    <div
-      className="grid gap-3.5"
-      style={{ gridTemplateColumns: 'minmax(0, 1.6fr) repeat(3, minmax(0, 1fr))' }}
-    >
+    <div className="casi-grid-earnings">
       <LinkTile slug={slug} />
       <StatTile label="Earned today" value={earnedToday} tone="accent" />
       <StatTile label="This month" value={earnedMonth} />

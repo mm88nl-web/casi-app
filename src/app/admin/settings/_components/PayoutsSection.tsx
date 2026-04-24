@@ -156,10 +156,7 @@ export default function PayoutsSection() {
         />
       </div>
 
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', marginTop: '18px' }}
-      >
+      <div className="casi-grid-2" style={{ marginTop: '18px' }}>
         <FieldRow label="Minimum payout · EUR">
           <input
             value={minPayout}

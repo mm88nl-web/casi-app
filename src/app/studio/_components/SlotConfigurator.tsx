@@ -219,7 +219,7 @@ export default function SlotConfigurator({ slotName, dimensions }: Props) {
         </div>
       </div>
 
-      <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+      <div className="casi-grid-3">
         <Field label="Min · €">
           <NumberInput value={min} onChange={setMin} />
         </Field>
@@ -231,7 +231,7 @@ export default function SlotConfigurator({ slotName, dimensions }: Props) {
         </Field>
       </div>
 
-      <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+      <div className="casi-grid-2">
         <MiniToggle label="Manual approval required" on={manualApproval} onChange={setManualApproval} />
         <MiniToggle label="Enabled on stream" on={enabled} onChange={setEnabled} />
       </div>

@@ -235,12 +235,8 @@ function ApprovalChipVisual() {
 export default function TrustStrip() {
   return (
     <section
-      className="mx-auto grid gap-6"
-      style={{
-        maxWidth: '1200px',
-        padding: '80px 40px',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-      }}
+      className="mx-auto casi-grid-trust casi-trust-pad"
+      style={{ maxWidth: '1200px' }}
     >
       <CardShell
         num="01"

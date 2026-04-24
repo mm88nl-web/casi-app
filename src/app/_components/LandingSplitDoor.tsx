@@ -57,20 +57,13 @@ function Eyebrow({ children, tone }: { children: string; tone: 'accent' | 'cyan'
 export default function LandingSplitDoor() {
   return (
     <section
-      className="grid"
-      style={{
-        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-        borderBottom: '1px solid var(--casi-border)',
-        minHeight: 'calc(100vh - 111px)',
-      }}
+      className="casi-grid-hero casi-hero-section"
+      style={{ borderBottom: '1px solid var(--casi-border)' }}
     >
       {/* WATCH */}
       <div
-        className="relative flex flex-col justify-center overflow-hidden"
-        style={{
-          padding: '80px 64px',
-          borderRight: '1px solid var(--casi-border)',
-        }}
+        className="casi-hero-panel relative flex flex-col justify-center overflow-hidden"
+        data-hero-left
       >
         <Watermark side="left" />
         <CornerLabel>01 · Watch</CornerLabel>
@@ -125,10 +118,7 @@ export default function LandingSplitDoor() {
       </div>
 
       {/* STREAM */}
-      <div
-        className="relative flex flex-col justify-center overflow-hidden"
-        style={{ padding: '80px 64px' }}
-      >
+      <div className="casi-hero-panel relative flex flex-col justify-center overflow-hidden">
         <Watermark side="right" />
         <CornerLabel>02 · Stream</CornerLabel>
 

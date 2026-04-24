@@ -144,8 +144,8 @@ export default function StudioPage() {
       </nav>
 
       <div
-        className="mx-auto flex flex-col gap-5"
-        style={{ maxWidth: '1240px', padding: '28px 32px 60px' }}
+        className="mx-auto flex flex-col gap-5 casi-page-pad"
+        style={{ maxWidth: '1240px' }}
       >
         <StudioHeadline username={SLUG} viewers={2147} isLive />
 
@@ -158,13 +158,7 @@ export default function StudioPage() {
           pendingCount={queue.length}
         />
 
-        <div
-          className="grid items-start gap-5"
-          style={{
-            gridTemplateColumns:
-              mode === 'setup' ? 'minmax(0, 1.5fr) minmax(0, 1fr)' : 'minmax(0, 1fr)',
-          }}
-        >
+        <div className={mode === 'setup' ? 'casi-grid-studio-setup' : 'flex flex-col gap-5'}>
           {mode === 'setup' ? (
             <div className="flex flex-col gap-4">
               <StudioCanvas

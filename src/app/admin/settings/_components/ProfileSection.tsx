@@ -121,10 +121,7 @@ export default function ProfileSection({ supabase, profile }: Props) {
         </div>
       </div>
 
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}
-      >
+      <div className="casi-grid-2">
         <FieldRow label="Display name">
           <input
             value={displayName}

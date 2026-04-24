@@ -70,17 +70,10 @@ export default function SettingsLayout({ rail, children }: Props) {
 
   return (
     <div
-      className="mx-auto grid items-start gap-7"
-      style={{
-        maxWidth: '1200px',
-        padding: '28px 32px 80px',
-        gridTemplateColumns: 'minmax(0, 220px) minmax(0, 1fr)',
-      }}
+      className="mx-auto casi-grid-settings casi-settings-pad"
+      style={{ maxWidth: '1200px' }}
     >
-      <aside
-        className="sticky flex flex-col gap-0.5"
-        style={{ top: '20px' }}
-      >
+      <aside className="casi-settings-rail">
         {rail.map((group) => (
           <div key={group.title}>
             <div

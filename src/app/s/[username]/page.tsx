@@ -77,13 +77,8 @@ export default function ViewerBookingPage() {
       </nav>
 
       <div
-        className="mx-auto grid items-start"
-        style={{
-          maxWidth: '1360px',
-          padding: '32px',
-          gap: '32px',
-          gridTemplateColumns: 'minmax(0, 1.3fr) minmax(0, 1fr)',
-        }}
+        className="mx-auto casi-grid-viewer casi-page-pad"
+        style={{ maxWidth: '1360px' }}
       >
         <div className="flex flex-col gap-4">
           <StreamerBar

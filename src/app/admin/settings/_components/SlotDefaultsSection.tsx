@@ -20,10 +20,7 @@ export default function SlotDefaultsSection() {
       title="Slot defaults"
       desc="Apply to new streams. Per-stream overrides still live on the dashboard."
     >
-      <div
-        className="grid gap-3.5"
-        style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}
-      >
+      <div className="casi-grid-3">
         <FieldRow label="Flash · price" hint="15s text or image">
           <input
             value={flashPrice}
