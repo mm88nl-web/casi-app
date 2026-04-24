@@ -1,28 +1,17 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 type CopyRowProps = {
-  label?: string;
+  /** Optional caption above the copy row. Accepts JSX (e.g. leading badge). */
+  label?: ReactNode;
   value: string;
-  hint?: string;
-  /** Controls middle-truncation breakpoints (defaults tuned for the OBS URL pattern). */
-  keepStart?: number;
-  keepEnd?: number;
+  hint?: ReactNode;
+  /** Button label styles. "solid" = accent fill (default), "ghost" = transparent. */
+  variant?: 'solid' | 'ghost';
 };
 
-function middleTruncate(s: string, keepStart: number, keepEnd: number): string {
-  if (s.length <= keepStart + keepEnd + 1) return s;
-  return `${s.slice(0, keepStart)}…${s.slice(-keepEnd)}`;
-}
-
-export default function CopyRow({
-  label,
-  value,
-  hint,
-  keepStart = 28,
-  keepEnd = 12,
-}: CopyRowProps) {
+export default function CopyRow({ label, value, hint, variant = 'solid' }: CopyRowProps) {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -37,65 +26,74 @@ export default function CopyRow({
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => setCopied(false), 1500);
     } catch {
-      // Clipboard API refused (insecure context, perms). Fail quiet; user can select-and-copy the displayed text.
+      // Insecure context or denied permission — user can select the displayed text manually.
     }
   };
 
+  const solid = variant === 'solid';
+
   return (
-    <div className="flex flex-col gap-1.5">
+    <div>
       {label ? (
-        <span
-          className="font-mono uppercase"
+        <div
+          className="mb-1.5 block font-mono uppercase"
           style={{
-            fontSize: '11px',
+            fontSize: '10px',
             letterSpacing: '0.15em',
-            color: 'var(--casi-text-dim)',
+            color: 'var(--casi-text-faint)',
           }}
         >
           {label}
-        </span>
+        </div>
       ) : null}
 
       <div
-        className="flex items-stretch gap-0 overflow-hidden"
+        className="flex items-center gap-2.5"
         style={{
-          border: '1px solid var(--casi-border)',
-          borderRadius: '8px',
-          background: 'var(--casi-surface-2)',
+          background: 'var(--casi-bg)',
+          border: '1px solid var(--casi-border-2)',
+          borderRadius: '9px',
+          padding: '10px 14px',
         }}
       >
-        <div
-          className="flex-1 truncate px-3 py-2 font-mono"
-          style={{
-            fontSize: '12px',
-            color: 'var(--casi-text)',
-            whiteSpace: 'nowrap',
-          }}
+        <span
+          className="flex-1 truncate font-mono"
+          style={{ fontSize: '12px', color: 'var(--casi-text-dim)', whiteSpace: 'nowrap' }}
           title={value}
         >
-          {middleTruncate(value, keepStart, keepEnd)}
-        </div>
+          {value}
+        </span>
         <button
           type="button"
           onClick={onCopy}
-          className="font-mono uppercase transition-colors"
+          className="cursor-pointer whitespace-nowrap font-bold"
           style={{
+            padding: '6px 12px',
+            borderRadius: '6px',
+            background: solid ? 'var(--casi-accent)' : 'transparent',
+            color: solid ? '#050505' : 'var(--casi-accent)',
+            fontFamily: 'var(--font-casi-sans)',
+            fontWeight: 800,
             fontSize: '11px',
-            letterSpacing: '0.12em',
-            padding: '0 14px',
-            borderLeft: '1px solid var(--casi-border)',
-            background: copied ? 'rgba(var(--casi-accent-rgb), 0.14)' : 'transparent',
-            color: copied ? 'var(--casi-accent)' : 'var(--casi-text-mid)',
-            cursor: 'pointer',
+            border: solid ? 'none' : '1px solid rgba(var(--casi-accent-rgb), 0.3)',
           }}
-          aria-label={copied ? 'Copied' : `Copy ${label ?? 'value'}`}
+          aria-label={copied ? 'Copied' : 'Copy to clipboard'}
         >
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
 
       {hint ? (
-        <span style={{ fontSize: '12px', color: 'var(--casi-text-mid)' }}>{hint}</span>
+        <div
+          className="mt-1.5 font-mono uppercase"
+          style={{
+            fontSize: '10px',
+            letterSpacing: '0.1em',
+            color: 'var(--casi-text-faint)',
+          }}
+        >
+          {hint}
+        </div>
       ) : null}
     </div>
   );
