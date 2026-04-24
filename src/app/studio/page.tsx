@@ -18,7 +18,8 @@ const SLUG = 'pixel_hana';
 const CANVAS_SLOTS: CanvasSlot[] = [
   {
     id: 'right-panel',
-    tag: 'Beam · rect · selected',
+    tag: 'Beam · rect',
+    displayName: 'Beam slot · right panel',
     price: '€5–50',
     state: 'selected',
     top: '6%',
@@ -29,6 +30,7 @@ const CANVAS_SLOTS: CanvasSlot[] = [
   {
     id: 'backdrop',
     tag: 'Beam · backdrop',
+    displayName: 'Beam slot · full backdrop',
     price: '€12–80',
     state: 'idle',
     bottom: '8%',
@@ -39,6 +41,7 @@ const CANVAS_SLOTS: CanvasSlot[] = [
   {
     id: 'banner',
     tag: 'Beam · banner · off',
+    displayName: 'Beam slot · lower banner',
     price: 'disabled',
     state: 'off',
     bottom: '8%',
@@ -153,7 +156,7 @@ export default function StudioPage() {
               />
               {selectedSlot ? (
                 <SlotConfigurator
-                  slotName={`${selectedSlot.tag.split(' · ')[0]} slot · ${selectedSlot.id.replace('-', ' ')}`}
+                  slotName={selectedSlot.displayName}
                   dimensions="500×560 · image or video · mask picks the shape"
                 />
               ) : null}

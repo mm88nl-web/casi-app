@@ -6,7 +6,10 @@ export type CanvasSlotState = 'selected' | 'active' | 'off' | 'idle';
 
 export type CanvasSlot = {
   id: string;
+  /** Displayed inside the canvas box — short, e.g. "Beam · rect · selected". */
   tag: string;
+  /** Human-readable name for the configurator header, e.g. "Beam slot · right panel". */
+  displayName: string;
   price: string;
   state: CanvasSlotState;
   // percentage-based positioning; any combo of top/right/bottom/left

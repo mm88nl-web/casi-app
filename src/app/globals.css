@@ -42,3 +42,14 @@ body {
   color: var(--casi-text);
   font-family: var(--font-casi-sans), ui-sans-serif, system-ui, sans-serif;
 }
+
+/* Studio flashes-log row actions — variant-scoped hover colours. */
+.flash-act[data-variant="pin"]:hover {
+  color: var(--casi-accent);
+  border-color: var(--casi-accent);
+}
+.flash-act[data-variant="refund"]:hover,
+.flash-act[data-variant="block"]:hover {
+  color: #ef4444;
+  border-color: #ef4444;
+}

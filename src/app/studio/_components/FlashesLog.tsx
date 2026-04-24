@@ -258,15 +258,11 @@ function FlashActButton({
   variant: 'pin' | 'refund' | 'block';
   children: string;
 }) {
-  const hover: Record<string, string> = {
-    pin: 'var(--casi-accent)',
-    refund: '#ef4444',
-    block: '#ef4444',
-  };
   return (
     <button
       type="button"
-      className="font-mono uppercase transition-colors"
+      data-variant={variant}
+      className="flash-act font-mono uppercase transition-colors"
       style={{
         padding: '4px 9px',
         borderRadius: '6px',
@@ -277,14 +273,6 @@ function FlashActButton({
         letterSpacing: '0.1em',
         fontWeight: 500,
         cursor: 'pointer',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.color = hover[variant];
-        e.currentTarget.style.borderColor = hover[variant];
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.color = 'var(--casi-text-dim)';
-        e.currentTarget.style.borderColor = 'var(--casi-border-2)';
       }}
     >
       {children}
