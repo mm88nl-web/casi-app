@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Rnd } from 'react-rnd';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
@@ -1399,6 +1400,24 @@ export default function AdminStudio() {
             </div>
           </div>
           <div className="tnr">
+            <Link
+              href={view === 'settings' ? '/admin/settings' : '/studio'}
+              title={view === 'settings' ? 'Try new settings' : 'Try new studio dashboard'}
+              style={{
+                fontFamily: 'var(--font-casi-mono, ui-monospace, monospace)',
+                fontSize: '10px',
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                textDecoration: 'none',
+                padding: '5px 10px',
+                borderRadius: '999px',
+                background: 'rgba(245, 130, 32, 0.08)',
+                border: '1px solid rgba(245, 130, 32, 0.3)',
+                color: '#F58220',
+              }}
+            >
+              {view === 'settings' ? 'New settings' : 'New studio'} →
+            </Link>
             <button onClick={toggleLive} disabled={togglingLive} className={`live-toggle ${profile.is_live ? 'lt-on' : 'lt-off'}`}>
               <span className={`live-dot ${profile.is_live ? 'ld-on' : 'ld-off'}`} />
               {profile.is_live ? 'Live' : 'Go Live'}

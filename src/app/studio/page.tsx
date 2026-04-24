@@ -109,20 +109,38 @@ export default function StudioPage() {
           </span>
         </Link>
 
-        <span
-          className="font-mono uppercase"
-          style={{
-            padding: '6px 12px',
-            borderRadius: '999px',
-            background: 'rgba(var(--casi-accent-rgb), 0.08)',
-            border: '1px solid rgba(var(--casi-accent-rgb), 0.3)',
-            color: 'var(--casi-accent)',
-            fontSize: '11px',
-            letterSpacing: '0.14em',
-          }}
-        >
-          Studio
-        </span>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/admin"
+            title="Classic studio (current production)"
+            className="font-mono uppercase transition-colors"
+            style={{
+              fontSize: '10px',
+              letterSpacing: '0.15em',
+              textDecoration: 'none',
+              color: 'var(--casi-text-dim)',
+              padding: '5px 10px',
+              borderRadius: '999px',
+              border: '1px solid var(--casi-border-2)',
+            }}
+          >
+            ↩ Classic studio
+          </Link>
+          <span
+            className="font-mono uppercase"
+            style={{
+              padding: '6px 12px',
+              borderRadius: '999px',
+              background: 'rgba(var(--casi-accent-rgb), 0.08)',
+              border: '1px solid rgba(var(--casi-accent-rgb), 0.3)',
+              color: 'var(--casi-accent)',
+              fontSize: '11px',
+              letterSpacing: '0.14em',
+            }}
+          >
+            Studio · beta
+          </span>
+        </div>
       </nav>
 
       <div

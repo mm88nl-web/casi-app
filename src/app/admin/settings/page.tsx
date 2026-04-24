@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import SettingsLayout, { type RailGroup } from './_components/SettingsLayout';
@@ -117,6 +118,22 @@ export default function SettingsPage() {
             Everything about your account, stream, payouts, and rules — in one place.
           </p>
         </div>
+        <Link
+          href="/admin"
+          title="Classic studio (current production)"
+          className="font-mono uppercase transition-colors"
+          style={{
+            fontSize: '10px',
+            letterSpacing: '0.15em',
+            textDecoration: 'none',
+            color: 'var(--casi-text-dim)',
+            padding: '6px 12px',
+            borderRadius: '999px',
+            border: '1px solid var(--casi-border-2)',
+          }}
+        >
+          ↩ Classic studio
+        </Link>
       </div>
 
       <SettingsLayout rail={RAIL}>
