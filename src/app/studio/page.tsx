@@ -7,7 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { createClient } from '@/utils/supabase/client';
 import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
-import { approveBooking, denyBooking, type ModerationContext } from '@/lib/streamer-moderation';
+import { approveBooking, denyBooking, endBeamEarly, type ModerationContext } from '@/lib/streamer-moderation';
 import CasiLogo from '@/components/CasiLogo';
 import WalletNav from '@/components/WalletNav';
 import AiringNow, { type AiringItem } from './_components/AiringNow';
@@ -20,7 +20,7 @@ import StudioLiveEditor from './_components/StudioLiveEditor';
 // escrow_pda / viewer_wallet (Solana settle on deny), image_url (overlay copy
 // on approve).
 const BOOKING_COLS =
-  'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, duration_minutes, price_value, price_unit, payment_method, started_at, escrow_pda, viewer_wallet, is_queued';
+  'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, started_at, escrow_pda, viewer_wallet, is_queued';
 const FLASH_COLS =
   'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method';
 const PROFILE_COLS = 'id, username, solana_wallet, is_live';
@@ -61,6 +61,7 @@ type BookingRow = {
   file_type: string | null;
   message: string | null;
   image_url: string | null;
+  storage_path: string | null;
   duration_minutes: number | string;
   price_value: number | string;
   price_unit: string | null;
@@ -183,6 +184,7 @@ export default function StudioPage() {
   const [flashLog, setFlashLog] = useState<FlashLogItem[]>([]);
   const [flashTotals, setFlashTotals] = useState({ count: 0, eur: '€0', usdc: '0 USDC' });
   const [moderating, setModerating] = useState<Set<string>>(new Set());
+  const [endingEarly, setEndingEarly] = useState<Set<string>>(new Set());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [togglingLive, setTogglingLive] = useState(false);
   const [mode, setMode] = useState<'monitor' | 'live'>('monitor');
@@ -376,6 +378,29 @@ export default function StudioPage() {
     setTogglingLive(false);
   }, [state, supabase, togglingLive]);
 
+  const handleEndEarly = useCallback(async (bookingId: string) => {
+    if (!moderationCtx) return;
+    const booking = activeBookings.find((b) => String(b.id) === bookingId);
+    if (!booking) return;
+
+    setEndingEarly((prev) => new Set(prev).add(bookingId));
+    setErrorMsg(null);
+    const result = await endBeamEarly(moderationCtx, booking);
+    setEndingEarly((prev) => {
+      const next = new Set(prev);
+      next.delete(bookingId);
+      return next;
+    });
+
+    if (!result.ok) {
+      setErrorMsg(result.message);
+      return;
+    }
+    // Realtime sub will reflect the new state; remove from local active set
+    // optimistically so the row disappears immediately.
+    setActiveBookings((prev) => prev.filter((b) => String(b.id) !== bookingId));
+  }, [moderationCtx, activeBookings]);
+
   const handleReject = useCallback(async (queueId: string) => {
     if (!moderationCtx) return;
     const raw = queueId.startsWith('booking-') ? queueId.slice('booking-'.length) : null;
@@ -425,10 +450,15 @@ export default function StudioPage() {
     return acc;
   }, {});
 
-  const airing: AiringItem[] = activeBookings.map((b) => ({
-    ...bookingToAiringItem(b),
-    queueCount: b.element_id ? queueCountByElement[b.element_id] : undefined,
-  }));
+  const airing: AiringItem[] = activeBookings.map((b) => {
+    const bookingId = String(b.id);
+    return {
+      ...bookingToAiringItem(b),
+      queueCount: b.element_id ? queueCountByElement[b.element_id] : undefined,
+      onEndEarly: () => handleEndEarly(bookingId),
+      endingEarly: endingEarly.has(bookingId),
+    };
+  });
 
   return (
     <main className="min-h-screen" style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}>

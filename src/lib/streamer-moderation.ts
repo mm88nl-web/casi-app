@@ -42,6 +42,8 @@ export type BookingLike = {
   image_url?: string | null;
   escrow_pda?: string | null;
   viewer_wallet?: string | null;
+  /** For storage cleanup on end-early / expire. */
+  storage_path?: string | null;
 };
 
 export type WalletSigner = {
@@ -156,6 +158,126 @@ export async function denyBooking(
     return { ok: false, message: body?.error || `Stripe cancel failed (${res.status}).` };
   }
   return { ok: true, optimistic: 'denied' };
+}
+
+/**
+ * End an active beam early. Streamer triggers this from /studio's Airing row.
+ *
+ * Flow (mirrors admin's kickBeam + expireBooking):
+ * 1. Close escrow:
+ *    - solana: settle_beam on-chain (delegate first, wallet fallback). If
+ *      the outcome isn't `settled` or `closed`, the beam stays live —
+ *      flipping DB while funds are still locked on-chain over-vests to
+ *      the streamer as wall-clock passes.
+ *    - stripe: POST /api/stripe/end-early, which prorates the capture.
+ *      Non-2xx leaves the beam alive.
+ * 2. Delete the uploaded media from storage (best-effort).
+ * 3. Mark bookings.status='expired', image_url=null.
+ * 4. Auto-promote the next approved_queued booking on the same element:
+ *    - solana next: start_beam on-chain (delegate → wallet fallback), then
+ *      flip it to active + copy its image_url onto overlay_elements.
+ *    - stripe next: flip to active + copy image_url.
+ *    - no next: clear overlay_elements.image_url.
+ */
+export async function endBeamEarly(
+  ctx: ModerationContext,
+  booking: BookingLike,
+): Promise<ModerationResult> {
+  // 1. Close escrow.
+  if (booking.payment_method === 'solana') {
+    if (booking.escrow_pda && booking.viewer_wallet) {
+      const settleOutcome = await settleOrClearSolanaEscrow(ctx, booking);
+      if (settleOutcome.outcome === 'pending-chain') {
+        return { ok: false, message: 'Escrow still Pending on-chain — viewer must reclaim from the overlay.' };
+      }
+      if (settleOutcome.outcome === 'no-wallet') {
+        return { ok: false, message: 'Connect your streamer wallet to end this beam.' };
+      }
+      if (settleOutcome.outcome === 'error') {
+        return { ok: false, message: 'Could not settle escrow on-chain. Beam stays live — try again.' };
+      }
+    }
+  } else {
+    const { data: { session } } = await ctx.supabase.auth.getSession();
+    const res = await fetch('/api/stripe/end-early', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({ booking_id: booking.id }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { ok: false, message: body?.error || `Stripe end-early failed (${res.status}).` };
+    }
+  }
+
+  // 2. Cleanup storage.
+  if (booking.storage_path) {
+    await ctx.supabase.storage
+      .from('beams')
+      .remove([booking.storage_path])
+      .catch(() => { /* non-fatal */ });
+  }
+
+  // 3. Expire the row.
+  const { error: expireErr } = await ctx.supabase
+    .from('bookings')
+    .update({ status: 'expired', image_url: null })
+    .eq('id', booking.id);
+  if (expireErr) return { ok: false, message: expireErr.message };
+
+  // 4. Auto-promote next queued, same as admin's expireBooking.
+  if (booking.element_id) {
+    const { data: next } = await ctx.supabase
+      .from('bookings')
+      .select('id, element_id, image_url, payment_method, escrow_pda, viewer_wallet')
+      .eq('element_id', booking.element_id)
+      .eq('status', 'approved_queued')
+      .order('approved_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (!next) {
+      await ctx.supabase
+        .from('overlay_elements')
+        .update({ image_url: '' })
+        .eq('id', booking.element_id);
+    } else if (next.payment_method === 'solana') {
+      // Chain-first: start_beam must land before the DB flip, or settle
+      // later will revert with NotActive.
+      const startResult = await startSolanaBeamOnChain(ctx, next as BookingLike);
+      if (startResult.ok) {
+        await ctx.supabase
+          .from('bookings')
+          .update({ status: 'active', started_at: new Date().toISOString() })
+          .eq('id', next.id);
+        await ctx.supabase
+          .from('overlay_elements')
+          .update({ image_url: next.image_url })
+          .eq('id', next.element_id);
+      } else {
+        // Leave row in approved_queued; nudge the streamer to click Play Now
+        // (admin has that affordance; /studio doesn't yet — queue stays).
+        await ctx.supabase
+          .from('overlay_elements')
+          .update({ image_url: '' })
+          .eq('id', booking.element_id);
+      }
+    } else {
+      await ctx.supabase
+        .from('bookings')
+        .update({ status: 'active', started_at: new Date().toISOString() })
+        .eq('id', next.id);
+      await ctx.supabase
+        .from('overlay_elements')
+        .update({ image_url: next.image_url })
+        .eq('id', next.element_id);
+    }
+  }
+
+  return { ok: true };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
