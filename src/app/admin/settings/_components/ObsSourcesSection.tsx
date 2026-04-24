@@ -1,7 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import SettingsSection from './SettingsSection';
-import GhostButton from './GhostButton';
 import CopyRow from '@/components/CopyRow';
 
 function SourceNum({ n }: { n: number }) {
@@ -23,11 +23,22 @@ function SourceNum({ n }: { n: number }) {
   );
 }
 
-export default function ObsSourcesSection() {
-  const slug = 'pixel_hana';
-  const backdropUrl = `https://www.casi.gg/obs/${slug}/backdrop?k=••••••••_bdKx9`;
-  const beamsUrl = `https://www.casi.gg/obs/${slug}/beams?k=••••••••_bmRt3`;
-  const flashesUrl = `https://www.casi.gg/obs/${slug}/flashes?k=••••••••_flS8w`;
+type Props = {
+  /** Streamer slug — the `?s=` param the overlay reads. */
+  username: string;
+};
+
+export default function ObsSourcesSection({ username }: Props) {
+  // origin resolves on the client; empty string on server-render avoids a
+  // hydration mismatch, then the effect fills it in.
+  const [origin, setOrigin] = useState('');
+  useEffect(() => {
+    if (typeof window !== 'undefined') setOrigin(window.location.origin);
+  }, []);
+
+  const base = origin || 'https://www.casi.gg';
+  const beamsUrl = `${base}/obs?s=${username}&layer=beams`;
+  const backdropUrl = `${base}/obs?s=${username}&layer=backdrop`;
 
   return (
     <SettingsSection
@@ -35,8 +46,8 @@ export default function ObsSourcesSection() {
       title="OBS sources"
       desc={
         <>
-          One URL per surface. Add each as a <b>Browser Source</b> in OBS at 1920×1080. Stack them in
-          this Z-order: Backdrop at the back, Beams above your scene, Flashes on top.
+          Two Browser Sources at 1920×1080. Stack them in this Z-order: Backdrop at the back,
+          Beams on top. Flashes come through the Beams layer — no separate source needed.
         </>
       }
     >
@@ -53,25 +64,23 @@ export default function ObsSourcesSection() {
         <CopyRow
           label={
             <>
-              <SourceNum n={2} /> Beams · slot overlays
+              <SourceNum n={2} /> Beams · slot overlays + flashes
             </>
           }
           value={beamsUrl}
-          hint="All shaped slots render here — hex, circle, banner, rect, rounded."
-        />
-        <CopyRow
-          label={
-            <>
-              <SourceNum n={3} /> Flashes · popup messages
-            </>
-          }
-          value={flashesUrl}
-          hint="15-second text pop-ups. Keep on top so they're visible."
+          hint="All shaped slots render here — plus the 15s flash popups."
         />
       </div>
 
-      <div style={{ marginTop: '14px' }}>
-        <GhostButton type="button">Regenerate all keys</GhostButton>
+      <div
+        className="mt-3.5 font-mono uppercase"
+        style={{
+          fontSize: '10px',
+          letterSpacing: '0.1em',
+          color: 'var(--casi-text-faint)',
+        }}
+      >
+        Custom CSS for both sources: <code style={{ color: 'var(--casi-text-dim)' }}>body &#123; background-color: rgba(0,0,0,0); &#125;</code>
       </div>
     </SettingsSection>
   );

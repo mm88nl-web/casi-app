@@ -141,7 +141,7 @@ export default function SettingsPage() {
         <PayoutsSection />
         <AppearanceSection />
         <SlotDefaultsSection />
-        <ObsSourcesSection />
+        <ObsSourcesSection username={state.profile.username ?? 'your-handle'} />
         <SessionKeySection />
         <NotificationsSection />
         <ModerationSection />
