@@ -5,7 +5,8 @@ export type AiringItem = {
   icon: string;
   name: string;
   subtitle: string;
-  remaining: string;
+  /** Countdown for timed items (beams). Flashes and other untimed items omit this. */
+  remaining?: string;
 };
 
 type Props = {
@@ -90,12 +91,25 @@ export default function AiringNow({ items }: Props) {
               {item.subtitle}
             </div>
           </div>
-          <div
-            className="font-mono font-medium"
-            style={{ fontSize: '14px', color: 'var(--casi-accent2)' }}
-          >
-            {item.remaining}
-          </div>
+          {item.remaining ? (
+            <div
+              className="font-mono font-medium"
+              style={{ fontSize: '14px', color: 'var(--casi-accent2)' }}
+            >
+              {item.remaining}
+            </div>
+          ) : (
+            <div
+              className="font-mono uppercase"
+              style={{
+                fontSize: '10px',
+                letterSpacing: '0.15em',
+                color: 'var(--casi-accent2)',
+              }}
+            >
+              on stream
+            </div>
+          )}
         </div>
       ))}
     </section>
