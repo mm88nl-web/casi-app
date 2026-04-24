@@ -11,7 +11,7 @@ export default function SiteFooter() {
         marginTop: 'auto',
         padding: '28px 20px 36px',
         borderTop: '1px solid #27272a',
-        fontFamily: "'DM Mono', ui-monospace, monospace",
+        fontFamily: "var(--font-casi-mono), ui-monospace, monospace",
         fontSize: 11,
         letterSpacing: 1,
         textTransform: 'uppercase',

@@ -4,7 +4,7 @@
   --background: #ffffff;
   --foreground: #171717;
 
-  /* ── Casi skin tokens ── defaults match Casi Dark, overridden by SkinProvider */
+  /* ── Casi skin tokens ── defaults match Casi Dark, overridden by SkinProvider / UserSkinProvider */
   --casi-accent:      #F58220;
   --casi-accent-rgb:  245, 130, 32;
   --casi-accent2:     #06b6d4;
@@ -14,13 +14,20 @@
   --casi-border:      #1c1c1c;
   --casi-text:        #e8e8e8;
   --casi-text-muted:  #555;
+
+  /* Extended tokens — skin-independent, match redesign v3 handoff */
+  --casi-surface-2:   #111111;
+  --casi-border-2:    #2a2a2a;
+  --casi-text-mid:    #888;
+  --casi-text-dim:    #555;
+  --casi-text-faint:  #333;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-casi-sans);
+  --font-mono: var(--font-casi-mono);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -31,7 +38,145 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--casi-bg);
+  color: var(--casi-text);
+  font-family: var(--font-casi-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ── Casi responsive grids ── one place, so the 4 redesign surfaces stack
+   to one column on narrow viewports instead of overflowing sideways. */
+
+/* Landing split-door hero: 2-col on desktop, stack on mobile. */
+.casi-grid-hero {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 900px) {
+  .casi-grid-hero { grid-template-columns: 1fr 1fr; }
+}
+.casi-hero-panel {
+  padding: 56px 24px;
+}
+@media (min-width: 900px) {
+  .casi-hero-panel { padding: 80px 64px; }
+}
+.casi-hero-panel[data-hero-left] {
+  border-bottom: 1px solid var(--casi-border);
+}
+@media (min-width: 900px) {
+  .casi-hero-panel[data-hero-left] {
+    border-bottom: none;
+    border-right: 1px solid var(--casi-border);
+  }
+}
+
+/* Landing trust strip: 3 promise cards → stack / 3-col. */
+.casi-grid-trust {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+@media (min-width: 768px) {
+  .casi-grid-trust { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.casi-trust-pad { padding: 48px 24px; }
+@media (min-width: 900px) {
+  .casi-trust-pad { padding: 80px 40px; }
+}
+
+/* Viewer booking split: stream/feed column + booking panel. */
+.casi-grid-viewer {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .casi-grid-viewer { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 2rem; }
+}
+
+/* Settings layout: rail + content. Rail hides below the breakpoint; sections
+   still anchor-link when rail is visible. */
+.casi-grid-settings {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.75rem;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .casi-grid-settings { grid-template-columns: minmax(0, 220px) minmax(0, 1fr); }
+}
+
+.casi-settings-rail {
+  display: none;
+}
+@media (min-width: 900px) {
+  .casi-settings-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: sticky;
+    top: 20px;
+  }
+}
+.casi-settings-pad { padding: 20px 16px 64px; }
+@media (min-width: 900px) {
+  .casi-settings-pad { padding: 28px 32px 80px; gap: 1.75rem; }
+}
+
+/* Studio setup-mode main split. Monitor mode uses a single column regardless. */
+.casi-grid-studio-setup {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .casi-grid-studio-setup { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+}
+
+/* Studio earnings strip: link + 3 stat tiles. 2x2 on tablet, 4-wide on desktop. */
+.casi-grid-earnings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.875rem;
+}
+@media (min-width: 1000px) {
+  .casi-grid-earnings { grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); }
+}
+
+/* Shared responsive page padding. */
+.casi-page-pad { padding: 20px 16px 48px; }
+@media (min-width: 700px) {
+  .casi-page-pad { padding: 32px; }
+}
+
+/* Side-by-side form fields (settings / slot config): stack on mobile. */
+.casi-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+@media (min-width: 640px) {
+  .casi-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.casi-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.875rem;
+}
+@media (min-width: 640px) {
+  .casi-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Studio flashes-log row actions — variant-scoped hover colours. */
+.flash-act[data-variant="pin"]:hover {
+  color: var(--casi-accent);
+  border-color: var(--casi-accent);
+}
+.flash-act[data-variant="refund"]:hover,
+.flash-act[data-variant="block"]:hover {
+  color: #ef4444;
+  border-color: #ef4444;
 }

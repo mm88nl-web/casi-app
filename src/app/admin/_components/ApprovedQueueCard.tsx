@@ -33,24 +33,24 @@ export default function ApprovedQueueCard({
 
   return (
     <div className={cardClass}>
-      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 500, color: posColor, minWidth: 28 }}>#{queuePosition}</span>
+      <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 18, fontWeight: 500, color: posColor, minWidth: 28 }}>#{queuePosition}</span>
       <div style={{ width: 52, height: 52, borderRadius: 8, border: thumbBorder, overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
         {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit }} />}
       </div>
       <div style={{ flex: 1 }}>
-        <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: 'var(--casi-text)', marginBottom: 3 }}>{booking.viewer_name}</div>
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>${booking.price_value}/{booking.price_unit} · {fmtDuration(booking.duration_minutes)}</div>
+        <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontWeight: 700, fontSize: 14, color: 'var(--casi-text)', marginBottom: 3 }}>{booking.viewer_name}</div>
+        <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>${booking.price_value}/{booking.price_unit} · {fmtDuration(booking.duration_minutes)}</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: statusColor, textTransform: 'uppercase', letterSpacing: 1 }}>
+        <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: statusColor, textTransform: 'uppercase', letterSpacing: 1 }}>
           {queuePosition === 1 ? 'Next up' : `Queue #${queuePosition}`}
         </span>
         <button onClick={() => onPlayNow(booking)}
-          style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(var(--casi-accent2-rgb),0.6)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
+          style={{ background: 'none', border: 'none', fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'rgba(var(--casi-accent2-rgb),0.6)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
           Play Now
         </button>
         <button onClick={() => onRemove(booking.id)}
-          style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
+          style={{ background: 'none', border: 'none', fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1, padding: 0 }}>
           Remove
         </button>
       </div>

@@ -219,7 +219,7 @@ export default function DelegateKeyCard({
             {headline}
           </div>
           <div style={{
-            fontFamily: "'DM Mono',monospace",
+            fontFamily: "var(--font-casi-mono),monospace",
             fontSize: 10,
             color: 'var(--casi-text-muted)',
             overflow: 'hidden',
@@ -241,7 +241,7 @@ export default function DelegateKeyCard({
                 border: status.kind === 'healthy' ? '1px solid var(--casi-border)' : 'none',
                 borderRadius: 8,
                 padding: '8px 14px',
-                fontFamily: "'Syne',sans-serif",
+                fontFamily: "var(--font-casi-sans),sans-serif",
                 fontWeight: 800,
                 fontSize: 11,
                 textTransform: 'uppercase',
@@ -263,7 +263,7 @@ export default function DelegateKeyCard({
                 border: '1px solid rgba(239,68,68,0.3)',
                 borderRadius: 8,
                 padding: '8px 14px',
-                fontFamily: "'Syne',sans-serif",
+                fontFamily: "var(--font-casi-sans),sans-serif",
                 fontWeight: 800,
                 fontSize: 11,
                 textTransform: 'uppercase',
@@ -277,7 +277,7 @@ export default function DelegateKeyCard({
         </div>
       </div>
       <div style={{
-        fontFamily: "'DM Mono',monospace",
+        fontFamily: "var(--font-casi-mono),monospace",
         fontSize: 9,
         color: err ? '#ef4444' : okLink ? '#4ade80' : 'var(--casi-text-muted)',
         marginTop: 5,

@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Rnd } from 'react-rnd';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
@@ -1201,7 +1202,7 @@ export default function AdminStudio() {
   if (!isReady || !profile) return (
     <div style={{ minHeight: '100vh', background: 'var(--casi-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
       <Logo scale={0.5} />
-      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--casi-accent)', animation: 'pulse 1.5s infinite' }}>Loading studio…</span>
+      <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--casi-accent)', animation: 'pulse 1.5s infinite' }}>Loading studio…</span>
     </div>
   );
 
@@ -1217,41 +1218,40 @@ export default function AdminStudio() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: var(--casi-bg); }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
         @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:.2} }
         @keyframes springPop { from{opacity:0;transform:scale(0.88) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
-        .flash-toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:9999; padding:12px 20px; border-radius:10px; font-family:'DM Mono',monospace; font-size:11px; letter-spacing:1px; max-width:420px; animation:springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both; }
+        .flash-toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:9999; padding:12px 20px; border-radius:10px; font-family:var(--font-casi-mono),monospace; font-size:11px; letter-spacing:1px; max-width:420px; animation:springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both; }
         .flash-toast-ok  { background:rgba(74,222,128,0.1); border:1px solid rgba(74,222,128,0.3); color:#4ade80; }
         .flash-toast-err { background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); color:#f87171; }
 
-        .sw { min-height:100vh; background:var(--casi-bg); color:var(--casi-text); font-family:'Syne',sans-serif; display:flex; flex-direction:column; }
+        .sw { min-height:100vh; background:var(--casi-bg); color:var(--casi-text); font-family:var(--font-casi-sans),sans-serif; display:flex; flex-direction:column; }
 
         /* NAV */
         .util-bar { display:flex; align-items:center; justify-content:flex-end; gap:14px; padding:0 32px; height:32px; flex-shrink:0; background:rgba(0,0,0,0.25); border-bottom:1px solid rgba(var(--casi-accent-rgb),0.05); }
         .vlink-strip { display:flex; align-items:center; gap:10px; padding:10px 32px; background:rgba(var(--casi-accent-rgb),0.03); border-bottom:1px solid rgba(var(--casi-accent-rgb),0.08); flex-shrink:0; flex-wrap:wrap; }
-        .vlink-lbl { font-family:'DM Mono',monospace; font-size:10px; color:var(--casi-text-muted); flex-shrink:0; letter-spacing:1px; text-transform:uppercase; }
-        .vlink-url { flex:1; min-width:200px; font-family:'DM Mono',monospace; font-size:11px; color:var(--casi-accent); background:rgba(0,0,0,0.3); border:1px solid rgba(var(--casi-accent-rgb),0.12); border-radius:6px; padding:6px 10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .save-status-txt { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; color:#333; }
+        .vlink-lbl { font-family:var(--font-casi-mono),monospace; font-size:10px; color:var(--casi-text-muted); flex-shrink:0; letter-spacing:1px; text-transform:uppercase; }
+        .vlink-url { flex:1; min-width:200px; font-family:var(--font-casi-mono),monospace; font-size:11px; color:var(--casi-accent); background:rgba(0,0,0,0.3); border:1px solid rgba(var(--casi-accent-rgb),0.12); border-radius:6px; padding:6px 10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .save-status-txt { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:1px; color:#333; }
         .top-nav { display:flex; align-items:center; justify-content:space-between; padding:0 32px; height:64px; flex-shrink:0; border-bottom:1px solid rgba(var(--casi-accent-rgb),0.08); background:color-mix(in srgb, var(--casi-bg) 96%, transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:100; }
         .tnl { display:flex; align-items:center; gap:32px; }
         .nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
         .nav-wm { font-size:20px; font-weight:800; color:var(--casi-accent); letter-spacing:-0.5px; }
         .nav-tabs { display:flex; gap:4px; }
-        .nav-tab { font-family:'DM Mono',monospace; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; padding:7px 14px; border-radius:8px; border:none; background:none; color:var(--casi-text-muted); cursor:pointer; transition:all .2s; position:relative; }
+        .nav-tab { font-family:var(--font-casi-mono),monospace; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; padding:7px 14px; border-radius:8px; border:none; background:none; color:var(--casi-text-muted); cursor:pointer; transition:all .2s; position:relative; }
         .nav-tab:hover { color:var(--casi-text); background:rgba(255,255,255,0.04); }
         .nav-tab.active { color:var(--casi-accent); background:rgba(var(--casi-accent-rgb),0.08); }
         .nav-badge { position:absolute; top:2px; right:2px; background:var(--casi-accent); color:var(--casi-bg); font-size:9px; font-weight:800; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
         .tnr { display:flex; align-items:center; gap:12px; }
-        .live-toggle { display:flex; align-items:center; gap:8px; padding:8px 16px; border-radius:8px; border:1px solid; cursor:pointer; font-family:'Syne',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; transition:all .2s; }
+        .live-toggle { display:flex; align-items:center; gap:8px; padding:8px 16px; border-radius:8px; border:1px solid; cursor:pointer; font-family:var(--font-casi-sans),sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; transition:all .2s; }
         .lt-off { background:rgba(255,255,255,0.04); border-color:var(--casi-border); color:var(--casi-text-muted); }
         .lt-on  { background:rgba(239,68,68,0.12); border-color:rgba(239,68,68,0.35); color:#f87171; }
         .live-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
         .ld-off { background:#444; }
         .ld-on  { background:#f87171; animation:blink 1.5s infinite; }
-        .btn-sm { font-family:'Syne',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; padding:8px 16px; border-radius:8px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
+        .btn-sm { font-family:var(--font-casi-sans),sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; padding:8px 16px; border-radius:8px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
         .b-orange  { background:var(--casi-accent); color:var(--casi-bg); }
         .b-orange:hover { filter:brightness(1.12); }
         .b-outline { background:rgba(255,255,255,0.04); color:#888; border:1px solid var(--casi-border) !important; }
@@ -1269,7 +1269,7 @@ export default function AdminStudio() {
         /* STUDIO */
         .studio-body { flex:1; display:flex; flex-direction:column; padding:20px 32px 32px; gap:16px; overflow:auto; }
         .canvas-wrap { position:relative; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:#080808; overflow:visible; }
-        .canvas-hint { text-align:center; font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:#1e1e1e; margin-top:10px; }
+        .canvas-hint { text-align:center; font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:#1e1e1e; margin-top:10px; }
 
         /* ── BEAM CONTROL PANEL ── */
         .beam-ctrl { background:var(--casi-surface); border:1px solid rgba(var(--casi-accent-rgb),0.2); border-radius:12px; padding:16px 20px; display:flex; flex-direction:column; gap:14px; animation:fadeIn .2s ease; }
@@ -1281,7 +1281,7 @@ export default function AdminStudio() {
            so the editor preview matches what viewers see. */
         @keyframes bannerPreview { from{transform:translateX(100%)} to{transform:translateX(-100%)} }
         .banner-preview { display:flex; align-items:center; width:100%; height:100%; overflow:hidden; background:rgba(var(--casi-accent-rgb),0.06); border:1.5px dashed rgba(var(--casi-accent-rgb),0.35); border-radius:6px; white-space:nowrap; }
-        .banner-preview-track { display:inline-block; padding-left:100%; color:rgba(var(--casi-accent-rgb),0.7); font-family:'Syne',sans-serif; font-weight:800; font-size:16px; letter-spacing:1px; animation: bannerPreview 15s linear infinite; }
+        .banner-preview-track { display:inline-block; padding-left:100%; color:rgba(var(--casi-accent-rgb),0.7); font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:16px; letter-spacing:1px; animation: bannerPreview 15s linear infinite; }
         .dpad-btn { width:36px; height:36px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); color:var(--casi-text); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s; user-select:none; -webkit-user-select:none; }
         .dpad-btn:hover { background:rgba(var(--casi-accent-rgb),0.12); border-color:rgba(var(--casi-accent-rgb),0.3); color:var(--casi-accent); }
         .dpad-btn:active { transform:scale(0.9); }
@@ -1291,9 +1291,9 @@ export default function AdminStudio() {
 
         /* REQUESTS */
         .req-body { flex:1; padding:24px 32px; overflow:auto; max-width:800px; width:100%; margin:0 auto; }
-        .sec-head { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+        .sec-head { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
         .sec-head::before { content:''; display:block; width:16px; height:1px; background:currentColor; opacity:0.5; }
-        .slot-type-badge { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1.5px; padding:2px 8px; border-radius:20px; border:1px solid; }
+        .slot-type-badge { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:1.5px; padding:2px 8px; border-radius:20px; border:1px solid; }
         .badge-beam { color:var(--casi-accent2); border-color:rgba(var(--casi-accent2-rgb),0.3); background:rgba(var(--casi-accent2-rgb),0.06); }
         .badge-backdrop { color:#c084fc; border-color:rgba(192,132,252,0.3); background:rgba(168,85,247,0.06); }
         .req-card { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:14px; padding:20px; margin-bottom:10px; display:flex; gap:16px; align-items:flex-start; transition:border-color .2s; }
@@ -1303,7 +1303,7 @@ export default function AdminStudio() {
         .req-info { flex:1; min-width:0; }
         .req-name { font-size:17px; font-weight:700; color:var(--casi-text); margin-bottom:6px; }
         .req-meta { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
-        .tag { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; padding:3px 10px; border-radius:20px; border:1px solid; }
+        .tag { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:1px; padding:3px 10px; border-radius:20px; border:1px solid; }
         .t-orange { color:var(--casi-accent); background:rgba(var(--casi-accent-rgb),0.08); border-color:rgba(var(--casi-accent-rgb),0.2); }
         .t-green  { color:#4ade80; background:rgba(74,222,128,0.08); border-color:rgba(74,222,128,0.2); }
         .t-cyan   { color:var(--casi-accent2); background:rgba(var(--casi-accent2-rgb),0.08); border-color:rgba(var(--casi-accent2-rgb),0.2); }
@@ -1313,7 +1313,7 @@ export default function AdminStudio() {
         .badge-flash { color:#facc15; border-color:rgba(250,204,21,0.3); background:rgba(250,204,21,0.06); }
         .req-msg { font-size:13px; color:var(--casi-text-muted); font-style:italic; border-left:2px solid var(--casi-border); padding-left:10px; margin-top:6px; }
         .req-actions { display:flex; flex-direction:column; gap:8px; flex-shrink:0; }
-        .act-btn { font-family:'Syne',sans-serif; font-weight:800; font-size:12px; text-transform:uppercase; padding:10px 18px; border-radius:8px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
+        .act-btn { font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:12px; text-transform:uppercase; padding:10px 18px; border-radius:8px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
         .c-active  { background:rgba(var(--casi-accent2-rgb),0.05); border-color:rgba(var(--casi-accent2-rgb),0.2) !important; }
         .c-queued  { background:rgba(var(--casi-accent-rgb),0.04); border-color:rgba(var(--casi-accent-rgb),0.15) !important; }
         .c-backdrop-active { background:rgba(168,85,247,0.05); border-color:rgba(168,85,247,0.2) !important; }
@@ -1324,14 +1324,14 @@ export default function AdminStudio() {
         .set-body { flex:1; padding:24px 32px; overflow:auto; max-width:680px; width:100%; margin:0 auto; display:flex; flex-direction:column; gap:12px; }
         .set-card { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:14px; padding:24px; }
         .set-title { font-size:14px; font-weight:700; color:var(--casi-text); margin-bottom:4px; }
-        .set-sub   { font-family:'DM Mono',monospace; font-size:10px; color:var(--casi-text-muted); margin-bottom:16px; }
+        .set-sub   { font-family:var(--font-casi-mono),monospace; font-size:10px; color:var(--casi-text-muted); margin-bottom:16px; }
         .code-row  { display:flex; align-items:center; gap:10px; }
-        .code-box  { flex:1; background:rgba(0,0,0,0.4); border:1px solid var(--casi-border); border-radius:8px; padding:10px 14px; font-family:'DM Mono',monospace; font-size:11px; color:#888; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .code-box  { flex:1; background:rgba(0,0,0,0.4); border:1px solid var(--casi-border); border-radius:8px; padding:10px 14px; font-family:var(--font-casi-mono),monospace; font-size:11px; color:#888; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         /* Inline profile edit */
-        .pe-inp { width:100%; background:var(--casi-bg); border:1px solid var(--casi-border); border-radius:10px; padding:10px 13px; font-size:13px; color:var(--casi-text); outline:none; font-family:'Syne',sans-serif; transition:border-color .2s; box-sizing:border-box; }
+        .pe-inp { width:100%; background:var(--casi-bg); border:1px solid var(--casi-border); border-radius:10px; padding:10px 13px; font-size:13px; color:var(--casi-text); outline:none; font-family:var(--font-casi-sans),sans-serif; transition:border-color .2s; box-sizing:border-box; }
         .pe-inp::placeholder { color:var(--casi-text-muted); opacity:0.5; }
         .pe-inp:focus { border-color:rgba(var(--casi-accent-rgb),0.4); }
-        .pe-lbl { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--casi-text-muted); display:block; margin-bottom:6px; }
+        .pe-lbl { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--casi-text-muted); display:block; margin-bottom:6px; }
         .pe-swatch { width:26px; height:26px; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:all .15s; flex-shrink:0; background:none; padding:0; }
         .pe-swatch:hover { transform:scale(1.15); }
         .pe-swatch.active { border-color:#fff; box-shadow:0 0 0 2px rgba(255,255,255,0.2); }
@@ -1400,6 +1400,24 @@ export default function AdminStudio() {
             </div>
           </div>
           <div className="tnr">
+            <Link
+              href={view === 'settings' ? '/admin/settings' : '/studio'}
+              title={view === 'settings' ? 'Try new settings' : 'Try new studio dashboard'}
+              style={{
+                fontFamily: 'var(--font-casi-mono, ui-monospace, monospace)',
+                fontSize: '10px',
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                textDecoration: 'none',
+                padding: '5px 10px',
+                borderRadius: '999px',
+                background: 'rgba(245, 130, 32, 0.08)',
+                border: '1px solid rgba(245, 130, 32, 0.3)',
+                color: '#F58220',
+              }}
+            >
+              {view === 'settings' ? 'New settings' : 'New studio'} →
+            </Link>
             <button onClick={toggleLive} disabled={togglingLive} className={`live-toggle ${profile.is_live ? 'lt-on' : 'lt-off'}`}>
               <span className={`live-dot ${profile.is_live ? 'ld-on' : 'ld-off'}`} />
               {profile.is_live ? 'Live' : 'Go Live'}
@@ -1480,8 +1498,8 @@ export default function AdminStudio() {
                 <div key={booking.id} className="beam-chip" onClick={() => setSelectedSlotId(booking.element_id)}>
                   {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }} />}
                   <div>
-                    <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 600, color: 'var(--casi-text)' }}>{booking.viewer_name}</div>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: isBackdrop ? 'rgba(192,132,252,0.6)' : 'rgba(var(--casi-accent2-rgb),0.6)', letterSpacing: 1 }}>
+                    <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 12, fontWeight: 600, color: 'var(--casi-text)' }}>{booking.viewer_name}</div>
+                    <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: isBackdrop ? 'rgba(192,132,252,0.6)' : 'rgba(var(--casi-accent2-rgb),0.6)', letterSpacing: 1 }}>
                       {isBackdrop ? '🖼 backdrop' : '✦ beam'}{queueForSlot.length > 0 ? ` · +${queueForSlot.length} queued` : ''}
                     </div>
                   </div>
@@ -1587,12 +1605,12 @@ export default function AdminStudio() {
                             </div>
                           ) : (
                             <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(var(--casi-accent-rgb),0.35)'}`, borderRadius: el.is_background ? 12 : 6, background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(var(--casi-accent-rgb),0.04)' }}>
-                              {el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>}
+                              {el.locked && <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>}
                               <span style={{ fontSize: el.is_background ? 24 : 16, marginBottom: 4 }}>{el.is_background ? '🖼️' : el.shape === 'banner' ? '▰' : '✦'}</span>
-                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(var(--casi-accent-rgb),0.6)' }}>
+                              <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(var(--casi-accent-rgb),0.6)' }}>
                                 {el.locked ? 'No requests' : el.is_background ? 'Backdrop' : el.shape === 'banner' ? 'Banner' : 'Beam'}
                               </span>
-                              {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : 'var(--casi-accent)' }}>${el.price_value}/{el.price_unit}</span>}
+                              {el.price_value > 0 && !el.locked && <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, fontWeight: 500, marginTop: 3, color: el.is_background ? 'rgba(168,85,247,0.9)' : 'var(--casi-accent)' }}>${el.price_value}/{el.price_unit}</span>}
                             </div>
                           )
                         ) : (
@@ -1680,9 +1698,9 @@ export default function AdminStudio() {
             {pendingFlashes.length > 0 && (
               <div style={{ marginBottom: 32 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 16, fontWeight: 800, color: 'var(--casi-text)', letterSpacing: -0.5 }}>Flash Messages</div>
+                  <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 16, fontWeight: 800, color: 'var(--casi-text)', letterSpacing: -0.5 }}>Flash Messages</div>
                   <span className="slot-type-badge badge-flash">⚡ Flashes</span>
-                  {confirmedFlashes.length > 0 && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#4ade80' }}>{confirmedFlashes.length} paid</span>}
+                  {confirmedFlashes.length > 0 && <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: '#4ade80' }}>{confirmedFlashes.length} paid</span>}
                 </div>
                 {pendingFlashes.map(flash => (
                   <FlashCard
@@ -1700,7 +1718,7 @@ export default function AdminStudio() {
             {(activeBeams.length > 0 || approvedBeams.length > 0 || pendingBeams.length > 0 || queuedBeams.length > 0) && (
               <div style={{ marginBottom: 32 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 16, fontWeight: 800, color: 'var(--casi-text)', letterSpacing: -0.5 }}>Beam Slots</div>
+                  <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 16, fontWeight: 800, color: 'var(--casi-text)', letterSpacing: -0.5 }}>Beam Slots</div>
                   <span className="slot-type-badge badge-beam">✦ Beams</span>
                 </div>
 
@@ -1788,7 +1806,7 @@ export default function AdminStudio() {
             {(activeBackdrop.length > 0 || approvedBackdrop.length > 0 || pendingBackdrop.length > 0 || queuedBackdrop.length > 0) && (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 16, fontWeight: 800, color: 'var(--casi-text)', letterSpacing: -0.5 }}>Full Backdrop</div>
+                  <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 16, fontWeight: 800, color: 'var(--casi-text)', letterSpacing: -0.5 }}>Full Backdrop</div>
                   <span className="slot-type-badge badge-backdrop">🖼 Backdrop</span>
                 </div>
 
@@ -1865,8 +1883,8 @@ export default function AdminStudio() {
 
             {totalPending === 0 && activeBookings.length === 0 && approvedQueued.length === 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', border: '1px dashed #1c1c1c', borderRadius: 14, textAlign: 'center' }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#333' }}>No requests yet</div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#222', marginTop: 8 }}>Share your overlay link to get started</div>
+                <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 12, color: '#333' }}>No requests yet</div>
+                <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: '#222', marginTop: 8 }}>Share your overlay link to get started</div>
               </div>
             )}
           </div>
@@ -1986,7 +2004,7 @@ export default function AdminStudio() {
             <button key={v} onClick={() => setView(v)} className={`bot-tab ${view === v ? 'active' : ''}`}>
               {v === 'requests' && totalPending > 0 && <span className="bot-badge">{totalPending}</span>}
               <span style={{ fontSize: 18 }}>{v === 'studio' ? '🎬' : v === 'requests' ? '📥' : '⚙️'}</span>
-              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{v}</span>
+              <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{v}</span>
             </button>
           ))}
           {/* Mobile bottom nav no longer surfaces a Backdrop shortcut —

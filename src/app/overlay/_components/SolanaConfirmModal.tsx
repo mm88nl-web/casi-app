@@ -35,7 +35,7 @@ export default function SolanaConfirmModal({
     : null;
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:"'DM Mono',monospace" }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:"var(--font-casi-mono),monospace" }}>
       <div style={{ background:'var(--casi-surface,#0d0d0d)', border:'1px solid rgba(153,69,255,0.35)', borderRadius:16, padding:28, width:'100%', maxWidth:380 }}>
         <div style={{ fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'#9945FF', marginBottom:16 }}>Confirm your beam slot</div>
 
@@ -49,7 +49,7 @@ export default function SolanaConfirmModal({
           {shortWallet && (
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666', marginBottom:6 }}>
               <span>Recipient</span>
-              <span style={{ color:'#e8e8e8', fontFamily:"'DM Mono',monospace" }}>{shortWallet}</span>
+              <span style={{ color:'#e8e8e8', fontFamily:"var(--font-casi-mono),monospace" }}>{shortWallet}</span>
             </div>
           )}
           <div style={{ borderTop:'1px solid #1c1c1c', margin:'10px 0' }} />
@@ -127,14 +127,14 @@ export default function SolanaConfirmModal({
           <button
             onClick={onCancel}
             disabled={inProgress}
-            style={{ flex:1, background:'none', border:'1px solid #1c1c1c', borderRadius:10, padding:'12px 0', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:13, color: inProgress ? '#333' : '#555', cursor: inProgress ? 'not-allowed' : 'pointer' }}
+            style={{ flex:1, background:'none', border:'1px solid #1c1c1c', borderRadius:10, padding:'12px 0', fontFamily:"var(--font-casi-sans),sans-serif", fontWeight:700, fontSize:13, color: inProgress ? '#333' : '#555', cursor: inProgress ? 'not-allowed' : 'pointer' }}
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
             disabled={inProgress || hasInsufficient}
-            style={{ flex:2, background: inProgress || hasInsufficient ? '#1c1c1c' : '#9945FF', border:'none', borderRadius:10, padding:'12px 0', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:13, color: inProgress || hasInsufficient ? '#444' : '#fff', cursor: inProgress || hasInsufficient ? 'not-allowed' : 'pointer' }}
+            style={{ flex:2, background: inProgress || hasInsufficient ? '#1c1c1c' : '#9945FF', border:'none', borderRadius:10, padding:'12px 0', fontFamily:"var(--font-casi-sans),sans-serif", fontWeight:800, fontSize:13, color: inProgress || hasInsufficient ? '#444' : '#fff', cursor: inProgress || hasInsufficient ? 'not-allowed' : 'pointer' }}
           >
             {inProgress ? 'Signing…' : txStatus === 'error' ? 'Retry →' : 'Confirm & Sign →'}
           </button>

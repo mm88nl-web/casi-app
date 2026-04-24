@@ -3,7 +3,6 @@ import { usePathname } from 'next/navigation';
 import WalletNav from '@/components/WalletNav';
 
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
 
   .hd {
     position: sticky; top: 0; z-index: 100;
@@ -18,7 +17,7 @@ const CSS = `
     text-decoration: none; flex-shrink: 0;
   }
   .hd-wordmark {
-    font-family: 'Syne', sans-serif;
+    font-family: var(--font-casi-sans), sans-serif;
     font-size: 18px; font-weight: 800; letter-spacing: -1px;
     color: #F58220;
   }

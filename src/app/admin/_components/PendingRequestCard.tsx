@@ -53,7 +53,7 @@ export default function PendingRequestCard({
       <button className="req-thumb" onClick={() => onPreview(booking)}>
         {booking.image_url
           ? <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit }} />
-          : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>No img</span>}
+          : <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: '#444' }}>No img</span>}
       </button>
       <div className="req-info">
         <div className="req-name">{booking.viewer_name}</div>
@@ -66,7 +66,7 @@ export default function PendingRequestCard({
         {!isBackdrop && booking.tx_signature && (
           <div style={{ marginTop: 5 }}>
             <a href={`https://solscan.io/tx/${booking.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
-              style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none' }}>↗ Solscan</a>
+              style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none' }}>↗ Solscan</a>
           </div>
         )}
       </div>

@@ -62,7 +62,7 @@ export default function MyBeamsSection({
           <button
             onClick={onStaleCleanup}
             disabled={cleanupBusy}
-            style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', background: 'none', border: '1px solid var(--casi-border)', borderRadius: 8, padding: '4px 10px', color: 'var(--casi-text-muted)', cursor: cleanupBusy ? 'default' : 'pointer', opacity: cleanupBusy ? 0.5 : 1 }}
+            style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', background: 'none', border: '1px solid var(--casi-border)', borderRadius: 8, padding: '4px 10px', color: 'var(--casi-text-muted)', cursor: cleanupBusy ? 'default' : 'pointer', opacity: cleanupBusy ? 0.5 : 1 }}
             title="Probe each escrow and clear rows whose funds already left the vault"
           >
             {cleanupBusy ? '…' : 'Clean up ended'}
@@ -111,9 +111,9 @@ export default function MyBeamsSection({
           return (
             <div key={booking.id} className="beam-chip" style={chipStyle}>
               {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4 }} />}
-              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 500 }}>{statusLabel}</span>
+              <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, fontWeight: 500 }}>{statusLabel}</span>
               {isLive && activeBooking && (
-                <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, opacity: 0.7 }}>
+                <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, opacity: 0.7 }}>
                   <Countdown
                     booking={activeBooking}
                     onWarning={(s) => onExpiringWarning(booking.id, s)}

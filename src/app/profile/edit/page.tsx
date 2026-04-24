@@ -190,18 +190,17 @@ export default function ProfileEditPage() {
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: '#F58220', animation: 'pulse 1.5s infinite' }}>Loading…</div>
+      <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: '#F58220', animation: 'pulse 1.5s infinite' }}>Loading…</div>
     </div>
   );
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
-        .pe { min-height: 100vh; background: #050505; color: #e8e8e8; font-family: 'Syne', sans-serif; }
+        .pe { min-height: 100vh; background: #050505; color: #e8e8e8; font-family: var(--font-casi-sans), sans-serif; }
         .pe::before {
           content: ''; position: fixed; inset: 0;
           background-image: linear-gradient(rgba(245,130,32,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(245,130,32,0.02) 1px, transparent 1px);
@@ -210,27 +209,27 @@ export default function ProfileEditPage() {
 
         .pe-nav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; height: 64px; border-bottom: 1px solid #111; background: rgba(5,5,5,0.94); backdrop-filter: blur(20px); }
         .pe-nav-left { display: flex; align-items: center; gap: 16px; }
-        .pe-back { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #555; text-decoration: none; transition: color .2s; }
+        .pe-back { font-family: var(--font-casi-mono), monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #555; text-decoration: none; transition: color .2s; }
         .pe-back:hover { color: #e8e8e8; }
         .pe-nav-title { font-size: 16px; font-weight: 700; color: #e8e8e8; }
-        .pe-view-link { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #F58220; text-decoration: none; transition: color .2s; }
+        .pe-view-link { font-family: var(--font-casi-mono), monospace; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #F58220; text-decoration: none; transition: color .2s; }
         .pe-view-link:hover { color: #ff9030; }
 
         .pe-body { position: relative; z-index: 1; max-width: 600px; margin: 0 auto; padding: 48px 40px; }
 
         .pe-field { margin-bottom: 24px; }
-        .pe-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #555; display: block; margin-bottom: 8px; }
-        .pe-input { width: 100%; background: #0a0a0a; border: 1px solid #1c1c1c; border-radius: 10px; padding: 13px 16px; font-size: 14px; color: #e8e8e8; outline: none; font-family: 'Syne', sans-serif; transition: border-color .2s; }
+        .pe-label { font-family: var(--font-casi-mono), monospace; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #555; display: block; margin-bottom: 8px; }
+        .pe-input { width: 100%; background: #0a0a0a; border: 1px solid #1c1c1c; border-radius: 10px; padding: 13px 16px; font-size: 14px; color: #e8e8e8; outline: none; font-family: var(--font-casi-sans), sans-serif; transition: border-color .2s; }
         .pe-input::placeholder { color: #333; }
         .pe-input:focus { border-color: rgba(245,130,32,0.35); }
-        .pe-hint { font-family: 'DM Mono', monospace; font-size: 10px; margin-top: 6px; color: #444; }
+        .pe-hint { font-family: var(--font-casi-mono), monospace; font-size: 10px; margin-top: 6px; color: #444; }
         .pe-hint.ok  { color: #4ade80; }
         .pe-hint.err { color: #f87171; }
 
         .pe-avatar-row { display: flex; align-items: center; gap: 16px; }
         .pe-avatar { width: 64px; height: 64px; border-radius: 50%; border: 1px dashed #222; background: #0a0a0a; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; }
 
-        .pe-readonly { background: rgba(0,0,0,0.3); border: 1px solid #111; border-radius: 10px; padding: 13px 16px; font-family: 'DM Mono', monospace; font-size: 13px; color: #444; }
+        .pe-readonly { background: rgba(0,0,0,0.3); border: 1px solid #111; border-radius: 10px; padding: 13px 16px; font-family: var(--font-casi-mono), monospace; font-size: 13px; color: #444; }
 
         /* Theme picker */
         .theme-presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
@@ -241,7 +240,7 @@ export default function ProfileEditPage() {
         .theme-preview-bar { height: 3px; border-radius: 2px; margin-top: 12px; transition: background .3s; }
 
         .pe-actions { display: flex; gap: 10px; padding-top: 8px; }
-        .pe-btn { flex: 1; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 0.3px; padding: 14px; border-radius: 10px; border: none; cursor: pointer; transition: all .2s; }
+        .pe-btn { flex: 1; font-family: var(--font-casi-sans), sans-serif; font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 0.3px; padding: 14px; border-radius: 10px; border: none; cursor: pointer; transition: all .2s; }
         .pe-btn.cancel { background: rgba(255,255,255,0.04); color: #666; border: 1px solid #1c1c1c !important; }
         .pe-btn.cancel:hover { background: rgba(255,255,255,0.08); color: #e8e8e8; }
         .pe-btn.save { color: #050505; }
@@ -249,16 +248,16 @@ export default function ProfileEditPage() {
         .pe-btn.save:disabled { background: #1c1c1c !important; color: #444 !important; cursor: not-allowed; }
         .pe-btn.saved { background: #4ade80 !important; color: #050505 !important; }
 
-        .pe-error { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); border-radius: 8px; padding: 10px 14px; font-family: 'DM Mono', monospace; font-size: 11px; color: #f87171; margin-bottom: 16px; }
+        .pe-error { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); border-radius: 8px; padding: 10px 14px; font-family: var(--font-casi-mono), monospace; font-size: 11px; color: #f87171; margin-bottom: 16px; }
 
         /* Preview card */
         .pe-preview { background: #080808; border: 1px solid #161616; border-radius: 14px; padding: 20px; margin-top: 32px; transition: border-color .3s; }
-        .pe-preview-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #444; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+        .pe-preview-label { font-family: var(--font-casi-mono), monospace; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #444; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
         .pe-preview-label::before { content: ''; display: block; width: 16px; height: 1px; background: #333; }
         .pe-preview-inner { display: flex; align-items: center; gap: 14px; }
         .pe-preview-avatar { width: 48px; height: 48px; border-radius: 50%; border: 1px solid #1c1c1c; overflow: hidden; background: #0d0d0d; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; }
         .pe-preview-name { font-size: 16px; font-weight: 700; color: #e8e8e8; margin-bottom: 2px; }
-        .pe-preview-handle { font-family: 'DM Mono', monospace; font-size: 11px; color: #444; }
+        .pe-preview-handle { font-family: var(--font-casi-mono), monospace; font-size: 11px; color: #444; }
         .pe-preview-bio { font-size: 13px; color: #484848; line-height: 1.6; margin-top: 8px; }
 
         @media (max-width: 640px) {
@@ -323,7 +322,7 @@ export default function ProfileEditPage() {
               <label className="pe-label">Bio</label>
               <textarea value={bio} placeholder="What do you stream? Tell viewers about yourself…"
                 rows={4} maxLength={160}
-                style={{ width: '100%', background: '#0a0a0a', border: '1px solid #1c1c1c', borderRadius: 10, padding: '13px 16px', fontSize: 14, color: '#e8e8e8', outline: 'none', fontFamily: "'Syne', sans-serif", resize: 'none', transition: 'border-color .2s' }}
+                style={{ width: '100%', background: '#0a0a0a', border: '1px solid #1c1c1c', borderRadius: 10, padding: '13px 16px', fontSize: 14, color: '#e8e8e8', outline: 'none', fontFamily: "var(--font-casi-sans), sans-serif", resize: 'none', transition: 'border-color .2s' }}
                 onFocus={(e) => e.target.style.borderColor = `${tc}50`}
                 onBlur={(e) => e.target.style.borderColor = '#1c1c1c'}
                 onChange={(e) => setBio(e.target.value)} />
@@ -358,14 +357,14 @@ export default function ProfileEditPage() {
                   placeholder="#F58220"
                   maxLength={7}
                   className="pe-input"
-                  style={{ flex: 1, fontFamily: "'DM Mono', monospace", fontSize: 13 }}
+                  style={{ flex: 1, fontFamily: "var(--font-casi-mono), monospace", fontSize: 13 }}
                   onChange={(e) => {
                     const v = e.target.value;
                     setCustomColor(v);
                     if (/^#[0-9A-Fa-f]{6}$/.test(v)) setThemeColor(v);
                   }}
                 />
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', whiteSpace: 'nowrap' }}>custom hex</span>
+                <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: '#444', whiteSpace: 'nowrap' }}>custom hex</span>
               </div>
               <div className="theme-preview-bar" style={{ background: `linear-gradient(90deg, ${tc}, ${tc}40)` }} />
               <div className="pe-hint">Viewers see this color on your overlay page and public profile</div>
@@ -374,12 +373,12 @@ export default function ProfileEditPage() {
             <div className="pe-field" style={{ marginTop: 8 }}>
               <label className="pe-label">Payments</label>
               {stripeStatus === 'success' && (
-                <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4ade80', marginBottom: 12 }}>
+                <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: '#4ade80', marginBottom: 12 }}>
                   ✓ Stripe account connected — you can now receive payments
                 </div>
               )}
               {stripeStatus === 'refresh' && (
-                <div style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: 10, padding: '10px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#facc15', marginBottom: 12 }}>
+                <div style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: 10, padding: '10px 14px', fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: '#facc15', marginBottom: 12 }}>
                   Onboarding incomplete — finish connecting your account to receive payments
                 </div>
               )}
@@ -388,12 +387,12 @@ export default function ProfileEditPage() {
                   <div style={{ fontSize: 13, fontWeight: 700, color: stripeConnected ? '#4ade80' : '#e8e8e8', marginBottom: 3 }}>
                     {stripeConnected ? '✓ Connected to Stripe' : 'Connect Stripe to get paid'}
                   </div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>
+                  <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: '#444' }}>
                     {stripeConnected ? 'Viewers can now pay for beam slots' : 'Required to accept payments from viewers'}
                   </div>
                 </div>
                 <button type="button" onClick={handleStripeConnect} disabled={stripeLoading}
-                  style={{ background: stripeConnected ? 'rgba(74,222,128,0.1)' : tc, border: stripeConnected ? '1px solid rgba(74,222,128,0.25)' : 'none', borderRadius: 8, padding: '10px 16px', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', color: stripeConnected ? '#4ade80' : '#050505', cursor: stripeLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  style={{ background: stripeConnected ? 'rgba(74,222,128,0.1)' : tc, border: stripeConnected ? '1px solid rgba(74,222,128,0.25)' : 'none', borderRadius: 8, padding: '10px 16px', fontFamily: "var(--font-casi-sans), sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', color: stripeConnected ? '#4ade80' : '#050505', cursor: stripeLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
                   {stripeLoading ? 'Redirecting…' : stripeConnected ? '↗ Manage' : 'Connect →'}
                 </button>
               </div>
@@ -410,18 +409,18 @@ export default function ProfileEditPage() {
                       ? `◎ ${solanaWallet.slice(0,6)}…${solanaWallet.slice(-4)}`
                       : 'Connect a Solana wallet to accept SOL payments'}
                   </div>
-                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#444' }}>
+                  <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#444' }}>
                     {solanaWallet ? 'Viewers can pay with USDC on-chain' : 'Optional — Stripe payments always work without this'}
                   </div>
                 </div>
                 {walletConnected && publicKey ? (
                   <button type="button" onClick={handleSaveWallet} disabled={savingWallet}
-                    style={{ background: walletSaved ? 'rgba(74,222,128,0.1)' : 'rgba(153,69,255,0.15)', border: walletSaved ? '1px solid rgba(74,222,128,0.3)' : '1px solid rgba(153,69,255,0.35)', borderRadius:8, padding:'10px 16px', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:12, textTransform:'uppercase', color: walletSaved ? '#4ade80' : '#9945FF', cursor: savingWallet ? 'wait' : 'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
+                    style={{ background: walletSaved ? 'rgba(74,222,128,0.1)' : 'rgba(153,69,255,0.15)', border: walletSaved ? '1px solid rgba(74,222,128,0.3)' : '1px solid rgba(153,69,255,0.35)', borderRadius:8, padding:'10px 16px', fontFamily:"var(--font-casi-sans),sans-serif", fontWeight:800, fontSize:12, textTransform:'uppercase', color: walletSaved ? '#4ade80' : '#9945FF', cursor: savingWallet ? 'wait' : 'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
                     {savingWallet ? 'Saving…' : walletSaved ? '✓ Saved!' : `Save ${publicKey.toBase58().slice(0,4)}…${publicKey.toBase58().slice(-4)}`}
                   </button>
                 ) : (
                   <button type="button" onClick={openWalletModal} disabled={walletConnecting}
-                    style={{ background:'rgba(153,69,255,0.1)', border:'1px solid rgba(153,69,255,0.3)', borderRadius:8, padding:'10px 16px', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:12, textTransform:'uppercase', color:'#9945FF', cursor: walletConnecting ? 'not-allowed' : 'pointer', whiteSpace:'nowrap', flexShrink:0, opacity: walletConnecting ? 0.6 : 1 }}>
+                    style={{ background:'rgba(153,69,255,0.1)', border:'1px solid rgba(153,69,255,0.3)', borderRadius:8, padding:'10px 16px', fontFamily:"var(--font-casi-sans),sans-serif", fontWeight:800, fontSize:12, textTransform:'uppercase', color:'#9945FF', cursor: walletConnecting ? 'not-allowed' : 'pointer', whiteSpace:'nowrap', flexShrink:0, opacity: walletConnecting ? 0.6 : 1 }}>
                     {walletConnecting ? 'Connecting…' : 'Connect Wallet'}
                   </button>
                 )}
@@ -435,7 +434,7 @@ export default function ProfileEditPage() {
               <div style={{ background: '#0a0a0a', border: '1px solid #1c1c1c', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#e8e8e8', marginBottom: 3 }}>Allow free Flashes</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', lineHeight: 1.6 }}>
+                  <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: '#444', lineHeight: 1.6 }}>
                     Chat messages without payment · 1 per minute per viewer
                   </div>
                 </div>
@@ -476,11 +475,11 @@ export default function ProfileEditPage() {
             <div style={{ marginTop: 16, background: '#050505', border: `1px solid ${tc}20`, borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 32, height: 32, borderRadius: 6, border: `1.5px dashed ${tc}60`, background: `${tc}08`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>✦</div>
               <div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: tc, letterSpacing: 1, textTransform: 'uppercase' }}>Beam slot</div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: tc }}>$5/min</div>
+                <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: tc, letterSpacing: 1, textTransform: 'uppercase' }}>Beam slot</div>
+                <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: tc }}>$5/min</div>
               </div>
               <div style={{ marginLeft: 'auto' }}>
-                <div style={{ background: tc, borderRadius: 12, padding: '4px 12px', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 10, textTransform: 'uppercase', color: '#050505' }}>Rent →</div>
+                <div style={{ background: tc, borderRadius: 12, padding: '4px 12px', fontFamily: "var(--font-casi-sans), sans-serif", fontWeight: 800, fontSize: 10, textTransform: 'uppercase', color: '#050505' }}>Rent →</div>
               </div>
             </div>
           </div>

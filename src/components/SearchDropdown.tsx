@@ -15,7 +15,7 @@ const CSS = `
 
   .sd-input {
     flex: 1; background: none; border: none; outline: none;
-    padding: 14px 18px; font-family: 'Syne', sans-serif; font-size: 15px;
+    padding: 14px 18px; font-family: var(--font-casi-sans), sans-serif; font-size: 15px;
     color: #e8e8e8;
   }
   .sd-input::placeholder { color: #333; }
@@ -40,7 +40,7 @@ const CSS = `
 
   .sd-status {
     padding: 18px; text-align: center;
-    font-family: 'DM Mono', monospace; font-size: 11px;
+    font-family: var(--font-casi-mono), monospace; font-size: 11px;
     color: #333; letter-spacing: 1px;
   }
 
@@ -65,19 +65,19 @@ const CSS = `
   .sd-live-badge {
     display: inline-flex; align-items: center; gap: 3px;
     background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25);
-    color: #f87171; font-family: 'DM Mono', monospace;
+    color: #f87171; font-family: var(--font-casi-mono), monospace;
     font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
     padding: 1px 6px; border-radius: 10px;
   }
   .sd-live-dot { width: 4px; height: 4px; border-radius: 50%; background: #f87171; animation: sd-pulse 1.5s infinite; }
   @keyframes sd-pulse { 0%,100%{opacity:1} 50%{opacity:.2} }
-  .sd-handle { font-family: 'DM Mono', monospace; font-size: 10px; color: #444; }
+  .sd-handle { font-family: var(--font-casi-mono), monospace; font-size: 10px; color: #444; }
   .sd-bio {
-    font-family: 'DM Mono', monospace; font-size: 10px; color: #2f2f2f;
+    font-family: var(--font-casi-mono), monospace; font-size: 10px; color: #2f2f2f;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
   }
   .sd-cta {
-    font-family: 'DM Mono', monospace; font-size: 10px;
+    font-family: var(--font-casi-mono), monospace; font-size: 10px;
     letter-spacing: 1px; text-transform: uppercase;
     margin-left: auto; flex-shrink: 0; padding-left: 8px;
   }
@@ -89,7 +89,7 @@ const CSS = `
   }
   .sd-toggle {
     display: flex; align-items: center; gap: 6px;
-    font-family: 'DM Mono', monospace; font-size: 9px;
+    font-family: var(--font-casi-mono), monospace; font-size: 9px;
     letter-spacing: 1.5px; text-transform: uppercase;
     color: #444; background: none; border: none; cursor: pointer;
     padding: 4px 8px; border-radius: 6px; transition: all .12s;
@@ -98,7 +98,7 @@ const CSS = `
   .sd-toggle.on { color: #f87171; }
   .sd-toggle-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
   .sd-toggle.on .sd-toggle-dot { animation: sd-pulse 1.5s infinite; }
-  .sd-count { font-family: 'DM Mono', monospace; font-size: 9px; color: #2f2f2f; }
+  .sd-count { font-family: var(--font-casi-mono), monospace; font-size: 9px; color: #2f2f2f; }
 
   /* ── Live strip ── */
   .sd-strip {
@@ -122,7 +122,7 @@ const CSS = `
     font-size: 9px; overflow: hidden; flex-shrink: 0;
   }
   .sd-chip-av img { width: 100%; height: 100%; object-fit: cover; }
-  .sd-chip-name { font-family: 'DM Mono', monospace; font-size: 10px; color: #ccc; letter-spacing: 0.3px; }
+  .sd-chip-name { font-family: var(--font-casi-mono), monospace; font-size: 10px; color: #ccc; letter-spacing: 0.3px; }
 
   /* Mobile */
   @media (max-width: 640px) {

@@ -33,8 +33,8 @@ export default function ActiveCard({
         {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: '100%', height: '100%', objectFit }} />}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)', marginBottom: 4 }}>{booking.viewer_name}</div>
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)', marginBottom: 4 }}>{booking.viewer_name}</div>
+        <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: 'var(--casi-text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span>${booking.price_value}/{booking.price_unit} · {fmtDuration(booking.duration_minutes)}</span>
           {!isBackdrop && booking.tx_signature && (
             <a href={`https://solscan.io/tx/${booking.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
@@ -46,9 +46,9 @@ export default function ActiveCard({
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
             {nextUpList.map((next, idx) => (
               <div key={next.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'rgba(var(--casi-accent-rgb),0.4)', minWidth: 20 }}>#{idx + 1}</span>
-                <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, color: 'rgba(var(--casi-accent-rgb),0.7)' }}>{next.viewer_name}</span>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444' }}>{idx === 0 ? '— auto-starts next' : `pos #${idx + 1}`}</span>
+                <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: 'rgba(var(--casi-accent-rgb),0.4)', minWidth: 20 }}>#{idx + 1}</span>
+                <span style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 12, color: 'rgba(var(--casi-accent-rgb),0.7)' }}>{next.viewer_name}</span>
+                <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#444' }}>{idx === 0 ? '— auto-starts next' : `pos #${idx + 1}`}</span>
               </div>
             ))}
           </div>
@@ -56,7 +56,7 @@ export default function ActiveCard({
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
         <BeamTimer booking={booking} onExpire={onExpire} />
-        <button onClick={() => onKick(booking)} style={{ background: 'none', border: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>End early</button>
+        <button onClick={() => onKick(booking)} style={{ background: 'none', border: 'none', fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'rgba(248,113,113,0.4)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>End early</button>
       </div>
     </div>
   );

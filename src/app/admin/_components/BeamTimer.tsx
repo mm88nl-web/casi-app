@@ -31,7 +31,7 @@ export default function BeamTimer({
         padding: '3px 10px',
         borderRadius: 20,
         fontSize: 11,
-        fontFamily: "'DM Mono', monospace",
+        fontFamily: "var(--font-casi-mono), monospace",
         fontWeight: 500,
         background: isExpired
           ? 'rgba(239,68,68,0.12)'

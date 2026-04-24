@@ -197,12 +197,12 @@ export default function SendFlashSection({
           onMouseOut={e => (e.currentTarget.style.background = 'rgba(var(--casi-accent-rgb),0.06)')}>
           <span style={{ fontSize: 20 }}>⚡</span>
           <div style={{ textAlign: 'left' }}>
-            <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, color: 'var(--casi-text)' }}>Send a Flash</div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)', marginTop: 2 }}>
+            <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontWeight: 700, fontSize: 13, color: 'var(--casi-text)' }}>Send a Flash</div>
+            <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'var(--casi-text-muted)', marginTop: 2 }}>
               {freeAllowed ? 'Free or paid message · shown live on stream' : 'One-time paid message · shown live on stream'}
             </div>
           </div>
-          <span style={{ marginLeft: 'auto', fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>→</span>
+          <span style={{ marginLeft: 'auto', fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>→</span>
         </button>
       ) : embedded && !open ? (
         // Compact collapsed bar for embedded mode — lives inside FlashPanel
@@ -218,7 +218,7 @@ export default function SendFlashSection({
             padding: '8px 12px',
             display: 'flex', alignItems: 'center', gap: 10,
             cursor: 'pointer', transition: 'background .15s',
-            fontFamily: "'DM Mono',monospace", fontSize: 11,
+            fontFamily: "var(--font-casi-mono),monospace", fontSize: 11,
             color: 'var(--casi-accent)',
           }}
           onMouseOver={e => (e.currentTarget.style.background = 'rgba(var(--casi-accent-rgb),0.14)')}
@@ -235,14 +235,14 @@ export default function SendFlashSection({
               shows the big "⚡ Flash · Send a Flash" title + ✕ as before. */}
           {embedded ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)' }}>⚡ Flash</span>
+              <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)' }}>⚡ Flash</span>
               <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 14, padding: 2 }}>✕</button>
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)', marginBottom: 3 }}>⚡ Flash</div>
-                <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 17, fontWeight: 800, color: 'var(--casi-text)' }}>Send a Flash</div>
+                <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)', marginBottom: 3 }}>⚡ Flash</div>
+                <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 17, fontWeight: 800, color: 'var(--casi-text)' }}>Send a Flash</div>
               </div>
               <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
             </div>
@@ -250,7 +250,7 @@ export default function SendFlashSection({
 
           {/* Live status feedback */}
           {myFlash?.status === 'approved' && (
-            <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4ade80', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: '#4ade80', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
               ✓ Your flash is live on stream!
               {myFlash.tx_signature && (
                 <a href={`https://solscan.io/tx/${myFlash.tx_signature}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
@@ -261,12 +261,12 @@ export default function SendFlashSection({
             </div>
           )}
           {myFlash?.status === 'denied' && (
-            <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#f87171', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: '#f87171', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
               ✕ Flash was not approved — no charge.
             </div>
           )}
           {myFlash?.status === 'pending' && myFlash.id !== dismissedFlashId && (
-            <div style={{ background: 'rgba(var(--casi-accent-rgb),0.06)', border: '1px solid rgba(var(--casi-accent-rgb),0.18)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-accent)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ background: 'rgba(var(--casi-accent-rgb),0.06)', border: '1px solid rgba(var(--casi-accent-rgb),0.18)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: 'var(--casi-accent)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               <span style={{ animation: 'blink 2s infinite' }}>⌛ Flash sent — awaiting streamer approval</span>
               <button
                 onClick={() => setDismissedFlashId(myFlash.id)}
@@ -280,12 +280,12 @@ export default function SendFlashSection({
 
           {/* On-chain banners */}
           {onChainStatus === 'locking' && (
-            <div style={{ background: 'rgba(153,69,255,0.08)', border: '1px solid rgba(153,69,255,0.25)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#c4a0ff', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ background: 'rgba(153,69,255,0.08)', border: '1px solid rgba(153,69,255,0.25)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: '#c4a0ff', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
               ⛓ Locking USDC in escrow — confirm in your wallet…
             </div>
           )}
           {onChainStatus === 'locked' && onChainTx && onChainTx !== dismissedOnChainTx && (
-            <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#4ade80', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: '#4ade80', animation: 'springPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 ⚡ Flash locked on-chain — awaiting streamer approval
                 <a href={`https://solscan.io/tx/${onChainTx}${EXPLORER_CLUSTER_QUERY}`} target="_blank" rel="noopener noreferrer"
@@ -306,7 +306,7 @@ export default function SendFlashSection({
           {/* Payment method toggle — only shown if more than one rail is available */}
           {methods.length > 1 && (
             <div style={{ marginBottom: 14 }}>
-              <label style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>Pay with</label>
+              <label style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>Pay with</label>
               <div style={{ display: 'flex', gap: 6 }}>
                 {methods.map(pm => {
                   const active = paymentMethod === pm;
@@ -317,7 +317,7 @@ export default function SendFlashSection({
                                        { background: 'rgba(var(--casi-accent-rgb),0.12)', borderColor: 'rgba(var(--casi-accent-rgb),0.45)', color: 'var(--casi-accent)' };
                   return (
                     <button key={pm} type="button" onClick={() => setPaymentMethod(pm)}
-                      style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', cursor: 'pointer', transition: 'all .2s cubic-bezier(0.34,1.56,0.64,1)',
+                      style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid', fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', cursor: 'pointer', transition: 'all .2s cubic-bezier(0.34,1.56,0.64,1)',
                         ...(active ? { ...activeStyle, transform: 'scale(1.02)' } : { background: 'none', borderColor: 'var(--casi-border)', color: 'var(--casi-text-muted)', transform: 'scale(1)' }) }}>
                       {label}
                     </button>
@@ -325,13 +325,13 @@ export default function SendFlashSection({
                 })}
               </div>
               {paymentMethod === 'solana' && !profile?.solana_wallet && (
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#f87171', marginTop: 6 }}>
+                <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#f87171', marginTop: 6 }}>
                   @{username} hasn&apos;t linked a Solana wallet yet.
                 </div>
               )}
               {paymentMethod === 'solana' && profile?.solana_wallet && !connected && (
                 <button type="button" onClick={() => setWalletModalVisible(true)}
-                  style={{ width: '100%', marginTop: 8, background: 'rgba(153,69,255,0.1)', border: '1px solid rgba(153,69,255,0.35)', borderRadius: 8, padding: '8px 0', fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', color: '#c4a0ff', cursor: 'pointer' }}>
+                  style={{ width: '100%', marginTop: 8, background: 'rgba(153,69,255,0.1)', border: '1px solid rgba(153,69,255,0.35)', borderRadius: 8, padding: '8px 0', fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', color: '#c4a0ff', cursor: 'pointer' }}>
                   Connect wallet to continue
                 </button>
               )}
@@ -340,23 +340,23 @@ export default function SendFlashSection({
 
           {/* Message */}
           <div style={{ marginBottom: 14 }}>
-            <label style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>Message</label>
+            <label style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>Message</label>
             <textarea value={message} onChange={e => setMessage(e.target.value)} maxLength={200} rows={3}
               placeholder="Say something to the stream…"
               className="bf-inp" style={{ resize: 'none' }} />
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#333', marginTop: 4, textAlign: 'right' }}>{message.length}/200</div>
+            <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#333', marginTop: 4, textAlign: 'right' }}>{message.length}/200</div>
           </div>
 
           {/* Amount — hidden entirely for the free rail */}
           {paymentMethod !== 'free' && (
             <div style={{ marginBottom: 16 }}>
-              <label style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>
+              <label style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>
                 Amount {paymentMethod === 'solana' ? '(USDC)' : '(EUR)'}
               </label>
               <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                 {AMOUNT_PRESETS.map(p => (
                   <button key={p} type="button" onClick={() => setAmount(String(p))}
-                    style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid', fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer',
                       ...(parseFloat(amount) === p
                         ? { background: 'rgba(var(--casi-accent-rgb),0.12)', borderColor: 'rgba(var(--casi-accent-rgb),0.35)', color: 'var(--casi-accent)' }
                         : { background: 'none', borderColor: 'var(--casi-border)', color: 'var(--casi-text-muted)' }) }}>
@@ -365,12 +365,12 @@ export default function SendFlashSection({
                 ))}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '10px 14px' }}>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: 'var(--casi-text-muted)' }}>
+                <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 13, color: 'var(--casi-text-muted)' }}>
                   {paymentMethod === 'solana' ? '◎' : '$'}
                 </span>
                 <input type="number" value={amount} min="1" step="1" onChange={e => setAmount(e.target.value)}
-                  style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 17, fontWeight: 700, color: 'var(--casi-text)', fontFamily: "'Syne', sans-serif" }} />
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#333', whiteSpace: 'nowrap' }}>
+                  style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 17, fontWeight: 700, color: 'var(--casi-text)', fontFamily: "var(--font-casi-sans), sans-serif" }} />
+                <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#333', whiteSpace: 'nowrap' }}>
                   {paymentMethod === 'solana' ? 'min 1 USDC' : 'min $1'}
                 </span>
               </div>
@@ -395,7 +395,7 @@ export default function SendFlashSection({
               background: canSend
                 ? (paymentMethod === 'solana' ? '#9945FF' : paymentMethod === 'free' ? '#4ade80' : 'var(--casi-accent)')
                 : 'var(--casi-border)',
-              border: 'none', borderRadius: 10, padding: '13px 0', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 14, textTransform: 'uppercase', letterSpacing: 0.3,
+              border: 'none', borderRadius: 10, padding: '13px 0', fontFamily: "var(--font-casi-sans), sans-serif", fontWeight: 800, fontSize: 14, textTransform: 'uppercase', letterSpacing: 0.3,
               color: canSend
                 ? (paymentMethod === 'solana' ? '#fff' : '#050505')
                 : '#444',
@@ -413,7 +413,7 @@ export default function SendFlashSection({
                 : (submitting ? 'Redirecting…' : `Pay $${(amountCents / 100).toFixed(2)} & Flash`)}
           </button>
 
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#2a2a2a', textAlign: 'center', marginTop: 10, lineHeight: 1.9 }}>
+          <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#2a2a2a', textAlign: 'center', marginTop: 10, lineHeight: 1.9 }}>
             {paymentMethod === 'solana'
               ? <>USDC held in a CASI escrow PDA · Refunded on deny · <span style={{ color:'#9945FF' }}>audited Anchor program</span><br /></>
               : paymentMethod === 'free'

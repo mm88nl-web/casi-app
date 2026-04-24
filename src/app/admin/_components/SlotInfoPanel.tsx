@@ -54,7 +54,7 @@ export default function SlotInfoPanel({
         onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #161616' }}>
           <div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 4 }}>
+            <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 4 }}>
               {el.is_background ? 'Full Backdrop' : 'Beam Slot'}
               {el.locked && <span style={{ color: '#f87171', marginLeft: 10 }}>● Locked</span>}
             </div>
@@ -69,9 +69,9 @@ export default function SlotInfoPanel({
             return (
             <div style={{ background: isFree ? 'rgba(74,222,128,0.05)' : 'rgba(var(--casi-accent-rgb),0.05)', border: `1px solid ${isFree ? 'rgba(74,222,128,0.2)' : 'rgba(var(--casi-accent-rgb),0.15)'}`, borderRadius: 10, padding: 16, marginBottom: 16, transition: 'background .15s, border-color .15s' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)' }}>Price</div>
+                <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)' }}>Price</div>
                 <button type="button" onClick={() => setEditPrice('0')}
-                  style={{ background: isFree ? 'rgba(74,222,128,0.14)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isFree ? 'rgba(74,222,128,0.4)' : '#222'}`, borderRadius: 6, padding: '3px 10px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: isFree ? '#4ade80' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
+                  style={{ background: isFree ? 'rgba(74,222,128,0.14)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isFree ? 'rgba(74,222,128,0.4)' : '#222'}`, borderRadius: 6, padding: '3px 10px', fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: isFree ? '#4ade80' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
                   {isFree ? '★ Free slot' : '★ Make free'}
                 </button>
               </div>
@@ -79,14 +79,14 @@ export default function SlotInfoPanel({
                 <span style={{ color: isFree ? '#4ade80' : 'var(--casi-accent)', fontWeight: 800, fontSize: 16 }}>$</span>
                 <input type="number" min={0} value={editPrice}
                   onChange={(e) => setEditPrice(e.target.value)}
-                  style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: `1px solid ${isFree ? 'rgba(74,222,128,0.3)' : '#333'}`, borderRadius: 8, padding: '10px 14px', fontSize: 16, color: 'var(--casi-text)', outline: 'none', fontFamily: "'DM Mono', monospace" }} />
+                  style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: `1px solid ${isFree ? 'rgba(74,222,128,0.3)' : '#333'}`, borderRadius: 8, padding: '10px 14px', fontSize: 16, color: 'var(--casi-text)', outline: 'none', fontFamily: "var(--font-casi-mono), monospace" }} />
                 <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)} disabled={isFree}
-                  style={{ background: 'var(--casi-surface)', border: '1px solid #333', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--casi-text)', outline: 'none', cursor: isFree ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono', monospace", opacity: isFree ? 0.4 : 1 }}>
+                  style={{ background: 'var(--casi-surface)', border: '1px solid #333', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--casi-text)', outline: 'none', cursor: isFree ? 'not-allowed' : 'pointer', fontFamily: "var(--font-casi-mono), monospace", opacity: isFree ? 0.4 : 1 }}>
                   <option value="min">/min</option>
                   <option value="hr">/hr</option>
                 </select>
                 <button onClick={() => { onUpdatePrice(el.id, parseFloat(editPrice) || 0, editUnit); onClose(); }}
-                  style={{ background: isFree ? '#4ade80' : 'var(--casi-accent)', border: 'none', borderRadius: 8, padding: '10px 16px', color: 'var(--casi-bg)', fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', cursor: 'pointer' }}>
+                  style={{ background: isFree ? '#4ade80' : 'var(--casi-accent)', border: 'none', borderRadius: 8, padding: '10px 16px', color: 'var(--casi-bg)', fontFamily: "var(--font-casi-sans), sans-serif", fontWeight: 800, fontSize: 12, textTransform: 'uppercase', cursor: 'pointer' }}>
                   Save
                 </button>
               </div>
@@ -99,28 +99,28 @@ export default function SlotInfoPanel({
               dimensions for circle/hex (square) and banner (wide strip). */}
           {!el.is_background && onUpdateShape && (
             <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #161616', borderRadius: 10, padding: 14, marginBottom: 16 }}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 10 }}>Shape</div>
+              <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 10 }}>Shape</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {SHAPE_OPTIONS.map(s => {
                   const active = (el.shape || 'rect') === s.id;
                   return (
                     <button key={s.id} onClick={() => onUpdateShape(el.id, s.id)}
-                      style={{ flex: '1 1 auto', background: active ? 'rgba(var(--casi-accent-rgb),0.15)' : 'rgba(255,255,255,0.04)', border: `1px solid ${active ? 'rgba(var(--casi-accent-rgb),0.5)' : '#222'}`, borderRadius: 8, padding: '7px 10px', fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: active ? 'var(--casi-accent)' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
+                      style={{ flex: '1 1 auto', background: active ? 'rgba(var(--casi-accent-rgb),0.15)' : 'rgba(255,255,255,0.04)', border: `1px solid ${active ? 'rgba(var(--casi-accent-rgb),0.5)' : '#222'}`, borderRadius: 8, padding: '7px 10px', fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: active ? 'var(--casi-accent)' : 'var(--casi-text-muted)', cursor: 'pointer', transition: 'all .15s' }}>
                       {s.label}
                     </button>
                   );
                 })}
               </div>
               {el.shape === 'banner' && (
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#555', marginTop: 8, lineHeight: 1.5 }}>
+                <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#555', marginTop: 8, lineHeight: 1.5 }}>
                   Banner slots scroll the viewer's message across the strip on stream. Uploads ignored; a short message is required.
                 </div>
               )}
               {onUpdateGlow && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, paddingTop: 12, borderTop: '1px solid #161616' }}>
                   <div>
-                    <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 600, color: 'var(--casi-text)' }}>Glow on beam start</div>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 2 }}>3s accent-colour bloom when a new beam goes live.</div>
+                    <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 12, fontWeight: 600, color: 'var(--casi-text)' }}>Glow on beam start</div>
+                    <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 2 }}>3s accent-colour bloom when a new beam goes live.</div>
                   </div>
                   <button onClick={(e) => { e.stopPropagation(); onUpdateGlow(el.id, !(el.glow_on_start ?? true)); }}
                     style={{ position: 'relative', width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer', background: (el.glow_on_start ?? true) ? 'var(--casi-accent)' : 'rgba(255,255,255,0.1)', transition: 'background .2s', flexShrink: 0 }}>
@@ -139,39 +139,39 @@ export default function SlotInfoPanel({
                   {activeBooking.image_url && <SlotMedia src={activeBooking.image_url} fileType={activeBooking.file_type} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
                 </div>
                 <div>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, color: 'var(--casi-text)', fontSize: 14 }}>● {activeBooking.viewer_name}</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>{fmtDuration(activeBooking.duration_minutes)} booked</div>
+                  <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontWeight: 700, color: 'var(--casi-text)', fontSize: 14 }}>● {activeBooking.viewer_name}</div>
+                  <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>{fmtDuration(activeBooking.duration_minutes)} booked</div>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 {[['Time left', formatTime(seconds), 'var(--casi-accent2)'], ['Earned', `$${earnedSoFar}`, '#4ade80'], ['Total', `$${totalValue}`, 'var(--casi-text)']].map(([l, v, c]) => (
                   <div key={l} style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 8, padding: 10, textAlign: 'center' }}>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#444', marginBottom: 4 }}>{l}</div>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 15, fontWeight: 500, color: c }}>{v}</div>
+                    <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#444', marginBottom: 4 }}>{l}</div>
+                    <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 15, fontWeight: 500, color: c }}>{v}</div>
                   </div>
                 ))}
               </div>
-              {activeBooking.message && <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, color: 'var(--casi-text-muted)', fontStyle: 'italic', marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)' }}>"{activeBooking.message}"</div>}
-              <button onClick={() => onKick(activeBooking)} style={{ marginTop: 12, width: '100%', background: 'none', border: 'none', color: 'rgba(248,113,113,0.5)', fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, cursor: 'pointer', padding: '6px 0' }}>End early</button>
+              {activeBooking.message && <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 12, color: 'var(--casi-text-muted)', fontStyle: 'italic', marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)' }}>"{activeBooking.message}"</div>}
+              <button onClick={() => onKick(activeBooking)} style={{ marginTop: 12, width: '100%', background: 'none', border: 'none', color: 'rgba(248,113,113,0.5)', fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, cursor: 'pointer', padding: '6px 0' }}>End early</button>
             </div>
           ) : (
             <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #161616', borderRadius: 10, padding: 14, textAlign: 'center', marginBottom: 16 }}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444' }}>No active booking</div>
+              <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: '#444' }}>No active booking</div>
             </div>
           )}
 
           {/* Queue */}
           {queueBookings.length > 0 && (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 10 }}>{queueBookings.length} in queue</div>
+              <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 10 }}>{queueBookings.length} in queue</div>
               {queueBookings.map((b, idx) => (
                 <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(var(--casi-accent-rgb),0.05)', border: '1px solid rgba(var(--casi-accent-rgb),0.12)', borderRadius: 8, padding: '8px 12px', marginBottom: 6 }}>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(var(--casi-accent-rgb),0.4)', minWidth: 20 }}>#{idx + 1}</span>
+                  <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'rgba(var(--casi-accent-rgb),0.4)', minWidth: 20 }}>#{idx + 1}</span>
                   <div style={{ width: 20, height: 20, borderRadius: 4, overflow: 'hidden', background: 'var(--casi-bg)', flexShrink: 0 }}>
                     {b.image_url && <SlotMedia src={b.image_url} fileType={b.file_type} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
                   </div>
-                  <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 600, color: 'var(--casi-text)', flex: 1 }}>{b.viewer_name}</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>{b.duration_minutes}m</span>
+                  <span style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 12, fontWeight: 600, color: 'var(--casi-text)', flex: 1 }}>{b.viewer_name}</span>
+                  <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>{b.duration_minutes}m</span>
                 </div>
               ))}
             </div>
@@ -181,8 +181,8 @@ export default function SlotInfoPanel({
           <div style={{ paddingTop: 16, borderTop: '1px solid #161616', display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 600, color: 'var(--casi-text)', marginBottom: 2 }}>Lock slot</div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>No new requests. Current runs to end.</div>
+                <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 13, fontWeight: 600, color: 'var(--casi-text)', marginBottom: 2 }}>Lock slot</div>
+                <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>No new requests. Current runs to end.</div>
               </div>
               <button onClick={(e) => { e.stopPropagation(); onLockToggle(el.id, !el.locked); }}
                 style={{ position: 'relative', width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: el.locked ? '#f87171' : 'rgba(255,255,255,0.1)', transition: 'background .2s', flexShrink: 0 }}>
@@ -190,7 +190,7 @@ export default function SlotInfoPanel({
               </button>
             </div>
             <button onClick={(e) => { e.stopPropagation(); onDelete(el.id); onClose(); }}
-              style={{ width: '100%', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 8, padding: 10, color: '#f87171', fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, cursor: 'pointer' }}>
+              style={{ width: '100%', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 8, padding: 10, color: '#f87171', fontFamily: "var(--font-casi-sans), sans-serif", fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, cursor: 'pointer' }}>
               Delete slot
             </button>
           </div>

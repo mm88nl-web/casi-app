@@ -1348,7 +1348,6 @@ function OverlayContent() {
     <>
       <SkinProvider skin={profile?.skin} themeColor={profile?.theme_color} />
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes blink     { 0%,100%{opacity:1} 50%{opacity:.2} }
         @keyframes fadeIn    { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
@@ -1367,60 +1366,60 @@ function OverlayContent() {
         .beam-shape-hex     { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
         .beam-glow          { animation: beamGlow 3s ease-out 1; will-change: box-shadow; }
         .beam-banner        { display:flex; align-items:center; width:100%; height:100%; overflow:hidden; background:rgba(0,0,0,0.78); border-top:2px solid rgba(var(--casi-accent-rgb),0.4); border-bottom:2px solid rgba(var(--casi-accent-rgb),0.4); white-space:nowrap; }
-        .beam-banner-track  { display:inline-block; padding-left:100%; color:var(--casi-accent); font-family:'Syne',sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
-        .ov { min-height:100vh; background:${isOBS?'transparent':'var(--casi-bg)'}; color:var(--casi-text); font-family:'Syne',sans-serif; }
+        .beam-banner-track  { display:inline-block; padding-left:100%; color:var(--casi-accent); font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
+        .ov { min-height:100vh; background:${isOBS?'transparent':'var(--casi-bg)'}; color:var(--casi-text); font-family:var(--font-casi-sans),sans-serif; }
 
         .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid var(--casi-surface); background:color-mix(in srgb,var(--casi-bg) 94%,transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
         .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; }
         .ov-wm { font-size:18px; font-weight:800; color:var(--casi-accent); letter-spacing:-0.5px; }
         .ov-nav-right { display:flex; align-items:center; gap:10px; }
-        .notif { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:springPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
+        .notif { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:springPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
         .viewer-chip { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.04); border:1px solid var(--casi-border); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
         .viewer-chip:hover { border-color:#333; }
         .vdot { width:6px; height:6px; border-radius:50%; background:var(--casi-accent); animation:blink 1.5s infinite; flex-shrink:0; }
-        .vname { font-family:'DM Mono',monospace; font-size:10px; color:#888; }
-        .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid rgba(var(--casi-accent-rgb),0.31); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--casi-text); outline:none; font-family:'DM Mono',monospace; width:130px; }
+        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:#888; }
+        .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid rgba(var(--casi-accent-rgb),0.31); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--casi-text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
 
         .ov-main { max-width:1200px; margin:0 auto; padding:16px 20px 48px; }
 
         .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
-        .my-beams-lbl { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; }
+        .my-beams-lbl { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; }
         .my-beams-list { display:flex; flex-wrap:wrap; gap:8px; }
         .beam-chip { display:flex; align-items:center; gap:8px; border-radius:10px; padding:8px 12px; border:1px solid; font-size:12px; }
-        .cancel-btn { background:none; border:none; font-family:'DM Mono',monospace; font-size:9px; color:rgba(248,113,113,0.5); cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:color .2s; padding:0; margin-left:4px; }
+        .cancel-btn { background:none; border:none; font-family:var(--font-casi-mono),monospace; font-size:9px; color:rgba(248,113,113,0.5); cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:color .2s; padding:0; margin-left:4px; }
         .cancel-btn:hover { color:#f87171; }
 
         .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:var(--casi-bg); position:relative; overflow:hidden; margin-bottom:10px; }
 
         .slots-sec { margin-top:20px; }
-        .slots-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+        .slots-lbl { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; display:flex; align-items:center; gap:8px; }
         .slots-lbl::before { content:''; display:block; width:16px; height:1px; background:var(--casi-border); }
         .slots-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:8px; }
         .slot-card { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px; cursor:pointer; transition:all .2s; display:flex; align-items:center; gap:10px; }
         .slot-card:hover:not(.s-disabled) { border-color:rgba(var(--casi-accent-rgb),0.3); transform:translateY(-1px); }
         .slot-card.s-disabled { cursor:default; opacity:0.55; }
         .s-thumb { width:36px; height:36px; border-radius:7px; overflow:hidden; background:var(--casi-bg); border:1px solid var(--casi-border); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; }
-        .s-type  { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:3px; }
-        .s-price { font-family:'DM Mono',monospace; font-size:13px; font-weight:500; }
+        .s-type  { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:3px; }
+        .s-price { font-family:var(--font-casi-mono),monospace; font-size:13px; font-weight:500; }
 
         .bf { background:var(--casi-surface); border-radius:14px; padding:20px; margin-top:10px; animation:fadeIn .25s ease; }
         .bf-hdr { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:18px; }
-        .bf-type  { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px; }
+        .bf-type  { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px; }
         .bf-price { font-size:20px; font-weight:800; letter-spacing:-0.5px; }
         .bf-x { background:none; border:none; color:var(--casi-text-muted); cursor:pointer; font-size:18px; padding:4px; transition:color .2s; }
         .bf-x:hover { color:var(--casi-text); }
-        .bf-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); display:block; margin-bottom:8px; }
-        .bf-inp { width:100%; background:var(--casi-bg); border:1px solid var(--casi-border); border-radius:10px; padding:12px 16px; font-size:14px; color:var(--casi-text); outline:none; font-family:'Syne',sans-serif; transition:border-color .2s; }
+        .bf-lbl { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); display:block; margin-bottom:8px; }
+        .bf-inp { width:100%; background:var(--casi-bg); border:1px solid var(--casi-border); border-radius:10px; padding:12px 16px; font-size:14px; color:var(--casi-text); outline:none; font-family:var(--font-casi-sans),sans-serif; transition:border-color .2s; }
         .bf-inp::placeholder { color:#333; }
-        .bf-hint { font-family:'DM Mono',monospace; font-size:10px; margin-top:6px; }
+        .bf-hint { font-family:var(--font-casi-mono),monospace; font-size:10px; margin-top:6px; }
         .bf-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
         .dur-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:8px; }
-        .dur-btn { font-family:'DM Mono',monospace; font-size:10px; padding:7px 12px; border-radius:8px; border:1px solid var(--casi-border); background:none; color:var(--casi-text-muted); cursor:pointer; transition:all .2s; }
+        .dur-btn { font-family:var(--font-casi-mono),monospace; font-size:10px; padding:7px 12px; border-radius:8px; border:1px solid var(--casi-border); background:none; color:var(--casi-text-muted); cursor:pointer; transition:all .2s; }
         .dur-btn:hover { border-color:rgba(var(--casi-accent-rgb),0.3); color:var(--casi-text); }
         .bf-footer { display:flex; align-items:center; justify-content:space-between; padding-top:14px; border-top:1px solid var(--casi-surface); margin-top:8px; gap:12px; }
-        .bf-cost-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--casi-text-muted); }
+        .bf-cost-lbl { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--casi-text-muted); }
         .bf-cost-val { font-size:22px; font-weight:800; letter-spacing:-0.5px; margin-top:2px; }
-        .bf-sub { font-family:'Syne',sans-serif; font-weight:800; font-size:14px; text-transform:uppercase; letter-spacing:0.3px; padding:13px 24px; border-radius:10px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
+        .bf-sub { font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:14px; text-transform:uppercase; letter-spacing:0.3px; padding:13px 24px; border-radius:10px; border:none; cursor:pointer; transition:all .2s; white-space:nowrap; }
         .bf-sub:disabled { background:var(--casi-border) !important; color:#444 !important; cursor:not-allowed; }
         .bf-sub:hover:not(:disabled) { filter:brightness(1.1); transform:translateY(-1px); }
 
@@ -1453,7 +1452,7 @@ function OverlayContent() {
                   { background:'rgba(234,179,8,0.1)', border:'1px solid rgba(234,179,8,0.25)', color:'#facc15' }
                 }>{notification.text}</div>
               )}
-              {selectedSlot && <button onClick={closeSlot} style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:'#555', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5 }}>Cancel</button>}
+              {selectedSlot && <button onClick={closeSlot} style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#555', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5 }}>Cancel</button>}
               {savedViewerName && !selectedSlot && (
                 showChangeName ? (
                   <input type="text" defaultValue={savedViewerName} autoFocus className="name-edit-input"
@@ -1623,7 +1622,7 @@ function OverlayContent() {
                   ) : (
                     <div className={shapeClass} style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:el.is_background?12:6, border:`1.5px dashed ${isLocked?'rgba(248,113,113,0.3)':isOccupied?`rgba(${tcRgb},0.31)`:el.is_background?'rgba(168,85,247,0.3)':`rgba(${tcRgb},0.25)`}`, background:isLocked?'rgba(248,113,113,0.03)':isOccupied?`rgba(${tcRgb},0.02)`:el.is_background?'rgba(168,85,247,0.03)':`rgba(${tcRgb},0.02)` }}>
                       <span style={{ fontSize:el.is_background?20:14, marginBottom:4 }}>{isLocked?'🔒':isOccupied?(el.shape==='banner'?'▰':''):el.is_background?'🖼':el.shape==='banner'?'▰':'✦'}</span>
-                      {isOccupied && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:`rgba(${tcRgb},0.69)` }}><Countdown booking={activeBooking} onExpire={() => clientExpireBooking(activeBooking)} /></span>}
+                      {isOccupied && <span style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:`rgba(${tcRgb},0.69)` }}><Countdown booking={activeBooking} onExpire={() => clientExpireBooking(activeBooking)} /></span>}
                     </div>
                   )}
 
@@ -1651,7 +1650,7 @@ function OverlayContent() {
                         padding: '3px 10px',
                         pointerEvents: 'none',
                         zIndex: 20,
-                        fontFamily: "'DM Mono',monospace",
+                        fontFamily: "var(--font-casi-mono),monospace",
                         fontSize: 10,
                         color: Number(el.price_value)===0 ? '#4ade80' : tc,
                         whiteSpace: 'nowrap',
@@ -1669,7 +1668,7 @@ function OverlayContent() {
                       style={{
                         position: 'absolute', top: 6, left: 6,
                         zIndex: 20, pointerEvents: 'none',
-                        fontFamily: "'DM Mono',monospace", fontSize: 9,
+                        fontFamily: "var(--font-casi-mono),monospace", fontSize: 9,
                         padding: '3px 10px', borderRadius: 20, border: '1px solid',
                         ...(isLocked
                           ? { color: 'rgba(248,113,113,0.6)', borderColor: 'rgba(248,113,113,0.25)', background: 'rgba(248,113,113,0.08)' }
@@ -1705,7 +1704,7 @@ function OverlayContent() {
                       style={{
                         position: 'absolute', bottom: 6, right: 6,
                         zIndex: 20, pointerEvents: 'none',
-                        fontFamily: "'DM Mono',monospace", fontSize: 9,
+                        fontFamily: "var(--font-casi-mono),monospace", fontSize: 9,
                         color: `rgba(${tcRgb},0.8)`,
                         background: 'rgba(5,5,5,0.85)',
                         border: `1px solid rgba(${tcRgb},0.22)`,
@@ -1727,7 +1726,7 @@ function OverlayContent() {
                       style={{
                         position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)',
                         background: '#eab308', border: 'none', borderRadius: 20,
-                        padding: '4px 14px', fontFamily: "'Syne',sans-serif",
+                        padding: '4px 14px', fontFamily: "var(--font-casi-sans),sans-serif",
                         fontWeight: 700, fontSize: 10, textTransform: 'uppercase',
                         color: 'var(--casi-bg)', cursor: 'pointer', zIndex: 25,
                       }}

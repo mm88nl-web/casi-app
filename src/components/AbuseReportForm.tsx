@@ -69,7 +69,7 @@ export default function AbuseReportForm() {
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ fontSize: 13, color: '#a1a1aa', fontFamily: "'DM Mono', monospace", letterSpacing: 1, textTransform: 'uppercase' }}>File a report</div>
+      <div style={{ fontSize: 13, color: '#a1a1aa', fontFamily: "var(--font-casi-mono), monospace", letterSpacing: 1, textTransform: 'uppercase' }}>File a report</div>
 
       <label style={lbl}>
         Type of report
@@ -118,7 +118,7 @@ export default function AbuseReportForm() {
           color: '#09090b',
           border: 'none',
           borderRadius: 8,
-          fontFamily: "'DM Mono', monospace",
+          fontFamily: "var(--font-casi-mono), monospace",
           fontWeight: 500,
           fontSize: 13,
           letterSpacing: 1,

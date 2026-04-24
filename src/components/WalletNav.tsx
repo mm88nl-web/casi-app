@@ -19,7 +19,7 @@ const CSS = `
     border: 1px solid rgba(153,69,255,0.3);
     border-radius: 10px;
     padding: 9px 16px;
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-casi-mono), monospace;
     font-size: 12px; letter-spacing: 0.5px;
     color: #9945FF;
     cursor: pointer;
@@ -54,7 +54,7 @@ const CSS = `
     border-radius: 10px;
     overflow: visible;
     position: relative;
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-casi-mono), monospace;
   }
 
   .wn-devnet {
@@ -96,7 +96,7 @@ const CSS = `
     display: flex; align-items: center; gap: 6px;
     padding: 9px 12px;
     background: none; border: none; cursor: pointer;
-    font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 0.5px;
+    font-family: var(--font-casi-mono), monospace; font-size: 12px; letter-spacing: 0.5px;
     color: #666; transition: color .2s, background .2s;
     border-radius: 0 9px 9px 0;
   }
@@ -115,7 +115,7 @@ const CSS = `
 
   .wn-drop-addr {
     padding: 14px 16px;
-    font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.5px;
+    font-family: var(--font-casi-mono), monospace; font-size: 10px; letter-spacing: 0.5px;
     color: #444; word-break: break-all; border-bottom: 1px solid #1a1a1a;
     line-height: 1.6;
   }
@@ -126,7 +126,7 @@ const CSS = `
   .wn-drop-row {
     display: flex; align-items: center; justify-content: space-between;
     padding: 10px 16px; border-bottom: 1px solid #111;
-    font-family: 'DM Mono', monospace; font-size: 11px;
+    font-family: var(--font-casi-mono), monospace; font-size: 11px;
   }
   .wn-drop-row-label { color: #333; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; }
   .wn-drop-row-val { color: #e8e8e8; }
@@ -135,7 +135,7 @@ const CSS = `
     display: flex; align-items: center; justify-content: center;
     width: 100%; padding: 12px 16px;
     background: none; border: none; cursor: pointer;
-    font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1px;
+    font-family: var(--font-casi-mono), monospace; font-size: 11px; letter-spacing: 1px;
     text-transform: uppercase; color: #f87171;
     transition: background .15s;
   }
@@ -241,7 +241,7 @@ export default function WalletNav() {
             <a
               href={solflareBrowseUrl(here)}
               style={{
-                fontFamily: "'DM Mono', monospace",
+                fontFamily: "var(--font-casi-mono), monospace",
                 fontSize: 9,
                 letterSpacing: 1,
                 color: '#666',
