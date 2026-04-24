@@ -22,7 +22,7 @@ const BOOKING_COLS =
   'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, duration_minutes, price_value, price_unit, payment_method, started_at, escrow_pda, viewer_wallet, is_queued';
 const FLASH_COLS =
   'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method';
-const PROFILE_COLS = 'id, username, solana_wallet';
+const PROFILE_COLS = 'id, username, solana_wallet, is_live';
 
 const LOG_LIMIT = 50;
 
@@ -174,7 +174,12 @@ function flashToLogItem(f: FlashRow): FlashLogItem {
   };
 }
 
-type Profile = { id: string; username: string | null; solana_wallet: string | null };
+type Profile = {
+  id: string;
+  username: string | null;
+  solana_wallet: string | null;
+  is_live: boolean | null;
+};
 
 type LoadState =
   | { kind: 'loading' }
@@ -195,6 +200,7 @@ export default function StudioPage() {
   const [flashTotals, setFlashTotals] = useState({ count: 0, eur: '€0', usdc: '0 USDC' });
   const [moderating, setModerating] = useState<Set<string>>(new Set());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [togglingLive, setTogglingLive] = useState(false);
 
   const [, setTick] = useState(0);
 
@@ -367,6 +373,21 @@ export default function StudioPage() {
     setPendingBookings((prev) => prev.filter((b) => String(b.id) !== raw));
   }, [moderationCtx, pendingBookings, markModerating]);
 
+  const toggleLive = useCallback(async () => {
+    if (state.kind !== 'ready' || togglingLive) return;
+    const next = !state.profile.is_live;
+    setTogglingLive(true);
+    // Optimistic — revert on failure so the streamer sees the right state
+    // if the RLS policy or the network swats the write.
+    setState({ kind: 'ready', profile: { ...state.profile, is_live: next } });
+    const { error } = await supabase.from('profiles').update({ is_live: next }).eq('id', state.profile.id);
+    if (error) {
+      setState({ kind: 'ready', profile: { ...state.profile, is_live: !next } });
+      setErrorMsg(error.message);
+    }
+    setTogglingLive(false);
+  }, [state, supabase, togglingLive]);
+
   const handleReject = useCallback(async (queueId: string) => {
     if (!moderationCtx) return;
     const raw = queueId.startsWith('booking-') ? queueId.slice('booking-'.length) : null;
@@ -469,53 +490,167 @@ export default function StudioPage() {
 
       <div
         className="mx-auto flex flex-col gap-5 casi-page-pad"
-        style={{ maxWidth: '1080px' }}
+        style={{ maxWidth: '1240px' }}
       >
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span
+        {/* Welcome banner — design-faithful hero row */}
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1
               className="font-extrabold"
-              style={{ fontSize: '22px', letterSpacing: '-0.8px', color: 'var(--casi-text)' }}
+              style={{
+                fontSize: '30px',
+                letterSpacing: '-1.2px',
+                lineHeight: 1.05,
+                color: 'var(--casi-text)',
+              }}
             >
-              @{slug}
-            </span>
-            <StatChip label="Airing" value={String(airing.length)} tone="accent" />
-            <StatChip label="Pending" value={String(queue.length)} tone="accent2" />
+              Welcome back,{' '}
+              <span style={{ color: 'var(--casi-accent)' }}>@{slug}</span>
+            </h1>
+            <p className="mt-1" style={{ fontSize: '14px', color: 'var(--casi-text-dim)' }}>
+              Your stream. Your slots. Your rates. One page.
+            </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <Link
-              href="/studio/setup"
-              className="font-mono uppercase"
+          <div className="flex items-center gap-3">
+            {profile.is_live ? (
+              <span
+                className="inline-flex items-center gap-2 font-mono uppercase"
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '999px',
+                  background: 'rgba(var(--casi-accent2-rgb), 0.1)',
+                  border: '1px solid rgba(var(--casi-accent2-rgb), 0.3)',
+                  fontSize: '11px',
+                  letterSpacing: '0.15em',
+                  color: 'var(--casi-accent2)',
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: '7px',
+                    height: '7px',
+                    borderRadius: '50%',
+                    background: 'var(--casi-accent2)',
+                    boxShadow: '0 0 8px rgba(var(--casi-accent2-rgb), 0.7)',
+                  }}
+                />
+                Live
+              </span>
+            ) : (
+              <span
+                className="font-mono uppercase"
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '999px',
+                  background: 'var(--casi-surface)',
+                  border: '1px solid var(--casi-border)',
+                  fontSize: '11px',
+                  letterSpacing: '0.15em',
+                  color: 'var(--casi-text-dim)',
+                }}
+              >
+                Offline
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={toggleLive}
+              disabled={togglingLive}
+              className="font-mono uppercase transition-colors"
+              title={profile.is_live ? 'Go offline' : 'Go live'}
               style={{
-                fontSize: '10px',
+                padding: '10px 16px',
+                borderRadius: '10px',
+                border: `1px solid ${profile.is_live ? 'var(--casi-border-2)' : 'rgba(var(--casi-accent2-rgb), 0.3)'}`,
+                background: profile.is_live ? 'transparent' : 'rgba(var(--casi-accent2-rgb), 0.08)',
+                color: profile.is_live ? 'var(--casi-text-dim)' : 'var(--casi-accent2)',
+                fontSize: '11px',
                 letterSpacing: '0.15em',
-                textDecoration: 'none',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                border: '1px solid var(--casi-border-2)',
-                color: 'var(--casi-text-dim)',
+                cursor: togglingLive ? 'wait' : 'pointer',
+                opacity: togglingLive ? 0.5 : 1,
               }}
             >
-              Configure slots →
-            </Link>
-            <Link
-              href="/admin/settings"
-              className="font-mono uppercase"
-              style={{
-                fontSize: '10px',
-                letterSpacing: '0.15em',
-                textDecoration: 'none',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                border: '1px solid var(--casi-border-2)',
-                color: 'var(--casi-text-dim)',
-              }}
-            >
-              Settings →
-            </Link>
+              {profile.is_live ? 'End stream ⏹' : 'Go live ●'}
+            </button>
           </div>
         </header>
+
+        {/* Mode toggle — Dashboard is this route, Live routes to /studio/setup */}
+        <div className="flex items-center justify-between gap-5 flex-wrap">
+          <div
+            className="inline-flex gap-0.5"
+            style={{
+              background: 'var(--casi-surface)',
+              border: '1px solid var(--casi-border)',
+              borderRadius: '12px',
+              padding: '4px',
+            }}
+          >
+            <span
+              aria-current="page"
+              className="inline-flex items-center gap-2 font-bold"
+              style={{
+                padding: '10px 18px',
+                borderRadius: '8px',
+                background: 'var(--casi-accent)',
+                color: '#0a0a0a',
+                fontSize: '13px',
+                letterSpacing: '-0.1px',
+              }}
+            >
+              <span aria-hidden className="font-mono" style={{ fontSize: '11px' }}>◉</span>
+              Dashboard
+              {queue.length > 0 ? (
+                <span
+                  className="font-mono"
+                  style={{
+                    padding: '2px 6px',
+                    borderRadius: '999px',
+                    background: 'rgba(0, 0, 0, 0.25)',
+                    color: '#0a0a0a',
+                    fontSize: '10px',
+                    letterSpacing: '0.1em',
+                  }}
+                >
+                  {queue.length}
+                </span>
+              ) : null}
+            </span>
+            <Link
+              href="/studio/setup"
+              className="inline-flex items-center gap-2 font-bold"
+              style={{
+                padding: '10px 18px',
+                borderRadius: '8px',
+                textDecoration: 'none',
+                color: 'var(--casi-text-dim)',
+                fontSize: '13px',
+                letterSpacing: '-0.1px',
+              }}
+            >
+              <span aria-hidden className="font-mono" style={{ fontSize: '11px' }}>⚙</span>
+              Live
+            </Link>
+          </div>
+          <span
+            className="font-mono uppercase"
+            style={{ fontSize: '10px', letterSpacing: '0.15em', color: 'var(--casi-text-faint)' }}
+          >
+            Live · what&apos;s happening now
+          </span>
+        </div>
+
+        {/* Earnings strip — viewer link + today's totals + pending count */}
+        <EarningsStrip
+          slug={slug}
+          earnedTodayEur={flashTotals.eur}
+          earnedTodayUsdc={flashTotals.usdc}
+          pendingCount={queue.length}
+          onCopyLink={() => {
+            navigator.clipboard?.writeText(`https://www.casi.gg/overlay?s=${slug}`).catch(() => {});
+          }}
+        />
 
         {errorMsg ? (
           <div
@@ -566,25 +701,108 @@ export default function StudioPage() {
   );
 }
 
-function StatChip({ label, value, tone }: { label: string; value: string; tone?: 'accent' | 'accent2' }) {
-  const colour =
-    tone === 'accent2' ? 'var(--casi-accent2)' : tone === 'accent' ? 'var(--casi-accent)' : 'var(--casi-text)';
+function EarningsStrip({
+  slug,
+  earnedTodayEur,
+  earnedTodayUsdc,
+  pendingCount,
+  onCopyLink,
+}: {
+  slug: string;
+  earnedTodayEur: string;
+  earnedTodayUsdc: string;
+  pendingCount: number;
+  onCopyLink: () => void;
+}) {
   return (
-    <span
-      className="inline-flex items-center gap-1.5 font-mono uppercase"
+    <div className="casi-grid-earnings">
+      {/* Viewer link tile — primary affordance for sharing. */}
+      <div
+        className="flex items-center gap-3 min-w-0"
+        style={{
+          background: 'var(--casi-surface)',
+          border: '1px solid var(--casi-border)',
+          borderRadius: '14px',
+          padding: '16px 18px',
+          minHeight: '78px',
+        }}
+      >
+        <div className="flex-1 min-w-0">
+          <div
+            className="font-mono uppercase"
+            style={{ fontSize: '10px', letterSpacing: '0.15em', color: 'var(--casi-text-faint)' }}
+          >
+            Your viewer link
+          </div>
+          <div
+            className="font-mono truncate"
+            style={{ fontSize: '14px', color: 'var(--casi-text)', marginTop: '2px' }}
+          >
+            <span style={{ color: 'var(--casi-text-dim)' }}>www.casi.gg/overlay?s=</span>
+            <span style={{ color: 'var(--casi-accent)', fontWeight: 500 }}>{slug}</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onCopyLink}
+          className="whitespace-nowrap font-bold"
+          style={{
+            padding: '8px 14px',
+            borderRadius: '8px',
+            background: 'var(--casi-accent)',
+            color: '#050505',
+            fontFamily: 'var(--font-casi-sans)',
+            fontWeight: 800,
+            fontSize: '12px',
+            border: 'none',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          Copy
+        </button>
+      </div>
+
+      <StatTile label="Today · EUR" value={earnedTodayEur} tone="accent" />
+      <StatTile label="Today · USDC" value={earnedTodayUsdc} />
+      <StatTile label="Pending" value={String(pendingCount)} tone="accent2" />
+    </div>
+  );
+}
+
+function StatTile({ label, value, tone }: { label: string; value: string; tone?: 'accent' | 'accent2' }) {
+  const color =
+    tone === 'accent' ? 'var(--casi-accent)' : tone === 'accent2' ? 'var(--casi-accent2)' : 'var(--casi-text)';
+  return (
+    <div
+      className="flex flex-col justify-center gap-1.5"
       style={{
-        padding: '6px 10px',
-        borderRadius: '8px',
         background: 'var(--casi-surface)',
         border: '1px solid var(--casi-border)',
-        fontSize: '10px',
-        letterSpacing: '0.14em',
-        color: 'var(--casi-text-faint)',
+        borderRadius: '14px',
+        padding: '16px 18px',
+        minHeight: '78px',
       }}
     >
-      {label}
-      <span style={{ color: colour, fontWeight: 500, letterSpacing: '-0.2px' }}>{value}</span>
-    </span>
+      <div
+        className="font-mono uppercase"
+        style={{ fontSize: '10px', letterSpacing: '0.15em', color: 'var(--casi-text-faint)' }}
+      >
+        {label}
+      </div>
+      <div
+        className="font-mono"
+        style={{
+          fontSize: '22px',
+          fontWeight: 500,
+          letterSpacing: '-0.5px',
+          lineHeight: 1,
+          color,
+        }}
+      >
+        {value}
+      </div>
+    </div>
   );
 }
 
