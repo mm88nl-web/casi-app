@@ -13,6 +13,7 @@ import WalletNav from '@/components/WalletNav';
 import AiringNow, { type AiringItem } from './_components/AiringNow';
 import ApprovalQueue, { type QueueItem } from './_components/ApprovalQueue';
 import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
+import StudioLiveEditor from './_components/StudioLiveEditor';
 
 // Explicit column lists. BOOKING_COLS adds the moderation-critical fields the
 // old /studio page didn't need: element_id / is_queued (slot + queue logic),
@@ -201,6 +202,7 @@ export default function StudioPage() {
   const [moderating, setModerating] = useState<Set<string>>(new Set());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [togglingLive, setTogglingLive] = useState(false);
+  const [mode, setMode] = useState<'monitor' | 'live'>('monitor');
 
   const [, setTick] = useState(0);
 
@@ -576,7 +578,8 @@ export default function StudioPage() {
           </div>
         </header>
 
-        {/* Mode toggle — Dashboard is this route, Live routes to /studio/setup */}
+        {/* Mode toggle — flips in-page between the live monitor and the
+            slot editor. No route change, state preserved across taps. */}
         <div className="flex items-center justify-between gap-5 flex-wrap">
           <div
             className="inline-flex gap-0.5"
@@ -587,57 +590,55 @@ export default function StudioPage() {
               padding: '4px',
             }}
           >
-            <span
-              aria-current="page"
-              className="inline-flex items-center gap-2 font-bold"
-              style={{
-                padding: '10px 18px',
-                borderRadius: '8px',
-                background: 'var(--casi-accent)',
-                color: '#0a0a0a',
-                fontSize: '13px',
-                letterSpacing: '-0.1px',
-              }}
-            >
-              <span aria-hidden className="font-mono" style={{ fontSize: '11px' }}>◉</span>
-              Dashboard
-              {queue.length > 0 ? (
-                <span
-                  className="font-mono"
+            {(['monitor', 'live'] as const).map((m) => {
+              const active = mode === m;
+              const label = m === 'monitor' ? 'Dashboard' : 'Live';
+              const icon = m === 'monitor' ? '◉' : '⚙';
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  aria-current={active ? 'page' : undefined}
+                  className="inline-flex items-center gap-2 font-bold"
                   style={{
-                    padding: '2px 6px',
-                    borderRadius: '999px',
-                    background: 'rgba(0, 0, 0, 0.25)',
-                    color: '#0a0a0a',
-                    fontSize: '10px',
-                    letterSpacing: '0.1em',
+                    padding: '10px 18px',
+                    borderRadius: '8px',
+                    background: active ? 'var(--casi-accent)' : 'transparent',
+                    color: active ? '#0a0a0a' : 'var(--casi-text-dim)',
+                    fontSize: '13px',
+                    letterSpacing: '-0.1px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-casi-sans)',
                   }}
                 >
-                  {queue.length}
-                </span>
-              ) : null}
-            </span>
-            <Link
-              href="/studio/setup"
-              className="inline-flex items-center gap-2 font-bold"
-              style={{
-                padding: '10px 18px',
-                borderRadius: '8px',
-                textDecoration: 'none',
-                color: 'var(--casi-text-dim)',
-                fontSize: '13px',
-                letterSpacing: '-0.1px',
-              }}
-            >
-              <span aria-hidden className="font-mono" style={{ fontSize: '11px' }}>⚙</span>
-              Live
-            </Link>
+                  <span aria-hidden className="font-mono" style={{ fontSize: '11px' }}>{icon}</span>
+                  {label}
+                  {m === 'monitor' && queue.length > 0 ? (
+                    <span
+                      className="font-mono"
+                      style={{
+                        padding: '2px 6px',
+                        borderRadius: '999px',
+                        background: active ? 'rgba(0, 0, 0, 0.25)' : 'rgba(var(--casi-accent-rgb), 0.15)',
+                        color: active ? '#0a0a0a' : 'var(--casi-accent)',
+                        fontSize: '10px',
+                        letterSpacing: '0.1em',
+                      }}
+                    >
+                      {queue.length}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
           <span
             className="font-mono uppercase"
             style={{ fontSize: '10px', letterSpacing: '0.15em', color: 'var(--casi-text-faint)' }}
           >
-            Live · what&apos;s happening now
+            {mode === 'monitor' ? "Live · what's happening now" : 'Slots · prices · approvals'}
           </span>
         </div>
 
@@ -687,15 +688,21 @@ export default function StudioPage() {
           </div>
         ) : null}
 
-        {airing.length > 0 ? <AiringNow items={airing} /> : null}
-        <ApprovalQueue
-          items={queue}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          pendingIds={moderating}
-          emptyLabel="No pending bookings · nothing to approve"
-        />
-        <FlashesLog items={flashLog} totals={flashTotals} />
+        {mode === 'monitor' ? (
+          <>
+            {airing.length > 0 ? <AiringNow items={airing} /> : null}
+            <ApprovalQueue
+              items={queue}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              pendingIds={moderating}
+              emptyLabel="No pending bookings · nothing to approve"
+            />
+            <FlashesLog items={flashLog} totals={flashTotals} />
+          </>
+        ) : (
+          <StudioLiveEditor supabase={supabase} profileId={profile.id} />
+        )}
       </div>
     </main>
   );
