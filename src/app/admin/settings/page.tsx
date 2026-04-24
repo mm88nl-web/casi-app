@@ -3,6 +3,7 @@
 import SettingsLayout, { type RailGroup } from './_components/SettingsLayout';
 import ProfileSection from './_components/ProfileSection';
 import PayoutsSection from './_components/PayoutsSection';
+import AppearanceSection from './_components/AppearanceSection';
 import SlotDefaultsSection from './_components/SlotDefaultsSection';
 import ObsSourcesSection from './_components/ObsSourcesSection';
 import SessionKeySection from './_components/SessionKeySection';
@@ -16,6 +17,7 @@ const RAIL: RailGroup[] = [
     items: [
       { id: 'profile', label: 'Profile', icon: '◉' },
       { id: 'payouts', label: 'Payouts', icon: '€' },
+      { id: 'appearance', label: 'Appearance', icon: '◐' },
       // Account rail item scrolls to danger-zone — no dedicated Account section in v3 handoff yet.
       { id: 'danger-zone', label: 'Account', icon: '☉' },
     ],
@@ -79,6 +81,7 @@ export default function SettingsPage() {
       <SettingsLayout rail={RAIL}>
         <ProfileSection />
         <PayoutsSection />
+        <AppearanceSection />
         <SlotDefaultsSection />
         <ObsSourcesSection />
         <SessionKeySection />
