@@ -130,7 +130,7 @@ export default function BookingForm(props: Props) {
                 <button
                   key={m}
                   onClick={() => onUploadModeChange(m)}
-                  style={{ flex: 1, padding: '5px 0', background: uploadMode === m ? accentColor : 'transparent', color: uploadMode === m ? 'var(--casi-bg)' : '#555', border: 'none', fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', fontWeight: uploadMode === m ? 700 : 400 }}
+                  style={{ flex: 1, padding: '5px 0', background: uploadMode === m ? accentColor : 'transparent', color: uploadMode === m ? 'var(--casi-bg)' : '#555', border: 'none', fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', fontWeight: uploadMode === m ? 700 : 400 }}
                 >
                   {m === 'upload' ? '↑ Upload' : '⇥ Link'}
                 </button>
@@ -147,15 +147,15 @@ export default function BookingForm(props: Props) {
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) onFileSelect(f); }}
                   />
                   <span style={{ fontSize: 18 }}>{uploading ? '⟳' : uploadedUrl ? (uploadedFileType === 'video' ? '▶' : '🖼') : '↑'}</span>
-                  <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: uploadedUrl ? accentColor : '#555', letterSpacing: 0.5, textAlign: 'center' }}>
+                  <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: uploadedUrl ? accentColor : '#555', letterSpacing: 0.5, textAlign: 'center' }}>
                     {uploading ? 'Uploading…' : uploadedUrl ? `✓ ${uploadedFileType === 'video' ? 'Video' : 'Image'} ready` : 'Click to upload · img 5 MB · video 20 MB'}
                   </span>
-                  {!uploadedUrl && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: '#444' }}>jpg · png · gif · webp · mp4 · webm</span>}
+                  {!uploadedUrl && <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: '#444' }}>jpg · png · gif · webp · mp4 · webm</span>}
                 </label>
                 {uploadedUrl && (
                   <button
                     onClick={onRemoveUpload}
-                    style={{ background: 'none', border: 'none', fontFamily: "'DM Mono',monospace", fontSize: 9, color: '#f87171', cursor: 'pointer', marginTop: 4 }}
+                    style={{ background: 'none', border: 'none', fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: '#f87171', cursor: 'pointer', marginTop: 4 }}
                   >
                     ✕ Remove
                   </button>
@@ -194,10 +194,10 @@ export default function BookingForm(props: Props) {
             <label className="bf-lbl">Viewing as</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '10px 14px' }}>
               <span className="vdot" />
-              <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14, flex: 1 }}>@{savedViewerName}</span>
+              <span style={{ fontFamily: "var(--font-casi-sans),sans-serif", fontWeight: 700, fontSize: 14, flex: 1 }}>@{savedViewerName}</span>
               <button
                 onClick={onChangeNameClick}
-                style={{ background: 'none', border: 'none', fontFamily: "'DM Mono',monospace", fontSize: 9, color: '#444', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}
+                style={{ background: 'none', border: 'none', fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: '#444', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}
               >
                 change
               </button>
@@ -213,7 +213,7 @@ export default function BookingForm(props: Props) {
                 onClick={() => onDurationChange(durationSeconds - 5)}
                 style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'var(--casi-text)', fontSize: 15, cursor: 'pointer', flexShrink: 0 }}
               >−</button>
-              <div style={{ flex: 1, textAlign: 'center', fontFamily: "'DM Mono',monospace", fontSize: 20, fontWeight: 700, color: 'var(--casi-text)', letterSpacing: 1 }}>
+              <div style={{ flex: 1, textAlign: 'center', fontFamily: "var(--font-casi-mono),monospace", fontSize: 20, fontWeight: 700, color: 'var(--casi-text)', letterSpacing: 1 }}>
                 {formatTime(durationSeconds)}
               </div>
               <button
@@ -234,13 +234,13 @@ export default function BookingForm(props: Props) {
               ))}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: 1, color: '#555', textTransform: 'uppercase' }}>Custom</span>
+              <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, letterSpacing: 1, color: '#555', textTransform: 'uppercase' }}>Custom</span>
               <input
                 type="number"
                 min="0.5"
                 step="0.5"
                 placeholder="minutes"
-                style={{ width: 80, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, padding: '5px 8px', fontSize: 12, color: 'var(--casi-text)', fontFamily: "'DM Mono',monospace", outline: 'none', textAlign: 'center', MozAppearance: 'textfield' } as React.CSSProperties}
+                style={{ width: 80, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, padding: '5px 8px', fontSize: 12, color: 'var(--casi-text)', fontFamily: "var(--font-casi-mono),monospace", outline: 'none', textAlign: 'center', MozAppearance: 'textfield' } as React.CSSProperties}
                 onFocus={(e) => (e.target.style.borderColor = 'rgba(var(--casi-accent-rgb),0.38)')}
                 onBlur={(e) => {
                   e.target.style.borderColor = 'rgba(255,255,255,0.08)';
@@ -254,7 +254,7 @@ export default function BookingForm(props: Props) {
                   }
                 }}
               />
-              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: '#555' }}>min</span>
+              <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: '#555' }}>min</span>
             </div>
           </div>
 
@@ -275,13 +275,13 @@ export default function BookingForm(props: Props) {
                   className="bf-inp"
                   style={{ resize: 'none' }}
                 />
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontFamily: "'DM Mono',monospace", fontSize: 9, color: message.length > BANNER_MAX_MESSAGE * 0.85 ? '#facc15' : '#555' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: message.length > BANNER_MAX_MESSAGE * 0.85 ? '#facc15' : '#555' }}>
                   <span>Shows as a live scroll on stream</span>
                   <span>{message.length}/{BANNER_MAX_MESSAGE}</span>
                 </div>
                 {message.trim().length > 0 && (
                   <div style={{ marginTop: 10, padding: 0, borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,0.65)', border: '1px solid rgba(var(--casi-accent-rgb),0.25)' }}>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', color: '#555', padding: '6px 10px 0' }}>Preview</div>
+                    <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', color: '#555', padding: '6px 10px 0' }}>Preview</div>
                     <div className="beam-banner" style={{ height: 44, borderTop: 'none', borderBottom: 'none' }}>
                       <span className="beam-banner-track" style={{ fontSize: 20 }}>{message}</span>
                     </div>
@@ -307,7 +307,7 @@ export default function BookingForm(props: Props) {
 
       {/* USDC cost preview (paid slots only) */}
       {!isFreeSlot && (
-        <div style={{ background: 'rgba(153,69,255,0.05)', border: '1px solid rgba(153,69,255,0.2)', borderRadius: 10, padding: '12px 14px', margin: '12px 0', fontFamily: "'DM Mono',monospace", fontSize: 11 }}>
+        <div style={{ background: 'rgba(153,69,255,0.05)', border: '1px solid rgba(153,69,255,0.2)', borderRadius: 10, padding: '12px 14px', margin: '12px 0', fontFamily: "var(--font-casi-mono),monospace", fontSize: 11 }}>
           {[['Duration', formatTime(durationSeconds)], ['Rate', `$${slot.price_value}/${slot.price_unit}`]].map(([l, v]) => (
             <div key={l} style={{ display: 'flex', justifyContent: 'space-between', color: '#555', marginBottom: 5 }}>
               <span>{l}</span><span>{v}</span>
@@ -339,9 +339,9 @@ export default function BookingForm(props: Props) {
       {/* Queue wait estimate */}
       {queueWait && (
         <div style={{ background: `rgba(${tcRgb},0.06)`, border: `1px solid rgba(${tcRgb},0.15)`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 4 }}>Estimated wait</div>
-          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 15, fontWeight: 700, color: 'var(--casi-accent)' }}>~{queueWait.wait} min</div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', marginTop: 2 }}>
+          <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 4 }}>Estimated wait</div>
+          <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 15, fontWeight: 700, color: 'var(--casi-accent)' }}>~{queueWait.wait} min</div>
+          <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: '#555', marginTop: 2 }}>
             {queueWait.ahead} booking{queueWait.ahead !== 1 ? 's' : ''} ahead of you
           </div>
         </div>

@@ -92,7 +92,7 @@ function OBSContent() {
         .obs-shape-hex     { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
         .obs-glow          { animation: beamGlow 3s ease-out 1; will-change: box-shadow; }
         .obs-banner        { display:flex; align-items:center; width:100%; height:100%; overflow:hidden; background:rgba(0,0,0,0.78); border-top:2px solid rgba(153,69,255,0.4); border-bottom:2px solid rgba(153,69,255,0.4); white-space:nowrap; }
-        .obs-banner-track  { display:inline-block; padding-left:100%; color:#9945FF; font-family:'Syne',sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
+        .obs-banner-track  { display:inline-block; padding-left:100%; color:#9945FF; font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
       `}</style>
       <div className="relative w-full h-full">
         {elements.map((el) => {

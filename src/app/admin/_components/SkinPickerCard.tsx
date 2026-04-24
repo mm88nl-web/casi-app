@@ -39,7 +39,7 @@ export default function SkinPickerCard({ activeSkin, savedSkin, saving, onSelect
                 <div style={{ width: 10, height: 10, borderRadius: 2, background: s.accent2 }} />
                 <div style={{ width: 10, height: 10, borderRadius: 2, background: s.bg, border: '1px solid rgba(255,255,255,0.1)' }} />
               </div>
-              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: isActive ? 'var(--casi-accent)' : 'var(--casi-text-muted)', letterSpacing: 0.5 }}>{s.name}</span>
+              <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 11, color: isActive ? 'var(--casi-accent)' : 'var(--casi-text-muted)', letterSpacing: 0.5 }}>{s.name}</span>
             </button>
           );
         })}

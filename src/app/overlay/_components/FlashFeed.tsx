@@ -88,15 +88,15 @@ export default function FlashFeed({ profileId }: { profileId: string }) {
       {items.map(flash => (
         <div key={flash.id} style={{ animation: 'flashPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5, paddingLeft: 4 }}>
-            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500, color: 'var(--casi-accent)', textShadow: '0 1px 6px rgba(0,0,0,0.9)', letterSpacing: 0.5 }}>
+            <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, fontWeight: 500, color: 'var(--casi-accent)', textShadow: '0 1px 6px rgba(0,0,0,0.9)', letterSpacing: 0.5 }}>
               ⚡ {flash.viewer_name}
             </span>
-            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, background: 'rgba(var(--casi-accent-rgb),0.18)', color: 'var(--casi-accent)', border: '1px solid rgba(var(--casi-accent-rgb),0.35)', borderRadius: 20, padding: '1px 8px' }}>
+            <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, background: 'rgba(var(--casi-accent-rgb),0.18)', color: 'var(--casi-accent)', border: '1px solid rgba(var(--casi-accent-rgb),0.35)', borderRadius: 20, padding: '1px 8px' }}>
               ${(flash.amount_cents / 100).toFixed(2)}
             </span>
           </div>
           <div style={{ background: 'rgba(255,255,255,0.93)', borderRadius: '18px 18px 4px 18px', padding: '11px 15px', boxShadow: '0 6px 24px rgba(0,0,0,0.4)' }}>
-            <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 14, fontWeight: 600, color: '#0d0d0d', lineHeight: 1.45, margin: 0 }}>
+            <p style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 14, fontWeight: 600, color: '#0d0d0d', lineHeight: 1.45, margin: 0 }}>
               {flash.message}
             </p>
             {flash.tx_signature && (
@@ -104,7 +104,7 @@ export default function FlashFeed({ profileId }: { profileId: string }) {
                 href={`https://solscan.io/tx/${flash.tx_signature}${EXPLORER_CLUSTER_QUERY}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ display: 'inline-block', marginTop: 6, fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none', opacity: 0.7, pointerEvents: 'auto' }}
+                style={{ display: 'inline-block', marginTop: 6, fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none', opacity: 0.7, pointerEvents: 'auto' }}
               >
                 ↗ verify on Solscan
               </a>

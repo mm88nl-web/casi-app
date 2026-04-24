@@ -202,11 +202,11 @@ export default function FlashPanel({
     borderRadius: 12,
     overflow: 'visible',
     minHeight: compact ? 320 : 420,
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-casi-sans), sans-serif",
   };
   const header: React.CSSProperties = {
     padding: '10px 14px',
-    fontFamily: "'DM Mono', monospace",
+    fontFamily: "var(--font-casi-mono), monospace",
     fontSize: 10,
     letterSpacing: 2,
     textTransform: 'uppercase',
@@ -260,15 +260,15 @@ export default function FlashPanel({
                   lineHeight: 1.4,
                 }}
               >
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--casi-text-muted)', flexShrink: 0, paddingTop: 2 }}>
+                <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'var(--casi-text-muted)', flexShrink: 0, paddingTop: 2 }}>
                   {formatTs(f.created_at)}
                 </span>
                 {amt ? (
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, color: 'var(--casi-accent)', background: 'rgba(var(--casi-accent-rgb),0.1)', padding: '2px 6px', borderRadius: 4, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                  <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, fontWeight: 700, color: 'var(--casi-accent)', background: 'rgba(var(--casi-accent-rgb),0.1)', padding: '2px 6px', borderRadius: 4, flexShrink: 0, whiteSpace: 'nowrap' }}>
                     {amt}
                   </span>
                 ) : (
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>
+                  <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, fontWeight: 700, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>
                     FREE
                   </span>
                 )}
@@ -279,7 +279,7 @@ export default function FlashPanel({
                     href={`https://solscan.io/tx/${f.tx_signature}${EXPLORER_CLUSTER_QUERY}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none', flexShrink: 0, paddingTop: 3 }}
+                    style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#9945FF', textDecoration: 'none', flexShrink: 0, paddingTop: 3 }}
                     title="View on Solscan"
                   >
                     ↗

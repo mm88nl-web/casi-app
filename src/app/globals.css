@@ -40,5 +40,5 @@
 body {
   background: var(--casi-bg);
   color: var(--casi-text);
-  font-family: var(--font-casi-sans), "Space Grotesk", system-ui, sans-serif;
+  font-family: var(--font-casi-sans), ui-sans-serif, system-ui, sans-serif;
 }

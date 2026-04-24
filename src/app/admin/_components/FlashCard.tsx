@@ -31,7 +31,7 @@ export default function FlashCard({ flash, settling, onApprove, onDeny }: {
           <span className="tag t-dim">{flash.payment_method}</span>
         </div>
         <div className="req-msg">"{flash.message}"</div>
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', marginTop: 6, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: '#333', marginTop: 6, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span>{new Date(flash.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           {paid && (
             <span style={{ color: '#4ade80' }}>

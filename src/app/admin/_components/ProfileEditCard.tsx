@@ -105,15 +105,15 @@ export default function ProfileEditCard({
             : '👤'}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)' }}>
+          <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--casi-text)' }}>
             {headerName}
           </div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>@{profile.username}</div>
+          <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>@{profile.username}</div>
           {!open && profile.bio && <div style={{ fontSize: 12, color: 'var(--casi-text-muted)', marginTop: 4 }}>{profile.bio}</div>}
         </div>
         <button
           onClick={() => onOpenChange(!open)}
-          style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: 'var(--casi-accent)', background: open ? 'rgba(var(--casi-accent-rgb),0.08)' : 'none', border: open ? '1px solid rgba(var(--casi-accent-rgb),0.2)' : '1px solid transparent', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0, transition: 'all .15s' }}
+          style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 11, color: 'var(--casi-accent)', background: open ? 'rgba(var(--casi-accent-rgb),0.08)' : 'none', border: open ? '1px solid rgba(var(--casi-accent-rgb),0.2)' : '1px solid transparent', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0, transition: 'all .15s' }}
         >
           {open ? '✕ Close' : 'Edit ↓'}
         </button>
@@ -138,7 +138,7 @@ export default function ProfileEditCard({
               style={{ resize: 'none', lineHeight: 1.5 }}
               placeholder="What do you stream?"
               onChange={(e) => onBioChange(e.target.value)} />
-            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', textAlign: 'right', marginTop: 2 }}>{bio.length}/160</div>
+            <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: 'var(--casi-text-muted)', textAlign: 'right', marginTop: 2 }}>{bio.length}/160</div>
           </div>
 
           {/* Avatar */}
@@ -155,7 +155,7 @@ export default function ProfileEditCard({
                 onLoad={() => onAvatarValidChange(true)} onError={() => onAvatarValidChange(false)} />}
             </div>
             {avatar && (
-              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, marginTop: 4, color: avatarValid ? '#4ade80' : '#f87171' }}>
+              <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, marginTop: 4, color: avatarValid ? '#4ade80' : '#f87171' }}>
                 {avatarValid ? '✓ Image loaded' : 'Image not loading — check URL'}
               </div>
             )}
@@ -175,10 +175,10 @@ export default function ProfileEditCard({
                 : <div style={{ width: 48, height: 27, borderRadius: 4, border: '1px dashed var(--casi-border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>🖥</div>
               }
               <div>
-                <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, color: previewBgUrl ? '#4ade80' : 'var(--casi-text)', marginBottom: 2 }}>
+                <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontWeight: 700, fontSize: 12, color: previewBgUrl ? '#4ade80' : 'var(--casi-text)', marginBottom: 2 }}>
                   {uploadingPreviewBg ? 'Uploading…' : previewBgUrl ? '✓ Preview set' : 'Upload screenshot'}
                 </div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--casi-text-muted)' }}>
+                <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: 'var(--casi-text-muted)' }}>
                   {previewBgUrl ? 'Click to replace' : 'jpg · png · max 5 MB'}
                 </div>
               </div>
@@ -199,7 +199,7 @@ export default function ProfileEditCard({
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 28, height: 28, borderRadius: 6, background: themeColor, border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0, boxShadow: `0 0 10px ${themeColor}50` }} />
               <input type="text" value={customColor || themeColor} placeholder="#F58220" maxLength={7}
-                className="pe-inp" style={{ flex: 1, fontFamily: "'DM Mono',monospace", fontSize: 12 }}
+                className="pe-inp" style={{ flex: 1, fontFamily: "var(--font-casi-mono),monospace", fontSize: 12 }}
                 onChange={(e) => {
                   const v = e.target.value;
                   onCustomColorChange(v);
@@ -217,16 +217,16 @@ export default function ProfileEditCard({
                 <div style={{ fontSize: 13, fontWeight: 700, color: stripeConnected ? '#4ade80' : 'var(--casi-text)', marginBottom: 2 }}>
                   {stripeConnected ? '✓ Connected to Stripe' : 'Connect Stripe to get paid'}
                 </div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
+                <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
                   {stripeConnected ? 'Viewers can pay for beam slots' : 'Required to accept card payments'}
                 </div>
               </div>
               <button type="button" onClick={onStripeConnect} disabled={stripeLoading}
-                style={{ background: stripeConnected ? 'rgba(74,222,128,0.1)' : 'var(--casi-accent)', border: stripeConnected ? '1px solid rgba(74,222,128,0.25)' : 'none', borderRadius: 8, padding: '8px 14px', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: stripeConnected ? '#4ade80' : 'var(--casi-bg)', cursor: stripeLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                style={{ background: stripeConnected ? 'rgba(74,222,128,0.1)' : 'var(--casi-accent)', border: stripeConnected ? '1px solid rgba(74,222,128,0.25)' : 'none', borderRadius: 8, padding: '8px 14px', fontFamily: "var(--font-casi-sans),sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: stripeConnected ? '#4ade80' : 'var(--casi-bg)', cursor: stripeLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 {stripeLoading ? 'Redirecting…' : stripeConnected ? '↗ Manage' : 'Connect →'}
               </button>
             </div>
-            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>100% of every tip lands in your Stripe account — no platform fee. Payouts go directly to your bank.</div>
+            <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>100% of every tip lands in your Stripe account — no platform fee. Payouts go directly to your bank.</div>
           </div>
 
           {/* Solana wallet */}
@@ -237,23 +237,23 @@ export default function ProfileEditCard({
                 <div style={{ fontSize: 13, fontWeight: 700, color: solanaWallet ? '#9945FF' : 'var(--casi-text)', marginBottom: 2 }}>
                   {solanaWallet ? `◎ ${solanaWallet.slice(0,6)}…${solanaWallet.slice(-4)}` : 'No wallet linked'}
                 </div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
+                <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
                   {solanaWallet ? 'Viewers can pay with USDC on-chain' : 'Optional — Stripe works without this'}
                 </div>
               </div>
               {walletConnected && publicKey ? (
                 <button type="button" onClick={onSaveWallet} disabled={savingWallet}
-                  style={{ background: walletSaved ? 'rgba(74,222,128,0.1)' : 'rgba(153,69,255,0.15)', border: walletSaved ? '1px solid rgba(74,222,128,0.3)' : '1px solid rgba(153,69,255,0.35)', borderRadius: 8, padding: '8px 14px', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: walletSaved ? '#4ade80' : '#9945FF', cursor: savingWallet ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  style={{ background: walletSaved ? 'rgba(74,222,128,0.1)' : 'rgba(153,69,255,0.15)', border: walletSaved ? '1px solid rgba(74,222,128,0.3)' : '1px solid rgba(153,69,255,0.35)', borderRadius: 8, padding: '8px 14px', fontFamily: "var(--font-casi-sans),sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: walletSaved ? '#4ade80' : '#9945FF', cursor: savingWallet ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
                   {savingWallet ? 'Saving…' : walletSaved ? '✓ Saved!' : `Save ${publicKey.toBase58().slice(0,4)}…${publicKey.toBase58().slice(-4)}`}
                 </button>
               ) : (
                 <button type="button" onClick={onOpenWalletModal} disabled={walletConnecting}
-                  style={{ background: 'rgba(153,69,255,0.1)', border: '1px solid rgba(153,69,255,0.3)', borderRadius: 8, padding: '8px 14px', fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: '#9945FF', cursor: walletConnecting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0, opacity: walletConnecting ? 0.6 : 1 }}>
+                  style={{ background: 'rgba(153,69,255,0.1)', border: '1px solid rgba(153,69,255,0.3)', borderRadius: 8, padding: '8px 14px', fontFamily: "var(--font-casi-sans),sans-serif", fontWeight: 800, fontSize: 11, textTransform: 'uppercase', color: '#9945FF', cursor: walletConnecting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0, opacity: walletConnecting ? 0.6 : 1 }}>
                   {walletConnecting ? 'Connecting…' : 'Connect Wallet'}
                 </button>
               )}
             </div>
-            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>Connect your wallet then click Save to link it to your profile.</div>
+            <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: 'var(--casi-text-muted)', marginTop: 5 }}>Connect your wallet then click Save to link it to your profile.</div>
           </div>
 
           {/* Session key delegate */}
@@ -269,7 +269,7 @@ export default function ProfileEditCard({
             <div style={{ background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--casi-text)', marginBottom: 2 }}>Allow free Flashes</div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>Chat messages without payment · 1 per minute per viewer</div>
+                <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>Chat messages without payment · 1 per minute per viewer</div>
               </div>
               <button type="button" role="switch" aria-checked={allowFreeFlashes}
                 onClick={() => onAllowFreeFlashesChange(!allowFreeFlashes)}
@@ -282,11 +282,11 @@ export default function ProfileEditCard({
           {/* Actions */}
           <div style={{ display: 'flex', gap: 8, paddingTop: 2 }}>
             <button type="button" onClick={onCancel}
-              style={{ flex: 1, padding: '10px 0', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--casi-border)', borderRadius: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 12, color: 'var(--casi-text-muted)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              style={{ flex: 1, padding: '10px 0', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--casi-border)', borderRadius: 10, fontFamily: "var(--font-casi-sans),sans-serif", fontWeight: 700, fontSize: 12, color: 'var(--casi-text-muted)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Cancel
             </button>
             <button type="button" disabled={saving} onClick={onSave}
-              style={{ flex: 2, padding: '10px 0', background: saved ? '#4ade80' : 'var(--casi-accent)', border: 'none', borderRadius: 10, fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 12, color: 'var(--casi-bg)', cursor: saving ? 'not-allowed' : 'pointer', textTransform: 'uppercase', letterSpacing: 0.5, opacity: saving ? 0.7 : 1 }}>
+              style={{ flex: 2, padding: '10px 0', background: saved ? '#4ade80' : 'var(--casi-accent)', border: 'none', borderRadius: 10, fontFamily: "var(--font-casi-sans),sans-serif", fontWeight: 800, fontSize: 12, color: 'var(--casi-bg)', cursor: saving ? 'not-allowed' : 'pointer', textTransform: 'uppercase', letterSpacing: 0.5, opacity: saving ? 0.7 : 1 }}>
               {saving ? 'Saving…' : 'Save profile'}
             </button>
           </div>

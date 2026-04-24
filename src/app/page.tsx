@@ -35,18 +35,17 @@ export default function HomePage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         .casi-page {
           background: #050505;
           color: #e8e8e8;
-          font-family: 'Syne', sans-serif;
+          font-family: var(--font-casi-sans), sans-serif;
           min-height: 100vh;
           overflow-x: hidden;
         }
-        .mono { font-family: 'DM Mono', monospace; }
+        .mono { font-family: var(--font-casi-mono), monospace; }
 
         .casi-page::before {
           content: '';
@@ -76,7 +75,7 @@ export default function HomePage() {
         .casi-nav-right { display: flex; align-items: center; gap: 16px; }
 
         .nav-link {
-          font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1.5px;
+          font-family: var(--font-casi-mono), monospace; font-size: 11px; letter-spacing: 1.5px;
           text-transform: uppercase; color: #555; text-decoration: none;
           transition: color 0.2s; white-space: nowrap;
         }
@@ -84,7 +83,7 @@ export default function HomePage() {
 
         .live-pill {
           display: flex; align-items: center; gap: 6px;
-          font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 1.5px;
+          font-family: var(--font-casi-mono), monospace; font-size: 10px; letter-spacing: 1.5px;
           text-transform: uppercase; color: #06b6d4;
           background: rgba(6,182,212,0.08); border: 1px solid rgba(6,182,212,0.2);
           border-radius: 20px; padding: 5px 12px; text-decoration: none; white-space: nowrap;
@@ -97,7 +96,7 @@ export default function HomePage() {
 
         .btn-primary {
           background: #F58220; color: #050505;
-          font-family: 'Syne', sans-serif; font-weight: 800; font-size: 12px;
+          font-family: var(--font-casi-sans), sans-serif; font-weight: 800; font-size: 12px;
           letter-spacing: 0.5px; text-transform: uppercase;
           padding: 10px 18px; border-radius: 8px; text-decoration: none;
           transition: all 0.2s; white-space: nowrap; flex-shrink: 0; border: none; cursor: pointer;
@@ -112,7 +111,7 @@ export default function HomePage() {
           text-align: center;
         }
         .viewer-eyebrow {
-          font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 3px;
+          font-family: var(--font-casi-mono), monospace; font-size: 10px; letter-spacing: 3px;
           text-transform: uppercase; color: #06b6d4; margin-bottom: 20px;
           display: flex; align-items: center; justify-content: center; gap: 10px;
         }
@@ -135,8 +134,8 @@ export default function HomePage() {
           gap: 32px; padding-bottom: 64px;
           border-bottom: 1px solid #0d0d0d; flex-wrap: wrap;
         }
-        .stat-num   { font-size: 28px; font-weight: 800; color: #F58220; letter-spacing: -1px; font-family: 'DM Mono', monospace; }
-        .stat-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #444; margin-top: 2px; }
+        .stat-num   { font-size: 28px; font-weight: 800; color: #F58220; letter-spacing: -1px; font-family: var(--font-casi-mono), monospace; }
+        .stat-label { font-family: var(--font-casi-mono), monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #444; margin-top: 2px; }
 
         /* ── STREAMER SECTION ── */
         .streamer-section {
@@ -147,7 +146,7 @@ export default function HomePage() {
         }
 
         .hero-eyebrow {
-          font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 3px;
+          font-family: var(--font-casi-mono), monospace; font-size: 10px; letter-spacing: 3px;
           text-transform: uppercase; color: #F58220; margin-bottom: 24px;
           display: flex; align-items: center; gap: 10px;
         }
@@ -162,7 +161,7 @@ export default function HomePage() {
         .hero-ctas { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
 
         .btn-ghost {
-          font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1.5px;
+          font-family: var(--font-casi-mono), monospace; font-size: 11px; letter-spacing: 1.5px;
           text-transform: uppercase; color: #555; text-decoration: none;
           padding: 11px 0; border-bottom: 1px solid #2a2a2a; transition: all 0.2s;
         }
@@ -190,7 +189,7 @@ export default function HomePage() {
           position:absolute; top:12px; left:50%; transform:translateX(-50%);
           display:flex; align-items:center; gap:5px;
           background:rgba(239,68,68,0.9); border-radius:20px; padding:4px 10px;
-          font-family:'DM Mono',monospace; font-size:9px; letter-spacing:2px;
+          font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:2px;
           text-transform:uppercase; color:white; font-weight:500; z-index:20;
         }
         .stream-beam {
@@ -200,23 +199,23 @@ export default function HomePage() {
         }
         .beam-tl { top:10%; left:5%; width:22%; height:30%; }
         .beam-tr { top:10%; right:5%; width:22%; height:30%; border-color:rgba(6,182,212,0.4); background:rgba(6,182,212,0.05); }
-        .beam-label   { font-family:'DM Mono',monospace; font-size:7px; letter-spacing:1px; text-transform:uppercase; color:rgba(247,147,26,0.7); }
-        .beam-price   { font-family:'DM Mono',monospace; font-size:9px; font-weight:500; color:#F58220; margin-top:2px; }
-        .beam-occupied { font-family:'DM Mono',monospace; font-size:7px; color:#06b6d4; letter-spacing:1px; }
+        .beam-label   { font-family:var(--font-casi-mono),monospace; font-size:7px; letter-spacing:1px; text-transform:uppercase; color:rgba(247,147,26,0.7); }
+        .beam-price   { font-family:var(--font-casi-mono),monospace; font-size:9px; font-weight:500; color:#F58220; margin-top:2px; }
+        .beam-occupied { font-family:var(--font-casi-mono),monospace; font-size:7px; color:#06b6d4; letter-spacing:1px; }
         .beam-avatar  { width:28px; height:28px; border-radius:4px; background:linear-gradient(135deg,rgba(6,182,212,0.3),rgba(6,182,212,0.1)); margin-bottom:3px; display:flex; align-items:center; justify-content:center; font-size:14px; }
         .stream-earnings {
           position:absolute; bottom:10%; right:5%;
           background:rgba(5,5,5,0.9); border:1px solid #1c1c1c; border-radius:8px; padding:8px 12px; z-index:20;
         }
-        .earnings-label { font-family:'DM Mono',monospace; font-size:8px; letter-spacing:1.5px; text-transform:uppercase; color:#444; }
-        .earnings-num   { font-family:'DM Mono',monospace; font-size:16px; font-weight:500; color:#4ade80; margin-top:1px; }
-        .mockup-label   { text-align:center; font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:#2a2a2a; margin-top:16px; }
+        .earnings-label { font-family:var(--font-casi-mono),monospace; font-size:8px; letter-spacing:1.5px; text-transform:uppercase; color:#444; }
+        .earnings-num   { font-family:var(--font-casi-mono),monospace; font-size:16px; font-weight:500; color:#4ade80; margin-top:1px; }
+        .mockup-label   { text-align:center; font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:#2a2a2a; margin-top:16px; }
 
         /* ── HOW IT WORKS ── */
         .how-section { position:relative; z-index:1; max-width:1100px; margin:80px auto; padding:0 40px; }
         .how-header  { margin-bottom:56px; }
         .section-label {
-          font-family:'DM Mono',monospace; font-size:10px; letter-spacing:3px; text-transform:uppercase;
+          font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:3px; text-transform:uppercase;
           color:#F58220; margin-bottom:16px; display:flex; align-items:center; gap:10px;
         }
         .section-label::before { content:''; display:block; width:24px; height:1px; background:#F58220; }
@@ -229,7 +228,7 @@ export default function HomePage() {
         .step-card { padding:40px 32px; background:#050505; position:relative; transition:background 0.2s; }
         .step-card:hover { background:#080808; }
         .step-card+.step-card { border-left:1px solid #111; }
-        .step-num   { font-family:'DM Mono',monospace; font-size:11px; letter-spacing:2px; color:#2a2a2a; margin-bottom:20px; }
+        .step-num   { font-family:var(--font-casi-mono),monospace; font-size:11px; letter-spacing:2px; color:#2a2a2a; margin-bottom:20px; }
         .step-icon  { width:44px; height:44px; border-radius:10px; background:rgba(247,147,26,0.08); border:1px solid rgba(247,147,26,0.15); display:flex; align-items:center; justify-content:center; font-size:20px; margin-bottom:20px; }
         .step-title { font-size:20px; font-weight:700; letter-spacing:-0.5px; color:#e8e8e8; margin-bottom:10px; }
         .step-body  { font-size:14px; line-height:1.65; color:#555; }
@@ -247,7 +246,7 @@ export default function HomePage() {
         .cta-title   { font-size:40px; font-weight:800; letter-spacing:-1.5px; color:#f0f0f0; margin-bottom:12px; }
         .cta-sub     { font-size:15px; color:#555; line-height:1.6; }
         .cta-actions { display:flex; flex-direction:column; gap:12px; align-items:flex-end; flex-shrink:0; }
-        .cta-note    { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; color:#333; text-align:right; }
+        .cta-note    { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:1px; color:#333; text-align:right; }
 
         /* ── FOOTER ── */
         .casi-footer { position:relative; z-index:1; border-top:1px solid #0d0d0d; padding:28px 40px; display:flex; align-items:center; justify-content:space-between; }

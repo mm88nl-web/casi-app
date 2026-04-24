@@ -60,7 +60,7 @@ export default function SlotsList({
               onClick={() => !myBookingForSlot && !isLocked && onOpenSlot(el, isOccupied)}
             >
               {isFree && !isLocked && (
-                <span style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(74,222,128,0.14)', border: '1px solid rgba(74,222,128,0.4)', color: '#4ade80', fontFamily: "'DM Mono', monospace", fontSize: 8, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 4, pointerEvents: 'none' }}>
+                <span style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(74,222,128,0.14)', border: '1px solid rgba(74,222,128,0.4)', color: '#4ade80', fontFamily: "var(--font-casi-mono), monospace", fontSize: 8, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 4, pointerEvents: 'none' }}>
                   ★ Free
                 </span>
               )}

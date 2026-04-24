@@ -138,7 +138,6 @@ export default function AuthPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         .auth-page {
@@ -146,7 +145,7 @@ export default function AuthPage() {
           background: #050505;
           display: grid;
           grid-template-columns: 1fr 1fr;
-          font-family: 'Syne', sans-serif;
+          font-family: var(--font-casi-sans), sans-serif;
         }
 
         /* Left panel */
@@ -179,12 +178,12 @@ export default function AuthPage() {
         }
         .auth-brand { position: relative; z-index: 1; }
         .auth-brand-name { font-size: 28px; font-weight: 800; color: #F58220; letter-spacing: -1px; margin-top: 12px; }
-        .auth-brand-tag  { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #444; margin-top: 4px; }
+        .auth-brand-tag  { font-family: var(--font-casi-mono), monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #444; margin-top: 4px; }
 
         .auth-quote { position: relative; z-index: 1; }
         .auth-quote-text { font-size: 22px; font-weight: 700; color: #e8e8e8; line-height: 1.3; letter-spacing: -0.5px; margin-bottom: 12px; }
         .auth-quote-text .o { color: #F58220; }
-        .auth-quote-sub  { font-family: 'DM Mono', monospace; font-size: 11px; color: #444; letter-spacing: 1px; }
+        .auth-quote-sub  { font-family: var(--font-casi-mono), monospace; font-size: 11px; color: #444; letter-spacing: 1px; }
 
         /* Step indicators */
         .left-steps { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 16px; }
@@ -192,13 +191,13 @@ export default function AuthPage() {
         .left-step-dot {
           width: 32px; height: 32px; border-radius: 50%;
           display: flex; align-items: center; justify-content: center;
-          font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500;
+          font-family: var(--font-casi-mono), monospace; font-size: 11px; font-weight: 500;
           flex-shrink: 0; transition: all .3s;
         }
         .left-step-dot.done    { background: #F58220; color: #050505; }
         .left-step-dot.current { background: rgba(245,130,32,0.15); border: 1px solid rgba(245,130,32,0.4); color: #F58220; }
         .left-step-dot.pending { background: rgba(255,255,255,0.04); border: 1px solid #1c1c1c; color: #333; }
-        .left-step-label { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; transition: color .3s; }
+        .left-step-label { font-family: var(--font-casi-mono), monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; transition: color .3s; }
         .left-step-label.done    { color: #F58220; }
         .left-step-label.current { color: #e8e8e8; }
         .left-step-label.pending { color: #333; }
@@ -217,7 +216,7 @@ export default function AuthPage() {
           border-radius: 12px; padding: 4px; margin-bottom: 32px; gap: 4px;
         }
         .auth-tab {
-          flex: 1; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px;
+          flex: 1; font-family: var(--font-casi-sans), sans-serif; font-weight: 700; font-size: 13px;
           text-transform: uppercase; letter-spacing: 0.3px;
           padding: 10px 0; border: none; border-radius: 9px;
           cursor: pointer; transition: all .2s; background: none; color: #555;
@@ -226,25 +225,25 @@ export default function AuthPage() {
         .auth-tab:not(.active):hover { color: #e8e8e8; }
 
         .auth-title    { font-size: 26px; font-weight: 800; color: #f0f0f0; letter-spacing: -1px; margin-bottom: 6px; }
-        .auth-subtitle { font-family: 'DM Mono', monospace; font-size: 11px; color: #444; letter-spacing: 1px; margin-bottom: 32px; }
+        .auth-subtitle { font-family: var(--font-casi-mono), monospace; font-size: 11px; color: #444; letter-spacing: 1px; margin-bottom: 32px; }
 
         .auth-field { margin-bottom: 16px; }
         .auth-label {
-          font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 2px;
+          font-family: var(--font-casi-mono), monospace; font-size: 10px; letter-spacing: 2px;
           text-transform: uppercase; color: #555; display: block; margin-bottom: 8px;
         }
         .auth-input {
           width: 100%; background: #0a0a0a; border: 1px solid #1c1c1c;
           border-radius: 10px; padding: 13px 16px; font-size: 14px;
           color: #e8e8e8; outline: none; transition: border-color .2s;
-          font-family: 'Syne', sans-serif;
+          font-family: var(--font-casi-sans), sans-serif;
         }
         .auth-input::placeholder { color: #333; }
         .auth-input:focus  { border-color: rgba(245,130,32,0.4); }
         .auth-input.valid  { border-color: rgba(74,222,128,0.4); }
         .auth-input.invalid { border-color: rgba(248,113,113,0.4); }
 
-        .auth-hint     { font-family: 'DM Mono', monospace; font-size: 10px; margin-top: 6px; min-height: 16px; }
+        .auth-hint     { font-family: var(--font-casi-mono), monospace; font-size: 10px; margin-top: 6px; min-height: 16px; }
         .auth-hint.ok  { color: #4ade80; }
         .auth-hint.err { color: #f87171; }
         .auth-hint.dim { color: #444; }
@@ -252,12 +251,12 @@ export default function AuthPage() {
         .auth-error {
           background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2);
           border-radius: 8px; padding: 10px 14px;
-          font-family: 'DM Mono', monospace; font-size: 11px; color: #f87171; margin-bottom: 16px;
+          font-family: var(--font-casi-mono), monospace; font-size: 11px; color: #f87171; margin-bottom: 16px;
         }
 
         .auth-btn {
           width: 100%; background: #F58220; border: none; border-radius: 10px;
-          padding: 14px; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px;
+          padding: 14px; font-family: var(--font-casi-sans), sans-serif; font-weight: 800; font-size: 14px;
           text-transform: uppercase; letter-spacing: 0.5px; color: #050505;
           cursor: pointer; transition: all .2s; margin-top: 8px;
         }
@@ -267,7 +266,7 @@ export default function AuthPage() {
         .auth-btn-row { display: flex; gap: 10px; margin-top: 8px; }
         .auth-btn-back {
           flex-shrink: 0; background: rgba(255,255,255,0.04); border: 1px solid #1c1c1c;
-          border-radius: 10px; padding: 14px 20px; font-family: 'Syne', sans-serif;
+          border-radius: 10px; padding: 14px 20px; font-family: var(--font-casi-sans), sans-serif;
           font-weight: 700; font-size: 13px; text-transform: uppercase; color: #555;
           cursor: pointer; transition: all .2s;
         }
@@ -275,13 +274,13 @@ export default function AuthPage() {
 
         /* Username input */
         .username-wrap { position: relative; }
-        .username-at   { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-family: 'DM Mono', monospace; font-size: 14px; color: #444; pointer-events: none; }
+        .username-at   { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-family: var(--font-casi-mono), monospace; font-size: 14px; color: #444; pointer-events: none; }
         .username-input { padding-left: 28px !important; }
 
         /* URL preview */
         .url-preview       { background: rgba(245,130,32,0.05); border: 1px solid rgba(245,130,32,0.12); border-radius: 8px; padding: 12px 14px; margin-top: 12px; }
-        .url-preview-label { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: #555; margin-bottom: 4px; }
-        .url-preview-value { font-family: 'DM Mono', monospace; font-size: 11px; color: #F58220; word-break: break-all; }
+        .url-preview-label { font-family: var(--font-casi-mono), monospace; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: #555; margin-bottom: 4px; }
+        .url-preview-value { font-family: var(--font-casi-mono), monospace; font-size: 11px; color: #F58220; word-break: break-all; }
 
         /* Avatar row */
         .avatar-row    { display: flex; align-items: center; gap: 16px; }
@@ -394,7 +393,7 @@ export default function AuthPage() {
                       {regPassword.length === 0 ? 'At least 6 characters' : regPassword.length < 6 ? `${6 - regPassword.length} more needed` : '✓ Looks good'}
                     </div>
                   </div>
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#999', lineHeight: 1.5, cursor: 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: '#999', lineHeight: 1.5, cursor: 'pointer' }}>
                     <input
                       type="checkbox"
                       checked={acceptedTos}
@@ -482,7 +481,7 @@ export default function AuthPage() {
                   <div className="auth-field">
                     <label className="auth-label">Bio <span style={{ color: '#333', textTransform: 'none', fontSize: 9 }}>— optional</span></label>
                     <textarea placeholder="What do you stream?" rows={3} maxLength={160}
-                      style={{ width: '100%', background: '#0a0a0a', border: '1px solid #1c1c1c', borderRadius: 10, padding: '13px 16px', fontSize: 14, color: '#e8e8e8', outline: 'none', fontFamily: "'Syne', sans-serif", resize: 'none', transition: 'border-color .2s' }}
+                      style={{ width: '100%', background: '#0a0a0a', border: '1px solid #1c1c1c', borderRadius: 10, padding: '13px 16px', fontSize: 14, color: '#e8e8e8', outline: 'none', fontFamily: "var(--font-casi-sans), sans-serif", resize: 'none', transition: 'border-color .2s' }}
                       value={bio} onChange={(e) => setBio(e.target.value)} />
                     <div className="auth-hint dim" style={{ textAlign: 'right' }}>{bio.length}/160</div>
                   </div>

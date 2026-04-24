@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
-import { Syne, DM_Mono } from "next/font/google";
+import { Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import ClientErrorReporter from "@/components/ClientErrorReporter";
 
-const syne = Syne({
+const sans = Bricolage_Grotesque({
   variable: "--font-casi-sans",
   subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
+  weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
-const dmMono = DM_Mono({
+const mono = JetBrains_Mono({
   variable: "--font-casi-mono",
   subsets: ["latin"],
   weight: ["300", "400", "500"],
@@ -31,7 +31,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${syne.variable} ${dmMono.variable} h-full antialiased`}
+      className={`${sans.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <Providers>
