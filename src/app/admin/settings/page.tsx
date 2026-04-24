@@ -9,48 +9,35 @@ import WalletNav from '@/components/WalletNav';
 import SettingsLayout, { type RailGroup } from './_components/SettingsLayout';
 import ProfileSection, { type ProfileRow } from './_components/ProfileSection';
 import PayoutsSection from './_components/PayoutsSection';
-import AppearanceSection from './_components/AppearanceSection';
-import SlotDefaultsSection from './_components/SlotDefaultsSection';
-import ObsSourcesSection from './_components/ObsSourcesSection';
 import SessionKeySection from './_components/SessionKeySection';
-import NotificationsSection from './_components/NotificationsSection';
-import ModerationSection from './_components/ModerationSection';
-import DangerZoneSection from './_components/DangerZoneSection';
+import AppearanceSection from './_components/AppearanceSection';
+import ObsSourcesSection from './_components/ObsSourcesSection';
 
+// Rail groups after the cleanup pass. Dropped: Slot defaults (per-slot
+// prices live on overlay_elements, not a profile default — redundant
+// surface), Notifications (no schema, pure stub), Moderation (no
+// blocked-users/keywords table, pure stub), Danger zone (no delete-
+// account endpoint wired). Session key merged into the Wallet group
+// next to Payouts since they're both money-rail concerns.
 const RAIL: RailGroup[] = [
   {
     title: 'You',
     items: [
       { id: 'profile', label: 'Profile', icon: '◉' },
-      { id: 'payouts', label: 'Payouts', icon: '€' },
       { id: 'appearance', label: 'Appearance', icon: '◐' },
-      // Account rail item scrolls to danger-zone — no dedicated Account section in v3 handoff yet.
-      { id: 'danger-zone', label: 'Account', icon: '☉' },
-    ],
-  },
-  {
-    title: 'Stream',
-    items: [
-      { id: 'slot-defaults', label: 'Slot defaults', icon: '▣' },
-      { id: 'obs-sources', label: 'OBS sources', icon: '▹' },
     ],
   },
   {
     title: 'Wallet',
     items: [
+      { id: 'payouts', label: 'Payouts', icon: '€' },
       { id: 'session-key', label: 'Session key', icon: '⚿' },
     ],
   },
   {
-    title: 'Alerts',
+    title: 'Stream',
     items: [
-      { id: 'notifications', label: 'Notifications', icon: '◇' },
-    ],
-  },
-  {
-    title: 'Safety',
-    items: [
-      { id: 'moderation', label: 'Moderation', icon: '✘' },
+      { id: 'obs-sources', label: 'OBS sources', icon: '▹' },
     ],
   },
 ];
@@ -129,6 +116,23 @@ export default function SettingsPage() {
         </Link>
         <div className="flex items-center gap-3">
           <Link
+            href="/studio"
+            title="Live monitor + slot editor"
+            className="font-mono uppercase"
+            style={{
+              fontSize: '10px',
+              letterSpacing: '0.15em',
+              textDecoration: 'none',
+              color: 'var(--casi-accent)',
+              padding: '5px 10px',
+              borderRadius: '999px',
+              background: 'rgba(var(--casi-accent-rgb), 0.08)',
+              border: '1px solid rgba(var(--casi-accent-rgb), 0.3)',
+            }}
+          >
+            ↩ Studio
+          </Link>
+          <Link
             href="/admin"
             title="Classic studio (current production)"
             className="font-mono uppercase"
@@ -142,7 +146,7 @@ export default function SettingsPage() {
               border: '1px solid var(--casi-border-2)',
             }}
           >
-            ↩ Classic studio
+            Classic studio
           </Link>
           <WalletNav />
         </div>
@@ -165,18 +169,14 @@ export default function SettingsPage() {
 
       <SettingsLayout rail={RAIL}>
         <ProfileSection supabase={supabase} profile={state.profile} />
-        <PayoutsSection />
         <AppearanceSection
           supabase={supabase}
           profileId={state.profile.id}
           initialSkinId={state.profile.skin}
         />
-        <SlotDefaultsSection />
-        <ObsSourcesSection username={state.profile.username ?? 'your-handle'} />
+        <PayoutsSection />
         <SessionKeySection />
-        <NotificationsSection />
-        <ModerationSection />
-        <DangerZoneSection />
+        <ObsSourcesSection username={state.profile.username ?? 'your-handle'} />
       </SettingsLayout>
     </main>
   );
