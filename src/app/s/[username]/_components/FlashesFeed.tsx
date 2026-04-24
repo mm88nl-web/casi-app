@@ -5,7 +5,7 @@ export type Flash = {
   time: string;
   who: string;
   message: string;
-  chip: { kind: 'free' | 'usdc'; label: string };
+  chip: { kind: 'free' | 'usdc' | 'eur'; label: string };
   mine?: boolean;
   fresh?: boolean;
 };
@@ -20,6 +20,11 @@ const CHIP_STYLES: Record<Flash['chip']['kind'], { bg: string; fg: string; borde
     bg: 'rgba(153, 69, 255, 0.12)',
     fg: '#b98bff',
     border: 'rgba(153, 69, 255, 0.25)',
+  },
+  eur: {
+    bg: 'rgba(var(--casi-accent-rgb), 0.12)',
+    fg: 'var(--casi-accent)',
+    border: 'rgba(var(--casi-accent-rgb), 0.25)',
   },
 };
 

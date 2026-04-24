@@ -2,13 +2,15 @@
 
 type Props = {
   username: string;
-  category: string;
-  language: string;
-  uptime: string;
-  watching: number;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  bio?: string | null;
+  isLive: boolean;
 };
 
-export default function StreamerBar({ username, category, language, uptime, watching }: Props) {
+export default function StreamerBar({ username, displayName, avatarUrl, bio, isLive }: Props) {
+  const initial = (displayName || username || '?').slice(0, 1).toUpperCase();
+
   return (
     <div
       className="flex items-center gap-3.5"
@@ -19,23 +21,39 @@ export default function StreamerBar({ username, category, language, uptime, watc
         borderRadius: '14px',
       }}
     >
-      <div
-        aria-hidden
-        style={{
-          width: '44px',
-          height: '44px',
-          borderRadius: '50%',
-          background:
-            'linear-gradient(135deg, var(--casi-accent2), var(--casi-accent))',
-          flexShrink: 0,
-        }}
-      />
+      {avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={avatarUrl}
+          alt={`${displayName ?? username} avatar`}
+          width={44}
+          height={44}
+          style={{ width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+        />
+      ) : (
+        <div
+          aria-hidden
+          className="flex items-center justify-center font-extrabold"
+          style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, var(--casi-accent2), var(--casi-accent))',
+            color: '#0a0a0a',
+            fontSize: '18px',
+            fontFamily: 'var(--font-casi-sans)',
+            flexShrink: 0,
+          }}
+        >
+          {initial}
+        </div>
+      )}
       <div className="flex-1 min-w-0">
         <div
           className="font-bold truncate"
           style={{ fontSize: '18px', letterSpacing: '-0.3px', color: 'var(--casi-text)' }}
         >
-          @{username}
+          {displayName || `@${username}`}
         </div>
         <div
           className="font-mono uppercase truncate"
@@ -46,15 +64,16 @@ export default function StreamerBar({ username, category, language, uptime, watc
             marginTop: '2px',
           }}
         >
-          {category} · {language} · {uptime}
+          @{username}
+          {bio ? <> · <span style={{ textTransform: 'none', letterSpacing: '0.02em' }}>{bio.slice(0, 80)}</span></> : null}
         </div>
       </div>
       <span
         className="font-mono uppercase inline-flex items-center gap-1.5"
         style={{
-          fontSize: '12px',
+          fontSize: '11px',
           letterSpacing: '0.14em',
-          color: 'var(--casi-accent2)',
+          color: isLive ? 'var(--casi-accent2)' : 'var(--casi-text-dim)',
         }}
       >
         <span
@@ -63,11 +82,11 @@ export default function StreamerBar({ username, category, language, uptime, watc
             width: '8px',
             height: '8px',
             borderRadius: '50%',
-            background: 'var(--casi-accent2)',
-            boxShadow: '0 0 8px rgba(var(--casi-accent2-rgb), 0.7)',
+            background: isLive ? 'var(--casi-accent2)' : 'var(--casi-text-faint)',
+            boxShadow: isLive ? '0 0 8px rgba(var(--casi-accent2-rgb), 0.7)' : 'none',
           }}
         />
-        {watching.toLocaleString()} watching
+        {isLive ? 'Live now' : 'Offline'}
       </span>
     </div>
   );
