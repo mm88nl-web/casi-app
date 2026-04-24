@@ -13,7 +13,7 @@ monetization platform with three earn-surfaces: **flashes** (paid chat),
 4. **Settings** — profile, payouts, slot defaults, OBS sources, session key, notifications, moderation
 
 It also includes a **skin system**: 7 themable colorways (Casi Dark, Void,
-Neon, Twitch, Terminal, Ember, Gilded) driven entirely by CSS custom
+Neon, Twitch, Terminal, Ember, Chrome) driven entirely by CSS custom
 properties.
 
 ## About the design files
@@ -22,10 +22,13 @@ The file in `design/casi-redesign-v3.html` is a **design reference** — a
 single self-contained HTML prototype showing intended look, copy, layout, and
 behavior. **It is not production code.** Your job is to recreate these
 screens inside the existing `casi-app` codebase
-(`github.com/mm88nl-web/casi-app`, Next.js 14 App Router + Tailwind +
-Supabase) using its established patterns and libraries. Lift the design
-tokens, typography, and component vocabulary; ignore the HTML scaffolding
-(meta-bar, skin-swatch strip, JS tab switcher) — that's prototype chrome.
+(`github.com/mm88nl-web/casi-app`, Next.js 16 App Router + Tailwind 4 +
+Supabase) using its established patterns and libraries. Note: this repo is on
+Next 16 and Tailwind 4 — see `AGENTS.md` for the breaking-change callouts
+(async `params`/`cookies()`, `@theme` in CSS instead of `tailwind.config.ts`,
+etc.). Lift the design tokens, typography, and component vocabulary; ignore
+the HTML scaffolding (meta-bar, skin-swatch strip, JS tab switcher) — that's
+prototype chrome.
 
 The file contains four screens stacked as `<section class="screen">` with
 `id="screen-landing" | "screen-viewer" | "screen-streamer" | "screen-settings"`.
@@ -36,15 +39,17 @@ the prototype in a browser.
 
 **High-fidelity.** Final colors, typography, spacing, component shapes, and
 copy. Recreate pixel-close using the repo's existing stack (Next.js + Tailwind
-+ Supabase). If a Tailwind config gets in the way of specific values, add them
-to `tailwind.config.ts` under `theme.extend` rather than hard-coding.
++ Supabase). This repo is on Tailwind 4 — there is no `tailwind.config.ts`;
+theme tokens live in the `@theme` block in `src/app/globals.css`. Extend
+tokens there rather than hard-coding.
 
 ---
 
 ## Design tokens
 
-All tokens live on `:root` in the prototype. Port them to Tailwind theme
-tokens (or CSS custom properties in `globals.css`).
+All tokens live on `:root` in the prototype. Port them into the `@theme`
+block in `src/app/globals.css` (Tailwind 4) and/or as CSS custom properties
+on `:root` for the skin-overridable ones.
 
 ### Color — default skin (Casi Dark)
 
@@ -78,11 +83,16 @@ Seven skins, each overrides `--bg`, `--surface`, `--border`, `--text`,
 | Twitch | `#9146FF` + `#772CE8` | Purple on `#0e0e10` |
 | Terminal | `#39ff14` + `#00cc00` | Phosphor green on black |
 | Ember | `#ff6a00` + `#ee0979` | Orange/pink on `#0d0805` |
-| Gilded | `#e2e2e2` + `#c9a227` | Silver/gold on `#0a0c10` |
+| Chrome | `#e2e2e2` + `#c9a227` | Silver/gold on `#0a0c10` |
 
 Implementation: apply by setting CSS vars on `document.documentElement`.
-See `applySkin()` at line 5625 of the prototype. Persist selection to
-`localStorage` keyed by user.
+See `applySkin()` at line 5625 of the prototype. **Persistence: the DB is
+source of truth** — the streamer's choice is stored on `profiles.skin`
+(migration `20260413120000_add_skin_column.sql`) because the OBS overlay
+(`/overlay`) runs in a separate browser context on the streamer's OBS
+machine and must read the chosen skin from the server. `localStorage` is
+fine as a per-device cache for instant paint, but the write-path must hit
+`profiles.skin` so the overlay stays in sync.
 
 ### Typography
 
@@ -139,8 +149,8 @@ backdrop), configures it, pays, and submits for streamer approval.
 
 **Layout:**
 - Top: streamer card (avatar, name, live status, current viewer count)
-- Main: 3-column surface selector (Flash / Beam / Backdrop), each with a price & description
-- Config panel (context-dependent): upload media, set duration, pick a shape (hex / circle / banner / rect / rounded), live preview on a mock stream
+- Main: 2-tab surface selector (**Flash** / **Beam**). Backdrop is not a top-level tab in the viewer UI — it lives as a shape (`data-shape="backdrop"`) inside Beam's slot picker, priced as a full-bleed slot
+- Config panel (context-dependent): upload media, set duration, pick a shape (hex / circle / banner / rect / rounded / backdrop), live preview on a mock stream
 - Pay CTA (Stripe copy): "€4.00 · 60 seconds · Stripe processes, fees included"
 
 ### 3. Streamer dashboard (`#screen-streamer`, line ~1948)
@@ -161,7 +171,8 @@ screen a streamer keeps open in a second window while streaming.
 
 **Rail groups (current order):**
 - **You**: Profile · Payouts · Account
-- **Stream**: Slot defaults · OBS sources · Session key
+- **Stream**: Slot defaults · OBS sources
+- **Wallet**: Session key *(Solana delegate — see below)*
 - **Alerts**: Notifications
 - **Safety**: Moderation *(bottom — backend is stub, de-emphasized)*
 
@@ -169,21 +180,42 @@ screen a streamer keeps open in a second window while streaming.
 1. Profile — avatar, @handle, display name, bio, social links
 2. Payouts — Stripe Connect status, payout schedule, €-per-payout threshold
 3. Slot defaults — allowed shapes, min/max duration, default prices
-4. OBS sources — **three separate URLs** (see below)
-5. Session key — ephemeral signing key for stream session
+4. OBS sources — **two separate URLs** (see below)
+5. Session key — Solana escrow delegate (see below; has nothing to do with OBS)
 6. Notifications — email/push toggles per event type
 7. Moderation — category blocklist (NSFW/Political/Gambling/Alcohol), keyword list, user blocklist
 8. Danger zone — delete account
 
-**OBS sources — recent change, important:**
-Three separate copy-rows, numbered 1/2/3, each with a Z-order hint:
+**OBS sources:**
+Two copy-rows. These are the real route shape (`src/app/obs/page.tsx`):
 
-1. **Backdrop** — `https://www.casi.gg/obs/{handle}/backdrop?k={key}` · "Full-bleed. Put this at the bottom of your scene."
-2. **Beams** — `https://www.casi.gg/obs/{handle}/beams?k={key}` · "All shaped slots render here — hex, circle, banner, rect, rounded."
-3. **Flashes** — `https://www.casi.gg/obs/{handle}/flashes?k={key}` · "15-second text pop-ups. Keep on top so they're visible."
+1. **Backdrop** — `https://www.casi.gg/obs?s={username}&layer=backdrop` · "Full-bleed. Put this at the bottom of your scene."
+2. **Beams** — `https://www.casi.gg/obs?s={username}&layer=beams` · "All shaped slots render here — hex, circle, banner, rect, rounded, backdrop."
 
-Single "Regenerate all keys" button below. **No webhook fields** — removed in
-this redesign.
+Notes for the implementer:
+- Flashes are **not** an OBS source. They render inside `/overlay` via
+  `FlashFeed` / `FlashPanel` alongside the beams layer. Don't add a third
+  OBS URL — there is no `flashes` layer in `/obs/page.tsx`.
+- URLs carry **no `k={key}` auth param**. The route resolves the streamer by
+  public `username` slug. Don't invent a key-rotation RPC or a
+  `{backdrop,beams}_key` column — none of that exists in the repo, and the
+  route has no code to validate such a key.
+- **No "Regenerate all keys" button.** The prior handoff described one; drop
+  it from the UI.
+- **No webhook fields** — removed in this redesign.
+
+**Session key (Solana delegate):**
+This is the **Solana escrow delegate keypair**, not an OBS URL token.
+Streamer registers a session pubkey on-chain via `set_delegate`; the server
+holds the encrypted secret (`streamer_delegates` table, sealed with
+`DELEGATE_ENCRYPTION_KEY`) and uses it to sign delegated booking-lifecycle
+instructions (`start_beam_delegated`, `settle_beam_delegated`,
+`approve_flash_delegated`, `deny_flash_delegated`) so the **streamer** doesn't
+get a wallet popup on every approve/kick. See `AGENTS.md` → "Phase 3 —
+session-key delegation" and `src/app/admin/_components/DelegateKeyCard.tsx`
+for the install / rotate / revoke state machine. **Do not** reuse this key
+as an OBS URL auth token — it's a signing key and leaking it in browser-source
+URLs compromises the streamer's delegated approvals.
 
 ---
 
@@ -207,7 +239,7 @@ this redesign.
 - **`<EarningsStrip>`** — horizontal 4-stat bar at top of dashboard.
 
 ### Viewer-specific
-- **`<SurfaceSelector>`** — 3-up card selector for Flash/Beam/Backdrop with visual of each.
+- **`<SurfaceSelector>`** — 2-up tab selector for Flash / Beam. Backdrop is rendered as a shape option inside Beam's slot picker, not as a third top-level card.
 - **`<ShapePicker>`** — icon grid for hex/circle/banner/rect/rounded.
 - **`<StreamMockPreview>`** — shows the user's upload composited onto a mock stream in the chosen shape/position.
 
@@ -218,7 +250,6 @@ this redesign.
 - **Skin switch**: instant. CSS custom property swap on `<html>`. No page reload. Transition: 150ms ease on relevant properties.
 - **Settings rail nav**: click scrolls the section into view (`behavior: 'smooth'`). Active item follows scroll via `IntersectionObserver`.
 - **OBS copy buttons**: `navigator.clipboard.writeText(url)` → inline toast "Copied". Auto-dismiss 1.5s.
-- **Regenerate all keys**: confirmation modal ("This invalidates all 3 OBS sources. Your OBS will show blank until you paste the new URLs."). Then API call rotates backdrop_key, beams_key, flashes_key atomically.
 - **Dashboard approval queue**: real-time via Supabase Realtime on the `bookings` table, status=`pending`. Approve/Reject mutates status.
 - **Viewer booking**: Stripe Checkout for payment. On success, booking enters `pending` state until streamer approves.
 
@@ -227,8 +258,9 @@ this redesign.
 Follow the existing repo patterns (`src/app/page.tsx` uses `useState` +
 Supabase client). For settings specifically:
 - Profile / payouts / slot defaults / moderation: form state, save on blur or explicit Save button
-- OBS keys: fetched from `streamers` table, mutated via RPC that rotates + writes atomically
-- Skin: `localStorage` only (no backend needed — skin is cosmetic per-device)
+- OBS URLs: derived client-side from the streamer's own `profiles.username` — no keys, no server write path
+- Session key (Solana delegate): install via `/api/solana/delegates/install`, status via `/api/solana/delegates/status`, revoke via `/api/solana/delegates/revoke`. See `AGENTS.md` for the two-phase install contract (DB upsert + on-chain `set_delegate`)
+- Skin: persisted on `profiles.skin` (DB is source of truth so the OBS overlay can read it); `localStorage` may be used as a per-device cache
 
 ## Assets
 
@@ -236,8 +268,10 @@ The prototype uses:
 - **Google Fonts**: Syne, DM Mono. Load via `next/font` in the app to avoid FOUT.
 - **No image assets** — everything is CSS. Avatars are placeholder colored circles with initials. Streamer scene previews are mock gradients + noise.
 
-When you connect the real app, user avatars come from `streamers.avatar_url`
-(already in schema per `AGENTS.md`).
+When you connect the real app, user avatars come from `profiles.avatar_url`
+(there is no `streamers` table — the schema uses `profiles` for both
+streamers and authenticated users; see `AGENTS.md` → "RLS and permission
+model").
 
 ## Files
 
