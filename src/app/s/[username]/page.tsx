@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/utils/supabase/client';
 import CasiLogo from '@/components/CasiLogo';
 import SkinProvider from '@/components/SkinProvider';
+import WalletNav from '@/components/WalletNav';
 import StreamerBar from './_components/StreamerBar';
 import StreamPreview from './_components/StreamPreview';
 import FlashesFeed, { type Flash } from './_components/FlashesFeed';
@@ -178,32 +179,35 @@ export default function ViewerBookingPage() {
           </span>
         </Link>
 
-        <span
-          className="inline-flex items-center gap-2 font-mono uppercase"
-          style={{
-            padding: '6px 12px',
-            borderRadius: '999px',
-            background: profile.is_live
-              ? 'rgba(var(--casi-accent2-rgb), 0.08)'
-              : 'var(--casi-surface)',
-            border: `1px solid ${profile.is_live ? 'rgba(var(--casi-accent2-rgb), 0.3)' : 'var(--casi-border)'}`,
-            color: profile.is_live ? 'var(--casi-accent2)' : 'var(--casi-text-dim)',
-            fontSize: '11px',
-            letterSpacing: '0.14em',
-          }}
-        >
+        <div className="flex items-center gap-3">
           <span
-            aria-hidden
+            className="inline-flex items-center gap-2 font-mono uppercase"
             style={{
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              background: profile.is_live ? 'var(--casi-accent2)' : 'var(--casi-text-faint)',
-              boxShadow: profile.is_live ? '0 0 8px rgba(var(--casi-accent2-rgb), 0.7)' : 'none',
+              padding: '6px 12px',
+              borderRadius: '999px',
+              background: profile.is_live
+                ? 'rgba(var(--casi-accent2-rgb), 0.08)'
+                : 'var(--casi-surface)',
+              border: `1px solid ${profile.is_live ? 'rgba(var(--casi-accent2-rgb), 0.3)' : 'var(--casi-border)'}`,
+              color: profile.is_live ? 'var(--casi-accent2)' : 'var(--casi-text-dim)',
+              fontSize: '11px',
+              letterSpacing: '0.14em',
             }}
-          />
-          {profile.is_live ? 'Live' : 'Offline'}
-        </span>
+          >
+            <span
+              aria-hidden
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: profile.is_live ? 'var(--casi-accent2)' : 'var(--casi-text-faint)',
+                boxShadow: profile.is_live ? '0 0 8px rgba(var(--casi-accent2-rgb), 0.7)' : 'none',
+              }}
+            />
+            {profile.is_live ? 'Live' : 'Offline'}
+          </span>
+          <WalletNav />
+        </div>
       </nav>
 
       <div

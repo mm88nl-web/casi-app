@@ -9,6 +9,7 @@ import { createClient } from '@/utils/supabase/client';
 import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 import { approveBooking, denyBooking, type ModerationContext } from '@/lib/streamer-moderation';
 import CasiLogo from '@/components/CasiLogo';
+import WalletNav from '@/components/WalletNav';
 import AiringNow, { type AiringItem } from './_components/AiringNow';
 import ApprovalQueue, { type QueueItem } from './_components/ApprovalQueue';
 import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
@@ -462,6 +463,7 @@ export default function StudioPage() {
           >
             Studio · beta
           </span>
+          <WalletNav />
         </div>
       </nav>
 

@@ -1,5 +1,8 @@
+'use client';
+
 import Link from 'next/link';
 import CasiLogo from '@/components/CasiLogo';
+import WalletNav from '@/components/WalletNav';
 
 type Props = {
   liveCount: number;
@@ -29,7 +32,7 @@ export default function LandingNav({ liveCount }: Props) {
         </span>
       </Link>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <span
           className="inline-flex items-center gap-2 font-mono uppercase"
           style={{
@@ -54,6 +57,7 @@ export default function LandingNav({ liveCount }: Props) {
           />
           {liveCount} live now
         </span>
+        <WalletNav />
       </div>
     </nav>
   );

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import CasiLogo from '@/components/CasiLogo';
+import WalletNav from '@/components/WalletNav';
 import SettingsLayout, { type RailGroup } from './_components/SettingsLayout';
 import ProfileSection, { type ProfileRow } from './_components/ProfileSection';
 import PayoutsSection from './_components/PayoutsSection';
@@ -108,37 +110,57 @@ export default function SettingsPage() {
 
   return (
     <main className="min-h-screen" style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}>
+      <nav
+        className="flex items-center justify-between"
+        style={{ padding: '18px 32px', borderBottom: '1px solid var(--casi-border)' }}
+      >
+        <Link
+          href="/"
+          className="flex items-center gap-2"
+          style={{ color: 'var(--casi-text)', textDecoration: 'none' }}
+        >
+          <CasiLogo size={72} />
+          <span
+            className="font-extrabold"
+            style={{ fontFamily: 'var(--font-casi-sans)', fontSize: '22px', letterSpacing: '-1px' }}
+          >
+            casi
+          </span>
+        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/admin"
+            title="Classic studio (current production)"
+            className="font-mono uppercase"
+            style={{
+              fontSize: '10px',
+              letterSpacing: '0.15em',
+              textDecoration: 'none',
+              color: 'var(--casi-text-dim)',
+              padding: '5px 10px',
+              borderRadius: '999px',
+              border: '1px solid var(--casi-border-2)',
+            }}
+          >
+            ↩ Classic studio
+          </Link>
+          <WalletNav />
+        </div>
+      </nav>
+
       <div
-        className="mx-auto flex flex-wrap items-end justify-between gap-4"
+        className="mx-auto"
         style={{ maxWidth: '1200px', padding: '28px 32px 0' }}
       >
-        <div>
-          <h1
-            className="font-extrabold"
-            style={{ fontSize: '30px', letterSpacing: '-1.2px', color: 'var(--casi-text)' }}
-          >
-            Settings
-          </h1>
-          <p className="mt-1" style={{ color: 'var(--casi-text-dim)', fontSize: '14px' }}>
-            Everything about your account, stream, payouts, and rules — in one place.
-          </p>
-        </div>
-        <Link
-          href="/admin"
-          title="Classic studio (current production)"
-          className="font-mono uppercase transition-colors"
-          style={{
-            fontSize: '10px',
-            letterSpacing: '0.15em',
-            textDecoration: 'none',
-            color: 'var(--casi-text-dim)',
-            padding: '6px 12px',
-            borderRadius: '999px',
-            border: '1px solid var(--casi-border-2)',
-          }}
+        <h1
+          className="font-extrabold"
+          style={{ fontSize: '30px', letterSpacing: '-1.2px', color: 'var(--casi-text)' }}
         >
-          ↩ Classic studio
-        </Link>
+          Settings
+        </h1>
+        <p className="mt-1" style={{ color: 'var(--casi-text-dim)', fontSize: '14px' }}>
+          Everything about your account, stream, payouts, and rules — in one place.
+        </p>
       </div>
 
       <SettingsLayout rail={RAIL}>
