@@ -46,72 +46,84 @@ export default function AiringNow({ items }: Props) {
         </span>
       </header>
 
-      {items.map((item) => (
-        <div
-          key={item.id}
-          className="grid items-center gap-2.5"
-          style={{
-            gridTemplateColumns: '36px 1fr auto',
-            padding: '10px 12px',
-            background: 'var(--casi-bg)',
-            border: '1px solid var(--casi-border-2)',
-            borderRadius: '10px',
-          }}
-        >
+      {/* Scroll container — approved flashes never auto-expire (pending | approved | denied),
+          so a streamer with a long stream accumulates dozens of "on stream" rows. Cap the
+          visible area at ~5 rows and scroll the rest so the rest of /studio stays reachable. */}
+      <div
+        className="flex flex-col gap-2 overflow-y-auto pr-1"
+        style={{
+          maxHeight: '340px',
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'var(--casi-border-2) transparent',
+        }}
+      >
+        {items.map((item) => (
           <div
-            className="flex items-center justify-center"
+            key={item.id}
+            className="grid items-center gap-2.5 shrink-0"
             style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
-              background:
-                'linear-gradient(135deg, rgba(var(--casi-accent2-rgb), 0.3), rgba(var(--casi-accent-rgb), 0.2))',
-              fontSize: '16px',
+              gridTemplateColumns: '36px 1fr auto',
+              padding: '10px 12px',
+              background: 'var(--casi-bg)',
+              border: '1px solid var(--casi-border-2)',
+              borderRadius: '10px',
             }}
-            aria-hidden
           >
-            {item.icon}
-          </div>
-          <div>
             <div
-              className="font-semibold truncate"
-              style={{ fontSize: '13px', color: 'var(--casi-text)' }}
-            >
-              {item.name}
-            </div>
-            <div
-              className="font-mono uppercase"
+              className="flex items-center justify-center"
               style={{
-                fontSize: '10px',
-                letterSpacing: '0.1em',
-                color: 'var(--casi-text-dim)',
-                marginTop: '2px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background:
+                  'linear-gradient(135deg, rgba(var(--casi-accent2-rgb), 0.3), rgba(var(--casi-accent-rgb), 0.2))',
+                fontSize: '16px',
               }}
+              aria-hidden
             >
-              {item.subtitle}
+              {item.icon}
             </div>
+            <div className="min-w-0">
+              <div
+                className="font-semibold truncate"
+                style={{ fontSize: '13px', color: 'var(--casi-text)' }}
+              >
+                {item.name}
+              </div>
+              <div
+                className="font-mono uppercase truncate"
+                style={{
+                  fontSize: '10px',
+                  letterSpacing: '0.1em',
+                  color: 'var(--casi-text-dim)',
+                  marginTop: '2px',
+                }}
+              >
+                {item.subtitle}
+              </div>
+            </div>
+            {item.remaining ? (
+              <div
+                className="font-mono font-medium"
+                style={{ fontSize: '14px', color: 'var(--casi-accent2)' }}
+              >
+                {item.remaining}
+              </div>
+            ) : (
+              <div
+                className="font-mono uppercase"
+                style={{
+                  fontSize: '10px',
+                  letterSpacing: '0.15em',
+                  color: 'var(--casi-accent2)',
+                }}
+              >
+                on stream
+              </div>
+            )}
           </div>
-          {item.remaining ? (
-            <div
-              className="font-mono font-medium"
-              style={{ fontSize: '14px', color: 'var(--casi-accent2)' }}
-            >
-              {item.remaining}
-            </div>
-          ) : (
-            <div
-              className="font-mono uppercase"
-              style={{
-                fontSize: '10px',
-                letterSpacing: '0.15em',
-                color: 'var(--casi-accent2)',
-              }}
-            >
-              on stream
-            </div>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
     </section>
   );
 }
