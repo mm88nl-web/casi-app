@@ -9,6 +9,8 @@ import { createClient } from '@/utils/supabase/client';
 import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 import { approveBooking, denyBooking, endBeamEarly, moderateFlash, type ModerationContext } from '@/lib/streamer-moderation';
 import CasiLogo from '@/components/CasiLogo';
+import SkinProvider from '@/components/SkinProvider';
+import ThemeColorDot from '@/components/ThemeColorDot';
 import WalletNav from '@/components/WalletNav';
 import AiringNow, { type AiringItem } from './_components/AiringNow';
 import ApprovalQueue, { type QueueItem } from './_components/ApprovalQueue';
@@ -23,7 +25,7 @@ const BOOKING_COLS =
   'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, started_at, escrow_pda, viewer_wallet, is_queued';
 const FLASH_COLS =
   'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, escrow_pda, viewer_wallet';
-const PROFILE_COLS = 'id, username, solana_wallet, is_live';
+const PROFILE_COLS = 'id, username, solana_wallet, is_live, skin, theme_color';
 
 const LOG_LIMIT = 50;
 
@@ -192,6 +194,8 @@ type Profile = {
   username: string | null;
   solana_wallet: string | null;
   is_live: boolean | null;
+  skin: string | null;
+  theme_color: string | null;
 };
 
 type LoadState =
@@ -436,6 +440,17 @@ export default function StudioPage() {
     setTogglingLive(false);
   }, [state, supabase, togglingLive]);
 
+  // Applied optimistically by ThemeColorDot — parent here just mirrors it
+  // into the Profile state so SkinProvider repaints the dashboard. The
+  // picker itself writes profiles.theme_color server-side so the overlay
+  // + other devices converge on the next realtime sub tick.
+  const handleThemeColorChange = useCallback((next: string | null) => {
+    setState((prev) => {
+      if (prev.kind !== 'ready') return prev;
+      return { kind: 'ready', profile: { ...prev.profile, theme_color: next } };
+    });
+  }, []);
+
   const handleEndEarly = useCallback(async (bookingId: string) => {
     if (!moderationCtx) return;
     const booking = activeBookings.find((b) => String(b.id) === bookingId);
@@ -571,6 +586,9 @@ export default function StudioPage() {
 
   return (
     <main className="min-h-screen" style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}>
+      {/* Streamer's own skin + accent applied to the dashboard so picking a
+          theme color from the dot below repaints the page in real time. */}
+      <SkinProvider skin={profile.skin} themeColor={profile.theme_color} />
       <nav
         className="flex items-center justify-between"
         style={{ padding: '18px 32px', borderBottom: '1px solid var(--casi-border)' }}
@@ -636,6 +654,12 @@ export default function StudioPage() {
           >
             ⚙ Settings
           </Link>
+          <ThemeColorDot
+            supabase={supabase}
+            profileId={profile.id}
+            themeColor={profile.theme_color}
+            onChange={handleThemeColorChange}
+          />
           <WalletNav />
         </div>
       </nav>

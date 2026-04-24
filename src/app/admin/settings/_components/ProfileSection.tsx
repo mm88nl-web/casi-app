@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import SettingsSection from './SettingsSection';
 import FieldRow, { settingsInputStyle, settingsTextareaStyle } from './FieldRow';
 import GhostButton from './GhostButton';
+import SolanaLogo from '@/components/SolanaLogo';
 
 export type ProfileRow = {
   id: string;
@@ -99,25 +100,54 @@ export default function ProfileSection({ supabase, profile }: Props) {
       actions={<SaveIndicator state={saveState} error={errorMsg} />}
     >
       <div className="mb-5 flex items-center gap-4">
-        <div
-          className="flex shrink-0 items-center justify-center"
-          style={{
-            width: '72px',
-            height: '72px',
-            borderRadius: '16px',
-            background:
-              'linear-gradient(135deg, rgba(var(--casi-accent-rgb), 0.5), rgba(var(--casi-accent2-rgb), 0.4))',
-            fontFamily: 'var(--font-casi-sans)',
-            fontSize: '28px',
-            fontWeight: 800,
-            color: '#0a0a0a',
-          }}
-          aria-hidden
-        >
-          {initial}
-        </div>
+        {profile.avatar_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={profile.avatar_url}
+            alt={`${displayName || slug} avatar`}
+            width={72}
+            height={72}
+            style={{ width: '72px', height: '72px', borderRadius: '16px', objectFit: 'cover', flexShrink: 0 }}
+          />
+        ) : (
+          // Default avatar = Solana brandmark inside a dark tile. Signals the
+          // streamer's crypto-rail identity until they upload something custom.
+          // Falls back to the first initial if SolanaLogo is ever stripped
+          // (older admin copy still uses initials).
+          <div
+            className="flex shrink-0 items-center justify-center relative"
+            style={{
+              width: '72px',
+              height: '72px',
+              borderRadius: '16px',
+              background: '#0a0a0a',
+              border: '1px solid var(--casi-border)',
+              overflow: 'hidden',
+            }}
+            aria-label={`${displayName || slug || 'streamer'} avatar placeholder`}
+          >
+            <SolanaLogo size={52} />
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                bottom: '6px',
+                right: '8px',
+                fontFamily: 'var(--font-casi-mono)',
+                fontSize: '9px',
+                letterSpacing: '0.14em',
+                color: 'var(--casi-text-faint)',
+                textTransform: 'uppercase',
+              }}
+            >
+              {initial}
+            </span>
+          </div>
+        )}
         <div className="flex flex-col items-start gap-1.5">
-          <GhostButton type="button" disabled>Upload avatar</GhostButton>
+          <GhostButton type="button" disabled title="Avatar upload coming soon — using Solana default for now">
+            Upload avatar
+          </GhostButton>
           <GhostButton type="button" variant="danger" disabled>Remove</GhostButton>
         </div>
       </div>
