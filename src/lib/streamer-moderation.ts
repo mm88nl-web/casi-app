@@ -190,6 +190,12 @@ export async function endBeamEarly(
   ctx: ModerationContext,
   booking: BookingLike,
 ): Promise<ModerationResult> {
+  // Track whether we proved the Solana escrow closed on-chain during this
+  // flow — if so we null escrow_pda on the expire update so the viewer's
+  // "Recover USDC" chip doesn't linger on a row whose funds are already
+  // back in their wallet.
+  let escrowClosed = false;
+
   // 1. Close escrow.
   if (booking.payment_method === 'solana') {
     if (booking.escrow_pda && booking.viewer_wallet) {
@@ -203,6 +209,8 @@ export async function endBeamEarly(
       if (settleOutcome.outcome === 'error') {
         return { ok: false, message: 'Could not settle escrow on-chain. Beam stays live — try again.' };
       }
+      // settled or closed = PDA is gone, safe to null the DB pointer.
+      escrowClosed = true;
     }
   } else {
     const { data: { session } } = await ctx.supabase.auth.getSession();
@@ -228,10 +236,13 @@ export async function endBeamEarly(
       .catch(() => { /* non-fatal */ });
   }
 
-  // 3. Expire the row.
+  // 3. Expire the row. Null escrow_pda when we confirmed closure on-chain so
+  // the viewer's overlay stops surfacing a stale "Recover USDC" chip.
+  const expireUpdate: Record<string, unknown> = { status: 'expired', image_url: null };
+  if (escrowClosed) expireUpdate.escrow_pda = null;
   const { error: expireErr } = await ctx.supabase
     .from('bookings')
-    .update({ status: 'expired', image_url: null })
+    .update(expireUpdate)
     .eq('id', booking.id);
   if (expireErr) return { ok: false, message: expireErr.message };
 

@@ -1113,6 +1113,10 @@ export default function AdminStudio() {
           }
           return;
         }
+        // settle_beam confirmed the PDA is closed → null the DB pointer so
+        // the viewer's overlay stops surfacing a stale "Recover USDC" chip
+        // on an expired row whose refund already landed in their wallet.
+        await supabase.from('bookings').update({ escrow_pda: null }).eq('id', booking.id);
       }
       await expireBooking(booking);
     } else {
