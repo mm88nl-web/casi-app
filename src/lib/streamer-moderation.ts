@@ -35,7 +35,7 @@ export type ModerationResult =
   | { ok: false; message: string };
 
 export type BookingLike = {
-  id: string;
+  id: string | number;
   element_id?: string | null;
   is_queued?: boolean | null;
   payment_method?: string | null;
