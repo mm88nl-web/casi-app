@@ -40,11 +40,11 @@ type Props = {
 
 export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: Props) {
   const [elements, setElements] = useState<any[]>([]);
-  // Tracked so the corner × on a slot hides when something is live / queued
-  // on it — matches the delete guard in deleteLayer (belt + suspenders: the
-  // click handler would block it anyway, but hiding the button makes the
-  // "end early first" rule legible without a toast).
-  const [busySlotIds, setBusySlotIds] = useState<Set<string>>(new Set());
+  // Map element_id → booking state: 'active' means a beam is currently
+  // playing (glow + "Live" pill), 'queued' means approved and waiting.
+  // Both gate the corner × delete button, matching the deleteLayer
+  // guard so the "end early first" rule is visible in the UI.
+  const [slotState, setSlotState] = useState<Record<string, 'active' | 'queued'>>({});
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [saveStatus, setSaveStatus] = useState<'Ready' | 'Saving…' | 'Saved'>('Ready');
@@ -61,8 +61,8 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
     setTimeout(() => setToast(null), 2800);
   };
 
-  // Initial fetch: elements + any live/queued bookings (so the corner ×
-  // can decide whether to render per-slot).
+  // Initial fetch: elements + any live/queued bookings so the slot render
+  // can show the glow / "Live" pill / hide delete button.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -75,18 +75,21 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
       ]);
       if (cancelled) return;
       setElements(elementsRes.data || []);
-      const ids = new Set<string>();
+      const map: Record<string, 'active' | 'queued'> = {};
       for (const b of bookingsRes.data || []) {
-        if (b.element_id) ids.add(b.element_id);
+        if (!b.element_id) continue;
+        // 'active' wins over 'queued' — a slot with an active beam might
+        // also have queued bookings behind it.
+        if (map[b.element_id] === 'active') continue;
+        map[b.element_id] = b.status === 'active' ? 'active' : 'queued';
       }
-      setBusySlotIds(ids);
+      setSlotState(map);
     })();
     return () => { cancelled = true; };
   }, [supabase, profileId]);
 
-  // Refresh busy-slot set whenever a booking changes status. Cheaper to
-  // re-query than maintain a full reducer here; bookings mutate rarely
-  // compared to drag events.
+  // Refresh slot state whenever a booking changes. Cheaper to re-query than
+  // maintain a full reducer here; bookings mutate rarely compared to drag events.
   useEffect(() => {
     const channel = supabase
       .channel(`studio_editor_bookings_${profileId}`)
@@ -97,11 +100,13 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
             .select('element_id, status')
             .eq('profile_id', profileId)
             .in('status', ['active', 'approved_queued']);
-          const ids = new Set<string>();
+          const map: Record<string, 'active' | 'queued'> = {};
           for (const b of data || []) {
-            if (b.element_id) ids.add(b.element_id);
+            if (!b.element_id) continue;
+            if (map[b.element_id] === 'active') continue;
+            map[b.element_id] = b.status === 'active' ? 'active' : 'queued';
           }
-          setBusySlotIds(ids);
+          setSlotState(map);
         })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -271,6 +276,8 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
       >
         {dimensions.width > 0 && elements.map((el) => {
           const isSelected = selectedSlotId === el.id;
+          const state = slotState[el.id]; // 'active' | 'queued' | undefined
+          const isActive = state === 'active';
           return (
             <Rnd
               key={el.id}
@@ -323,9 +330,22 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
                 <div
                   style={{
                     position: 'relative', width: '100%', height: '100%',
-                    border: el.is_background ? 'none' : isSelected ? '2px solid var(--casi-accent)' : '1.5px solid rgba(var(--casi-accent-rgb),0.3)',
+                    border: el.is_background
+                      ? 'none'
+                      : isSelected
+                        ? '2px solid var(--casi-accent)'
+                        : isActive
+                          ? '2px solid var(--casi-accent2)'
+                          : '1.5px solid rgba(var(--casi-accent-rgb),0.3)',
                     borderRadius: el.is_background ? 0 : el.shape === 'rounded' ? 14 : 6,
                     opacity: el.locked ? 0.7 : 1,
+                    // Persistent soft glow on live slots so the streamer sees
+                    // at a glance which of their slots is airing content. The
+                    // viewer overlay has a 3s one-shot on transition; here it
+                    // holds steady while the beam is live.
+                    boxShadow: isActive
+                      ? '0 0 0 3px rgba(var(--casi-accent2-rgb), 0.2), 0 0 24px rgba(var(--casi-accent2-rgb), 0.35)'
+                      : undefined,
                     clipPath:
                       el.shape === 'circle' ? 'circle(50%)'
                       : el.shape === 'hex' ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)'
@@ -382,7 +402,7 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
                     (which settles the escrow first). deleteLayer itself
                     also guards, so even if the button leaks out, the
                     click is refused with a toast. */}
-                {!el.is_background && !busySlotIds.has(el.id) ? (
+                {!el.is_background && !state ? (
                   <button
                     type="button"
                     onPointerDown={(e) => e.stopPropagation()}
@@ -399,21 +419,46 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
                     ✕
                   </button>
                 ) : null}
-                {!el.is_background && busySlotIds.has(el.id) ? (
+                {!el.is_background && state === 'active' ? (
+                  <span
+                    aria-hidden
+                    className="font-mono uppercase inline-flex items-center gap-1.5"
+                    style={{
+                      position: 'absolute', top: 6, right: 6,
+                      padding: '3px 8px', borderRadius: 4,
+                      background: 'rgba(var(--casi-accent2-rgb), 0.15)',
+                      border: '1px solid rgba(var(--casi-accent2-rgb), 0.45)',
+                      color: 'var(--casi-accent2)',
+                      fontSize: 9, letterSpacing: '0.14em', zIndex: 50,
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        width: '6px', height: '6px', borderRadius: '50%',
+                        background: 'var(--casi-accent2)',
+                        boxShadow: '0 0 6px rgba(var(--casi-accent2-rgb), 0.8)',
+                      }}
+                    />
+                    Live · end from Dashboard
+                  </span>
+                ) : null}
+                {!el.is_background && state === 'queued' ? (
                   <span
                     aria-hidden
                     className="font-mono uppercase"
                     style={{
                       position: 'absolute', top: 6, right: 6,
                       padding: '3px 8px', borderRadius: 4,
-                      background: 'rgba(var(--casi-accent2-rgb), 0.12)',
-                      border: '1px solid rgba(var(--casi-accent2-rgb), 0.3)',
-                      color: 'var(--casi-accent2)',
+                      background: 'rgba(var(--casi-accent-rgb), 0.12)',
+                      border: '1px solid rgba(var(--casi-accent-rgb), 0.3)',
+                      color: 'var(--casi-accent)',
                       fontSize: 9, letterSpacing: '0.14em', zIndex: 50,
                       pointerEvents: 'none',
                     }}
                   >
-                    Live · end from Dashboard
+                    Queued
                   </span>
                 ) : null}
               </div>

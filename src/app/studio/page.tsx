@@ -862,16 +862,45 @@ function EarningsStrip({
         </button>
       </div>
 
-      <StatTile label="Today · EUR" value={earnedTodayEur} tone="accent" />
-      <StatTile label="Today · USDC" value={earnedTodayUsdc} />
+      {/* Dim the rail with no activity today. Keeps the grid layout stable
+          (4 columns on desktop) but a solana-only streamer sees a muted
+          "Today · EUR —" instead of a loud "€0". Same for stripe-only. */}
+      <StatTile
+        label="Today · EUR"
+        value={earnedTodayEur === '€0' ? '—' : earnedTodayEur}
+        tone="accent"
+        dim={earnedTodayEur === '€0'}
+      />
+      <StatTile
+        label="Today · USDC"
+        value={earnedTodayUsdc === '0 USDC' ? '—' : earnedTodayUsdc}
+        dim={earnedTodayUsdc === '0 USDC'}
+      />
       <StatTile label="Pending" value={String(pendingCount)} tone="accent2" />
     </div>
   );
 }
 
-function StatTile({ label, value, tone }: { label: string; value: string; tone?: 'accent' | 'accent2' }) {
-  const color =
-    tone === 'accent' ? 'var(--casi-accent)' : tone === 'accent2' ? 'var(--casi-accent2)' : 'var(--casi-text)';
+function StatTile({
+  label,
+  value,
+  tone,
+  dim,
+}: {
+  label: string;
+  value: string;
+  tone?: 'accent' | 'accent2';
+  /** True when the tile represents a rail with no activity today — paints
+   *  the value in muted text and drops the tint so it doesn't compete. */
+  dim?: boolean;
+}) {
+  const color = dim
+    ? 'var(--casi-text-faint)'
+    : tone === 'accent'
+      ? 'var(--casi-accent)'
+      : tone === 'accent2'
+        ? 'var(--casi-accent2)'
+        : 'var(--casi-text)';
   return (
     <div
       className="flex flex-col justify-center gap-1.5"
