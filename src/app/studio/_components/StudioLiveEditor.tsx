@@ -311,9 +311,20 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
                 isDragging.current = false;
               }}
               onResizeStop={(_e, _dir, ref, _delta, pos) => {
+                const heightPct = (ref.offsetHeight / dimensions.height) * 100;
+                let widthPct = (ref.offsetWidth / dimensions.width) * 100;
+                // Circle and hex need a pixel-square rendered box or the
+                // clipPath turns the shape into an ellipse / flattened hex.
+                // Canvas is 16:9, so pixel-square == widthPct = heightPct × 9/16.
+                // Same rule handleUpdateShape uses on shape change — apply
+                // again on every resize so the streamer can't drift the slot
+                // out of ratio.
+                if (el.shape === 'circle' || el.shape === 'hex') {
+                  widthPct = Math.round(heightPct * 9 / 16 * 100) / 100;
+                }
                 updateLayer(el.id, {
-                  width: (ref.offsetWidth / dimensions.width) * 100,
-                  height: (ref.offsetHeight / dimensions.height) * 100,
+                  width: widthPct,
+                  height: heightPct,
                   pos_x: (pos.x / dimensions.width) * 100,
                   pos_y: (pos.y / dimensions.height) * 100,
                 });

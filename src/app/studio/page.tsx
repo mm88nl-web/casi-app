@@ -129,6 +129,27 @@ function flashToQueueItem(f: FlashRow): QueueItem {
   };
 }
 
+/** Short label for which slot on the canvas a booking lives in, so two
+ *  active beams don't look identical on the Airing list. Shape first
+ *  (hex, circle, banner, backdrop, rect, rounded), then a rough position
+ *  quadrant for non-full-canvas shapes. Returns null for detached
+ *  bookings (no element_id or element deleted). */
+function slotLabel(
+  element: { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null } | undefined,
+): string | null {
+  if (!element) return null;
+  const shape = element.shape || 'rect';
+  if (element.is_background || shape === 'backdrop') return 'backdrop';
+  if (shape === 'banner') return 'banner';
+  const x = Number(element.pos_x ?? 50);
+  const y = Number(element.pos_y ?? 50);
+  const horiz = x < 33 ? 'left' : x > 55 ? 'right' : 'centre';
+  const vert = y < 33 ? 'top' : y > 55 ? 'bottom' : 'mid';
+  // Collapse "mid-centre" to just "centre"; otherwise join with a hyphen.
+  const pos = horiz === 'centre' && vert === 'mid' ? 'centre' : `${vert}-${horiz}`;
+  return `${shape} · ${pos}`;
+}
+
 function bookingToAiringItem(b: BookingRow): AiringItem {
   const who = b.viewer_name || 'anon';
   const snippet = b.message ? `"${b.message.slice(0, 40)}"` : b.file_type === 'video' ? 'video clip' : 'image';
@@ -188,6 +209,11 @@ export default function StudioPage() {
   const [pendingFlashes, setPendingFlashes] = useState<FlashRow[]>([]);
   const [activeBookings, setActiveBookings] = useState<BookingRow[]>([]);
   const [queuedBookings, setQueuedBookings] = useState<BookingRow[]>([]);
+  // Streamer's overlay elements, keyed by id. Used to surface slot context
+  // ("hex · top-right") on airing rows so two beams in different slots
+  // don't look identical. Same realtime sub also drives StudioLiveEditor;
+  // re-querying here keeps them in lockstep without sharing state.
+  const [elementsById, setElementsById] = useState<Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }>>({});
   const [flashLogRaw, setFlashLogRaw] = useState<FlashRow[]>([]);
   const [flashTotals, setFlashTotals] = useState({ count: 0, eur: '€0', usdc: '0 USDC' });
   const [moderating, setModerating] = useState<Set<string>>(new Set());
@@ -206,7 +232,7 @@ export default function StudioPage() {
     const startOfDayIso = new Date();
     startOfDayIso.setHours(0, 0, 0, 0);
 
-    const [pendingBookingsRes, pendingFlashesRes, activeBookingsRes, queuedBookingsRes, logFlashesRes] =
+    const [pendingBookingsRes, pendingFlashesRes, activeBookingsRes, queuedBookingsRes, elementsRes, logFlashesRes] =
       await Promise.all([
         supabase.from('bookings').select(BOOKING_COLS)
           .eq('profile_id', profileId).eq('status', 'pending')
@@ -223,6 +249,10 @@ export default function StudioPage() {
         supabase.from('bookings').select(BOOKING_COLS)
           .eq('profile_id', profileId).eq('status', 'approved_queued')
           .order('approved_at', { ascending: true }).limit(50),
+        // Slot metadata for airing-row context ("hex · top-right" etc.).
+        supabase.from('overlay_elements')
+          .select('id, shape, pos_x, pos_y, is_background')
+          .eq('profile_id', profileId),
         supabase.from('flashes').select(FLASH_COLS)
           .eq('profile_id', profileId)
           .in('status', ['approved', 'denied'])
@@ -234,6 +264,12 @@ export default function StudioPage() {
     setPendingFlashes((pendingFlashesRes.data ?? []) as FlashRow[]);
     setActiveBookings((activeBookingsRes.data ?? []) as BookingRow[]);
     setQueuedBookings((queuedBookingsRes.data ?? []) as BookingRow[]);
+
+    const elementsMap: Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }> = {};
+    for (const el of (elementsRes.data ?? []) as Array<{ id: string; shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }>) {
+      elementsMap[el.id] = { shape: el.shape, pos_x: el.pos_x, pos_y: el.pos_y, is_background: el.is_background };
+    }
+    setElementsById(elementsMap);
 
     const logRows = (logFlashesRes.data ?? []) as FlashRow[];
     setFlashLogRaw(logRows);
@@ -514,8 +550,15 @@ export default function StudioPage() {
 
   const airing: AiringItem[] = activeBookings.map((b) => {
     const bookingId = String(b.id);
+    const base = bookingToAiringItem(b);
+    // Inject the slot label into the subtitle so two beams in different
+    // slots don't look identical. Falls back to no-op if the element is
+    // gone or the row is detached (no element_id).
+    const label = b.element_id ? slotLabel(elementsById[b.element_id]) : null;
+    const subtitle = label ? `${label} · ${base.subtitle}` : base.subtitle;
     return {
-      ...bookingToAiringItem(b),
+      ...base,
+      subtitle,
       queueCount: b.element_id ? queueCountByElement[b.element_id] : undefined,
       onEndEarly: () => handleEndEarly(bookingId),
       endingEarly: endingEarly.has(bookingId),
@@ -573,6 +616,22 @@ export default function StudioPage() {
           >
             Studio · beta
           </span>
+          <Link
+            href="/admin/settings"
+            title="Profile, payouts, OBS sources, session key, moderation"
+            className="font-mono uppercase"
+            style={{
+              fontSize: '10px',
+              letterSpacing: '0.15em',
+              textDecoration: 'none',
+              color: 'var(--casi-text-dim)',
+              padding: '5px 10px',
+              borderRadius: '999px',
+              border: '1px solid var(--casi-border-2)',
+            }}
+          >
+            ⚙ Settings
+          </Link>
           <WalletNav />
         </div>
       </nav>
