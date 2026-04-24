@@ -7,7 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { createClient } from '@/utils/supabase/client';
 import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
-import { approveBooking, denyBooking, endBeamEarly, type ModerationContext } from '@/lib/streamer-moderation';
+import { approveBooking, denyBooking, endBeamEarly, moderateFlash, type ModerationContext } from '@/lib/streamer-moderation';
 import CasiLogo from '@/components/CasiLogo';
 import WalletNav from '@/components/WalletNav';
 import AiringNow, { type AiringItem } from './_components/AiringNow';
@@ -22,7 +22,7 @@ import StudioLiveEditor from './_components/StudioLiveEditor';
 const BOOKING_COLS =
   'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, started_at, escrow_pda, viewer_wallet, is_queued';
 const FLASH_COLS =
-  'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method';
+  'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, escrow_pda, viewer_wallet';
 const PROFILE_COLS = 'id, username, solana_wallet, is_live';
 
 const LOG_LIMIT = 50;
@@ -80,6 +80,8 @@ type FlashRow = {
   message: string | null;
   amount_cents: number | null;
   payment_method: string | null;
+  escrow_pda: string | null;
+  viewer_wallet: string | null;
 };
 
 function bookingToQueueItem(b: BookingRow): QueueItem {
@@ -116,9 +118,6 @@ function flashToQueueItem(f: FlashRow): QueueItem {
     name: `${who} · "${snippet}${overflow ? '…' : ''}"`,
     subtitle: `${logTime(f.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · text`,
     priceLabel,
-    // Flash moderation has its own on-chain flow (approve_flash / deny_flash)
-    // that isn't wired here yet — route the streamer to /admin for now.
-    readOnly: true,
   };
 }
 
@@ -181,10 +180,11 @@ export default function StudioPage() {
   const [pendingFlashes, setPendingFlashes] = useState<FlashRow[]>([]);
   const [activeBookings, setActiveBookings] = useState<BookingRow[]>([]);
   const [queuedBookings, setQueuedBookings] = useState<BookingRow[]>([]);
-  const [flashLog, setFlashLog] = useState<FlashLogItem[]>([]);
+  const [flashLogRaw, setFlashLogRaw] = useState<FlashRow[]>([]);
   const [flashTotals, setFlashTotals] = useState({ count: 0, eur: '€0', usdc: '0 USDC' });
   const [moderating, setModerating] = useState<Set<string>>(new Set());
   const [endingEarly, setEndingEarly] = useState<Set<string>>(new Set());
+  const [refundingFlash, setRefundingFlash] = useState<Set<string>>(new Set());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [togglingLive, setTogglingLive] = useState(false);
   const [mode, setMode] = useState<'monitor' | 'live'>('monitor');
@@ -228,7 +228,7 @@ export default function StudioPage() {
     setQueuedBookings((queuedBookingsRes.data ?? []) as BookingRow[]);
 
     const logRows = (logFlashesRes.data ?? []) as FlashRow[];
-    setFlashLog(logRows.map(flashToLogItem));
+    setFlashLogRaw(logRows);
 
     let eurCents = 0;
     let usdcUnits = 0;
@@ -345,23 +345,37 @@ export default function StudioPage() {
 
   const handleApprove = useCallback(async (queueId: string) => {
     if (!moderationCtx) return;
-    const raw = queueId.startsWith('booking-') ? queueId.slice('booking-'.length) : null;
-    if (!raw) return;
-    const booking = pendingBookings.find((b) => String(b.id) === raw);
-    if (!booking) return;
-
-    markModerating(queueId, true);
     setErrorMsg(null);
-    const result = await approveBooking(moderationCtx, booking);
-    markModerating(queueId, false);
 
-    if (!result.ok) {
-      setErrorMsg(result.message);
+    if (queueId.startsWith('booking-')) {
+      const raw = queueId.slice('booking-'.length);
+      const booking = pendingBookings.find((b) => String(b.id) === raw);
+      if (!booking) return;
+      markModerating(queueId, true);
+      const result = await approveBooking(moderationCtx, booking);
+      markModerating(queueId, false);
+      if (!result.ok) {
+        setErrorMsg(result.message);
+        return;
+      }
+      setPendingBookings((prev) => prev.filter((b) => String(b.id) !== raw));
       return;
     }
-    // Optimistic — realtime will converge.
-    setPendingBookings((prev) => prev.filter((b) => String(b.id) !== raw));
-  }, [moderationCtx, pendingBookings, markModerating]);
+
+    if (queueId.startsWith('flash-')) {
+      const raw = queueId.slice('flash-'.length);
+      const flash = pendingFlashes.find((f) => f.id === raw);
+      if (!flash) return;
+      markModerating(queueId, true);
+      const result = await moderateFlash(moderationCtx, flash, 'approve');
+      markModerating(queueId, false);
+      if (!result.ok) {
+        setErrorMsg(result.message);
+        return;
+      }
+      setPendingFlashes((prev) => prev.filter((f) => f.id !== raw));
+    }
+  }, [moderationCtx, pendingBookings, pendingFlashes, markModerating]);
 
   const toggleLive = useCallback(async () => {
     if (state.kind !== 'ready' || togglingLive) return;
@@ -403,22 +417,60 @@ export default function StudioPage() {
 
   const handleReject = useCallback(async (queueId: string) => {
     if (!moderationCtx) return;
-    const raw = queueId.startsWith('booking-') ? queueId.slice('booking-'.length) : null;
-    if (!raw) return;
-    const booking = pendingBookings.find((b) => String(b.id) === raw);
-    if (!booking) return;
-
-    markModerating(queueId, true);
     setErrorMsg(null);
-    const result = await denyBooking(moderationCtx, String(booking.id), booking.payment_method);
-    markModerating(queueId, false);
 
-    if (!result.ok) {
-      setErrorMsg(result.message);
+    if (queueId.startsWith('booking-')) {
+      const raw = queueId.slice('booking-'.length);
+      const booking = pendingBookings.find((b) => String(b.id) === raw);
+      if (!booking) return;
+      markModerating(queueId, true);
+      const result = await denyBooking(moderationCtx, String(booking.id), booking.payment_method);
+      markModerating(queueId, false);
+      if (!result.ok) {
+        setErrorMsg(result.message);
+        return;
+      }
+      setPendingBookings((prev) => prev.filter((b) => String(b.id) !== raw));
       return;
     }
-    setPendingBookings((prev) => prev.filter((b) => String(b.id) !== raw));
-  }, [moderationCtx, pendingBookings, markModerating]);
+
+    if (queueId.startsWith('flash-')) {
+      const raw = queueId.slice('flash-'.length);
+      const flash = pendingFlashes.find((f) => f.id === raw);
+      if (!flash) return;
+      markModerating(queueId, true);
+      const result = await moderateFlash(moderationCtx, flash, 'deny');
+      markModerating(queueId, false);
+      if (!result.ok) {
+        setErrorMsg(result.message);
+        return;
+      }
+      setPendingFlashes((prev) => prev.filter((f) => f.id !== raw));
+    }
+  }, [moderationCtx, pendingBookings, pendingFlashes, markModerating]);
+
+  // Refund a flash from the live log — deny on-chain + flip DB. Pin and Block
+  // stay as UI-only for now: the schema has no `pinned` column and the block
+  // list is a profile-level concern (admin writes it), so shell-only on those
+  // until they get their own pass.
+  const handleFlashRefund = useCallback(async (flashId: string) => {
+    if (!moderationCtx) return;
+    setErrorMsg(null);
+    const flash = flashLogRaw.find((f) => f.id === flashId);
+    if (!flash) return;
+    setRefundingFlash((prev) => new Set(prev).add(flashId));
+    const result = await moderateFlash(moderationCtx, flash, 'deny');
+    setRefundingFlash((prev) => {
+      const next = new Set(prev);
+      next.delete(flashId);
+      return next;
+    });
+    if (!result.ok) {
+      setErrorMsg(result.message);
+    }
+    // Realtime sub will flip status=denied; the derived flashLog re-renders
+    // with the row dimmed + struck-through.
+  }, [moderationCtx, flashLogRaw]);
 
   if (state.kind === 'loading' || state.kind === 'anonymous') {
     return <StatusScreen>Loading studio…</StatusScreen>;
@@ -449,6 +501,8 @@ export default function StudioPage() {
     acc[b.element_id] = (acc[b.element_id] ?? 0) + 1;
     return acc;
   }, {});
+
+  const flashLog: FlashLogItem[] = flashLogRaw.map(flashToLogItem);
 
   const airing: AiringItem[] = activeBookings.map((b) => {
     const bookingId = String(b.id);
@@ -723,7 +777,12 @@ export default function StudioPage() {
               pendingIds={moderating}
               emptyLabel="No pending bookings · nothing to approve"
             />
-            <FlashesLog items={flashLog} totals={flashTotals} />
+            <FlashesLog
+              items={flashLog}
+              totals={flashTotals}
+              onRefund={handleFlashRefund}
+              refunding={refundingFlash}
+            />
           </>
         ) : (
           <StudioLiveEditor supabase={supabase} profileId={profile.id} />

@@ -46,6 +46,13 @@ export type BookingLike = {
   storage_path?: string | null;
 };
 
+export type FlashLike = {
+  id: string;
+  payment_method?: string | null;
+  escrow_pda?: string | null;
+  viewer_wallet?: string | null;
+};
+
 export type WalletSigner = {
   publicKey: PublicKey;
   signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T>;
@@ -280,11 +287,165 @@ export async function endBeamEarly(
   return { ok: true };
 }
 
+/**
+ * Approve or deny a flash. Mirrors admin's moderateSolanaFlash + the Stripe
+ * branch inline in approveFlash/denyFlash.
+ *
+ * Stripe path: POST /api/flashes/moderate db_only — server validates and flips
+ *   DB. One call, no chain signing.
+ *
+ * Solana path:
+ *   1. If no escrow metadata: db_only fallback.
+ *   2. Probe the PDA. If gone (already settled on-chain), db_only fallback.
+ *   3. Try the delegate crank (/api/solana/delegates/approve-flash|deny-flash).
+ *      On success the webhook flips DB; we also fire db_only as a belt-and-
+ *      braces fallback for dev setups without a Helius tunnel.
+ *   4. On delegate failure, wallet-signed approve_flash / deny_flash. Handle
+ *      mid-flight PDA disappearance (Anchor's AccountNotInitialized /
+ *      already-processed) by re-probing and falling to db_only.
+ *   5. After a successful chain tx, POST /api/flashes/moderate with
+ *      tx_signature so the server verifies and flips DB.
+ */
+export async function moderateFlash(
+  ctx: ModerationContext,
+  flash: FlashLike,
+  action: 'approve' | 'deny',
+): Promise<ModerationResult> {
+  const { data: { session } } = await ctx.supabase.auth.getSession();
+  if (!session?.access_token) {
+    return { ok: false, message: 'Not signed in.' };
+  }
+  const authHeader = `Bearer ${session.access_token}`;
+
+  const dbOnlyModerate = async () => {
+    const res = await fetch('/api/flashes/moderate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+      body: JSON.stringify({ flash_id: flash.id, action, db_only: true }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body?.error) {
+      throw new Error(body?.error || `Server update failed (${res.status}).`);
+    }
+  };
+
+  try {
+    // Stripe flashes never touch chain — server is authoritative.
+    if (flash.payment_method !== 'solana' && flash.payment_method !== 'usdc') {
+      await dbOnlyModerate();
+      return { ok: true };
+    }
+
+    // Solana with no escrow metadata: approve can't happen (no vault to
+    // close); deny is a DB-only flip.
+    if (!flash.viewer_wallet || !flash.escrow_pda) {
+      if (action === 'deny') {
+        await dbOnlyModerate();
+        return { ok: true };
+      }
+      return { ok: false, message: "Flash hasn't been paid yet — nothing to approve." };
+    }
+
+    // Probe the PDA. If it's gone, flash was already settled on-chain.
+    const { PublicKey } = await import('@solana/web3.js');
+    const escrowPk = new PublicKey(flash.escrow_pda);
+    const pdaInfo = await ctx.connection.getAccountInfo(escrowPk).catch(() => null);
+    if (!pdaInfo) {
+      await dbOnlyModerate();
+      return { ok: true };
+    }
+
+    // Delegate crank first — no wallet popup if a healthy session key is installed.
+    try {
+      const route = action === 'approve'
+        ? '/api/solana/delegates/approve-flash'
+        : '/api/solana/delegates/deny-flash';
+      const res = await fetch(route, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+        body: JSON.stringify({ flash_id: flash.id }),
+      });
+      if (res.ok) {
+        // Webhook normally flips DB; fire db_only as a safety net for dev
+        // setups without a Helius tunnel. Both paths gate on status='pending'
+        // so the double-write is idempotent.
+        try { await dbOnlyModerate(); } catch { /* webhook already handled it */ }
+        return { ok: true };
+      }
+    } catch (err) {
+      console.warn('[moderateFlash] delegate crank failed, falling back', err);
+    }
+
+    // Wallet-signed path.
+    if (!ctx.wallet) {
+      return { ok: false, message: 'Connect your streamer wallet to moderate this flash.' };
+    }
+    if (ctx.profile.solana_wallet && ctx.wallet.publicKey.toBase58() !== ctx.profile.solana_wallet) {
+      return { ok: false, message: 'Connected wallet does not match the streamer wallet on file.' };
+    }
+
+    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const anchorWallet = buildAnchorWallet(ctx.wallet);
+    const client = new CasiEscrowClient(ctx.connection, anchorWallet as never, ctx.cluster);
+    const viewerPk = new PublicKey(flash.viewer_wallet);
+
+    let sig: string;
+    try {
+      const result = action === 'approve'
+        ? await client.approveFlash({ escrowId: flash.id, viewer: viewerPk, streamer: ctx.wallet.publicKey })
+        : await client.denyFlash({ escrowId: flash.id, viewer: viewerPk, streamer: ctx.wallet.publicKey });
+      sig = result.sig;
+    } catch (err) {
+      // Mid-flight drift — PDA closed between probe and tx. Fall back to
+      // db_only if the account is gone now.
+      const { isAlreadyProcessed } = await import('@/lib/casi-errors');
+      const msg = err instanceof Error ? err.message : String(err);
+      if (isAlreadyProcessed(err) || /AccountNotInitialized|account.*not.*exist|AlreadySettled/i.test(msg)) {
+        const stillThere = await ctx.connection.getAccountInfo(escrowPk).catch(() => null);
+        if (!stillThere) {
+          await dbOnlyModerate();
+          return { ok: true };
+        }
+      }
+      const { formatEscrowError } = await import('@/lib/casi-errors');
+      return { ok: false, message: formatEscrowError(err) };
+    }
+
+    // Verify tx server-side, which flips DB status.
+    const verify = await fetch('/api/flashes/moderate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+      body: JSON.stringify({ flash_id: flash.id, action, tx_signature: sig }),
+    });
+    const body = await verify.json().catch(() => ({}));
+    if (!verify.ok || body?.error) {
+      return { ok: false, message: body?.error || `Server verification failed (${verify.status}).` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
    Internals — mirror admin/page.tsx's startSolanaBeamOnChain and
    settleOrClearSolanaEscrow. Kept here (rather than in @/lib/casi-escrow)
    because they blend web3 signing with Supabase session calls.
    ────────────────────────────────────────────────────────────────────────── */
+
+function buildAnchorWallet(wallet: WalletSigner) {
+  return {
+    publicKey: wallet.publicKey,
+    signTransaction: wallet.signTransaction,
+    signAllTransactions:
+      wallet.signAllTransactions ||
+      (async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
+        const out: T[] = [];
+        for (const tx of txs) out.push(await wallet.signTransaction(tx));
+        return out;
+      }),
+  };
+}
 
 async function startSolanaBeamOnChain(
   ctx: ModerationContext,
