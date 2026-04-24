@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import ClientErrorReporter from "@/components/ClientErrorReporter";
+import DevBanner from "@/components/DevBanner";
 
 const sans = Bricolage_Grotesque({
   variable: "--font-casi-sans",
@@ -36,6 +38,9 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <Providers>
             <ClientErrorReporter />
+            <Suspense fallback={null}>
+              <DevBanner />
+            </Suspense>
             {children}
           </Providers>
       </body>

@@ -15,6 +15,11 @@ export type FlashLogItem = {
 type Props = {
   items: FlashLogItem[];
   totals: { count: number; eur: string; usdc: string };
+  /** Called when the streamer clicks Refund on a flash row. Receives the
+   *  flash id (without the "flash-" prefix, just the raw UUID). */
+  onRefund?: (flashId: string) => void;
+  /** Set of flash ids currently being refunded — row shows a wait state. */
+  refunding?: ReadonlySet<string>;
 };
 
 type FilterKey = 'all' | 'paid' | 'free' | 'pinned' | 'refunded';
@@ -45,7 +50,7 @@ const CHIP_STYLES: Record<FlashLogItem['chip']['kind'], { bg: string; fg: string
   },
 };
 
-export default function FlashesLog({ items, totals }: Props) {
+export default function FlashesLog({ items, totals, onRefund, refunding }: Props) {
   const [filter, setFilter] = useState<FilterKey>('all');
 
   const counts = useMemo(
@@ -153,14 +158,32 @@ export default function FlashesLog({ items, totals }: Props) {
             No flashes match
           </div>
         ) : (
-          visible.map((flash, idx) => <FlashRow key={flash.id} flash={flash} isLast={idx === visible.length - 1} />)
+          visible.map((flash, idx) => (
+            <FlashRow
+              key={flash.id}
+              flash={flash}
+              isLast={idx === visible.length - 1}
+              onRefund={onRefund}
+              isRefunding={refunding?.has(flash.id) ?? false}
+            />
+          ))
         )}
       </div>
     </section>
   );
 }
 
-function FlashRow({ flash, isLast }: { flash: FlashLogItem; isLast: boolean }) {
+function FlashRow({
+  flash,
+  isLast,
+  onRefund,
+  isRefunding,
+}: {
+  flash: FlashLogItem;
+  isLast: boolean;
+  onRefund?: (flashId: string) => void;
+  isRefunding: boolean;
+}) {
   const chip = CHIP_STYLES[flash.chip.kind];
   return (
     <div
@@ -227,9 +250,22 @@ function FlashRow({ flash, isLast }: { flash: FlashLogItem; isLast: boolean }) {
       <div className="flex gap-1">
         {!flash.refunded ? (
           <>
-            <FlashActButton variant="pin">{flash.pinned ? 'Unpin' : 'Pin'}</FlashActButton>
-            <FlashActButton variant="refund">Refund</FlashActButton>
-            <FlashActButton variant="block">Block</FlashActButton>
+            {/* Pin + Block are shell-only for now — no schema support.
+                Refund wires the real approve_flash / deny_flash path. */}
+            <FlashActButton variant="pin" disabled title="Pinning isn't wired yet">
+              {flash.pinned ? 'Unpin' : 'Pin'}
+            </FlashActButton>
+            <FlashActButton
+              variant="refund"
+              onClick={onRefund ? () => onRefund(flash.id) : undefined}
+              disabled={isRefunding || !onRefund}
+              title={onRefund ? 'Deny and refund' : 'Refund handler not wired'}
+            >
+              {isRefunding ? '…' : 'Refund'}
+            </FlashActButton>
+            <FlashActButton variant="block" disabled title="Blocking isn't wired yet">
+              Block
+            </FlashActButton>
           </>
         ) : (
           <span
@@ -254,14 +290,23 @@ function FlashRow({ flash, isLast }: { flash: FlashLogItem; isLast: boolean }) {
 function FlashActButton({
   variant,
   children,
+  onClick,
+  disabled,
+  title,
 }: {
   variant: 'pin' | 'refund' | 'block';
-  children: string;
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       data-variant={variant}
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
       className="flash-act font-mono uppercase transition-colors"
       style={{
         padding: '4px 9px',
@@ -272,7 +317,8 @@ function FlashActButton({
         fontSize: '10px',
         letterSpacing: '0.1em',
         fontWeight: 500,
-        cursor: 'pointer',
+        opacity: disabled ? 0.35 : 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
       }}
     >
       {children}

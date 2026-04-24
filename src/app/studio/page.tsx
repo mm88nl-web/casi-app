@@ -7,21 +7,23 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { createClient } from '@/utils/supabase/client';
 import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
-import { approveBooking, denyBooking, type ModerationContext } from '@/lib/streamer-moderation';
+import { approveBooking, denyBooking, endBeamEarly, moderateFlash, type ModerationContext } from '@/lib/streamer-moderation';
 import CasiLogo from '@/components/CasiLogo';
+import WalletNav from '@/components/WalletNav';
 import AiringNow, { type AiringItem } from './_components/AiringNow';
 import ApprovalQueue, { type QueueItem } from './_components/ApprovalQueue';
 import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
+import StudioLiveEditor from './_components/StudioLiveEditor';
 
 // Explicit column lists. BOOKING_COLS adds the moderation-critical fields the
 // old /studio page didn't need: element_id / is_queued (slot + queue logic),
 // escrow_pda / viewer_wallet (Solana settle on deny), image_url (overlay copy
 // on approve).
 const BOOKING_COLS =
-  'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, duration_minutes, price_value, price_unit, payment_method, started_at, escrow_pda, viewer_wallet, is_queued';
+  'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, started_at, escrow_pda, viewer_wallet, is_queued';
 const FLASH_COLS =
-  'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method';
-const PROFILE_COLS = 'id, username, solana_wallet';
+  'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, escrow_pda, viewer_wallet';
+const PROFILE_COLS = 'id, username, solana_wallet, is_live';
 
 const LOG_LIMIT = 50;
 
@@ -59,6 +61,7 @@ type BookingRow = {
   file_type: string | null;
   message: string | null;
   image_url: string | null;
+  storage_path: string | null;
   duration_minutes: number | string;
   price_value: number | string;
   price_unit: string | null;
@@ -77,6 +80,8 @@ type FlashRow = {
   message: string | null;
   amount_cents: number | null;
   payment_method: string | null;
+  escrow_pda: string | null;
+  viewer_wallet: string | null;
 };
 
 function bookingToQueueItem(b: BookingRow): QueueItem {
@@ -87,13 +92,21 @@ function bookingToQueueItem(b: BookingRow): QueueItem {
       ? 'video clip'
       : 'image';
   const duration = Number(b.duration_minutes) || 0;
+  const rate = Number(b.price_value) || 0;
+  // price_unit is 'min' or 'hr'. The viewer's total in escrow == rate ×
+  // duration in the rate's unit. Default to per-minute since that's the
+  // common case on Casi.
+  const unitMinutes = b.price_unit === 'hr' ? 60 : 1;
+  const total = rate * (duration / unitMinutes);
   const isUsdc = b.payment_method === 'usdc' || b.payment_method === 'solana';
-  const priceLabel = isUsdc ? `${Number(b.price_value)} USDC` : `€${Number(b.price_value)}`;
+  const priceLabel = isUsdc
+    ? `${total.toFixed(total % 1 === 0 ? 0 : 2)} USDC`
+    : `€${total.toFixed(total % 1 === 0 ? 0 : 2)}`;
   return {
     id: `booking-${b.id}`,
     kind: 'beam',
     name: `${who} · ${snippet}`,
-    subtitle: `${timeAgo(b.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · ${duration}m${b.file_type === 'video' ? ' · video' : ''}`,
+    subtitle: `${timeAgo(b.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · ${duration}m${b.file_type === 'video' ? ' · video' : ''}${rate > 0 ? ` · ${rate}/${b.price_unit}` : ''}`,
     priceLabel,
     readOnly: false,
   };
@@ -113,10 +126,28 @@ function flashToQueueItem(f: FlashRow): QueueItem {
     name: `${who} · "${snippet}${overflow ? '…' : ''}"`,
     subtitle: `${logTime(f.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · text`,
     priceLabel,
-    // Flash moderation has its own on-chain flow (approve_flash / deny_flash)
-    // that isn't wired here yet — route the streamer to /admin for now.
-    readOnly: true,
   };
+}
+
+/** Short label for which slot on the canvas a booking lives in, so two
+ *  active beams don't look identical on the Airing list. Shape first
+ *  (hex, circle, banner, backdrop, rect, rounded), then a rough position
+ *  quadrant for non-full-canvas shapes. Returns null for detached
+ *  bookings (no element_id or element deleted). */
+function slotLabel(
+  element: { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null } | undefined,
+): string | null {
+  if (!element) return null;
+  const shape = element.shape || 'rect';
+  if (element.is_background || shape === 'backdrop') return 'backdrop';
+  if (shape === 'banner') return 'banner';
+  const x = Number(element.pos_x ?? 50);
+  const y = Number(element.pos_y ?? 50);
+  const horiz = x < 33 ? 'left' : x > 55 ? 'right' : 'centre';
+  const vert = y < 33 ? 'top' : y > 55 ? 'bottom' : 'mid';
+  // Collapse "mid-centre" to just "centre"; otherwise join with a hyphen.
+  const pos = horiz === 'centre' && vert === 'mid' ? 'centre' : `${vert}-${horiz}`;
+  return `${shape} · ${pos}`;
 }
 
 function bookingToAiringItem(b: BookingRow): AiringItem {
@@ -134,23 +165,6 @@ function bookingToAiringItem(b: BookingRow): AiringItem {
     name: `${who} · ${snippet}`,
     subtitle: `Beam · ${priceLabel}`,
     remaining: formatRemaining(remaining),
-  };
-}
-
-function flashToAiringItem(f: FlashRow): AiringItem {
-  const who = f.viewer_name || 'anon';
-  const snippet = (f.message || '').slice(0, 40);
-  const isUsdc = f.payment_method === 'usdc' || f.payment_method === 'solana';
-  const priceLabel = f.payment_method === 'free'
-    ? 'Free'
-    : isUsdc
-      ? `${((f.amount_cents ?? 0) / 100).toFixed(2)} USDC`
-      : `€${((f.amount_cents ?? 0) / 100).toFixed(2)}`;
-  return {
-    id: `flash-${f.id}`,
-    icon: '⚡',
-    name: `${who} · "${snippet}"`,
-    subtitle: `Flash · ${priceLabel}`,
   };
 }
 
@@ -173,7 +187,12 @@ function flashToLogItem(f: FlashRow): FlashLogItem {
   };
 }
 
-type Profile = { id: string; username: string | null; solana_wallet: string | null };
+type Profile = {
+  id: string;
+  username: string | null;
+  solana_wallet: string | null;
+  is_live: boolean | null;
+};
 
 type LoadState =
   | { kind: 'loading' }
@@ -189,11 +208,20 @@ export default function StudioPage() {
   const [pendingBookings, setPendingBookings] = useState<BookingRow[]>([]);
   const [pendingFlashes, setPendingFlashes] = useState<FlashRow[]>([]);
   const [activeBookings, setActiveBookings] = useState<BookingRow[]>([]);
-  const [recentFlashes, setRecentFlashes] = useState<FlashRow[]>([]);
-  const [flashLog, setFlashLog] = useState<FlashLogItem[]>([]);
+  const [queuedBookings, setQueuedBookings] = useState<BookingRow[]>([]);
+  // Streamer's overlay elements, keyed by id. Used to surface slot context
+  // ("hex · top-right") on airing rows so two beams in different slots
+  // don't look identical. Same realtime sub also drives StudioLiveEditor;
+  // re-querying here keeps them in lockstep without sharing state.
+  const [elementsById, setElementsById] = useState<Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }>>({});
+  const [flashLogRaw, setFlashLogRaw] = useState<FlashRow[]>([]);
   const [flashTotals, setFlashTotals] = useState({ count: 0, eur: '€0', usdc: '0 USDC' });
   const [moderating, setModerating] = useState<Set<string>>(new Set());
+  const [endingEarly, setEndingEarly] = useState<Set<string>>(new Set());
+  const [refundingFlash, setRefundingFlash] = useState<Set<string>>(new Set());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [togglingLive, setTogglingLive] = useState(false);
+  const [mode, setMode] = useState<'monitor' | 'live'>('monitor');
 
   const [, setTick] = useState(0);
 
@@ -204,7 +232,7 @@ export default function StudioPage() {
     const startOfDayIso = new Date();
     startOfDayIso.setHours(0, 0, 0, 0);
 
-    const [pendingBookingsRes, pendingFlashesRes, activeBookingsRes, airingFlashesRes, logFlashesRes] =
+    const [pendingBookingsRes, pendingFlashesRes, activeBookingsRes, queuedBookingsRes, elementsRes, logFlashesRes] =
       await Promise.all([
         supabase.from('bookings').select(BOOKING_COLS)
           .eq('profile_id', profileId).eq('status', 'pending')
@@ -215,9 +243,16 @@ export default function StudioPage() {
         supabase.from('bookings').select(BOOKING_COLS)
           .eq('profile_id', profileId).eq('status', 'active')
           .order('started_at', { ascending: false }).limit(10),
-        supabase.from('flashes').select(FLASH_COLS)
-          .eq('profile_id', profileId).eq('status', 'approved')
-          .order('created_at', { ascending: false }).limit(20),
+        // approved_queued = streamer OK'd the booking but the slot is still busy;
+        // auto-promotes when the active one ends. Count these per-element so
+        // airing rows can show "N in queue".
+        supabase.from('bookings').select(BOOKING_COLS)
+          .eq('profile_id', profileId).eq('status', 'approved_queued')
+          .order('approved_at', { ascending: true }).limit(50),
+        // Slot metadata for airing-row context ("hex · top-right" etc.).
+        supabase.from('overlay_elements')
+          .select('id, shape, pos_x, pos_y, is_background')
+          .eq('profile_id', profileId),
         supabase.from('flashes').select(FLASH_COLS)
           .eq('profile_id', profileId)
           .in('status', ['approved', 'denied'])
@@ -228,10 +263,16 @@ export default function StudioPage() {
     setPendingBookings((pendingBookingsRes.data ?? []) as BookingRow[]);
     setPendingFlashes((pendingFlashesRes.data ?? []) as FlashRow[]);
     setActiveBookings((activeBookingsRes.data ?? []) as BookingRow[]);
-    setRecentFlashes((airingFlashesRes.data ?? []) as FlashRow[]);
+    setQueuedBookings((queuedBookingsRes.data ?? []) as BookingRow[]);
+
+    const elementsMap: Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }> = {};
+    for (const el of (elementsRes.data ?? []) as Array<{ id: string; shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }>) {
+      elementsMap[el.id] = { shape: el.shape, pos_x: el.pos_x, pos_y: el.pos_y, is_background: el.is_background };
+    }
+    setElementsById(elementsMap);
 
     const logRows = (logFlashesRes.data ?? []) as FlashRow[];
-    setFlashLog(logRows.map(flashToLogItem));
+    setFlashLogRaw(logRows);
 
     let eurCents = 0;
     let usdcUnits = 0;
@@ -348,42 +389,132 @@ export default function StudioPage() {
 
   const handleApprove = useCallback(async (queueId: string) => {
     if (!moderationCtx) return;
-    const raw = queueId.startsWith('booking-') ? queueId.slice('booking-'.length) : null;
-    if (!raw) return;
-    const booking = pendingBookings.find((b) => String(b.id) === raw);
+    setErrorMsg(null);
+
+    if (queueId.startsWith('booking-')) {
+      const raw = queueId.slice('booking-'.length);
+      const booking = pendingBookings.find((b) => String(b.id) === raw);
+      if (!booking) return;
+      markModerating(queueId, true);
+      const result = await approveBooking(moderationCtx, booking);
+      markModerating(queueId, false);
+      if (!result.ok) {
+        setErrorMsg(result.message);
+        return;
+      }
+      setPendingBookings((prev) => prev.filter((b) => String(b.id) !== raw));
+      return;
+    }
+
+    if (queueId.startsWith('flash-')) {
+      const raw = queueId.slice('flash-'.length);
+      const flash = pendingFlashes.find((f) => f.id === raw);
+      if (!flash) return;
+      markModerating(queueId, true);
+      const result = await moderateFlash(moderationCtx, flash, 'approve');
+      markModerating(queueId, false);
+      if (!result.ok) {
+        setErrorMsg(result.message);
+        return;
+      }
+      setPendingFlashes((prev) => prev.filter((f) => f.id !== raw));
+    }
+  }, [moderationCtx, pendingBookings, pendingFlashes, markModerating]);
+
+  const toggleLive = useCallback(async () => {
+    if (state.kind !== 'ready' || togglingLive) return;
+    const next = !state.profile.is_live;
+    setTogglingLive(true);
+    // Optimistic — revert on failure so the streamer sees the right state
+    // if the RLS policy or the network swats the write.
+    setState({ kind: 'ready', profile: { ...state.profile, is_live: next } });
+    const { error } = await supabase.from('profiles').update({ is_live: next }).eq('id', state.profile.id);
+    if (error) {
+      setState({ kind: 'ready', profile: { ...state.profile, is_live: !next } });
+      setErrorMsg(error.message);
+    }
+    setTogglingLive(false);
+  }, [state, supabase, togglingLive]);
+
+  const handleEndEarly = useCallback(async (bookingId: string) => {
+    if (!moderationCtx) return;
+    const booking = activeBookings.find((b) => String(b.id) === bookingId);
     if (!booking) return;
 
-    markModerating(queueId, true);
+    setEndingEarly((prev) => new Set(prev).add(bookingId));
     setErrorMsg(null);
-    const result = await approveBooking(moderationCtx, booking);
-    markModerating(queueId, false);
+    const result = await endBeamEarly(moderationCtx, booking);
+    setEndingEarly((prev) => {
+      const next = new Set(prev);
+      next.delete(bookingId);
+      return next;
+    });
 
     if (!result.ok) {
       setErrorMsg(result.message);
       return;
     }
-    // Optimistic — realtime will converge.
-    setPendingBookings((prev) => prev.filter((b) => String(b.id) !== raw));
-  }, [moderationCtx, pendingBookings, markModerating]);
+    // Realtime sub will reflect the new state; remove from local active set
+    // optimistically so the row disappears immediately.
+    setActiveBookings((prev) => prev.filter((b) => String(b.id) !== bookingId));
+  }, [moderationCtx, activeBookings]);
 
   const handleReject = useCallback(async (queueId: string) => {
     if (!moderationCtx) return;
-    const raw = queueId.startsWith('booking-') ? queueId.slice('booking-'.length) : null;
-    if (!raw) return;
-    const booking = pendingBookings.find((b) => String(b.id) === raw);
-    if (!booking) return;
-
-    markModerating(queueId, true);
     setErrorMsg(null);
-    const result = await denyBooking(moderationCtx, String(booking.id), booking.payment_method);
-    markModerating(queueId, false);
 
-    if (!result.ok) {
-      setErrorMsg(result.message);
+    if (queueId.startsWith('booking-')) {
+      const raw = queueId.slice('booking-'.length);
+      const booking = pendingBookings.find((b) => String(b.id) === raw);
+      if (!booking) return;
+      markModerating(queueId, true);
+      const result = await denyBooking(moderationCtx, String(booking.id), booking.payment_method);
+      markModerating(queueId, false);
+      if (!result.ok) {
+        setErrorMsg(result.message);
+        return;
+      }
+      setPendingBookings((prev) => prev.filter((b) => String(b.id) !== raw));
       return;
     }
-    setPendingBookings((prev) => prev.filter((b) => String(b.id) !== raw));
-  }, [moderationCtx, pendingBookings, markModerating]);
+
+    if (queueId.startsWith('flash-')) {
+      const raw = queueId.slice('flash-'.length);
+      const flash = pendingFlashes.find((f) => f.id === raw);
+      if (!flash) return;
+      markModerating(queueId, true);
+      const result = await moderateFlash(moderationCtx, flash, 'deny');
+      markModerating(queueId, false);
+      if (!result.ok) {
+        setErrorMsg(result.message);
+        return;
+      }
+      setPendingFlashes((prev) => prev.filter((f) => f.id !== raw));
+    }
+  }, [moderationCtx, pendingBookings, pendingFlashes, markModerating]);
+
+  // Refund a flash from the live log — deny on-chain + flip DB. Pin and Block
+  // stay as UI-only for now: the schema has no `pinned` column and the block
+  // list is a profile-level concern (admin writes it), so shell-only on those
+  // until they get their own pass.
+  const handleFlashRefund = useCallback(async (flashId: string) => {
+    if (!moderationCtx) return;
+    setErrorMsg(null);
+    const flash = flashLogRaw.find((f) => f.id === flashId);
+    if (!flash) return;
+    setRefundingFlash((prev) => new Set(prev).add(flashId));
+    const result = await moderateFlash(moderationCtx, flash, 'deny');
+    setRefundingFlash((prev) => {
+      const next = new Set(prev);
+      next.delete(flashId);
+      return next;
+    });
+    if (!result.ok) {
+      setErrorMsg(result.message);
+    }
+    // Realtime sub will flip status=denied; the derived flashLog re-renders
+    // with the row dimmed + struck-through.
+  }, [moderationCtx, flashLogRaw]);
 
   if (state.kind === 'loading' || state.kind === 'anonymous') {
     return <StatusScreen>Loading studio…</StatusScreen>;
@@ -406,10 +537,37 @@ export default function StudioPage() {
     })),
   ].sort((a, b) => b.ts - a.ts).map(({ item }) => item);
 
-  const airing: AiringItem[] = [
-    ...activeBookings.map(bookingToAiringItem),
-    ...recentFlashes.map(flashToAiringItem),
-  ];
+  // Airing = active beams only. Approved flashes stay in the Flashes log
+  // below — mixing them into Airing was wrong (flashes don't have a slot
+  // they're blocking) and drowned out actual beams.
+  const queueCountByElement = queuedBookings.reduce<Record<string, number>>((acc, b) => {
+    if (!b.element_id) return acc;
+    acc[b.element_id] = (acc[b.element_id] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const flashLog: FlashLogItem[] = flashLogRaw.map(flashToLogItem);
+
+  const airing: AiringItem[] = activeBookings.map((b) => {
+    const bookingId = String(b.id);
+    const base = bookingToAiringItem(b);
+    const element = b.element_id ? elementsById[b.element_id] : undefined;
+    // Prefix the subtitle with a short slot label ("hex · top-right") as a
+    // fallback for rows where the thumbnail didn't render; when the thumb
+    // is there it's the primary visual differentiator.
+    const label = slotLabel(element);
+    const subtitle = label ? `${label} · ${base.subtitle}` : base.subtitle;
+    return {
+      ...base,
+      subtitle,
+      queueCount: b.element_id ? queueCountByElement[b.element_id] : undefined,
+      onEndEarly: () => handleEndEarly(bookingId),
+      endingEarly: endingEarly.has(bookingId),
+      mediaUrl: b.image_url,
+      fileType: b.file_type,
+      shape: element?.shape ?? null,
+    };
+  });
 
   return (
     <main className="min-h-screen" style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}>
@@ -462,58 +620,188 @@ export default function StudioPage() {
           >
             Studio · beta
           </span>
+          <Link
+            href="/admin/settings"
+            title="Profile, payouts, OBS sources, session key, moderation"
+            className="font-mono uppercase"
+            style={{
+              fontSize: '10px',
+              letterSpacing: '0.15em',
+              textDecoration: 'none',
+              color: 'var(--casi-text-dim)',
+              padding: '5px 10px',
+              borderRadius: '999px',
+              border: '1px solid var(--casi-border-2)',
+            }}
+          >
+            ⚙ Settings
+          </Link>
+          <WalletNav />
         </div>
       </nav>
 
       <div
         className="mx-auto flex flex-col gap-5 casi-page-pad"
-        style={{ maxWidth: '1080px' }}
+        style={{ maxWidth: '1240px' }}
       >
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span
+        {/* Welcome banner — design-faithful hero row */}
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1
               className="font-extrabold"
-              style={{ fontSize: '22px', letterSpacing: '-0.8px', color: 'var(--casi-text)' }}
+              style={{
+                fontSize: '30px',
+                letterSpacing: '-1.2px',
+                lineHeight: 1.05,
+                color: 'var(--casi-text)',
+              }}
             >
-              @{slug}
-            </span>
-            <StatChip label="Airing" value={String(airing.length)} tone="accent" />
-            <StatChip label="Pending" value={String(queue.length)} tone="accent2" />
+              Welcome back,{' '}
+              <span style={{ color: 'var(--casi-accent)' }}>@{slug}</span>
+            </h1>
+            <p className="mt-1" style={{ fontSize: '14px', color: 'var(--casi-text-dim)' }}>
+              Your stream. Your slots. Your rates. One page.
+            </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <Link
-              href="/studio/setup"
-              className="font-mono uppercase"
+          <div className="flex items-center gap-3">
+            {profile.is_live ? (
+              <span
+                className="inline-flex items-center gap-2 font-mono uppercase"
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '999px',
+                  background: 'rgba(var(--casi-accent2-rgb), 0.1)',
+                  border: '1px solid rgba(var(--casi-accent2-rgb), 0.3)',
+                  fontSize: '11px',
+                  letterSpacing: '0.15em',
+                  color: 'var(--casi-accent2)',
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: '7px',
+                    height: '7px',
+                    borderRadius: '50%',
+                    background: 'var(--casi-accent2)',
+                    boxShadow: '0 0 8px rgba(var(--casi-accent2-rgb), 0.7)',
+                  }}
+                />
+                Live
+              </span>
+            ) : (
+              <span
+                className="font-mono uppercase"
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '999px',
+                  background: 'var(--casi-surface)',
+                  border: '1px solid var(--casi-border)',
+                  fontSize: '11px',
+                  letterSpacing: '0.15em',
+                  color: 'var(--casi-text-dim)',
+                }}
+              >
+                Offline
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={toggleLive}
+              disabled={togglingLive}
+              className="font-mono uppercase transition-colors"
+              title={profile.is_live ? 'Go offline' : 'Go live'}
               style={{
-                fontSize: '10px',
+                padding: '10px 16px',
+                borderRadius: '10px',
+                border: `1px solid ${profile.is_live ? 'var(--casi-border-2)' : 'rgba(var(--casi-accent2-rgb), 0.3)'}`,
+                background: profile.is_live ? 'transparent' : 'rgba(var(--casi-accent2-rgb), 0.08)',
+                color: profile.is_live ? 'var(--casi-text-dim)' : 'var(--casi-accent2)',
+                fontSize: '11px',
                 letterSpacing: '0.15em',
-                textDecoration: 'none',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                border: '1px solid var(--casi-border-2)',
-                color: 'var(--casi-text-dim)',
+                cursor: togglingLive ? 'wait' : 'pointer',
+                opacity: togglingLive ? 0.5 : 1,
               }}
             >
-              Configure slots →
-            </Link>
-            <Link
-              href="/admin/settings"
-              className="font-mono uppercase"
-              style={{
-                fontSize: '10px',
-                letterSpacing: '0.15em',
-                textDecoration: 'none',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                border: '1px solid var(--casi-border-2)',
-                color: 'var(--casi-text-dim)',
-              }}
-            >
-              Settings →
-            </Link>
+              {profile.is_live ? 'End stream ⏹' : 'Go live ●'}
+            </button>
           </div>
         </header>
+
+        {/* Mode toggle — flips in-page between the live monitor and the
+            slot editor. No route change, state preserved across taps. */}
+        <div className="flex items-center justify-between gap-5 flex-wrap">
+          <div
+            className="inline-flex gap-0.5"
+            style={{
+              background: 'var(--casi-surface)',
+              border: '1px solid var(--casi-border)',
+              borderRadius: '12px',
+              padding: '4px',
+            }}
+          >
+            {(['monitor', 'live'] as const).map((m) => {
+              const active = mode === m;
+              const label = m === 'monitor' ? 'Dashboard' : 'Live';
+              const icon = m === 'monitor' ? '◉' : '⚙';
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  aria-current={active ? 'page' : undefined}
+                  className="inline-flex items-center gap-2 font-bold"
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '8px',
+                    background: active ? 'var(--casi-accent)' : 'transparent',
+                    color: active ? '#0a0a0a' : 'var(--casi-text-dim)',
+                    fontSize: '13px',
+                    letterSpacing: '-0.1px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-casi-sans)',
+                  }}
+                >
+                  <span aria-hidden className="font-mono" style={{ fontSize: '11px' }}>{icon}</span>
+                  {label}
+                  {m === 'monitor' && queue.length > 0 ? (
+                    <span
+                      className="font-mono"
+                      style={{
+                        padding: '2px 6px',
+                        borderRadius: '999px',
+                        background: active ? 'rgba(0, 0, 0, 0.25)' : 'rgba(var(--casi-accent-rgb), 0.15)',
+                        color: active ? '#0a0a0a' : 'var(--casi-accent)',
+                        fontSize: '10px',
+                        letterSpacing: '0.1em',
+                      }}
+                    >
+                      {queue.length}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+          <span
+            className="font-mono uppercase"
+            style={{ fontSize: '10px', letterSpacing: '0.15em', color: 'var(--casi-text-faint)' }}
+          >
+            {mode === 'monitor' ? "Live · what's happening now" : 'Slots · prices · approvals'}
+          </span>
+        </div>
+
+        {/* Earnings strip — viewer link + today's totals + pending count */}
+        <EarningsStrip
+          slug={slug}
+          earnedTodayEur={flashTotals.eur}
+          earnedTodayUsdc={flashTotals.usdc}
+          pendingCount={queue.length}
+          onCopyLink={() => {
+            navigator.clipboard?.writeText(`https://www.casi.gg/overlay?s=${slug}`).catch(() => {});
+          }}
+        />
 
         {errorMsg ? (
           <div
@@ -550,39 +838,162 @@ export default function StudioPage() {
           </div>
         ) : null}
 
-        {airing.length > 0 ? <AiringNow items={airing} /> : null}
-        <ApprovalQueue
-          items={queue}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          pendingIds={moderating}
-          emptyLabel="No pending bookings · nothing to approve"
-        />
-        <FlashesLog items={flashLog} totals={flashTotals} />
+        {mode === 'monitor' ? (
+          <>
+            {airing.length > 0 ? <AiringNow items={airing} /> : null}
+            <ApprovalQueue
+              items={queue}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              pendingIds={moderating}
+              emptyLabel="No pending bookings · nothing to approve"
+            />
+            <FlashesLog
+              items={flashLog}
+              totals={flashTotals}
+              onRefund={handleFlashRefund}
+              refunding={refundingFlash}
+            />
+          </>
+        ) : (
+          <StudioLiveEditor supabase={supabase} profileId={profile.id} />
+        )}
       </div>
     </main>
   );
 }
 
-function StatChip({ label, value, tone }: { label: string; value: string; tone?: 'accent' | 'accent2' }) {
-  const colour =
-    tone === 'accent2' ? 'var(--casi-accent2)' : tone === 'accent' ? 'var(--casi-accent)' : 'var(--casi-text)';
+function EarningsStrip({
+  slug,
+  earnedTodayEur,
+  earnedTodayUsdc,
+  pendingCount,
+  onCopyLink,
+}: {
+  slug: string;
+  earnedTodayEur: string;
+  earnedTodayUsdc: string;
+  pendingCount: number;
+  onCopyLink: () => void;
+}) {
   return (
-    <span
-      className="inline-flex items-center gap-1.5 font-mono uppercase"
+    <div className="casi-grid-earnings">
+      {/* Viewer link tile — primary affordance for sharing. */}
+      <div
+        className="flex items-center gap-3 min-w-0"
+        style={{
+          background: 'var(--casi-surface)',
+          border: '1px solid var(--casi-border)',
+          borderRadius: '14px',
+          padding: '16px 18px',
+          minHeight: '78px',
+        }}
+      >
+        <div className="flex-1 min-w-0">
+          <div
+            className="font-mono uppercase"
+            style={{ fontSize: '10px', letterSpacing: '0.15em', color: 'var(--casi-text-faint)' }}
+          >
+            Your viewer link
+          </div>
+          <div
+            className="font-mono truncate"
+            style={{ fontSize: '14px', color: 'var(--casi-text)', marginTop: '2px' }}
+          >
+            <span style={{ color: 'var(--casi-text-dim)' }}>www.casi.gg/overlay?s=</span>
+            <span style={{ color: 'var(--casi-accent)', fontWeight: 500 }}>{slug}</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onCopyLink}
+          className="whitespace-nowrap font-bold"
+          style={{
+            padding: '8px 14px',
+            borderRadius: '8px',
+            background: 'var(--casi-accent)',
+            color: '#050505',
+            fontFamily: 'var(--font-casi-sans)',
+            fontWeight: 800,
+            fontSize: '12px',
+            border: 'none',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          Copy
+        </button>
+      </div>
+
+      {/* Dim the rail with no activity today. Keeps the grid layout stable
+          (4 columns on desktop) but a solana-only streamer sees a muted
+          "Today · EUR —" instead of a loud "€0". Same for stripe-only. */}
+      <StatTile
+        label="Today · EUR"
+        value={earnedTodayEur === '€0' ? '—' : earnedTodayEur}
+        tone="accent"
+        dim={earnedTodayEur === '€0'}
+      />
+      <StatTile
+        label="Today · USDC"
+        value={earnedTodayUsdc === '0 USDC' ? '—' : earnedTodayUsdc}
+        dim={earnedTodayUsdc === '0 USDC'}
+      />
+      <StatTile label="Pending" value={String(pendingCount)} tone="accent2" />
+    </div>
+  );
+}
+
+function StatTile({
+  label,
+  value,
+  tone,
+  dim,
+}: {
+  label: string;
+  value: string;
+  tone?: 'accent' | 'accent2';
+  /** True when the tile represents a rail with no activity today — paints
+   *  the value in muted text and drops the tint so it doesn't compete. */
+  dim?: boolean;
+}) {
+  const color = dim
+    ? 'var(--casi-text-faint)'
+    : tone === 'accent'
+      ? 'var(--casi-accent)'
+      : tone === 'accent2'
+        ? 'var(--casi-accent2)'
+        : 'var(--casi-text)';
+  return (
+    <div
+      className="flex flex-col justify-center gap-1.5"
       style={{
-        padding: '6px 10px',
-        borderRadius: '8px',
         background: 'var(--casi-surface)',
         border: '1px solid var(--casi-border)',
-        fontSize: '10px',
-        letterSpacing: '0.14em',
-        color: 'var(--casi-text-faint)',
+        borderRadius: '14px',
+        padding: '16px 18px',
+        minHeight: '78px',
       }}
     >
-      {label}
-      <span style={{ color: colour, fontWeight: 500, letterSpacing: '-0.2px' }}>{value}</span>
-    </span>
+      <div
+        className="font-mono uppercase"
+        style={{ fontSize: '10px', letterSpacing: '0.15em', color: 'var(--casi-text-faint)' }}
+      >
+        {label}
+      </div>
+      <div
+        className="font-mono"
+        style={{
+          fontSize: '22px',
+          fontWeight: 500,
+          letterSpacing: '-0.5px',
+          lineHeight: 1,
+          color,
+        }}
+      >
+        {value}
+      </div>
+    </div>
   );
 }
 

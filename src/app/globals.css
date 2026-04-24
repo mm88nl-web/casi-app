@@ -180,3 +180,66 @@ body {
   color: #ef4444;
   border-color: #ef4444;
 }
+
+/* ── Shared studio canvas + BeamCtrlPanel styles ──
+   Duplicated from admin/page.tsx's inline <style> block so /studio/setup
+   can render the same canvas + control panel without pulling in the
+   entire admin shell. Admin's inline copy stays — editing both when a
+   visual tweak is needed is a known cost, accepted to keep admin's
+   style block self-contained and avoid a styled-jsx extraction. */
+.canvas-wrap {
+  position: relative;
+  aspect-ratio: 16/9;
+  border-radius: 12px;
+  border: 1px solid var(--casi-border);
+  background: #080808;
+  overflow: visible;
+}
+.canvas-hint {
+  text-align: center;
+  font-family: var(--font-casi-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #1e1e1e;
+  margin-top: 10px;
+}
+.beam-ctrl {
+  background: var(--casi-surface);
+  border: 1px solid rgba(var(--casi-accent-rgb), 0.2);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: fadeIn .2s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes bannerPreview {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(-100%); }
+}
+.banner-preview {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: rgba(var(--casi-accent-rgb), 0.06);
+  border: 1.5px dashed rgba(var(--casi-accent-rgb), 0.35);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.banner-preview-track {
+  display: inline-block;
+  padding-left: 100%;
+  color: rgba(var(--casi-accent-rgb), 0.7);
+  font-family: var(--font-casi-sans), sans-serif;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 1px;
+  animation: bannerPreview 15s linear infinite;
+}

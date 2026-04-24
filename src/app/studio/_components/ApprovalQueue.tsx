@@ -8,7 +8,11 @@ export type QueueItem = {
   kind: 'beam' | 'flash';
   name: string;
   subtitle: string;
+  /** The final total paid — not the rate. For a 5m beam at 2 USDC/min this
+   *  is "10 USDC", not "2 USDC". */
   priceLabel: string;
+  /** Label rendered above priceLabel ("Total", "Refund", etc.). Defaults to "Total". */
+  priceLeader?: string;
   /** When true this row shows a "Manage →" link to /admin instead of buttons —
    *  for bookings/flashes whose approve flow isn't wired here yet. */
   readOnly?: boolean;
@@ -174,13 +178,26 @@ export default function ApprovalQueue({ items, onApprove, onReject, readOnly, pe
                 {item.subtitle}
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span
-                className="mr-1 font-mono font-medium"
-                style={{ fontSize: '13px', color: 'var(--casi-accent)' }}
-              >
-                {item.priceLabel}
-              </span>
+            <div className="flex items-center gap-2">
+              <div className="mr-1 text-right">
+                <div
+                  className="font-mono uppercase"
+                  style={{
+                    fontSize: '9px',
+                    letterSpacing: '0.12em',
+                    color: 'var(--casi-text-faint)',
+                    marginBottom: '1px',
+                  }}
+                >
+                  {item.priceLeader ?? 'Total'}
+                </div>
+                <div
+                  className="font-mono font-medium"
+                  style={{ fontSize: '13px', color: 'var(--casi-accent)' }}
+                >
+                  {item.priceLabel}
+                </div>
+              </div>
               {(item.readOnly ?? readOnly) ? (
                 <Link
                   href="/admin"
@@ -209,21 +226,21 @@ export default function ApprovalQueue({ items, onApprove, onReject, readOnly, pe
                           type="button"
                           onClick={() => onReject?.(item.id)}
                           disabled={isPending}
-                          className="font-extrabold transition-colors"
-                          title={`Reject · ${item.priceLabel} refunded`}
+                          className="font-extrabold font-mono uppercase transition-colors"
+                          title={`Deny · ${item.priceLabel} refunded`}
                           style={{
-                            padding: '7px 11px',
+                            padding: '8px 12px',
                             borderRadius: '7px',
                             background: 'transparent',
                             color: 'var(--casi-text-dim)',
                             border: '1px solid var(--casi-border-2)',
-                            fontFamily: 'var(--font-casi-sans)',
-                            fontSize: '11px',
+                            fontSize: '10px',
+                            letterSpacing: '0.12em',
                             cursor: isPending ? 'wait' : 'pointer',
                             opacity: isPending ? 0.5 : 1,
                           }}
                         >
-                          ✕
+                          Deny
                         </button>
                         <button
                           type="button"
