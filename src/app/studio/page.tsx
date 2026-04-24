@@ -1,22 +1,35 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { createClient } from '@/utils/supabase/client';
+import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
+import { approveBooking, denyBooking, type ModerationContext } from '@/lib/streamer-moderation';
 import CasiLogo from '@/components/CasiLogo';
 import AiringNow, { type AiringItem } from './_components/AiringNow';
 import ApprovalQueue, { type QueueItem } from './_components/ApprovalQueue';
 import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
 
-// Explicit column lists — mirrors the admin page convention (no select('*')).
+// Explicit column lists. BOOKING_COLS adds the moderation-critical fields the
+// old /studio page didn't need: element_id / is_queued (slot + queue logic),
+// escrow_pda / viewer_wallet (Solana settle on deny), image_url (overlay copy
+// on approve).
 const BOOKING_COLS =
-  'id, created_at, profile_id, viewer_name, status, file_type, message, duration_minutes, price_value, price_unit, payment_method, started_at, image_url';
+  'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, duration_minutes, price_value, price_unit, payment_method, started_at, escrow_pda, viewer_wallet, is_queued';
 const FLASH_COLS =
   'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method';
+const PROFILE_COLS = 'id, username, solana_wallet';
 
 const LOG_LIMIT = 50;
+
+function logTime(createdAt: string): string {
+  if (Date.now() - new Date(createdAt).getTime() < 30_000) return 'just now';
+  const d = new Date(createdAt);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 
 function timeAgo(createdAt: string): string {
   const delta = Date.now() - new Date(createdAt).getTime();
@@ -27,14 +40,7 @@ function timeAgo(createdAt: string): string {
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
-  const d = new Date(createdAt);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-function logTime(createdAt: string): string {
-  if (Date.now() - new Date(createdAt).getTime() < 30_000) return 'just now';
-  const d = new Date(createdAt);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return logTime(createdAt);
 }
 
 function formatRemaining(secs: number): string {
@@ -45,17 +51,22 @@ function formatRemaining(secs: number): string {
 }
 
 type BookingRow = {
-  id: number | string;
+  id: string | number;
   created_at: string;
+  element_id: string | null;
   viewer_name: string | null;
   status: string;
   file_type: string | null;
   message: string | null;
+  image_url: string | null;
   duration_minutes: number | string;
   price_value: number | string;
   price_unit: string | null;
   payment_method: string | null;
   started_at: string | null;
+  escrow_pda: string | null;
+  viewer_wallet: string | null;
+  is_queued: boolean | null;
 };
 
 type FlashRow = {
@@ -84,6 +95,7 @@ function bookingToQueueItem(b: BookingRow): QueueItem {
     name: `${who} · ${snippet}`,
     subtitle: `${timeAgo(b.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · ${duration}m${b.file_type === 'video' ? ' · video' : ''}`,
     priceLabel,
+    readOnly: false,
   };
 }
 
@@ -101,6 +113,9 @@ function flashToQueueItem(f: FlashRow): QueueItem {
     name: `${who} · "${snippet}${overflow ? '…' : ''}"`,
     subtitle: `${logTime(f.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · text`,
     priceLabel,
+    // Flash moderation has its own on-chain flow (approve_flash / deny_flash)
+    // that isn't wired here yet — route the streamer to /admin for now.
+    readOnly: true,
   };
 }
 
@@ -109,7 +124,6 @@ function bookingToAiringItem(b: BookingRow): AiringItem {
   const snippet = b.message ? `"${b.message.slice(0, 40)}"` : b.file_type === 'video' ? 'video clip' : 'image';
   const isUsdc = b.payment_method === 'usdc' || b.payment_method === 'solana';
   const priceLabel = isUsdc ? `${Number(b.price_value)} USDC` : `€${Number(b.price_value)}`;
-  // Remaining = duration_minutes * 60 - elapsed since started_at.
   const startMs = b.started_at ? new Date(b.started_at).getTime() : Date.now();
   const durationSecs = (Number(b.duration_minutes) || 0) * 60;
   const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
@@ -137,9 +151,6 @@ function flashToAiringItem(f: FlashRow): AiringItem {
     icon: '⚡',
     name: `${who} · "${snippet}"`,
     subtitle: `Flash · ${priceLabel}`,
-    // No remaining: flashes don't auto-expire server-side (status is
-    // pending/approved/denied). Once approved they stay on stream until the
-    // streamer clears them.
   };
 }
 
@@ -152,8 +163,6 @@ function flashToLogItem(f: FlashRow): FlashLogItem {
     : isUsdc
       ? `${((f.amount_cents ?? 0) / 100).toFixed(0)} USDC`
       : `€${((f.amount_cents ?? 0) / 100).toFixed(2)}`;
-  // Flash status enum is just pending | approved | denied (see 20260416000000_create_flashes.sql).
-  // Denied = streamer rejected and viewer got refunded.
   return {
     id: f.id,
     time: logTime(f.created_at),
@@ -164,7 +173,7 @@ function flashToLogItem(f: FlashRow): FlashLogItem {
   };
 }
 
-type Profile = { id: string; username: string | null };
+type Profile = { id: string; username: string | null; solana_wallet: string | null };
 
 type LoadState =
   | { kind: 'loading' }
@@ -177,16 +186,19 @@ export default function StudioPage() {
   const [supabase] = useState<SupabaseClient>(() => createClient());
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
 
-  const [queue, setQueue] = useState<QueueItem[]>([]);
-  // Stored as raw rows so the 1-sec tick can recompute remaining timers without refetching.
+  const [pendingBookings, setPendingBookings] = useState<BookingRow[]>([]);
+  const [pendingFlashes, setPendingFlashes] = useState<FlashRow[]>([]);
   const [activeBookings, setActiveBookings] = useState<BookingRow[]>([]);
   const [recentFlashes, setRecentFlashes] = useState<FlashRow[]>([]);
   const [flashLog, setFlashLog] = useState<FlashLogItem[]>([]);
   const [flashTotals, setFlashTotals] = useState({ count: 0, eur: '€0', usdc: '0 USDC' });
+  const [moderating, setModerating] = useState<Set<string>>(new Set());
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Bump once per second so airing remaining-time counters re-render; the stored
-  // timestamps are authoritative, so we just recompute display on each tick.
   const [, setTick] = useState(0);
+
+  const { publicKey, signTransaction, signAllTransactions } = useWallet();
+  const { connection } = useConnection();
 
   const reload = useCallback(async (profileId: string) => {
     const startOfDayIso = new Date();
@@ -203,9 +215,6 @@ export default function StudioPage() {
         supabase.from('bookings').select(BOOKING_COLS)
           .eq('profile_id', profileId).eq('status', 'active')
           .order('started_at', { ascending: false }).limit(10),
-        // Flashes currently on stream — approved with no terminal status transition.
-        // No time window: flashes don't auto-expire, they stay visible until the
-        // streamer clears or refunds them.
         supabase.from('flashes').select(FLASH_COLS)
           .eq('profile_id', profileId).eq('status', 'approved')
           .order('created_at', { ascending: false }).limit(20),
@@ -216,25 +225,14 @@ export default function StudioPage() {
           .order('created_at', { ascending: false }).limit(LOG_LIMIT),
       ]);
 
-    const pendingBookings = (pendingBookingsRes.data ?? []) as BookingRow[];
-    const pendingFlashes = (pendingFlashesRes.data ?? []) as FlashRow[];
-    const actives = (activeBookingsRes.data ?? []) as BookingRow[];
-    const airFlashes = (airingFlashesRes.data ?? []) as FlashRow[];
+    setPendingBookings((pendingBookingsRes.data ?? []) as BookingRow[]);
+    setPendingFlashes((pendingFlashesRes.data ?? []) as FlashRow[]);
+    setActiveBookings((activeBookingsRes.data ?? []) as BookingRow[]);
+    setRecentFlashes((airingFlashesRes.data ?? []) as FlashRow[]);
+
     const logRows = (logFlashesRes.data ?? []) as FlashRow[];
-
-    const mergedQueue = [
-      ...pendingBookings.map((b) => ({ item: bookingToQueueItem(b), ts: new Date(b.created_at).getTime() })),
-      ...pendingFlashes.map((f) => ({ item: flashToQueueItem(f), ts: new Date(f.created_at).getTime() })),
-    ].sort((a, b) => b.ts - a.ts).map(({ item }) => item);
-
-    setQueue(mergedQueue);
-    setActiveBookings(actives);
-    setRecentFlashes(airFlashes);
     setFlashLog(logRows.map(flashToLogItem));
 
-    // Totals: count approved flashes today, sum EUR and USDC separately.
-    // Denied rows are in logRows (the UI shows them struck through) but excluded
-    // from totals.
     let eurCents = 0;
     let usdcUnits = 0;
     let count = 0;
@@ -255,7 +253,6 @@ export default function StudioPage() {
     });
   }, [supabase]);
 
-  // Auth + initial profile fetch.
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -268,7 +265,7 @@ export default function StudioPage() {
       }
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username')
+        .select(PROFILE_COLS)
         .eq('id', user.id)
         .maybeSingle();
       if (cancelled) return;
@@ -285,7 +282,6 @@ export default function StudioPage() {
   const profileId = state.kind === 'ready' ? state.profile.id : null;
   const lastEventRef = useRef(Date.now());
 
-  // Realtime subscriptions + 30s watchdog refetch — mirrors admin/page.tsx.
   useEffect(() => {
     if (!profileId) return;
     lastEventRef.current = Date.now();
@@ -295,20 +291,16 @@ export default function StudioPage() {
 
     const bookingsChannel = supabase
       .channel(`studio_bookings_${profileId}`)
-      .on(
-        'postgres_changes',
+      .on('postgres_changes',
         { event: '*', schema: 'public', table: 'bookings', filter: `profile_id=eq.${profileId}` },
-        () => { bump(); reload(profileId); },
-      )
+        () => { bump(); reload(profileId); })
       .subscribe();
 
     const flashesChannel = supabase
       .channel(`studio_flashes_${profileId}`)
-      .on(
-        'postgres_changes',
+      .on('postgres_changes',
         { event: '*', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profileId}` },
-        () => { bump(); reload(profileId); },
-      )
+        () => { bump(); reload(profileId); })
       .subscribe();
 
     const watchdog = setInterval(() => {
@@ -325,12 +317,73 @@ export default function StudioPage() {
     };
   }, [profileId, supabase, reload]);
 
-  // Tick every second — updates airing remaining-time displays and prunes
-  // flashes that aged past their 15s window without waiting for the next event.
   useEffect(() => {
     const t = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(t);
   }, []);
+
+  const moderationCtx = useMemo<ModerationContext | null>(() => {
+    if (state.kind !== 'ready') return null;
+    const signer = publicKey && signTransaction
+      ? { publicKey, signTransaction, signAllTransactions: signAllTransactions ?? undefined }
+      : null;
+    return {
+      supabase,
+      connection,
+      profile: { id: state.profile.id, solana_wallet: state.profile.solana_wallet },
+      activeBookings: activeBookings.map((b) => ({ element_id: b.element_id })),
+      wallet: signer,
+      cluster: WALLET_ADAPTER_CLUSTER,
+    };
+  }, [state, supabase, connection, publicKey, signTransaction, signAllTransactions, activeBookings]);
+
+  const markModerating = useCallback((id: string, on: boolean) => {
+    setModerating((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const handleApprove = useCallback(async (queueId: string) => {
+    if (!moderationCtx) return;
+    const raw = queueId.startsWith('booking-') ? queueId.slice('booking-'.length) : null;
+    if (!raw) return;
+    const booking = pendingBookings.find((b) => String(b.id) === raw);
+    if (!booking) return;
+
+    markModerating(queueId, true);
+    setErrorMsg(null);
+    const result = await approveBooking(moderationCtx, booking);
+    markModerating(queueId, false);
+
+    if (!result.ok) {
+      setErrorMsg(result.message);
+      return;
+    }
+    // Optimistic — realtime will converge.
+    setPendingBookings((prev) => prev.filter((b) => String(b.id) !== raw));
+  }, [moderationCtx, pendingBookings, markModerating]);
+
+  const handleReject = useCallback(async (queueId: string) => {
+    if (!moderationCtx) return;
+    const raw = queueId.startsWith('booking-') ? queueId.slice('booking-'.length) : null;
+    if (!raw) return;
+    const booking = pendingBookings.find((b) => String(b.id) === raw);
+    if (!booking) return;
+
+    markModerating(queueId, true);
+    setErrorMsg(null);
+    const result = await denyBooking(moderationCtx, String(booking.id), booking.payment_method);
+    markModerating(queueId, false);
+
+    if (!result.ok) {
+      setErrorMsg(result.message);
+      return;
+    }
+    setPendingBookings((prev) => prev.filter((b) => String(b.id) !== raw));
+  }, [moderationCtx, pendingBookings, markModerating]);
 
   if (state.kind === 'loading' || state.kind === 'anonymous') {
     return <StatusScreen>Loading studio…</StatusScreen>;
@@ -342,7 +395,17 @@ export default function StudioPage() {
   const { profile } = state;
   const slug = profile.username ?? 'streamer';
 
-  // Airing: active beams (countdown) + approved flashes (persistent on stream).
+  const queue: QueueItem[] = [
+    ...pendingBookings.map((b) => ({
+      item: bookingToQueueItem(b),
+      ts: new Date(b.created_at).getTime(),
+    })),
+    ...pendingFlashes.map((f) => ({
+      item: flashToQueueItem(f),
+      ts: new Date(f.created_at).getTime(),
+    })),
+  ].sort((a, b) => b.ts - a.ts).map(({ item }) => item);
+
   const airing: AiringItem[] = [
     ...activeBookings.map(bookingToAiringItem),
     ...recentFlashes.map(flashToAiringItem),
@@ -452,10 +515,47 @@ export default function StudioPage() {
           </div>
         </header>
 
+        {errorMsg ? (
+          <div
+            className="flex items-center justify-between gap-3"
+            style={{
+              padding: '12px 16px',
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#f87171',
+              borderRadius: '12px',
+              fontSize: '13px',
+            }}
+            role="alert"
+          >
+            <span>{errorMsg}</span>
+            <button
+              type="button"
+              onClick={() => setErrorMsg(null)}
+              aria-label="Dismiss"
+              className="font-mono uppercase"
+              style={{
+                padding: '4px 10px',
+                borderRadius: '6px',
+                background: 'transparent',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                color: '#f87171',
+                fontSize: '10px',
+                letterSpacing: '0.14em',
+                cursor: 'pointer',
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
+
         {airing.length > 0 ? <AiringNow items={airing} /> : null}
         <ApprovalQueue
           items={queue}
-          readOnly
+          onApprove={handleApprove}
+          onReject={handleReject}
+          pendingIds={moderating}
           emptyLabel="No pending bookings · nothing to approve"
         />
         <FlashesLog items={flashLog} totals={flashTotals} />

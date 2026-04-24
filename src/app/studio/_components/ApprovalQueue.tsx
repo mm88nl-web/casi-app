@@ -9,14 +9,19 @@ export type QueueItem = {
   name: string;
   subtitle: string;
   priceLabel: string;
+  /** When true this row shows a "Manage →" link to /admin instead of buttons —
+   *  for bookings/flashes whose approve flow isn't wired here yet. */
+  readOnly?: boolean;
 };
 
 type Props = {
   items: QueueItem[];
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
-  /** When true, renders a "Manage →" link to /admin instead of Approve/Reject. */
+  /** Global fallback — when a QueueItem doesn't set readOnly, this prop wins. */
   readOnly?: boolean;
+  /** Per-row disabled state — set while an approve/reject is in flight. */
+  pendingIds?: ReadonlySet<string>;
   /** Optional empty-state override — defaults to "Nothing waiting". */
   emptyLabel?: string;
 };
@@ -29,7 +34,7 @@ const FILTERS: { id: FilterKey; label: string }[] = [
   { id: 'flash', label: 'Flash' },
 ];
 
-export default function ApprovalQueue({ items, onApprove, onReject, readOnly, emptyLabel }: Props) {
+export default function ApprovalQueue({ items, onApprove, onReject, readOnly, pendingIds, emptyLabel }: Props) {
   const [filter, setFilter] = useState<FilterKey>('all');
 
   const counts = useMemo(
@@ -176,7 +181,7 @@ export default function ApprovalQueue({ items, onApprove, onReject, readOnly, em
               >
                 {item.priceLabel}
               </span>
-              {readOnly ? (
+              {(item.readOnly ?? readOnly) ? (
                 <Link
                   href="/admin"
                   title="Approve or reject in the classic studio — the real payment + escrow flow runs there for now."
@@ -196,41 +201,52 @@ export default function ApprovalQueue({ items, onApprove, onReject, readOnly, em
                 </Link>
               ) : (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => onReject?.(item.id)}
-                    className="font-extrabold transition-colors"
-                    title={`Reject · ${item.priceLabel} refunded`}
-                    style={{
-                      padding: '7px 11px',
-                      borderRadius: '7px',
-                      background: 'transparent',
-                      color: 'var(--casi-text-dim)',
-                      border: '1px solid var(--casi-border-2)',
-                      fontFamily: 'var(--font-casi-sans)',
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    ✕
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onApprove?.(item.id)}
-                    className="font-extrabold"
-                    style={{
-                      padding: '7px 11px',
-                      borderRadius: '7px',
-                      background: 'var(--casi-accent)',
-                      color: '#050505',
-                      border: 'none',
-                      fontFamily: 'var(--font-casi-sans)',
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Approve
-                  </button>
+                  {(() => {
+                    const isPending = pendingIds?.has(item.id) ?? false;
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onReject?.(item.id)}
+                          disabled={isPending}
+                          className="font-extrabold transition-colors"
+                          title={`Reject · ${item.priceLabel} refunded`}
+                          style={{
+                            padding: '7px 11px',
+                            borderRadius: '7px',
+                            background: 'transparent',
+                            color: 'var(--casi-text-dim)',
+                            border: '1px solid var(--casi-border-2)',
+                            fontFamily: 'var(--font-casi-sans)',
+                            fontSize: '11px',
+                            cursor: isPending ? 'wait' : 'pointer',
+                            opacity: isPending ? 0.5 : 1,
+                          }}
+                        >
+                          ✕
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onApprove?.(item.id)}
+                          disabled={isPending}
+                          className="font-extrabold"
+                          style={{
+                            padding: '7px 11px',
+                            borderRadius: '7px',
+                            background: 'var(--casi-accent)',
+                            color: '#050505',
+                            border: 'none',
+                            fontFamily: 'var(--font-casi-sans)',
+                            fontSize: '11px',
+                            cursor: isPending ? 'wait' : 'pointer',
+                            opacity: isPending ? 0.5 : 1,
+                          }}
+                        >
+                          {isPending ? '…' : 'Approve'}
+                        </button>
+                      </>
+                    );
+                  })()}
                 </>
               )}
             </div>
