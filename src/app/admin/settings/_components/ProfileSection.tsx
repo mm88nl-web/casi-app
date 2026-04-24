@@ -12,6 +12,7 @@ export type ProfileRow = {
   display_name: string | null;
   bio: string | null;
   avatar_url: string | null;
+  skin: string | null;
 };
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';

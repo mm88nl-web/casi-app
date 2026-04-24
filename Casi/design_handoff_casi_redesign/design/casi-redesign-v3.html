@@ -3446,7 +3446,7 @@ const LANDING_VARIANTS = [
 
 // Viewer booking redesign — simplified from current /overlay + /v
 // Single-screen flow: stream on left, huge action panel on right.
-// Three tabs: Flash / Beam / Backdrop. One huge "Pay €X" button.
+// Two tabs: Flash / Beam (Backdrop is a shape inside Beam's slot picker). One huge "Pay €X" button.
 function renderViewer() {
   return `
   <style>
@@ -5434,38 +5434,27 @@ function renderSettings() {
           <div class="st-sec-head">
             <div>
               <div class="st-sec-title">OBS sources</div>
-              <div class="st-sec-desc">One URL per surface. Add each as a <b>Browser Source</b> in OBS at 1920\u00d71080. Stack them in this Z-order: Backdrop at the back, Beams above your scene, Flashes on top.</div>
+              <div class="st-sec-desc">Two URLs. Add each as a <b>Browser Source</b> in OBS at 1920\u00d71080. Stack them in this Z-order: Backdrop at the back, Beams above your scene. Flashes render inside the Beams layer \u2014 no separate source.</div>
             </div>
           </div>
 
           <div class="st-field" style="margin-bottom: 14px">
             <label><span class="st-src-num">1</span> Backdrop \u00b7 behind everything</label>
             <div class="st-copy-row">
-              <span class="val">https://www.casi.gg/obs/pixel_hana/backdrop?k=\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022_bdKx9</span>
+              <span class="val">https://www.casi.gg/obs?s=pixel_hana&layer=backdrop</span>
               <button>Copy</button>
             </div>
             <div class="st-hint">Full-bleed. Put this at the bottom of your scene.</div>
           </div>
 
           <div class="st-field" style="margin-bottom: 14px">
-            <label><span class="st-src-num">2</span> Beams \u00b7 slot overlays</label>
+            <label><span class="st-src-num">2</span> Beams \u00b7 slot overlays + flashes</label>
             <div class="st-copy-row">
-              <span class="val">https://www.casi.gg/obs/pixel_hana/beams?k=\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022_bmRt3</span>
+              <span class="val">https://www.casi.gg/obs?s=pixel_hana&layer=beams</span>
               <button>Copy</button>
             </div>
-            <div class="st-hint">All shaped slots render here \u2014 hex, circle, banner, rect, rounded.</div>
+            <div class="st-hint">All shaped slots render here \u2014 hex, circle, banner, rect, rounded, backdrop \u2014 plus flash pop-ups.</div>
           </div>
-
-          <div class="st-field" style="margin-bottom: 14px">
-            <label><span class="st-src-num">3</span> Flashes \u00b7 popup messages</label>
-            <div class="st-copy-row">
-              <span class="val">https://www.casi.gg/obs/pixel_hana/flashes?k=\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022_flS8w</span>
-              <button>Copy</button>
-            </div>
-            <div class="st-hint">15-second text pop-ups. Keep on top so they're visible.</div>
-          </div>
-
-          <button class="st-btn-ghost" style="margin-top: 6px">Regenerate all keys</button>
         </div>
 
         <!-- SESSION KEY -->
@@ -5473,7 +5462,7 @@ function renderSettings() {
           <div class="st-sec-head">
             <div>
               <div class="st-sec-title">Session key</div>
-              <div class="st-sec-desc">Lets the server approve pending beams on your behalf \u2014 so viewers don\u2019t see a wallet pop-up every time you confirm one. Scoped to approvals only; can\u2019t move funds or settle escrows.</div>
+              <div class="st-sec-desc">Lets the server approve and settle bookings on your behalf \u2014 so <b>you</b> don\u2019t see a wallet pop-up every time you approve a flash or kick a beam. Scoped to booking-lifecycle ops (approve/deny flashes, start/settle beams) \u2014 can\u2019t move funds to addresses other than those already declared in the escrow.</div>
             </div>
           </div>
 

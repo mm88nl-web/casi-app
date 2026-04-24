@@ -31,6 +31,11 @@ const RAIL: RailGroup[] = [
     items: [
       { id: 'slot-defaults', label: 'Slot defaults', icon: '▣' },
       { id: 'obs-sources', label: 'OBS sources', icon: '▹' },
+    ],
+  },
+  {
+    title: 'Wallet',
+    items: [
       { id: 'session-key', label: 'Session key', icon: '⚿' },
     ],
   },
@@ -54,7 +59,7 @@ type LoadState =
   | { kind: 'missing-profile' }
   | { kind: 'ready'; profile: ProfileRow };
 
-const PROFILE_COLS = 'id, username, display_name, bio, avatar_url';
+const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, skin';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -139,7 +144,11 @@ export default function SettingsPage() {
       <SettingsLayout rail={RAIL}>
         <ProfileSection supabase={supabase} profile={state.profile} />
         <PayoutsSection />
-        <AppearanceSection />
+        <AppearanceSection
+          supabase={supabase}
+          profileId={state.profile.id}
+          initialSkinId={state.profile.skin}
+        />
         <SlotDefaultsSection />
         <ObsSourcesSection username={state.profile.username ?? 'your-handle'} />
         <SessionKeySection />
