@@ -15,6 +15,9 @@ import {
   trySolanaSettleDelegated,
   trySolanaFlashDelegated,
   describeDelegateSettleFailure,
+  approveBooking as libApproveBooking,
+  denyBooking as libDenyBooking,
+  type ModerationContext,
 } from '@/lib/streamer-moderation';
 import Logo from './_components/Logo';
 import SlotMedia from '@/components/SlotMedia';
@@ -597,47 +600,40 @@ export default function AdminStudio() {
     return { solscanUrl };
   };
 
-  const approveBooking = async (booking: any) => {
-  setPreviewBooking(null);
-  const slotOccupied = activeBookings.some(b => b.element_id === booking.element_id);
+  /**
+   * Build a ModerationContext from the admin component's React state.
+   * Inline (not memoized) on purpose — the values it captures (wallet hooks,
+   * profile, activeBookings) change on every relevant render and a memo'd
+   * version with the right deps would invalidate as often as a fresh build.
+   */
+  const buildModCtx = (): ModerationContext => ({
+    supabase,
+    connection: walletConnection,
+    profile: { id: profile?.id ?? '', solana_wallet: profile?.solana_wallet ?? null },
+    activeBookings,
+    wallet: publicKey && signTransaction
+      ? { publicKey, signTransaction, signAllTransactions }
+      : null,
+    cluster: WALLET_ADAPTER_CLUSTER as 'devnet' | 'mainnet-beta',
+  });
 
-  if (slotOccupied || booking.is_queued) {
-    // Queued: the on-chain beam is NOT started yet — we start it only when
-    // the slot becomes live (via Play Now or auto-promotion). DB status just
-    // records that the streamer approved the request.
-    await supabase
-      .from('bookings')
-      .update({ status: 'approved_queued', approved_at: new Date().toISOString() })
-      .eq('id', booking.id);
-  } else {
-    // Direct booking: beam goes live immediately. For Solana we MUST fire
-    // start_beam on-chain before flipping DB status, so the vesting clock
-    // and the UI countdown stay in lockstep. If the chain call fails we
-    // bail out and leave the booking in 'pending' for retry.
-    try {
-      await startSolanaBeamOnChain(booking);
-    } catch (err: unknown) {
-      const { formatEscrowError } = await import('@/lib/casi-errors');
-      showFlashToast(formatEscrowError(err), 'err');
+  const approveBooking = async (booking: any) => {
+    setPreviewBooking(null);
+    const result = await libApproveBooking(buildModCtx(), booking);
+    if (!result.ok) {
+      showFlashToast(result.message, 'err');
       return;
     }
-    await supabase
-      .from('bookings')
-      .update({ status: 'active', started_at: new Date().toISOString() })
-      .eq('id', booking.id);
-    if (booking.element_id) {
-      await supabase
-        .from('overlay_elements')
-        .update({ image_url: booking.image_url })
-        .eq('id', booking.element_id);
+    // Optimistic UI: lib already wrote the overlay_elements row on the direct
+    // path, so mirror that into local element state to skip a refetch.
+    if (result.optimistic === 'active' && booking.element_id && booking.image_url) {
       setElements(prev => prev.map(el =>
         el.id === booking.element_id ? { ...el, image_url: booking.image_url } : el
       ));
     }
-  }
-  setPendingBookings(prev => prev.filter(b => b.id !== booking.id));
-  setQueuedBookings(prev => prev.filter(b => b.id !== booking.id));
-};
+    setPendingBookings(prev => prev.filter(b => b.id !== booking.id));
+    setQueuedBookings(prev => prev.filter(b => b.id !== booking.id));
+  };
 
   /**
    * Streamer-side on-chain action for closing a Solana escrow: probes the PDA
@@ -706,73 +702,31 @@ export default function AdminStudio() {
     }
   }, [walletConnection, publicKey, profile?.solana_wallet]);
 
-  const denyBooking = async (id: string, paymentMethod?: string) => {
-  setPreviewBooking(null);
-  if (paymentMethod === 'solana') {
-    // Fetch the minimum escrow metadata needed to decide if settle_beam
-    // should fire. If the row isn't ours or already cleared, fall through
-    // to a plain DB update.
-    const { data: b } = await supabase
-      .from('bookings')
-      .select('id, escrow_pda, viewer_wallet')
-      .eq('id', id)
-      .single();
-    const result = b
-      ? await settleOrClearSolanaEscrow(b)
-      : { outcome: 'closed' as const };
-
-    // Safe-to-deny outcomes:
-    //   settled / closed  — funds have moved or the vault is already empty
-    //   pending-chain     — escrow is still Pending, which can't over-vest;
-    //                       viewer keeps the recovery chip to cancel_escrow
-    // Unsafe outcomes (no-wallet, error) leave the escrow Active on-chain
-    // and the vesting clock runs toward 100% streamer on wall-clock. Flipping
-    // status='denied' there would hide the beam from the streamer while the
-    // program silently vests everything to them. Leave the row alone and
-    // force a retry — the beam stays live, the toast surfaces the reason.
-    if (result.outcome === 'no-wallet') {
-      showFlashToast('Connect streamer wallet to deny this beam', 'err');
+  const denyBooking = async (id: string | number, paymentMethod?: string) => {
+    setPreviewBooking(null);
+    const result = await libDenyBooking(buildModCtx(), id, paymentMethod);
+    if (!result.ok) {
+      showFlashToast(result.message, 'err');
       return;
     }
-    if (result.outcome === 'error') {
-      const { formatEscrowError } = await import('@/lib/casi-errors');
-      showFlashToast(`Deny failed — ${formatEscrowError(result.error)}; beam stays live`, 'err');
-      return;
+    if (paymentMethod === 'solana') {
+      // Granular toast based on what the on-chain settle decided. Same three
+      // outcomes the standalone helper used to surface inline.
+      if (result.denyDetail === 'settled') {
+        showFlashToast('✕ Denied & escrow settled on-chain', 'ok');
+      } else if (result.denyDetail === 'closed') {
+        // PDA was already closed by the time we probed — viewer reclaim,
+        // cranker cancelled a stale pending, or no escrow to begin with.
+        showFlashToast('✕ Denied — escrow already closed', 'ok');
+      } else {
+        // pending-chain: only the viewer can cancel_escrow. They see the
+        // "✕ Denied — USDC locked" chip with a RECOVER button on /overlay.
+        showFlashToast('✕ Denied — viewer can reclaim their USDC from the overlay', 'ok');
+      }
     }
-
-    const update: Record<string, unknown> = { status: 'denied' };
-    if (result.outcome === 'settled' || result.outcome === 'closed') {
-      update.escrow_pda = null;
-    }
-    await supabase.from('bookings').update(update).eq('id', id);
-
-    if (result.outcome === 'settled') {
-      showFlashToast('✕ Denied & escrow settled on-chain', 'ok');
-    } else if (result.outcome === 'closed') {
-      // PDA was already closed by the time we probed — either viewer
-      // reclaimed first, cranker cancelled a stale pending, or the row had
-      // no escrow to begin with. Nothing left for anyone to do.
-      showFlashToast('✕ Denied — escrow already closed', 'ok');
-    } else {
-      // pending-chain: only the viewer can cancel_escrow. They'll see
-      // "✕ Denied — USDC locked" with a RECOVER button on the overlay.
-      showFlashToast('✕ Denied — viewer can reclaim their USDC from the overlay', 'ok');
-    }
-  } else {
-    // Stripe: void/refund PaymentIntent then mark denied
-    const { data: { session } } = await supabase.auth.getSession();
-    await fetch('/api/stripe/cancel', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session?.access_token}`,
-      },
-      body: JSON.stringify({ booking_id: id }),
-    });
-  }
-  setPendingBookings(prev => prev.filter(b => b.id !== id));
-  setQueuedBookings(prev => prev.filter(b => b.id !== id));
-};
+    setPendingBookings(prev => prev.filter(b => b.id !== id));
+    setQueuedBookings(prev => prev.filter(b => b.id !== id));
+  };
 
   /**
    * Build an AnchorWallet adapter shim for the CasiEscrowClient from the

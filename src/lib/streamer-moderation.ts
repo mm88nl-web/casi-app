@@ -31,7 +31,18 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Connection, PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
 
 export type ModerationResult =
-  | { ok: true; optimistic?: 'active' | 'approved_queued' | 'denied' }
+  | {
+      ok: true;
+      optimistic?: 'active' | 'approved_queued' | 'denied';
+      /**
+       * On a successful Solana deny, surfaces the settle outcome so callers
+       * can pick a granular toast:
+       *   'settled'       — settle_beam landed, vault closed, refund sent
+       *   'closed'        — PDA was already gone (viewer reclaim / cranker)
+       *   'pending-chain' — escrow still Pending; only the viewer can close
+       */
+      denyDetail?: 'settled' | 'closed' | 'pending-chain';
+    }
   | { ok: false; message: string };
 
 export type BookingLike = {
@@ -212,7 +223,7 @@ export async function approveBooking(
 
 export async function denyBooking(
   ctx: ModerationContext,
-  bookingId: string,
+  bookingId: string | number,
   paymentMethod: string | null | undefined,
 ): Promise<ModerationResult> {
   if (paymentMethod === 'solana') {
@@ -241,7 +252,7 @@ export async function denyBooking(
     }
     const { error } = await ctx.supabase.from('bookings').update(update).eq('id', bookingId);
     if (error) return { ok: false, message: error.message };
-    return { ok: true, optimistic: 'denied' };
+    return { ok: true, optimistic: 'denied', denyDetail: settleOutcome.outcome };
   }
 
   // Stripe rail: let the server cancel the PaymentIntent and flip status.
