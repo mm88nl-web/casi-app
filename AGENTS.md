@@ -23,27 +23,41 @@ CASI lets livestream viewers pay to put their image / video / message **on strea
 
 ```
 src/app/
-  admin/              streamer dashboard (auth-gated)
+  admin/              legacy streamer dashboard (auth-gated)
     page.tsx          main file — kept <2k lines by design
     _components/      private components (underscore = Next.js ignores for routing)
+    settings/         v3 settings home — payouts, session key, accent picker, etc.
+      _components/    one component per section
+  studio/             v3 streamer dashboard redesign (canvas + airing + queue)
   overlay/            OBS browser-source target (renders active beams)
+  s/[username]/       shareable streamer landing page — bio + live indicator +
+                      flashes feed + hero CTA to /overlay (NOT a booking surface)
   api/
     bookings/         create/expire/advance/deny + per-rail variants
     stripe/           authorize, cancel, webhook, end-early, approve-queue
+                      connect/ (POST = onboarding link writer; status = read-only)
     solana/           sync-webhook (on-chain events → DB)
-    cron/             stripe-janitor (daily safety net for abandoned PIs)
+                      delegates/ (install / status / revoke / start-beam /
+                                  settle-beam / approve-flash / deny-flash)
+    cron/             stripe-janitor, solana-reconciler, cranker-monitor
     flashes/          tip-style ephemeral messages
     log/              client-side error ingest (rate-limited)
   ...
 src/lib/
-  casi-escrow.ts      Anchor client wrapper
-  casi-errors.ts      enumerated on-chain error names → user-readable
-  observability.ts    structured JSON logs → stdout + optional webhook
-  solana-network.ts   cluster + explorer URL helpers
-  stripe.ts           Stripe SDK singleton
-programs/casi-escrow/ Anchor program source (Rust)
-supabase/migrations/  SQL, applied via Supabase Dashboard SQL Editor
-tests/unit/           mocha + chai, wired into CI via .github/workflows/ci.yml
+  casi-escrow.ts          Anchor client wrapper
+  casi-errors.ts          enumerated on-chain error names → user-readable
+  cranker-keypair.ts      shared loader for SOLANA_CRANKER_KEYPAIR
+  observability.ts        structured JSON logs → stdout + optional webhook
+  solana-network.ts       cluster + explorer URL helpers
+  streamer-moderation.ts  SINGLE SOURCE OF TRUTH for the moderation handlers
+                          (approve / deny / endBeamEarly / moderateFlash) and
+                          the escrow primitives (startSolanaBeamOnChain,
+                          settleOrClearSolanaEscrow). Both /admin and /studio
+                          call into this — don't reimplement in either surface.
+  stripe.ts               Stripe SDK singleton
+programs/casi-escrow/     Anchor program source (Rust)
+supabase/migrations/      SQL, applied via Supabase Dashboard SQL Editor
+tests/unit/               mocha + chai, wired into CI via .github/workflows/ci.yml
 ```
 
 ## Data model — the three things booked
@@ -62,11 +76,14 @@ Every bookable row has a `status` lifecycle: `pending → approved_queued | acti
 - **Streamer-initiated mutations** use the Supabase session bearer. Streamers can only mutate their own `profile_id` rows.
 - When adding a new sensitive column to `bookings` or `flashes`, **extend the column-level GRANT list** in a migration — don't rely on RLS alone.
 
-## Admin page conventions
+## Admin / Studio conventions
 
-- `src/app/admin/page.tsx` is the kitchen sink — canvas, requests queue, modals, toasts. Kept together because state flows top-down and splitting the state shards makes things worse. But every self-contained UI chunk is extracted into `_components/`.
+- `src/app/admin/page.tsx` is the legacy kitchen sink — canvas, requests queue, modals, toasts. Kept together because state flows top-down and splitting the state shards makes things worse. Every self-contained UI chunk is extracted into `_components/`.
+- `src/app/studio/page.tsx` is the v3 redesign of the same surface — leaner cockpit, mobile-friendly, same data sources.
+- **Both pages share moderation handlers via `src/lib/streamer-moderation.ts`.** The lib is the single source of truth for `approveBooking`, `denyBooking`, `endBeamEarly`, `moderateFlash`, plus the escrow primitives `startSolanaBeamOnChain` and `settleOrClearSolanaEscrow`. Admin's local handlers are thin adapters that pipe React state (toasts, optimistic updates) around lib calls — don't add new business logic to them, edit the lib instead.
 - When adding a new card or panel, follow the existing split pattern: one component per file, props-driven, variant prop (e.g. `kind: 'beam' | 'backdrop'`) to share a component across similar but differently-themed surfaces.
-- `playNow`, `kickBeam`, `approveBooking`, `denyBooking` are the four core handlers. They close over supabase + profile + state and get passed into card components as callbacks. Don't duplicate them into children.
+- Admin's four core handlers (`playNow`, `kickBeam`, `approveBooking`, `denyBooking`) close over supabase + profile + state and get passed into card components as callbacks. Don't duplicate them into children.
+- `kickBeam` and `expireBooking` accept an `opts.skipAutoAdvance` flag. `playNow` is the one caller that sets it true — playNow handles its own next-booking promotion, so letting `expireBooking` auto-promote the queue's first entry would leave two `active` rows on the same slot.
 
 ## Payment flow quick reference
 
@@ -115,6 +132,9 @@ Phase 3 added a scoped delegation layer to the escrow program so the streamer do
 - Required if the delegate flow is enabled. Unset = both delegated routes return 503 `reason: 'no_cranker'` and admin falls back to wallet-signed start/settle (popup per action). This is a safe degradation; the program doesn't care.
 - Fund with ~0.05 SOL. Steady-state cost per delegated start or settle is ~10k lamports (0.00001 SOL, two signatures × 5k base fee). First-ever settle to a brand-new streamer OR first-ever refund to a brand-new viewer adds a one-time ~2.04M lamports (0.00204 SOL) ATA rent-exempt reserve per fresh ATA; once created, subsequent flashes/beams to the same wallet skip it. Worst-case both-ATAs-fresh is ~0.00409 SOL. Cancel-stale-pending cranks eat ~5k lamports each. At steady state 0.05 SOL covers thousands of operations.
 - Loader returns `null` on missing/malformed env — never throws. Callers branch on null and either fall back or 503.
+- **Daily balance monitor**: `/api/cron/cranker-monitor` (04:00 UTC) probes the cranker's SOL via `Connection.getBalance` and emits structured logs at two thresholds — `logWarn` at 0.005 SOL (~500 ops left), `logError` at 0.001 SOL (one fresh-ATA settle could break the next op). `ERROR_WEBHOOK_URL` fans the critical case out to Slack/Discord. Read-only; never moves funds.
+
+**Where the install UI lives**: `DelegateKeyCard.tsx` (in `src/app/admin/_components/`) is the reusable card. It's mounted inside `src/app/admin/settings/_components/SessionKeySection.tsx`, which provides the `onInstalled` callback that signs `set_delegate` from the streamer wallet. The legacy `/admin` route's `ProfileEditCard` also references it but the new settings page is the canonical home.
 
 **Install UX contract** (see `DelegateKeyCard.tsx` state machine):
 
@@ -184,11 +204,11 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 - Viewer: `reclaimSolanaEscrow` in `overlay/page.tsx` — probes PDA, cancels if Pending, tells viewer "beam is live" if Active. Handles numeric booking ids. Shows for denied rows scoped by `viewer_name` (local-tab) OR `viewer_wallet` (cross-device same-wallet), so abandoning a tab and reconnecting from a new browser still surfaces the refund chip as long as the same wallet is used.
 - Viewer bulk: `POST /api/bookings/cleanup-stale-solana` + the "Clean up ended" button in the overlay's "Your beams" header. Probes every denied/expired/cancelled Solana row for a given `viewer_wallet` and nulls `escrow_pda` where the on-chain PDA is actually gone. No auth — only write is clearing a DB column on rows whose funds already left the vault. Used to wipe "ghost" RECOVER USDC chips left over from prior builds / aborted flows.
 - Streamer: none by design. Deny-on-Active settles immediately via `settleOrClearSolanaEscrow`, and the `cancel_stale_pending` crank in `/api/cron/solana-reconciler` refunds abandoned Pending escrows after 7 days. Admins don't need to babysit stuck escrows.
-- Shared helper: `settleOrClearSolanaEscrow` in `admin/page.tsx` — discriminated-outcome (`settled | closed | pending-chain | no-wallet | error`) so callers compose their own DB + toast logic without duplicating signing boilerplate. `kickBeam` uses this too: DB only transitions to `expired` when outcome is `settled` or `closed`. Every other outcome leaves the beam live with a toast — this is load-bearing, since flipping DB while the escrow is still Active on-chain is how streamers end up with "Ended early — USDC recoverable" ghost chips and vesting clocks that keep ticking.
+- Shared helper: `settleOrClearSolanaEscrow` in `src/lib/streamer-moderation.ts` — discriminated-outcome (`settled | closed | pending-chain | no-wallet | error`) so callers compose their own DB + toast logic without duplicating signing boilerplate. `kickBeam` uses this too: DB only transitions to `expired` when outcome is `settled` or `closed`. Every other outcome leaves the beam live with a toast — this is load-bearing, since flipping DB while the escrow is still Active on-chain is how streamers end up with "Ended early — USDC recoverable" ghost chips and vesting clocks that keep ticking. Accepts an optional `hooks.onDelegateFailure` callback so admin can toast the delegate failure reason before the wallet-sign fallback fires.
 
 **Delegate failure diagnostics**:
-- `trySolanaSettleDelegated` in `admin/page.tsx` returns a `DelegateSettleOutcome` discriminated union (`{ ok: true, alreadyProcessed? } | { ok: false, reason?, message?, status? }`). Never a bare boolean — every caller must branch on `.ok`.
-- `describeDelegateSettleFailure(outcome)` maps reason codes (`no_session | no_delegate | revoked | expired | no_cranker | decrypt_failed | key_mismatch | db_error | chain_error | network_error`) to user-facing strings. Admin callers toast this BEFORE the wallet-sign fallback so the streamer sees WHICH failure caused the popup.
+- `trySolanaStartDelegated` / `trySolanaSettleDelegated` / `trySolanaFlashDelegated` (all exported from `src/lib/streamer-moderation.ts`) return a `DelegateSettleOutcome` discriminated union (`{ ok: true, alreadyProcessed? } | { ok: false, reason?, message?, status? }`). Never a bare boolean — every caller must branch on `.ok`.
+- `describeDelegateSettleFailure(outcome)` (also in `src/lib/streamer-moderation.ts`) maps reason codes (`no_session | no_delegate | revoked | expired | no_cranker | decrypt_failed | key_mismatch | db_error | chain_error | network_error`) to user-facing strings. Admin callers toast this BEFORE the wallet-sign fallback so the streamer sees WHICH failure caused the popup.
 - `/api/solana/delegates/settle-beam` 502 responses carry `casiError` (parsed Anchor variant via `parseCasiError`) and a prefixed `message` — the toast names the on-chain revert (`NotActive`, `Unauthorized`, `DelegateExpired`, etc.) instead of a bare opaque string.
 - `no_cranker` (503) means `loadCrankerKeypair` returned null — env var unset / empty / wrong length / base58-decode failure. NOT a balance issue; the server never tries to submit when cranker can't load. If the env var IS set on Vercel but the route still returns `no_cranker`, the value is malformed (extra whitespace, wrong format, truncated paste).
 
@@ -214,7 +234,9 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 - **Numeric vs string `booking_id`**: PostgREST returns `bookings.id` as a JS number, but older server routes rejected `typeof booking_id !== 'string'`. Always accept either — `typeof x === 'number' ? x : String(x)` — or the viewer's client will silently 400. Affects `/api/bookings/viewer-deny`, `/api/bookings/attach-solana-tx`, `/api/bookings/expire-and-advance`.
 - **`NEXT_PUBLIC_CASI_PROGRAM_ID` unset**: `CasiEscrowClient` throws a loud error in its constructor. Without this guard, unset env → client falls back to `SystemProgram.programId` and signs txs that look fine to the wallet but land on the wrong program.
 - **Session key as fee payer**: neither `start_beam_delegated` nor `settle_beam_delegated` can be signed with the session key as fee payer — Solana returns `"Attempt to debit an account but found no record of a prior credit"` because the ephemeral key has never received SOL. Always pay fees with the cranker; co-sign with the session key. `loadCrankerKeypair` in `src/lib/cranker-keypair.ts` is the shared loader.
-- **Cranker balance drift**: the cranker is the silent single point of failure for the delegated approve/kick flow. Monitor its SOL balance; if it hits 0, every approve AND every kick starts popping a wallet prompt again (routes return 503, admin falls back). Steady-state cost is ~10k lamports per start OR settle (base fee × 2 sigs); a one-time ~0.00204 SOL ATA rent is added the FIRST time a fresh streamer or viewer ATA is created. For a streamer with repeat viewers, subsequent operations are just the base fee — not 0.01 SOL each.
+- **Cranker balance drift**: the cranker is the silent single point of failure for the delegated approve/kick flow. Monitor its SOL balance; if it hits 0, every approve AND every kick starts popping a wallet prompt again (routes return 503, admin falls back). Steady-state cost is ~10k lamports per start OR settle (base fee × 2 sigs); a one-time ~0.00204 SOL ATA rent is added the FIRST time a fresh streamer or viewer ATA is created. For a streamer with repeat viewers, subsequent operations are just the base fee — not 0.01 SOL each. The daily `cranker-monitor` cron warns/errors at 0.005 / 0.001 SOL thresholds via `ERROR_WEBHOOK_URL`.
+- **Stripe denied-chip window**: the viewer overlay surfaces "✕ Denied — refund on the way" for Stripe denials within `STRIPE_DENIED_WINDOW_MS = 10 min` of `created_at`. Anchor on `created_at` because there's no `denied_at` column. The old 30s window meant a streamer denying after 30s + a viewer reload = no chip ever showed; 10 min covers realistic moderation latency.
+- **`playNow` queue safety**: `kickBeam(current, { skipAutoAdvance: true })` is mandatory in `playNow`. Without the flag, `expireBooking` auto-promotes the queue's FIRST `approved_queued` row, then `playNow` ALSO promotes the booking the streamer clicked — both end up `active` on the same `element_id`, both vesting clocks tick, the overlay shows whichever `image_url` won the race.
 
 ## Observability
 
@@ -234,7 +256,9 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 
 - **Don't broaden RLS or add table-level GRANTs.** Go column-level.
 - **Don't touch `admin/page.tsx` without extracting the piece you added to `_components/`** if it's more than ~30 lines of JSX.
+- **Don't put new moderation logic in `admin/page.tsx`.** The four core handlers live in `src/lib/streamer-moderation.ts` so /admin and /studio share one implementation. Admin's local handlers are thin adapters that translate `ModerationResult` to toasts + optimistic state. New logic goes in the lib.
 - **Don't add every-minute cron on Hobby.** Deploy will fail.
 - **Don't call `select('*')` on bookings.** Use the explicit column list already in `admin/page.tsx` / `overlay/page.tsx`.
 - **Don't auto-promote Solana queue on expire.** Escrow program isn't wired for it.
 - **Don't flip a Solana booking's DB status without reconciling the chain first.** DB status ≠ escrow status; acting on the DB alone leaves funds stuck or over-vested to the streamer. Use `settleOrClearSolanaEscrow` or equivalent probe-first logic.
+- **Don't build a second booking surface.** `/overlay` is the canonical Stripe + Solana booking flow; `/s/[username]` is a marketing landing page that funnels into it. If you need richer in-page booking on /s/[username], wire it through `/api/stripe/authorize` + `CasiEscrowClient` — never a parallel implementation.
