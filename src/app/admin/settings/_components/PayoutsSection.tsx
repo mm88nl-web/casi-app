@@ -204,17 +204,27 @@ export default function PayoutsSection({
     setBusy('stripe');
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      // Pre-flight: bare "Bearer " (empty token) trips the API into a 401
+      // with no surface in the toast. Bail early with a clean message so
+      // the streamer knows to reconnect rather than seeing an opaque
+      // "Stripe link failed (401)".
+      if (!session?.access_token) {
+        throw new Error('Sign in expired — reload the page to reconnect.');
+      }
       const res = await fetch('/api/stripe/connect', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session?.access_token ?? ''}` },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      const j = await res.json();
+      const j = await res.json().catch(() => ({}));
       if (!res.ok || !j.url) throw new Error(j?.error || `Stripe link failed (${res.status})`);
       // Both onboarding and "manage" land in Stripe-hosted flows. Same
       // window — Stripe's return_url brings them back to /profile/edit.
       window.location.href = j.url;
     } catch (err) {
       console.error('[PayoutsSection] Stripe action failed', err);
+      setStripe((s) => (s.kind === 'loading' || s.kind === 'not_connected'
+        ? { kind: 'error', message: err instanceof Error ? err.message : 'Stripe link failed' }
+        : s));
       setBusy(null);
     }
   };

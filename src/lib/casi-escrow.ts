@@ -137,6 +137,43 @@ export function solscanAccountUrl(
   return `https://solscan.io/account/${pubkey}${cluster === 'devnet' ? '?cluster=devnet' : ''}`;
 }
 
+/**
+ * Categorize the messy errors that come out of Anchor / wallet-adapter /
+ * web3.js when a `set_delegate` (or any program tx) fails. Returns a
+ * fresh Error with a UI-friendly message; UI code shows `.message` raw.
+ *
+ * Common modes seen on devnet during delegate install/rotate:
+ *   - User dismissed the wallet popup
+ *   - Wallet popup approved late, blockhash expired before submit
+ *   - RPC dropped the tx in transit
+ *   - Tx landed but client didn't see confirmation
+ *
+ * The pre-flight probe in `setDelegate` handles the last case; this
+ * helper covers the rest with a one-line cause.
+ */
+export function decorateDelegateError(err: unknown): Error {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+
+  if (
+    lower.includes('user rejected') ||
+    lower.includes('user declined') ||
+    lower.includes('rejected the request')
+  ) {
+    return new Error('Wallet popup dismissed — click again to retry.');
+  }
+  if (lower.includes('blockhash not found') || lower.includes('block height exceeded')) {
+    return new Error('Network slow — your signature timed out. Click again to retry.');
+  }
+  if (lower.includes('timeout') || lower.includes('timed out')) {
+    return new Error('Wallet timed out — click again to retry.');
+  }
+  if (lower.includes('insufficient lamports') || lower.includes('insufficient funds')) {
+    return new Error('Not enough SOL in your wallet for the transaction fee.');
+  }
+  return err instanceof Error ? err : new Error(msg);
+}
+
 // ---------------------------------------------------------------------------
 // Parameter types
 // ---------------------------------------------------------------------------
@@ -565,19 +602,45 @@ export class CasiEscrowClient {
 
   async setDelegate(
     params: SetDelegateParams,
-  ): Promise<{ sig: string; delegatePda: string; solscanUrl: string }> {
+  ): Promise<{ sig: string; delegatePda: string; solscanUrl: string; alreadyApplied?: boolean }> {
     const { sessionKey, expiresAt } = params;
     const streamer = this.wallet.publicKey;
     const [delegatePda] = deriveDelegatePda(streamer);
 
-    const sig = await (this.program.methods as any)
-      .setDelegate(sessionKey, new BN(expiresAt))
-      .accounts({
-        streamer,
-        delegate:      delegatePda,
-        systemProgram: SystemProgram.programId,
-      })
-      .rpc();
+    // Pre-flight: if a previous attempt actually landed on-chain but the
+    // client didn't observe the confirmation (network blip, slow RPC,
+    // user dismissed the popup AFTER signing), the on-chain delegate
+    // already matches what we'd register. Skip the wallet popup + tx fee.
+    // This is the dominant fix for the "I clicked Rotate three times before
+    // it worked" UX — the FIRST one usually landed, the retries were
+    // wasted.
+    try {
+      const existing = await this.fetchDelegate(streamer);
+      if (existing && existing.sessionKey.equals(sessionKey)) {
+        return {
+          sig:           '',
+          delegatePda:   delegatePda.toBase58(),
+          solscanUrl:    '',
+          alreadyApplied: true,
+        };
+      }
+    } catch {
+      // Fetch failure is non-fatal — fall through to the regular set_delegate.
+    }
+
+    let sig: string;
+    try {
+      sig = await (this.program.methods as any)
+        .setDelegate(sessionKey, new BN(expiresAt))
+        .accounts({
+          streamer,
+          delegate:      delegatePda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+    } catch (err) {
+      throw decorateDelegateError(err);
+    }
 
     return {
       sig,
