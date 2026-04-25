@@ -885,7 +885,7 @@ export default function AdminStudio() {
             showFlashToast('Escrow still Pending on-chain — viewer must reclaim from overlay', 'err');
           } else if (result.outcome === 'no-wallet') {
             showFlashToast('Connect streamer wallet to end this beam', 'err');
-          } else {
+          } else if (result.outcome === 'error') {
             const { formatEscrowError } = await import('@/lib/casi-errors');
             showFlashToast(`End early failed — ${formatEscrowError(result.error)}; beam stays live`, 'err');
           }
