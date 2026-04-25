@@ -71,6 +71,100 @@ export type ModerationContext = {
   cluster: 'devnet' | 'mainnet-beta';
 };
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Delegate crank helpers — POSTs to the server-held session-key routes.
+   Returned to callers so they can both branch on success AND surface the
+   failure reason to the streamer before falling back to a wallet popup
+   (missing delegate, expired, cranker unfunded, chain revert).
+
+   Same outcome shape across start_beam / settle_beam / approve_flash /
+   deny_flash so describeDelegateSettleFailure maps reasons uniformly.
+   ────────────────────────────────────────────────────────────────────────── */
+
+export type DelegateSettleOutcome =
+  | { ok: true; alreadyProcessed?: boolean }
+  | { ok: false; reason?: string; message?: string; status?: number };
+
+async function postDelegateRoute(
+  supabase: SupabaseClient,
+  route: string,
+  body: Record<string, unknown>,
+  scope: string,
+): Promise<DelegateSettleOutcome> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return { ok: false, reason: 'no_session' };
+    const res = await fetch(route, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization:  `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (res.ok) return { ok: true, alreadyProcessed: !!payload?.alreadyProcessed };
+    return { ok: false, status: res.status, reason: payload?.reason, message: payload?.message };
+  } catch (err) {
+    console.warn(`[${scope}] crank failed; falling back`, err);
+    return { ok: false, reason: 'network_error', message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export function trySolanaStartDelegated(
+  supabase: SupabaseClient,
+  bookingId: string | number,
+): Promise<DelegateSettleOutcome> {
+  return postDelegateRoute(
+    supabase,
+    '/api/solana/delegates/start-beam',
+    { booking_id: bookingId },
+    'trySolanaStartDelegated',
+  );
+}
+
+export function trySolanaSettleDelegated(
+  supabase: SupabaseClient,
+  bookingId: string | number,
+): Promise<DelegateSettleOutcome> {
+  return postDelegateRoute(
+    supabase,
+    '/api/solana/delegates/settle-beam',
+    { booking_id: bookingId },
+    'trySolanaSettleDelegated',
+  );
+}
+
+export function trySolanaFlashDelegated(
+  supabase: SupabaseClient,
+  flashId: string,
+  action: 'approve' | 'deny',
+): Promise<DelegateSettleOutcome> {
+  const route = action === 'approve'
+    ? '/api/solana/delegates/approve-flash'
+    : '/api/solana/delegates/deny-flash';
+  return postDelegateRoute(supabase, route, { flash_id: flashId }, 'trySolanaFlashDelegated');
+}
+
+/** Human-readable one-liner for a failed delegate crank. */
+export function describeDelegateSettleFailure(
+  o: Extract<DelegateSettleOutcome, { ok: false }>,
+): string {
+  switch (o.reason) {
+    case 'no_session':    return 'Not signed in — reconnecting…';
+    case 'no_delegate':   return 'Delegate not installed — sign this one manually, then install in Settings';
+    case 'revoked':       return 'Delegate revoked — sign this one, then reinstall in Settings';
+    case 'expired':       return 'Delegate expired — sign this one, then rotate in Settings';
+    case 'no_cranker':    return 'Server fee payer offline — signing with your wallet';
+    case 'decrypt_failed':
+    case 'key_mismatch':  return 'Delegate secret unreadable (env rotated?) — rotate in Settings';
+    case 'db_error':      return 'Delegate lookup failed — falling back to wallet';
+    case 'chain_error':   return `On-chain settle failed: ${o.message ?? 'unknown'}`;
+    case 'network_error': return 'Network error — retrying with wallet';
+    default:              return `Delegate settle failed (${o.reason ?? o.status ?? 'unknown'}) — falling back to wallet`;
+  }
+}
+
 export async function approveBooking(
   ctx: ModerationContext,
   booking: BookingLike,
@@ -367,24 +461,13 @@ export async function moderateFlash(
     }
 
     // Delegate crank first — no wallet popup if a healthy session key is installed.
-    try {
-      const route = action === 'approve'
-        ? '/api/solana/delegates/approve-flash'
-        : '/api/solana/delegates/deny-flash';
-      const res = await fetch(route, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
-        body: JSON.stringify({ flash_id: flash.id }),
-      });
-      if (res.ok) {
-        // Webhook normally flips DB; fire db_only as a safety net for dev
-        // setups without a Helius tunnel. Both paths gate on status='pending'
-        // so the double-write is idempotent.
-        try { await dbOnlyModerate(); } catch { /* webhook already handled it */ }
-        return { ok: true };
-      }
-    } catch (err) {
-      console.warn('[moderateFlash] delegate crank failed, falling back', err);
+    const delegated = await trySolanaFlashDelegated(ctx.supabase, flash.id, action);
+    if (delegated.ok) {
+      // Webhook normally flips DB; fire db_only as a safety net for dev
+      // setups without a Helius tunnel. Both paths gate on status='pending'
+      // so the double-write is idempotent.
+      try { await dbOnlyModerate(); } catch { /* webhook already handled it */ }
+      return { ok: true };
     }
 
     // Wallet-signed path.
@@ -471,23 +554,9 @@ async function startSolanaBeamOnChain(
 
   // Prefer the server-held session-key delegate. The route rejects with a
   // known reason if the delegate is missing / expired / revoked / cranker
-  // unfunded; we tolerate any non-200 and fall through to wallet signing.
-  try {
-    const { data: { session } } = await ctx.supabase.auth.getSession();
-    if (session?.access_token) {
-      const res = await fetch('/api/solana/delegates/start-beam', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ booking_id: booking.id }),
-      });
-      if (res.ok) return { ok: true };
-    }
-  } catch (err) {
-    console.warn('[studio-moderation] delegate start-beam failed, falling back to wallet', err);
-  }
+  // unfunded; we tolerate any non-ok and fall through to wallet signing.
+  const delegated = await trySolanaStartDelegated(ctx.supabase, booking.id);
+  if (delegated.ok) return { ok: true };
 
   if (!ctx.wallet) {
     return { ok: false, message: 'Connect your streamer wallet to approve this beam.' };
@@ -539,22 +608,8 @@ async function settleOrClearSolanaEscrow(
 
   // Try the delegated crank first — no wallet popup if a healthy session
   // key is installed.
-  try {
-    const { data: { session } } = await ctx.supabase.auth.getSession();
-    if (session?.access_token) {
-      const res = await fetch('/api/solana/delegates/settle-beam', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ booking_id: booking.id }),
-      });
-      if (res.ok) return { outcome: 'settled' };
-    }
-  } catch (err) {
-    console.warn('[studio-moderation] delegate settle-beam failed, falling back to wallet', err);
-  }
+  const delegated = await trySolanaSettleDelegated(ctx.supabase, booking.id);
+  if (delegated.ok) return { outcome: 'settled' };
 
   if (!ctx.wallet || !booking.viewer_wallet) return { outcome: 'no-wallet' };
   if (ctx.profile.solana_wallet && ctx.wallet.publicKey.toBase58() !== ctx.profile.solana_wallet) {
