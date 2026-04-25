@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import SlotMedia from '@/components/SlotMedia';
 
 export type QueueItem = {
   id: string;
@@ -16,6 +17,16 @@ export type QueueItem = {
   /** When true this row shows a "Manage →" link to /admin instead of buttons —
    *  for bookings/flashes whose approve flow isn't wired here yet. */
   readOnly?: boolean;
+  /** False = no Stripe PI / Solana tx / free-tier match yet. Approve button
+   *  is replaced with an "Awaiting payment" pill so the streamer can't
+   *  approve a booking before the viewer's funds are secured. */
+  paymentConfirmed?: boolean;
+  /** Booking image / video URL for the row preview thumbnail. */
+  mediaUrl?: string | null;
+  /** image | video — drives SlotMedia's render branch. */
+  fileType?: string | null;
+  /** Slot shape — masks the preview thumbnail to match what airs on stream. */
+  shape?: string | null;
 };
 
 type Props = {
@@ -138,13 +149,19 @@ export default function ApprovalQueue({ items, onApprove, onReject, readOnly, pe
         visible.map((item, idx) => (
           <div
             key={item.id}
-            className="grid items-center gap-2.5"
+            className="grid items-center gap-3"
             style={{
-              gridTemplateColumns: 'auto 1fr auto',
+              gridTemplateColumns: 'auto auto 1fr auto',
               padding: '12px 16px',
               borderBottom: idx === visible.length - 1 ? 'none' : '1px solid var(--casi-border)',
             }}
           >
+            <QueuePreviewThumb
+              mediaUrl={item.mediaUrl}
+              fileType={item.fileType}
+              shape={item.shape}
+              kind={item.kind}
+            />
             <span
               className="text-center font-mono uppercase"
               style={{
@@ -220,6 +237,10 @@ export default function ApprovalQueue({ items, onApprove, onReject, readOnly, pe
                 <>
                   {(() => {
                     const isPending = pendingIds?.has(item.id) ?? false;
+                    // Default to true for back-compat with surfaces that don't
+                    // pass the field; the streamer-side check is the safety
+                    // net but the explicit gate happens here in the UI too.
+                    const paid = item.paymentConfirmed ?? true;
                     return (
                       <>
                         <button
@@ -244,22 +265,26 @@ export default function ApprovalQueue({ items, onApprove, onReject, readOnly, pe
                         </button>
                         <button
                           type="button"
-                          onClick={() => onApprove?.(item.id)}
-                          disabled={isPending}
-                          className="font-extrabold"
+                          onClick={() => paid && onApprove?.(item.id)}
+                          disabled={isPending || !paid}
+                          className="font-extrabold font-mono uppercase"
+                          title={paid
+                            ? 'Approve · pushes the booking to active on stream'
+                            : 'Awaiting payment — viewer hasn\'t completed the Stripe / Solana transfer yet'}
                           style={{
-                            padding: '7px 11px',
+                            padding: '8px 12px',
                             borderRadius: '7px',
-                            background: 'var(--casi-accent)',
-                            color: '#050505',
-                            border: 'none',
+                            background: paid ? 'var(--casi-accent)' : 'var(--casi-border)',
+                            color: paid ? '#050505' : 'var(--casi-text-faint)',
+                            border: paid ? 'none' : '1px solid var(--casi-border-2)',
                             fontFamily: 'var(--font-casi-sans)',
-                            fontSize: '11px',
-                            cursor: isPending ? 'wait' : 'pointer',
+                            fontSize: '10px',
+                            letterSpacing: '0.12em',
+                            cursor: !paid ? 'not-allowed' : isPending ? 'wait' : 'pointer',
                             opacity: isPending ? 0.5 : 1,
                           }}
                         >
-                          {isPending ? '…' : 'Approve'}
+                          {isPending ? '…' : paid ? 'Approve' : 'Awaiting payment'}
                         </button>
                       </>
                     );
@@ -271,5 +296,72 @@ export default function ApprovalQueue({ items, onApprove, onReject, readOnly, pe
         ))
       )}
     </section>
+  );
+}
+
+/**
+ * 44×44 booking preview, masked to the slot's shape so the streamer sees
+ * the actual content they're approving (not just text). Falls back to a
+ * letter glyph when no media is attached (text-only flashes, banner
+ * messages, attach-failed bookings).
+ */
+function QueuePreviewThumb({
+  mediaUrl,
+  fileType,
+  shape,
+  kind,
+}: {
+  mediaUrl?: string | null;
+  fileType?: string | null;
+  shape?: string | null;
+  kind: 'beam' | 'flash';
+}) {
+  const tile: React.CSSProperties = {
+    width: '44px',
+    height: '44px',
+    borderRadius: '8px',
+    background: '#0a0a0a',
+    border: '1px solid var(--casi-border-2)',
+    flexShrink: 0,
+    overflow: 'hidden',
+    position: 'relative',
+  };
+
+  if (!mediaUrl) {
+    return (
+      <div
+        className="flex items-center justify-center font-mono"
+        style={{
+          ...tile,
+          color: kind === 'flash' ? 'var(--casi-accent)' : 'var(--casi-accent2)',
+          fontSize: '14px',
+        }}
+        aria-hidden
+      >
+        {kind === 'flash' ? '⚡' : '✦'}
+      </div>
+    );
+  }
+
+  const clipPath =
+    shape === 'circle' ? 'circle(50%)' :
+    shape === 'hex' ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' :
+    undefined;
+  const radius =
+    shape === 'rounded' ? 10 :
+    shape === 'rect' || shape === 'banner' ? 4 :
+    shape === 'backdrop' ? 4 :
+    8;
+
+  return (
+    <div style={{ ...tile, borderRadius: shape === 'circle' || shape === 'hex' ? 0 : radius }}>
+      <div style={{ width: '100%', height: '100%', clipPath }}>
+        <SlotMedia
+          src={mediaUrl}
+          fileType={fileType ?? null}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      </div>
+    </div>
   );
 }

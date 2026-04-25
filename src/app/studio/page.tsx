@@ -22,9 +22,9 @@ import StudioLiveEditor from './_components/StudioLiveEditor';
 // escrow_pda / viewer_wallet (Solana settle on deny), image_url (overlay copy
 // on approve).
 const BOOKING_COLS =
-  'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, started_at, escrow_pda, viewer_wallet, is_queued';
+  'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, payment_intent_id, tx_signature, started_at, escrow_pda, viewer_wallet, is_queued';
 const FLASH_COLS =
-  'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, escrow_pda, viewer_wallet';
+  'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, payment_intent_id, tx_signature, escrow_pda, viewer_wallet';
 const PROFILE_COLS = 'id, username, solana_wallet, is_live, skin, theme_color';
 
 const LOG_LIMIT = 50;
@@ -68,11 +68,20 @@ type BookingRow = {
   price_value: number | string;
   price_unit: string | null;
   payment_method: string | null;
+  payment_intent_id: string | null;
+  tx_signature: string | null;
   started_at: string | null;
   escrow_pda: string | null;
   viewer_wallet: string | null;
   is_queued: boolean | null;
 };
+
+/** Mirror of admin/page.tsx isPaymentConfirmed. Stripe PI present, Solana
+ *  tx_signature present, free tier, OR price_value=0 (free slot). Matches
+ *  the server-side checks the API routes do before letting an approve land. */
+function isPaymentConfirmed(b: { payment_intent_id?: string | null; tx_signature?: string | null; payment_method?: string | null; price_value?: number | string | null; }): boolean {
+  return !!(b.payment_intent_id || b.tx_signature || b.payment_method === 'free' || Number(b.price_value) === 0);
+}
 
 type FlashRow = {
   id: string;
@@ -82,6 +91,8 @@ type FlashRow = {
   message: string | null;
   amount_cents: number | null;
   payment_method: string | null;
+  payment_intent_id: string | null;
+  tx_signature: string | null;
   escrow_pda: string | null;
   viewer_wallet: string | null;
 };
@@ -399,6 +410,13 @@ export default function StudioPage() {
       const raw = queueId.slice('booking-'.length);
       const booking = pendingBookings.find((b) => String(b.id) === raw);
       if (!booking) return;
+      // Belt-and-braces — the button is disabled when payment isn't
+      // confirmed, but a stale tab or a custom client could still POST
+      // approve through. Refuse here too.
+      if (!isPaymentConfirmed(booking)) {
+        setErrorMsg('Payment not secured yet — wait for the viewer to complete payment.');
+        return;
+      }
       markModerating(queueId, true);
       const result = await approveBooking(moderationCtx, booking);
       markModerating(queueId, false);
@@ -414,6 +432,10 @@ export default function StudioPage() {
       const raw = queueId.slice('flash-'.length);
       const flash = pendingFlashes.find((f) => f.id === raw);
       if (!flash) return;
+      if (!isPaymentConfirmed(flash)) {
+        setErrorMsg('Payment not secured yet — wait for the viewer to complete payment.');
+        return;
+      }
       markModerating(queueId, true);
       const result = await moderateFlash(moderationCtx, flash, 'approve');
       markModerating(queueId, false);
@@ -542,12 +564,26 @@ export default function StudioPage() {
   const slug = profile.username ?? 'streamer';
 
   const queue: QueueItem[] = [
-    ...pendingBookings.map((b) => ({
-      item: bookingToQueueItem(b),
-      ts: new Date(b.created_at).getTime(),
-    })),
+    ...pendingBookings.map((b) => {
+      const element = b.element_id ? elementsById[b.element_id] : undefined;
+      return {
+        item: {
+          ...bookingToQueueItem(b),
+          paymentConfirmed: isPaymentConfirmed(b),
+          mediaUrl: b.image_url,
+          fileType: b.file_type,
+          shape: element?.shape ?? null,
+        },
+        ts: new Date(b.created_at).getTime(),
+      };
+    }),
     ...pendingFlashes.map((f) => ({
-      item: flashToQueueItem(f),
+      item: {
+        ...flashToQueueItem(f),
+        paymentConfirmed: isPaymentConfirmed(f),
+        // Flashes don't have media or shape — the QueuePreviewThumb falls
+        // back to the kind glyph when mediaUrl is null.
+      },
       ts: new Date(f.created_at).getTime(),
     })),
   ].sort((a, b) => b.ts - a.ts).map(({ item }) => item);
