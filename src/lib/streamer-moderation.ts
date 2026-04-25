@@ -552,7 +552,7 @@ function buildAnchorWallet(wallet: WalletSigner) {
   };
 }
 
-async function startSolanaBeamOnChain(
+export async function startSolanaBeamOnChain(
   ctx: ModerationContext,
   booking: BookingLike,
 ): Promise<ModerationResult> {
@@ -598,13 +598,29 @@ async function startSolanaBeamOnChain(
   }
 }
 
-type SettleOutcome =
+export type SettleOutcome =
   | { outcome: 'settled' | 'closed' | 'pending-chain' | 'no-wallet' }
   | { outcome: 'error'; error: unknown };
 
-async function settleOrClearSolanaEscrow(
+/**
+ * Probe a Solana escrow PDA and close it if it's Active. Branch points:
+ *   PDA gone        → 'closed'  (already settled / cancelled)
+ *   PDA Pending     → 'pending-chain' (only viewer can cancel_escrow)
+ *   PDA Active      → try delegate crank, fall back to wallet-signed settle.
+ *                     Bubbles 'no-wallet' if the streamer's wallet isn't
+ *                     connected or doesn't match profile.solana_wallet.
+ *
+ * `hooks.onDelegateFailure` fires when the cranker route returned non-ok
+ * AND we're about to fall back to a wallet popup. Useful for telling the
+ * streamer WHY a popup is appearing (delegate expired / cranker offline /
+ * etc.) — admin pipes describeDelegateSettleFailure through it.
+ */
+export async function settleOrClearSolanaEscrow(
   ctx: ModerationContext,
   booking: BookingLike,
+  hooks?: {
+    onDelegateFailure?: (outcome: Extract<DelegateSettleOutcome, { ok: false }>) => void;
+  },
 ): Promise<SettleOutcome> {
   if (!booking.escrow_pda) return { outcome: 'closed' };
 
@@ -621,6 +637,7 @@ async function settleOrClearSolanaEscrow(
   // key is installed.
   const delegated = await trySolanaSettleDelegated(ctx.supabase, booking.id);
   if (delegated.ok) return { outcome: 'settled' };
+  hooks?.onDelegateFailure?.(delegated);
 
   if (!ctx.wallet || !booking.viewer_wallet) return { outcome: 'no-wallet' };
   if (ctx.profile.solana_wallet && ctx.wallet.publicKey.toBase58() !== ctx.profile.solana_wallet) {

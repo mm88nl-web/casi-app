@@ -11,12 +11,13 @@ import WalletNav from '@/components/WalletNav';
 import FlashPanel from '@/components/FlashPanel';
 import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 import {
-  trySolanaStartDelegated,
   trySolanaSettleDelegated,
   trySolanaFlashDelegated,
   describeDelegateSettleFailure,
   approveBooking as libApproveBooking,
   denyBooking as libDenyBooking,
+  startSolanaBeamOnChain as libStartSolanaBeamOnChain,
+  settleOrClearSolanaEscrow as libSettleOrClearSolanaEscrow,
   type ModerationContext,
 } from '@/lib/streamer-moderation';
 import Logo from './_components/Logo';
@@ -331,9 +332,10 @@ export default function AdminStudio() {
     setTogglingLive(false);
   };
 
-  // Not memoized: this closes over startSolanaBeamOnChain (declared below) and
-  // a useCallback wrapper here would need startSolanaBeamOnChain in its deps,
-  // which is itself unmemoized. The onExpire prop's identity churn is harmless
+  // Not memoized: this calls buildModCtx() which captures wallet hooks that
+  // change on every relevant render — a useCallback wrapper here would need
+  // those in its deps and would invalidate as often as a fresh closure.
+  // The onExpire prop's identity churn is harmless
   // — BeamTimer keys on booking.id, not callback identity.
   const expireBooking = async (booking: any) => {
     // Stripe capture for natural expiry is handled by the Vercel Cron janitor
@@ -360,18 +362,18 @@ export default function AdminStudio() {
         setElements(prev => prev.map(el => el.id === booking.element_id ? { ...el, image_url: '' } : el));
       } else if (next.payment_method === 'solana') {
         // Solana queue: on-chain Pending → Active MUST happen before the DB
-        // flip, or settle_beam will revert. startSolanaBeamOnChain tries the
+        // flip, or settle_beam will revert. The lib helper tries the
         // server-held delegate first (cranker pays fees, no popup) and falls
         // back to a wallet-signed start_beam if the delegate is missing /
         // revoked / expired / unfunded. If both fail we leave the row in
         // approved_queued and nudge the streamer to click Play Now.
-        try {
-          await startSolanaBeamOnChain(next);
+        const startResult = await libStartSolanaBeamOnChain(buildModCtx(), next);
+        if (startResult.ok) {
           await supabase.from('bookings').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', next.id);
           await supabase.from('overlay_elements').update({ image_url: next.image_url }).eq('id', next.element_id);
           setElements(prev => prev.map(el => el.id === next.element_id ? { ...el, image_url: next.image_url } : el));
-        } catch (err) {
-          console.warn('[expireBooking] Solana auto-promote failed, leaving queued', err);
+        } else {
+          console.warn('[expireBooking] Solana auto-promote failed, leaving queued:', startResult.message);
           await supabase.from('overlay_elements').update({ image_url: '' }).eq('id', booking.element_id);
           setElements(prev => prev.map(el => el.id === booking.element_id ? { ...el, image_url: '' } : el));
           showFlashToast('Next Solana beam ready — click Play Now to start', 'ok');
@@ -531,43 +533,6 @@ export default function AdminStudio() {
     !!(b.payment_intent_id || b.tx_signature || b.payment_method === 'free' || Number(b.price_value) === 0);
 
   /**
-   * Fire `start_beam` on-chain for a Solana beam booking. The streamer must
-   * sign; the on-chain clock then drives the vesting schedule for settle_beam.
-   *
-   * Throws on wallet / signature errors so the caller can keep the booking in
-   * its current status and surface the failure to the streamer — we never
-   * want the DB to show "active" when the on-chain state is still "pending".
-   * No-op for non-Solana bookings.
-   */
-  const startSolanaBeamOnChain = async (booking: any) => {
-    if (booking.payment_method !== 'solana') return;
-    if (!booking.escrow_pda) {
-      console.warn('[startSolanaBeam] booking has no escrow_pda — skipping');
-      return;
-    }
-
-    // Prefer the server-held session-key delegate. If it exists, is healthy,
-    // and the on-chain program accepts it (the server will probe all three
-    // constraints), the streamer doesn't need to pop open their wallet.
-    // Fall back to streamer-signed start_beam if the delegate is missing /
-    // expired / revoked / server errored.
-    const delegated = await trySolanaStartDelegated(supabase, booking.id);
-    if (delegated.ok) return;
-
-    const anchorWallet = buildAnchorWalletForEscrow();
-    if (!anchorWallet) {
-      openWalletModal();
-      throw new Error('Connect your streamer wallet');
-    }
-    if (profile?.solana_wallet && publicKey!.toBase58() !== profile.solana_wallet) {
-      throw new Error('Connected wallet is not the streamer wallet on file');
-    }
-    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
-    const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
-    await client.startBeam({ escrowId: booking.id, streamer: publicKey! });
-  };
-
-  /**
    * Sign `set_delegate` on-chain after the server has generated + stored a
    * session keypair. This is the ONE wallet pop-up in the session-key flow —
    * every subsequent Approve is popup-free because the server signs
@@ -636,71 +601,20 @@ export default function AdminStudio() {
   };
 
   /**
-   * Streamer-side on-chain action for closing a Solana escrow: probes the PDA
-   * and, if it's Active, calls `settle_beam` (viewer gets pro-rata refund;
-   * vault + state close). Returns a structured outcome so callers can decide
-   * how to update the DB + UI.
-   *
-   *   'settled'       — settle_beam confirmed, PDA closed
-   *   'closed'        — PDA was already gone (previously settled / cancelled)
-   *   'pending-chain' — PDA alive but in Pending state; only the viewer can
-   *                     call cancel_escrow, streamer is powerless here
-   *   'no-wallet'     — streamer's wallet isn't connected or doesn't match
-   *                     profile.solana_wallet, so we can't sign
-   *   'error'         — unexpected on-chain failure
+   * Probe the escrow PDA and settle / clear it. Thin wrapper around the
+   * shared library helper that pipes a delegate-failure toast through —
+   * lets the streamer see WHY a wallet popup is appearing (delegate
+   * expired / cranker offline / etc.) before the popup pops.
    */
-  const settleOrClearSolanaEscrow = useCallback(async (booking: {
-    id: string; escrow_pda?: string | null; viewer_wallet?: string | null;
-  }): Promise<{ outcome: 'settled' | 'closed' | 'pending-chain' | 'no-wallet' | 'error'; error?: unknown }> => {
-    if (!booking.escrow_pda) return { outcome: 'closed' };
-    const { PublicKey } = await import('@solana/web3.js');
-    const pdaInfo = await walletConnection
-      .getAccountInfo(new PublicKey(booking.escrow_pda))
-      .catch(() => null);
-    if (!pdaInfo) return { outcome: 'closed' };
-
-    // Short-circuit Pending: settle_beam requires status=Active, so on Pending
-    // it reverts with NotActive — skip the wasted signing prompt + tx fee.
-    // Status byte lives at offset 161; see EscrowState layout in lib.rs.
-    if (pdaInfo.data[161] === 0) return { outcome: 'pending-chain' };
-
-    // Try the delegated crank first — if a healthy session key is installed,
-    // the server settles without a wallet pop-up. On failure (no delegate,
-    // expired, cranker unfunded, chain revert) we surface the reason and
-    // fall through to the wallet-signed path below.
-    const delegated = await trySolanaSettleDelegated(supabase, booking.id);
-    if (delegated.ok) {
-      return { outcome: 'settled' };
-    }
-    showFlashToast(describeDelegateSettleFailure(delegated), 'err');
-
-    const canSign = !!booking.viewer_wallet && !!publicKey && !!profile?.solana_wallet
-      && publicKey.toBase58() === profile.solana_wallet;
-    if (!canSign) return { outcome: 'no-wallet' };
-
-    try {
-      const anchorWallet = buildAnchorWalletForEscrow();
-      if (!anchorWallet) return { outcome: 'no-wallet' };
-      const { CasiEscrowClient } = await import('@/lib/casi-escrow');
-      const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
-      await client.settleBeam({
-        escrowId: booking.id,
-        viewer:   new PublicKey(booking.viewer_wallet!),
-        streamer: publicKey!,
-      });
-      return { outcome: 'settled' };
-    } catch (err) {
-      // NotActive = escrow is still Pending on-chain. Only the viewer can
-      // close it via cancel_escrow; surface that to the caller.
-      const { parseCasiError, isAlreadyProcessed } = await import('@/lib/casi-errors');
-      if (parseCasiError(err) === 'NotActive') return { outcome: 'pending-chain' };
-      // "already processed" = our first submission already landed and the
-      // settle succeeded. Treat as success so the caller doesn't toast.
-      if (isAlreadyProcessed(err)) return { outcome: 'settled' };
-      console.error('[settleOrClearSolanaEscrow] settle_beam failed:', err);
-      return { outcome: 'error', error: err };
-    }
-  }, [walletConnection, publicKey, profile?.solana_wallet]);
+  const settleOrClearSolanaEscrow = useCallback(
+    (booking: { id: string | number; escrow_pda?: string | null; viewer_wallet?: string | null }) =>
+      libSettleOrClearSolanaEscrow(buildModCtx(), booking, {
+        onDelegateFailure: (o) => showFlashToast(describeDelegateSettleFailure(o), 'err'),
+      }),
+    // buildModCtx and showFlashToast aren't memoized — would invalidate every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [supabase, walletConnection, publicKey, profile?.solana_wallet],
+  );
 
   const denyBooking = async (id: string | number, paymentMethod?: string) => {
     setPreviewBooking(null);
@@ -940,7 +854,7 @@ export default function AdminStudio() {
   };
 
   // Plain function (not useCallback) because it closes over the unmemoized
-  // expireBooking + startSolanaBeamOnChain. Memoizing would capture stale refs.
+  // expireBooking and buildModCtx. Memoizing would capture stale refs.
   /**
    * Returns `true` if the beam was successfully expired (escrow settled or
    * closed, DB flipped), `false` if any step bailed and the beam is still
@@ -1011,8 +925,8 @@ export default function AdminStudio() {
   // same slot (settles on-chain for Solana / prorates for Stripe), then
   // flip this booking to active ourselves since queue auto-promotion is
   // disabled on the Solana rail. Plain function (not useCallback) because
-  // startSolanaBeamOnChain + showFlashToast aren't memoized, so memoizing
-  // here would just capture stale refs.
+  // showFlashToast and buildModCtx aren't memoized, so memoizing here would
+  // just capture stale refs.
   const playNow = async (booking: any) => {
     const current = activeBookings.find(b => b.element_id === booking.element_id);
     if (current) {
@@ -1027,10 +941,9 @@ export default function AdminStudio() {
       if (!kicked) return;
     }
     if (booking.payment_method === 'solana') {
-      try { await startSolanaBeamOnChain(booking); }
-      catch (err: unknown) {
-        const { formatEscrowError } = await import('@/lib/casi-errors');
-        showFlashToast(formatEscrowError(err), 'err');
+      const startResult = await libStartSolanaBeamOnChain(buildModCtx(), booking);
+      if (!startResult.ok) {
+        showFlashToast(startResult.message, 'err');
         return;
       }
     }
