@@ -7,13 +7,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { createClient } from '@/utils/supabase/client';
 import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
-import { approveBooking, denyBooking, endBeamEarly, moderateFlash, type ModerationContext } from '@/lib/streamer-moderation';
+import { approveBooking, denyBooking, endBeamEarly, moderateFlash, playNowBooking, type ModerationContext } from '@/lib/streamer-moderation';
 import CasiLogo from '@/components/CasiLogo';
 import SkinProvider from '@/components/SkinProvider';
 import ThemeColorDot from '@/components/ThemeColorDot';
 import WalletNav from '@/components/WalletNav';
 import AiringNow, { type AiringItem } from './_components/AiringNow';
 import ApprovalQueue, { type QueueItem } from './_components/ApprovalQueue';
+import QueuedBookings, { type QueuedItem } from './_components/QueuedBookings';
 import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
 import StudioLiveEditor from './_components/StudioLiveEditor';
 
@@ -233,6 +234,7 @@ export default function StudioPage() {
   const [flashTotals, setFlashTotals] = useState({ count: 0, eur: '€0', usdc: '0 USDC' });
   const [moderating, setModerating] = useState<Set<string>>(new Set());
   const [endingEarly, setEndingEarly] = useState<Set<string>>(new Set());
+  const [queueActing, setQueueActing] = useState<Set<string>>(new Set()); // play-now / remove on queued bookings
   const [refundingFlash, setRefundingFlash] = useState<Set<string>>(new Set());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [togglingLive, setTogglingLive] = useState(false);
@@ -473,6 +475,45 @@ export default function StudioPage() {
     });
   }, []);
 
+  const handlePlayNow = useCallback(async (bookingId: string) => {
+    if (!moderationCtx) return;
+    const booking = queuedBookings.find((b) => String(b.id) === bookingId);
+    if (!booking) return;
+    setQueueActing((prev) => new Set(prev).add(bookingId));
+    setErrorMsg(null);
+    const result = await playNowBooking(moderationCtx, booking);
+    setQueueActing((prev) => {
+      const next = new Set(prev);
+      next.delete(bookingId);
+      return next;
+    });
+    if (!result.ok) {
+      setErrorMsg(result.message);
+      return;
+    }
+    // Optimistically remove from the queued list — realtime sub will reconcile.
+    setQueuedBookings((prev) => prev.filter((b) => String(b.id) !== bookingId));
+  }, [moderationCtx, queuedBookings]);
+
+  const handleQueueRemove = useCallback(async (bookingId: string) => {
+    if (!moderationCtx) return;
+    const booking = queuedBookings.find((b) => String(b.id) === bookingId);
+    if (!booking) return;
+    setQueueActing((prev) => new Set(prev).add(bookingId));
+    setErrorMsg(null);
+    const result = await denyBooking(moderationCtx, String(booking.id), booking.payment_method);
+    setQueueActing((prev) => {
+      const next = new Set(prev);
+      next.delete(bookingId);
+      return next;
+    });
+    if (!result.ok) {
+      setErrorMsg(result.message);
+      return;
+    }
+    setQueuedBookings((prev) => prev.filter((b) => String(b.id) !== bookingId));
+  }, [moderationCtx, queuedBookings]);
+
   const handleEndEarly = useCallback(async (bookingId: string) => {
     if (!moderationCtx) return;
     const booking = activeBookings.find((b) => String(b.id) === bookingId);
@@ -598,6 +639,32 @@ export default function StudioPage() {
   }, {});
 
   const flashLog: FlashLogItem[] = flashLogRaw.map(flashToLogItem);
+
+  const queueDisplay: QueuedItem[] = queuedBookings.map((b) => {
+    const element = b.element_id ? elementsById[b.element_id] : undefined;
+    const who = b.viewer_name || 'anon';
+    const snippet = b.message
+      ? `"${b.message.slice(0, 28)}${b.message.length > 28 ? '…' : ''}"`
+      : b.file_type === 'video' ? 'video clip' : 'image';
+    const duration = Number(b.duration_minutes) || 0;
+    const rate = Number(b.price_value) || 0;
+    const unitMinutes = b.price_unit === 'hr' ? 60 : 1;
+    const total = rate * (duration / unitMinutes);
+    const isUsdc = b.payment_method === 'usdc' || b.payment_method === 'solana';
+    const priceLabel = isUsdc
+      ? `${total.toFixed(total % 1 === 0 ? 0 : 2)} USDC`
+      : `€${total.toFixed(total % 1 === 0 ? 0 : 2)}`;
+    return {
+      id: String(b.id),
+      slotLabel: slotLabel(element),
+      name: `${who} · ${snippet}`,
+      subtitle: `${timeAgo(b.created_at)} · ${duration}m${rate > 0 ? ` · ${rate}/${b.price_unit}` : ''}`,
+      priceLabel,
+      mediaUrl: b.image_url,
+      fileType: b.file_type,
+      shape: element?.shape ?? null,
+    };
+  });
 
   const airing: AiringItem[] = activeBookings.map((b) => {
     const bookingId = String(b.id);
@@ -901,6 +968,12 @@ export default function StudioPage() {
         {mode === 'monitor' ? (
           <>
             {airing.length > 0 ? <AiringNow items={airing} /> : null}
+            <QueuedBookings
+              items={queueDisplay}
+              onPlayNow={handlePlayNow}
+              onRemove={handleQueueRemove}
+              pendingIds={queueActing}
+            />
             <ApprovalQueue
               items={queue}
               onApprove={handleApprove}

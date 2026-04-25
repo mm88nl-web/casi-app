@@ -317,6 +317,93 @@ export async function endBeamEarly(
  *   5. After a successful chain tx, POST /api/flashes/moderate with
  *      tx_signature so the server verifies and flips DB.
  */
+/**
+ * Promote a specific queued booking to active immediately. Mirrors admin's
+ * playNow: end-early any beam currently airing on the same slot, then start
+ * the chosen queued booking.
+ */
+export async function playNowBooking(
+  ctx: ModerationContext,
+  queuedBooking: BookingLike,
+): Promise<ModerationResult> {
+  if (!queuedBooking.element_id) {
+    return { ok: false, message: 'Queued booking has no slot to play in.' };
+  }
+
+  // End the currently-active booking on this slot (if any) so the slot is
+  // free before we start the new one. We can't use endBeamEarly here
+  // because it auto-promotes the oldest queued booking — we want THIS
+  // specific one promoted, not whatever's first in line.
+  const { data: currentActive } = await ctx.supabase
+    .from('bookings')
+    .select('id, element_id, payment_method, escrow_pda, viewer_wallet, storage_path')
+    .eq('profile_id', ctx.profile.id)
+    .eq('element_id', queuedBooking.element_id)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (currentActive) {
+    let escrowClosed = false;
+    if (currentActive.payment_method === 'solana' && currentActive.escrow_pda && currentActive.viewer_wallet) {
+      const settleOutcome = await settleOrClearSolanaEscrow(ctx, currentActive as BookingLike);
+      if (settleOutcome.outcome === 'pending-chain') {
+        return { ok: false, message: 'Current beam\'s escrow still Pending on-chain — viewer must reclaim before play-next.' };
+      }
+      if (settleOutcome.outcome === 'no-wallet') {
+        return { ok: false, message: 'Connect your streamer wallet to end the current beam.' };
+      }
+      if (settleOutcome.outcome === 'error') {
+        return { ok: false, message: 'Could not settle the current beam on-chain — try again.' };
+      }
+      escrowClosed = true;
+    } else if (currentActive.payment_method !== 'solana') {
+      const { data: { session } } = await ctx.supabase.auth.getSession();
+      const res = await fetch('/api/stripe/end-early', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ booking_id: currentActive.id }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        return { ok: false, message: body?.error || `Stripe end-early failed (${res.status}).` };
+      }
+    }
+    if (currentActive.storage_path) {
+      await ctx.supabase.storage
+        .from('beams')
+        .remove([currentActive.storage_path])
+        .catch(() => { /* non-fatal */ });
+    }
+    const expireUpdate: Record<string, unknown> = { status: 'expired', image_url: null };
+    if (escrowClosed) expireUpdate.escrow_pda = null;
+    await ctx.supabase.from('bookings').update(expireUpdate).eq('id', currentActive.id);
+  }
+
+  // Start the queued booking. Solana: chain-first (start_beam) before DB flip,
+  // so the vesting clock and the DB clock stay in lockstep.
+  if (queuedBooking.payment_method === 'solana') {
+    const startResult = await startSolanaBeamOnChain(ctx, queuedBooking);
+    if (!startResult.ok) return startResult;
+  }
+
+  await ctx.supabase
+    .from('bookings')
+    .update({ status: 'active', started_at: new Date().toISOString() })
+    .eq('id', queuedBooking.id);
+
+  if (queuedBooking.element_id && queuedBooking.image_url) {
+    await ctx.supabase
+      .from('overlay_elements')
+      .update({ image_url: queuedBooking.image_url })
+      .eq('id', queuedBooking.element_id);
+  }
+
+  return { ok: true, optimistic: 'active' };
+}
+
 export async function moderateFlash(
   ctx: ModerationContext,
   flash: FlashLike,
