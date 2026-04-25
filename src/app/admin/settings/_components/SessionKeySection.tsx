@@ -1,40 +1,75 @@
 'use client';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import SettingsSection from './SettingsSection';
-import GhostButton from './GhostButton';
+import DelegateKeyCard from '@/app/admin/_components/DelegateKeyCard';
+import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 
-export default function SessionKeySection() {
+type Props = {
+  supabase: SupabaseClient;
+  /** Saved Solana wallet from profiles.solana_wallet — used to gate
+   *  walletReady (the connected wallet must match the saved address). */
+  savedSolanaWallet: string | null;
+};
+
+export default function SessionKeySection({ supabase, savedSolanaWallet }: Props) {
+  const { publicKey, signTransaction, signAllTransactions } = useWallet();
+  const { connection } = useConnection();
+
+  const connectedAddr = publicKey?.toBase58() ?? null;
+  const walletReady =
+    !!publicKey
+    && !!signTransaction
+    && !!savedSolanaWallet
+    && connectedAddr === savedSolanaWallet;
+
+  const onInstalled = async (sessionPubkey: string, expiresAt: number) => {
+    if (!publicKey || !signTransaction) {
+      throw new Error('Connect your streamer wallet to finalize the session key');
+    }
+    if (savedSolanaWallet && connectedAddr !== savedSolanaWallet) {
+      throw new Error('Connected wallet is not the streamer wallet on file');
+    }
+
+    // Build the AnchorWallet shim the CasiEscrowClient needs. Same shape as
+    // admin/page.tsx::buildAnchorWalletForEscrow — kept inline here so the
+    // settings card stays self-contained.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anchorWallet: any = {
+      publicKey,
+      signTransaction,
+      signAllTransactions:
+        signAllTransactions ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (async (txs: any[]) => {
+          const out = [];
+          for (const tx of txs) out.push(await signTransaction(tx));
+          return out;
+        }),
+    };
+
+    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const { PublicKey } = await import('@solana/web3.js');
+    const client = new CasiEscrowClient(connection, anchorWallet, WALLET_ADAPTER_CLUSTER);
+    const { solscanUrl } = await client.setDelegate({
+      sessionKey: new PublicKey(sessionPubkey),
+      expiresAt,
+    });
+    return { solscanUrl };
+  };
+
   return (
     <SettingsSection
       id="session-key"
       title="Session key"
-      desc="Lets the server approve pending beams on your behalf — so viewers don't see a wallet pop-up every time you confirm one. Scoped to approvals only; can't move funds or settle escrows."
+      desc="Lets the server approve and settle your beams without popping a wallet on every action. Scoped to four instructions on your active escrows — can't move funds outside their declared destinations, can't change delegation. You can revoke any time."
     >
-      <div
-        className="flex items-center justify-between gap-4"
-        style={{
-          padding: '16px 18px',
-          border: '1px solid var(--casi-border)',
-          borderRadius: '12px',
-          background: 'var(--casi-bg)',
-        }}
-      >
-        <div>
-          <div
-            className="font-mono"
-            style={{ fontSize: '14px', color: 'var(--casi-accent)', letterSpacing: '0.02em' }}
-          >
-            ◉ CmmS…Xycs
-          </div>
-          <div className="mt-1" style={{ fontSize: '12px', color: 'var(--casi-text-dim)' }}>
-            Active · expires in 7d
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <GhostButton type="button">Rotate</GhostButton>
-          <GhostButton type="button" variant="danger">Revoke</GhostButton>
-        </div>
-      </div>
+      <DelegateKeyCard
+        supabase={supabase}
+        walletReady={walletReady}
+        onInstalled={onInstalled}
+      />
     </SettingsSection>
   );
 }

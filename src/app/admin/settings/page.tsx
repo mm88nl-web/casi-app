@@ -61,7 +61,7 @@ type LoadState =
   | { kind: 'missing-profile' }
   | { kind: 'ready'; profile: ProfileRow };
 
-const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, skin';
+const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -165,15 +165,24 @@ export default function SettingsPage() {
 
       <SettingsLayout rail={RAIL}>
         <ProfileSection supabase={supabase} profile={state.profile} />
-        <PayoutsSection />
+        <PayoutsSection
+          supabase={supabase}
+          profileId={state.profile.id}
+          initialStripeAccountId={state.profile.stripe_account_id ?? null}
+          initialSolanaWallet={state.profile.solana_wallet ?? null}
+        />
         <AppearanceSection
           supabase={supabase}
           profileId={state.profile.id}
           initialSkinId={state.profile.skin}
+          initialThemeColor={state.profile.theme_color ?? null}
         />
         <SlotDefaultsSection />
         <ObsSourcesSection username={state.profile.username ?? 'your-handle'} />
-        <SessionKeySection />
+        <SessionKeySection
+          supabase={supabase}
+          savedSolanaWallet={state.profile.solana_wallet ?? null}
+        />
         <NotificationsSection />
         <ModerationSection />
         <DangerZoneSection />

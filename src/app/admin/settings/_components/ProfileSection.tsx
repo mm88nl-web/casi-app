@@ -13,6 +13,9 @@ export type ProfileRow = {
   bio: string | null;
   avatar_url: string | null;
   skin: string | null;
+  solana_wallet: string | null;
+  stripe_account_id: string | null;
+  theme_color: string | null;
 };
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
