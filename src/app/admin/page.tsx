@@ -1084,7 +1084,14 @@ export default function AdminStudio() {
 
   // Plain function (not useCallback) because it closes over the unmemoized
   // expireBooking + startSolanaBeamOnChain. Memoizing would capture stale refs.
-  const kickBeam = async (booking: any) => {
+  /**
+   * Returns `true` if the beam was successfully expired (escrow settled or
+   * closed, DB flipped), `false` if any step bailed and the beam is still
+   * live. Callers (e.g. playNow) MUST honour the boolean — otherwise they
+   * proceed to start the next booking with the previous one still active
+   * on-chain, leaving two active bookings on the same slot.
+   */
+  const kickBeam = async (booking: any): Promise<boolean> => {
     setSelectedSlotId(null);
     setShowInfoPanel(false);
     if (booking.payment_method === 'solana') {
@@ -1111,7 +1118,7 @@ export default function AdminStudio() {
             const { formatEscrowError } = await import('@/lib/casi-errors');
             showFlashToast(`End early failed — ${formatEscrowError(result.error)}; beam stays live`, 'err');
           }
-          return;
+          return false;
         }
         // settle_beam confirmed the PDA is closed → null the DB pointer so
         // the viewer's overlay stops surfacing a stale "Recover USDC" chip
@@ -1119,26 +1126,28 @@ export default function AdminStudio() {
         await supabase.from('bookings').update({ escrow_pda: null }).eq('id', booking.id);
       }
       await expireBooking(booking);
-    } else {
-      // Stripe: prorate via API, then clear image + advance queue. If the
-      // server fails to capture (flaky Stripe, disabled Connect account,
-      // etc.) it returns non-2xx — keep the beam live so the streamer can
-      // retry instead of silently losing the capture.
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/stripe/end-early', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({ booking_id: booking.id }),
-      });
-      if (!res.ok) {
-        showFlashToast('End early failed — beam stays live, try again', 'err');
-        return;
-      }
-      await expireBooking(booking);
+      return true;
     }
+
+    // Stripe: prorate via API, then clear image + advance queue. If the
+    // server fails to capture (flaky Stripe, disabled Connect account,
+    // etc.) it returns non-2xx — keep the beam live so the streamer can
+    // retry instead of silently losing the capture.
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/stripe/end-early', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify({ booking_id: booking.id }),
+    });
+    if (!res.ok) {
+      showFlashToast('End early failed — beam stays live, try again', 'err');
+      return false;
+    }
+    await expireBooking(booking);
+    return true;
   };
 
   // Force-advance a queued booking to active: end the current one on the
@@ -1149,7 +1158,17 @@ export default function AdminStudio() {
   // here would just capture stale refs.
   const playNow = async (booking: any) => {
     const current = activeBookings.find(b => b.element_id === booking.element_id);
-    if (current) await kickBeam(current);
+    if (current) {
+      // kickBeam returns false when settle bailed (wallet popup cancelled,
+      // escrow Pending, chain error). We MUST abort here — proceeding to
+      // start_beam on the queued booking would leave the current beam live
+      // on-chain AND the queued one active in DB, with two bookings vesting
+      // out of the same slot and the streamer's overlay showing whichever
+      // image_url won the race. The toast inside kickBeam already explains
+      // why the kick stopped.
+      const kicked = await kickBeam(current);
+      if (!kicked) return;
+    }
     if (booking.payment_method === 'solana') {
       try { await startSolanaBeamOnChain(booking); }
       catch (err: unknown) {

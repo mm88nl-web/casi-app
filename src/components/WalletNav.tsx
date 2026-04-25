@@ -167,6 +167,15 @@ export default function WalletNav() {
 
   const [dropOpen, setDropOpen]  = useState(false);
   const [dropPos, setDropPos]    = useState<{ top: number; right: number }>({ top: 56, right: 12 });
+  // needsMobileHandoff() reads navigator.userAgent / window.phantom which
+  // exist only on the client. Calling it during render produces a different
+  // tree on SSR (always false) vs first client render (true on a phone)
+  // → hydration mismatch warning and a janky paint. Defer the check to
+  // after mount; the standard Connect Wallet button shows for the SSR
+  // pass and one frame on the client, then swaps to the mobile handoff
+  // button if appropriate.
+  const [mobileHandoff, setMobileHandoff] = useState(false);
+  useEffect(() => { setMobileHandoff(needsMobileHandoff()); }, []);
   const dropRef = useRef<HTMLDivElement>(null);
 
   // Only connect() after an explicit user click — Wallet Standard auto-registers
@@ -224,7 +233,7 @@ export default function WalletNav() {
     // Swap the "Connect Wallet" button for a one-tap handoff that loads
     // this same URL inside Phantom's in-app browser, where every
     // subsequent connect/sign call is synchronous and reliable.
-    if (needsMobileHandoff()) {
+    if (mobileHandoff) {
       const here = typeof window !== 'undefined' ? window.location.href : '';
       return (
         <>

@@ -275,18 +275,23 @@ async function applyTransition({
       // Viewer cancelled a pending escrow (or the permissionless timeout
       // crank fired) → refund on chain, PDA closed. The streamer may have
       // already flipped DB status to 'denied' (admin deny while Pending),
-      // so accept either pending → denied or denied → denied and null the
-      // stale PDA pointer in both cases. Without this, the admin's stuck
-      // escrows panel keeps showing the row as "closed on-chain / Clear
-      // row" even though the viewer's on-chain action fully resolved the
-      // escrow. A cancel against an active escrow is impossible per the
-      // program, so we never see that here.
-      if (booking.status !== 'pending' && booking.status !== 'denied') return;
+      // OR the booking may have been streamer-approved into the queue
+      // ('approved_queued') with the escrow staying Pending on-chain
+      // until the slot frees up. All three lifecycle stops resolve to
+      // 'denied' once the on-chain refund lands; null the stale PDA
+      // pointer in every case so the admin's stuck-escrows panel and
+      // the viewer's recover-USDC chip stop misclassifying the row.
+      // A cancel against an active escrow is impossible per the program.
+      if (
+        booking.status !== 'pending' &&
+        booking.status !== 'denied' &&
+        booking.status !== 'approved_queued'
+      ) return;
       const { error } = await supabase
         .from('bookings')
         .update({ status: 'denied', escrow_pda: null })
         .eq('id', booking.id)
-        .in('status', ['pending', 'denied']);
+        .in('status', ['pending', 'denied', 'approved_queued']);
       if (error) logError('solana-webhook', error, { kind, booking_id: booking.id });
       return;
     }

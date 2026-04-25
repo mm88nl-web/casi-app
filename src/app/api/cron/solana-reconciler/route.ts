@@ -192,10 +192,12 @@ async function reconcilePending(
 
   if (!info) {
     // Account closed — for a Pending DB row, the only close path is
-    // cancel_escrow (viewer refund). Match DB to that.
+    // cancel_escrow (viewer refund). Match DB to that. Null escrow_pda
+    // in the same write so the viewer's overlay stops surfacing a stale
+    // "Recover USDC" chip on a row whose vault is provably empty.
     const { error } = await supabase
       .from('bookings')
-      .update({ status: 'denied' })
+      .update({ status: 'denied', escrow_pda: null })
       .eq('id', row.id)
       .eq('status', 'pending');
     if (error) throw error;
@@ -291,10 +293,12 @@ async function reconcileActive(
     return 'noop';
   }
 
-  // Account closed → settle_beam has run. DB hasn't caught up.
+  // Account closed → settle_beam has run. DB hasn't caught up. Null
+  // escrow_pda in the same write so the viewer's overlay stops surfacing
+  // a stale "Recover USDC" chip on a row whose vault is empty.
   const { error } = await supabase
     .from('bookings')
-    .update({ status: 'expired', image_url: null })
+    .update({ status: 'expired', image_url: null, escrow_pda: null })
     .eq('id', row.id)
     .eq('status', 'active');
   if (error) throw error;
