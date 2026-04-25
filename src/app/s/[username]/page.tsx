@@ -11,7 +11,6 @@ import WalletNav from '@/components/WalletNav';
 import StreamerBar from './_components/StreamerBar';
 import StreamPreview from './_components/StreamPreview';
 import FlashesFeed, { type Flash } from './_components/FlashesFeed';
-import BookingPanel from './_components/BookingPanel';
 
 const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, is_live, skin, theme_color';
 const FLASH_COLS = 'id, created_at, viewer_name, status, message, amount_cents, payment_method';
@@ -227,8 +226,7 @@ export default function ViewerBookingPage() {
         </div>
 
         <div className="flex flex-col gap-3">
-          <BookingPanel />
-          <BookingBetaNote username={profile.username} />
+          <BookingHero username={profile.username} isLive={!!profile.is_live} />
         </div>
       </div>
     </main>
@@ -236,47 +234,79 @@ export default function ViewerBookingPage() {
 }
 
 /**
- * The booking panel is a shell — clicking Confirm doesn't create a booking yet.
- * Point the viewer at the classic overlay where the real Stripe/Solana flow runs.
+ * Hero CTA replacing the old shell BookingPanel + "still on classic overlay"
+ * note. /s/[username] is positioned as the streamer's shareable landing page;
+ * the actual Stripe/Solana booking flow lives at /overlay where it's been
+ * battle-tested. Funnelling here keeps one canonical surface for payment +
+ * escrow without duplicating the careful state machine.
  */
-function BookingBetaNote({ username }: { username: string }) {
+function BookingHero({ username, isLive }: { username: string; isLive: boolean }) {
   return (
     <div
-      className="flex items-center justify-between gap-3"
       style={{
-        padding: '12px 16px',
-        background: 'var(--casi-surface)',
-        border: '1px solid var(--casi-border)',
-        borderRadius: '12px',
+        padding: '28px 24px',
+        background:
+          'linear-gradient(160deg, rgba(var(--casi-accent-rgb), 0.10), rgba(var(--casi-accent2-rgb), 0.04))',
+        border: '1px solid rgba(var(--casi-accent-rgb), 0.25)',
+        borderRadius: '16px',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
       <div
         className="font-mono uppercase"
         style={{
           fontSize: '10px',
-          letterSpacing: '0.14em',
-          color: 'var(--casi-text-dim)',
-          lineHeight: 1.5,
+          letterSpacing: '0.18em',
+          color: 'var(--casi-accent)',
+          marginBottom: '10px',
         }}
       >
-        Booking submission still runs on the classic overlay for now.
+        ◇ Book a beam
       </div>
+      <h2
+        className="font-extrabold"
+        style={{
+          fontFamily: 'var(--font-casi-sans)',
+          fontSize: '24px',
+          lineHeight: 1.15,
+          letterSpacing: '-0.8px',
+          color: 'var(--casi-text)',
+          marginBottom: '8px',
+        }}
+      >
+        Put your image, video, or message on @{username}&apos;s stream.
+      </h2>
+      <p style={{ fontSize: '13.5px', lineHeight: 1.55, color: 'var(--casi-text-mid)', marginBottom: '18px' }}>
+        Pick a slot, pick a duration, pay with card or USDC. Your beam goes
+        live the moment {isLive ? '@' + username : 'the streamer'} approves it.
+      </p>
       <Link
         href={`/overlay?s=${username}`}
-        className="font-mono uppercase whitespace-nowrap"
+        className="inline-flex items-center gap-2 font-bold"
         style={{
-          padding: '8px 12px',
-          borderRadius: '8px',
+          padding: '12px 18px',
+          borderRadius: '10px',
           background: 'var(--casi-accent)',
-          color: '#050505',
-          fontSize: '10px',
-          letterSpacing: '0.12em',
+          color: '#0a0a0a',
+          fontFamily: 'var(--font-casi-sans)',
+          fontSize: '13px',
           textDecoration: 'none',
-          fontWeight: 700,
+          letterSpacing: '-0.2px',
         }}
       >
-        Book now →
+        Open booking →
       </Link>
+      <div
+        className="mt-4 font-mono uppercase"
+        style={{
+          fontSize: '9px',
+          letterSpacing: '0.18em',
+          color: 'var(--casi-text-faint)',
+        }}
+      >
+        Card: settles weekly · USDC: instant on approval
+      </div>
     </div>
   );
 }
