@@ -44,6 +44,12 @@ import BookingForm from './_components/BookingForm';
 const BOOKING_COLS = 'id, created_at, profile_id, element_id, viewer_name, status, image_url, storage_path, file_type, message, duration_minutes, price_value, price_unit, payment_method, tx_signature, payment_intent_id, original_amount_cents, approved_at, started_at, escrow_pda, viewer_wallet, is_queued, queue_position';
 const BOOKING_PAGE_LIMIT = 200;
 
+// How long a Stripe-denied booking stays surfaced to the viewer with the
+// "refund on the way" chip. Anchored on `created_at` because there's no
+// `denied_at` column — see comments at the use sites. 10 minutes covers
+// realistic streamer moderation latency without trailing stale history.
+const STRIPE_DENIED_WINDOW_MS = 10 * 60 * 1000;
+
 
 
 function OverlayContent() {
@@ -217,13 +223,19 @@ function OverlayContent() {
       // recoverable via cancel_escrow; `expired` with live PDA = kick-leaked,
       // recoverable via settle_beam; recently-denied gives Stripe viewers a
       // moment to see the refund chip. Everything else drops out.
+      //
+      // Window is keyed on `created_at` (no `denied_at` column) — a booking
+      // created within STRIPE_DENIED_WINDOW_MS may still be sitting in the
+      // streamer's queue waiting on moderation. 10 min covers realistic
+      // moderation latency; older rows are stale-history and silently drop.
       const relevant = mine.filter((b:any) => {
         if (b.status === 'expired') {
           return b.payment_method === 'solana' && b.escrow_pda;
         }
         if (b.status === 'denied') {
           return (b.payment_method === 'solana' && b.escrow_pda)
-            || Date.now() - new Date(b.created_at).getTime() < 30000;
+            || (b.payment_method === 'stripe'
+                && Date.now() - new Date(b.created_at).getTime() < STRIPE_DENIED_WINDOW_MS);
         }
         return true;
       });
@@ -1322,16 +1334,21 @@ function OverlayContent() {
   // — the viewer may need to click "recover USDC" to reclaim from chain.
   // Keep expired Solana bookings visible on the same condition — a kick whose
   // on-chain settle silently failed leaves the PDA alive and only the viewer
-  // can close it via settle_beam. Keep denied Stripe bookings visible for
-  // ~60s so the viewer sees a "refund on the way" chip (Stripe cancel voids
-  // the PI automatically, no action needed).
+  // can close it via settle_beam. Keep denied Stripe bookings visible while
+  // the deny is fresh so the viewer sees a "refund on the way" chip — the
+  // in-memory Set covers live transitions, the created_at fallback covers
+  // viewers who reload after the deny landed (no `denied_at` column to key on).
   const visibleMyBookings = myBookings.filter((b:any) => {
     if (b.status === 'expired') {
       return b.payment_method === 'solana' && b.escrow_pda;
     }
     if (b.status === 'denied') {
-      return (b.payment_method === 'solana' && b.escrow_pda)
-        || (b.payment_method === 'stripe' && recentlyDenied.has(String(b.id)));
+      if (b.payment_method === 'solana' && b.escrow_pda) return true;
+      if (b.payment_method === 'stripe') {
+        if (recentlyDenied.has(String(b.id))) return true;
+        return Date.now() - new Date(b.created_at).getTime() < STRIPE_DENIED_WINDOW_MS;
+      }
+      return false;
     }
     return true;
   });
