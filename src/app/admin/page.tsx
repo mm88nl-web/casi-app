@@ -10,6 +10,12 @@ import SkinProvider from '@/components/SkinProvider';
 import WalletNav from '@/components/WalletNav';
 import FlashPanel from '@/components/FlashPanel';
 import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
+import {
+  trySolanaStartDelegated,
+  trySolanaSettleDelegated,
+  trySolanaFlashDelegated,
+  describeDelegateSettleFailure,
+} from '@/lib/streamer-moderation';
 import Logo from './_components/Logo';
 import SlotMedia from '@/components/SlotMedia';
 import BeamTimer from './_components/BeamTimer';
@@ -542,25 +548,8 @@ export default function AdminStudio() {
     // constraints), the streamer doesn't need to pop open their wallet.
     // Fall back to streamer-signed start_beam if the delegate is missing /
     // expired / revoked / server errored.
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        const res = await fetch('/api/solana/delegates/start-beam', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization:  `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ booking_id: booking.id }),
-        });
-        if (res.ok) return;
-        // Non-200 with known reasons means the delegate can't crank this tx.
-        // Fall through to wallet-signed path; any other status is also
-        // tolerated — the worst case is one extra wallet prompt.
-      }
-    } catch (err) {
-      console.warn('[startSolanaBeam] delegate crank failed; falling back', err);
-    }
+    const delegated = await trySolanaStartDelegated(supabase, booking.id);
+    if (delegated.ok) return;
 
     const anchorWallet = buildAnchorWalletForEscrow();
     if (!anchorWallet) {
@@ -573,92 +562,6 @@ export default function AdminStudio() {
     const { CasiEscrowClient } = await import('@/lib/casi-escrow');
     const client = new CasiEscrowClient(walletConnection, anchorWallet, WALLET_ADAPTER_CLUSTER);
     await client.startBeam({ escrowId: booking.id, streamer: publicKey! });
-  };
-
-  /**
-   * Try the server-held session key first for settle_beam_delegated. Returns
-   * a discriminated outcome so callers can both branch on success AND surface
-   * the failure reason to the streamer before falling back to a wallet popup
-   * (missing delegate, expired, cranker unfunded, chain revert).
-   *
-   * Why a separate helper instead of inlining: both `settleOrClearSolanaEscrow`
-   * (deny path) and `kickBeam` (playNow + end-early) need the same
-   * try-delegated-first semantics. Keeping it one place keeps the fallback
-   * behavior identical across surfaces.
-   */
-  type DelegateSettleOutcome =
-    | { ok: true; alreadyProcessed?: boolean }
-    | { ok: false; reason?: string; message?: string; status?: number };
-
-  const trySolanaSettleDelegated = async (bookingId: string): Promise<DelegateSettleOutcome> => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return { ok: false, reason: 'no_session' };
-      const res = await fetch('/api/solana/delegates/settle-beam', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization:  `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ booking_id: bookingId }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (res.ok) return { ok: true, alreadyProcessed: !!body?.alreadyProcessed };
-      return { ok: false, status: res.status, reason: body?.reason, message: body?.message };
-    } catch (err) {
-      console.warn('[trySolanaSettleDelegated] crank failed; falling back', err);
-      return { ok: false, reason: 'network_error', message: err instanceof Error ? err.message : String(err) };
-    }
-  };
-
-  /**
-   * Flash analogue of trySolanaSettleDelegated. POSTs to the approve-flash or
-   * deny-flash delegate route; returns the same outcome union so callers can
-   * reuse describeDelegateSettleFailure for toasts and fall back to the
-   * wallet-signed path on any failure.
-   */
-  const trySolanaFlashDelegated = async (
-    flashId: string,
-    action: 'approve' | 'deny',
-  ): Promise<DelegateSettleOutcome> => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return { ok: false, reason: 'no_session' };
-      const route = action === 'approve'
-        ? '/api/solana/delegates/approve-flash'
-        : '/api/solana/delegates/deny-flash';
-      const res = await fetch(route, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization:  `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ flash_id: flashId }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (res.ok) return { ok: true, alreadyProcessed: !!body?.alreadyProcessed };
-      return { ok: false, status: res.status, reason: body?.reason, message: body?.message };
-    } catch (err) {
-      console.warn('[trySolanaFlashDelegated] crank failed; falling back', err);
-      return { ok: false, reason: 'network_error', message: err instanceof Error ? err.message : String(err) };
-    }
-  };
-
-  /** Human-readable one-liner for a failed delegate settle. */
-  const describeDelegateSettleFailure = (o: Extract<DelegateSettleOutcome, { ok: false }>): string => {
-    switch (o.reason) {
-      case 'no_session':    return 'Not signed in — reconnecting…';
-      case 'no_delegate':   return 'Delegate not installed — sign this one manually, then install in Settings';
-      case 'revoked':       return 'Delegate revoked — sign this one, then reinstall in Settings';
-      case 'expired':       return 'Delegate expired — sign this one, then rotate in Settings';
-      case 'no_cranker':    return 'Server fee payer offline — signing with your wallet';
-      case 'decrypt_failed':
-      case 'key_mismatch':  return 'Delegate secret unreadable (env rotated?) — rotate in Settings';
-      case 'db_error':      return 'Delegate lookup failed — falling back to wallet';
-      case 'chain_error':   return `On-chain settle failed: ${o.message ?? 'unknown'}`;
-      case 'network_error': return 'Network error — retrying with wallet';
-      default:              return `Delegate settle failed (${o.reason ?? o.status ?? 'unknown'}) — falling back to wallet`;
-    }
   };
 
   /**
@@ -769,7 +672,7 @@ export default function AdminStudio() {
     // the server settles without a wallet pop-up. On failure (no delegate,
     // expired, cranker unfunded, chain revert) we surface the reason and
     // fall through to the wallet-signed path below.
-    const delegated = await trySolanaSettleDelegated(booking.id);
+    const delegated = await trySolanaSettleDelegated(supabase, booking.id);
     if (delegated.ok) {
       return { outcome: 'settled' };
     }
@@ -964,7 +867,7 @@ export default function AdminStudio() {
       //     to dbOnlyModerate, which probes the PDA (now closed) and
       //     flips DB directly. Both paths gate on `status = 'pending'`
       //     so double-writes are idempotent.
-      const delegated = await trySolanaFlashDelegated(flash.id, action);
+      const delegated = await trySolanaFlashDelegated(supabase, flash.id, action);
       if (delegated.ok) {
         await dbOnlyModerate();
         return null;
