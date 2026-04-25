@@ -335,7 +335,18 @@ export default function AdminStudio() {
   // a useCallback wrapper here would need startSolanaBeamOnChain in its deps,
   // which is itself unmemoized. The onExpire prop's identity churn is harmless
   // — BeamTimer keys on booking.id, not callback identity.
-  const expireBooking = async (booking: any) => {
+  /**
+   * Flip a booking to expired, clean its media, and (by default) auto-promote
+   * the next approved_queued entry on the same slot.
+   *
+   * `opts.skipAutoAdvance` is set by playNow's kick path: playNow has already
+   * picked which queued booking to start, so letting expireBooking promote
+   * the FIRST approved_queued (which may be a different booking) would leave
+   * two active bookings on the same slot. Natural expiry, manual kick from
+   * the slot card, and the BeamTimer onExpire path all want the default
+   * auto-advance behaviour.
+   */
+  const expireBooking = async (booking: any, opts?: { skipAutoAdvance?: boolean }) => {
     // Stripe capture for natural expiry is handled by the Vercel Cron janitor
     // (/api/cron/stripe-janitor). We do NOT call the API here because a
     // fire-and-forget fetch races with the queue-advance logic below:
@@ -349,7 +360,7 @@ export default function AdminStudio() {
       });
     }
     await supabase.from('bookings').update({ status: 'expired', image_url: null }).eq('id', booking.id);
-    if (booking.element_id) {
+    if (booking.element_id && !opts?.skipAutoAdvance) {
       const { data: next } = await supabase.from('bookings')
         .select('id, element_id, image_url, payment_method, escrow_pda')
         .eq('element_id', booking.element_id).eq('status', 'approved_queued')
@@ -948,7 +959,10 @@ export default function AdminStudio() {
    * proceed to start the next booking with the previous one still active
    * on-chain, leaving two active bookings on the same slot.
    */
-  const kickBeam = async (booking: any): Promise<boolean> => {
+  const kickBeam = async (
+    booking: any,
+    opts?: { skipAutoAdvance?: boolean },
+  ): Promise<boolean> => {
     setSelectedSlotId(null);
     setShowInfoPanel(false);
     if (booking.payment_method === 'solana') {
@@ -982,7 +996,7 @@ export default function AdminStudio() {
         // on an expired row whose refund already landed in their wallet.
         await supabase.from('bookings').update({ escrow_pda: null }).eq('id', booking.id);
       }
-      await expireBooking(booking);
+      await expireBooking(booking, opts);
       return true;
     }
 
@@ -1003,7 +1017,7 @@ export default function AdminStudio() {
       showFlashToast('End early failed — beam stays live, try again', 'err');
       return false;
     }
-    await expireBooking(booking);
+    await expireBooking(booking, opts);
     return true;
   };
 
@@ -1023,7 +1037,13 @@ export default function AdminStudio() {
       // out of the same slot and the streamer's overlay showing whichever
       // image_url won the race. The toast inside kickBeam already explains
       // why the kick stopped.
-      const kicked = await kickBeam(current);
+      //
+      // skipAutoAdvance: expireBooking would otherwise auto-promote the
+      // FIRST approved_queued booking ordered by approved_at — which may
+      // not be the one the streamer just clicked Play Now on. Letting both
+      // promotions race leaves two `active` rows on the same element_id.
+      // playNow handles its own promotion below.
+      const kicked = await kickBeam(current, { skipAutoAdvance: true });
       if (!kicked) return;
     }
     if (booking.payment_method === 'solana') {
