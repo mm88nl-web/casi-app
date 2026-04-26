@@ -41,7 +41,7 @@ import BookingForm from './_components/BookingForm';
 // column-level GRANT in 20260423 — if a new sensitive column lands on
 // bookings and someone forgets to update the REVOKE/GRANT list, clients
 // here still only ask for known columns.
-const BOOKING_COLS = 'id, created_at, profile_id, element_id, viewer_name, status, image_url, storage_path, file_type, message, duration_minutes, price_value, price_unit, payment_method, tx_signature, payment_intent_id, original_amount_cents, approved_at, started_at, escrow_pda, viewer_wallet, is_queued, queue_position';
+const BOOKING_COLS = 'id, created_at, profile_id, element_id, viewer_name, status, image_url, storage_path, file_type, message, duration_minutes, price_value, price_unit, payment_method, tx_signature, payment_intent_id, original_amount_cents, approved_at, started_at, escrow_pda, viewer_wallet, is_queued, queue_position, banner_font_px, banner_speed_secs, media_offset_x, media_offset_y, media_zoom';
 const BOOKING_PAGE_LIMIT = 200;
 
 // How long a Stripe-denied booking stays surfaced to the viewer with the
@@ -104,6 +104,22 @@ function OverlayContent() {
   const [uploadedPath, setUploadedPath]     = useState<string|null>(null);
   const [uploadedFileType, setUploadedFileType] = useState<'image'|'video'|null>(null);
   const [uploading, setUploading]           = useState(false);
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Per-booking customization (banner font/speed + media offset/zoom) ─────
+  // Defaults match BANNER_*_RANGE.default / MEDIA_*_RANGE.default in
+  // src/lib/banner.ts. Sent in the create-* POST body; null-equivalent
+  // values are omitted server-side (the render path falls back to the
+  // same defaults when the column is null).
+  const [customizeOpen,   setCustomizeOpen]   = useState(false);
+  const [bannerFontPx,    setBannerFontPx]    = useState(28);
+  const [bannerSpeedSecs, setBannerSpeedSecs] = useState(20);
+  const [mediaOffsetX,    setMediaOffsetX]    = useState(50);
+  const [mediaOffsetY,    setMediaOffsetY]    = useState(50);
+  const [mediaZoom,       setMediaZoom]       = useState(1);
+  const onMediaOffsetChange = useCallback((x: number, y: number) => {
+    setMediaOffsetX(x); setMediaOffsetY(y);
+  }, []);
   // ─────────────────────────────────────────────────────────────────────────
 
   // ── Wallet state ──────────────────────────────────────────────────────────
@@ -532,6 +548,11 @@ function OverlayContent() {
     setSelectedSlot(el); setIsQueue(joinQueue); setIsExtend(extend);
     setImageUrl(''); setImageValid(false); setMessage('');
     setUploadedUrl(null); setUploadedPath(null); setUploadedFileType(null); setUploading(false);
+    // Reset customization back to per-shape defaults whenever the form
+    // opens — last viewer's tweaks shouldn't bleed into the next slot.
+    setCustomizeOpen(false);
+    setBannerFontPx(28); setBannerSpeedSecs(20);
+    setMediaOffsetX(50); setMediaOffsetY(50); setMediaZoom(1);
     const maxDur = el.max_duration_minutes;
     const defaultSec = maxDur ? Math.min(60, maxDur * 60) : 60;
     setDurationSeconds(defaultSec);
@@ -570,6 +591,21 @@ function OverlayContent() {
   const effectiveStoragePath = uploadMode === 'upload' ? uploadedPath : null;
   const effectiveFileType   = uploadMode === 'upload' ? uploadedFileType : (imageUrl ? getUrlFileType(imageUrl) : null);
 
+  // Only ship customization fields the viewer actually changed — null
+  // values let the render path fall back to defaults and keep DB rows
+  // lean. Banner fields are scoped to banner slots; media fields apply
+  // to everything else. The server clamps both ranges in case of drift.
+  const customizationBody: Record<string, number | null> = isBanner
+    ? {
+        banner_font_px:    bannerFontPx    === 28 ? null : bannerFontPx,
+        banner_speed_secs: bannerSpeedSecs === 20 ? null : bannerSpeedSecs,
+      }
+    : {
+        media_offset_x: mediaOffsetX === 50 ? null : mediaOffsetX,
+        media_offset_y: mediaOffsetY === 50 ? null : mediaOffsetY,
+        media_zoom:     mediaZoom     === 1  ? null : mediaZoom,
+      };
+
   const isFreeSlot = Number(selectedSlot.price_value) === 0;
 
   // ── FREE SLOT PATH ─────────────────────────────────────────────────────────
@@ -599,6 +635,7 @@ function OverlayContent() {
           is_queued:        isQueue || isExtend,
           queue_position:   (isQueue || isExtend) ? currentQueue + 1 : null,
           turnstile_token:  turnstileToken,
+          ...customizationBody,
         }),
       });
       const json = await res.json();
@@ -645,6 +682,7 @@ function OverlayContent() {
         is_queued:        isQueue || isExtend,
         queue_position:   (isQueue || isExtend) ? currentQueue + 1 : null,
         is_extend:        isExtend,
+        ...customizationBody,
       }),
     });
     const createJson = await createRes.json().catch(() => ({}));
@@ -734,6 +772,17 @@ function OverlayContent() {
     }
 
     const currentQueue = queueCounts[selectedSlot.id] || 0;
+    const isBannerSol = selectedSlot.shape === 'banner';
+    const customizationBodySol: Record<string, number | null> = isBannerSol
+      ? {
+          banner_font_px:    bannerFontPx    === 28 ? null : bannerFontPx,
+          banner_speed_secs: bannerSpeedSecs === 20 ? null : bannerSpeedSecs,
+        }
+      : {
+          media_offset_x: mediaOffsetX === 50 ? null : mediaOffsetX,
+          media_offset_y: mediaOffsetY === 50 ? null : mediaOffsetY,
+          media_zoom:     mediaZoom     === 1  ? null : mediaZoom,
+        };
     const createRes = await fetch('/api/bookings/create-solana', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -750,6 +799,7 @@ function OverlayContent() {
         price_unit:    selectedSlot.price_unit,
         is_queued:     isQueue || isExtend,
         queue_position: (isQueue || isExtend) ? currentQueue + 1 : null,
+        ...customizationBodySol,
       }),
     });
     const createBody = await createRes.json().catch(() => ({}));
@@ -1597,6 +1647,33 @@ function OverlayContent() {
               const handleSlotClick = clickable ? () => openSlot(el, isOccupied) : undefined;
               const isSelectedHere = selectedSlot?.id === el.id;
 
+              // Per-booking customization: when the viewer is staging a
+              // new booking on this slot, mirror their live form values
+              // so they preview exactly what'll go on stream. Otherwise
+              // honor whatever the active booking has stored. Defaults
+              // match BANNER_*_RANGE.default / MEDIA_*_RANGE.default in
+              // src/lib/banner.ts.
+              const cFontPx   = isSelectedHere ? bannerFontPx    : Number(activeBooking?.banner_font_px    ?? 28);
+              const cSpeedSec = isSelectedHere ? bannerSpeedSecs : Number(activeBooking?.banner_speed_secs ?? 20);
+              const cOffX     = isSelectedHere ? mediaOffsetX    : Number(activeBooking?.media_offset_x    ?? 50);
+              const cOffY     = isSelectedHere ? mediaOffsetY    : Number(activeBooking?.media_offset_y    ?? 50);
+              const cZoom     = isSelectedHere ? mediaZoom       : Number(activeBooking?.media_zoom        ?? 1);
+              const hasCustomCrop = cOffX !== 50 || cOffY !== 50 || cZoom !== 1;
+              // circle/hex masks only look right with `cover` — letterbox
+              // would leave empty wedges inside the clip-path. Backdrops
+              // also cover. Other shapes stay `contain` (preserving the
+              // viewer's aspect ratio) UNLESS they've customized — that
+              // signals intentional cropping.
+              const useCover = el.is_background || el.shape === 'circle' || el.shape === 'hex' || hasCustomCrop;
+              const objectFitCss: 'cover' | 'contain' = useCover ? 'cover' : 'contain';
+              const mediaInlineStyle: React.CSSProperties = {
+                width: '100%', height: '100%',
+                objectFit: objectFitCss,
+                objectPosition: `${cOffX}% ${cOffY}%`,
+                transform: cZoom !== 1 ? `scale(${cZoom})` : undefined,
+                pointerEvents: 'none',
+              };
+
               return (
                 <div
                   key={el.id}
@@ -1612,17 +1689,20 @@ function OverlayContent() {
                 >
                   {isBannerActive ? (
                     <div key={mediaKey} className={`beam-banner ${glowClass}`.trim()}>
-                      <span className="beam-banner-track">{activeBooking.message}</span>
+                      <span
+                        className="beam-banner-track"
+                        style={{ fontSize: cFontPx, animationDuration: `${cSpeedSec}s` }}
+                      >{activeBooking.message}</span>
                     </div>
                   ) : displayImage ? (
                     <div key={mediaKey} className={`${shapeClass} ${glowClass}`.trim()} style={{ position:'relative', width:'100%', height:'100%' }}>
-                      {/* Backdrop fills (cover, crop as needed). Beam slots
-                          preserve the viewer's aspect ratio (contain) —
-                          `fill` stretches to the slot and visibly squishes
-                          any upload whose AR differs from the slot's. */}
+                      {/* Backdrop fills (cover, crop as needed). Shape-able
+                          beams use cover when they're masked (circle/hex)
+                          or when the viewer customized the crop; otherwise
+                          contain preserves their aspect ratio. */}
                       {displayFileType === 'video'
-                        ? <video key={displayImage} src={displayImage} autoPlay loop muted playsInline style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'contain', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} />
-                        : <img key={displayImage ?? 'empty'} src={displayImage} style={{ width:'100%', height:'100%', objectFit:el.is_background?'cover':'contain', pointerEvents:'none', opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} alt="" />
+                        ? <video key={displayImage} src={displayImage} autoPlay loop muted playsInline style={{ ...mediaInlineStyle, opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} />
+                        : <img key={displayImage ?? 'empty'} src={displayImage} style={{ ...mediaInlineStyle, opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} alt="" />
                       }
                       {viewerHasPreview && !isOBS && <div style={{ position:'absolute', inset:0, borderRadius:4, boxShadow:`inset 0 0 0 2px rgba(${accentColorRgb},0.5)`, pointerEvents:'none' }} />}
                     </div>
@@ -1795,6 +1875,17 @@ function OverlayContent() {
               turnstileToken={turnstileToken}
               onTurnstileVerify={onTurnstileVerify}
               onTurnstileExpire={onTurnstileExpire}
+              customizeOpen={customizeOpen}
+              onCustomizeToggle={() => setCustomizeOpen(o => !o)}
+              bannerFontPx={bannerFontPx}
+              onBannerFontPxChange={setBannerFontPx}
+              bannerSpeedSecs={bannerSpeedSecs}
+              onBannerSpeedSecsChange={setBannerSpeedSecs}
+              mediaOffsetX={mediaOffsetX}
+              mediaOffsetY={mediaOffsetY}
+              onMediaOffsetChange={onMediaOffsetChange}
+              mediaZoom={mediaZoom}
+              onMediaZoomChange={setMediaZoom}
               canSubmit={canSubmit}
               submitting={submitting}
               connecting={connecting}
