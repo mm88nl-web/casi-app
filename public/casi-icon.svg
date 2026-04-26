@@ -1,18 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- Rounded square background — same orange-on-dark vibe as the brand. -->
-  <rect x="0" y="0" width="512" height="512" rx="96" ry="96" fill="#050505"/>
+  <!-- Solid Casi-orange rounded square. Works on light and dark consent
+       screens because the brand color is the dominant element rather
+       than a black background that vanishes in dark mode. -->
+  <rect x="0" y="0" width="512" height="512" rx="96" ry="96" fill="#F58220"/>
 
-  <!-- Casi brand mark, centered in the canvas.
-       Original mark is 400×200, here translated by (56, 156) to sit dead-centre
-       of a 512×512 frame. Stroke widths bumped slightly so the bars read at small sizes. -->
+  <!-- Casi mark in cream/white so the bars + almond read against the
+       orange field. Original 400×200 art, translated by (56, 156) to
+       sit dead-centre of the 512×512 canvas. -->
   <g transform="translate(56, 156)">
-    <g stroke="#F58220" fill="#F58220" stroke-width="20" stroke-linecap="round">
+    <g stroke="#FFFFFF" fill="#FFFFFF" stroke-width="20" stroke-linecap="round">
       <line x1="50" y1="60"  x2="350" y2="60"/>
       <line x1="20" y1="100" x2="380" y2="100"/>
       <line x1="50" y1="140" x2="350" y2="140"/>
     </g>
-    <path fill="#F58220" stroke="none"
+    <path fill="#FFFFFF" stroke="none"
           d="M 90,100 C 130,30 270,30 310,100 C 270,170 130,170 90,100 Z"/>
-    <circle fill="#050505" cx="200" cy="100" r="45"/>
+    <!-- Pupil = brand orange so the eye's iris/pupil contrast survives. -->
+    <circle fill="#F58220" cx="200" cy="100" r="45"/>
   </g>
 </svg>
