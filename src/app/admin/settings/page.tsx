@@ -10,12 +10,8 @@ import SettingsLayout, { type RailGroup } from './_components/SettingsLayout';
 import ProfileSection, { type ProfileRow } from './_components/ProfileSection';
 import PayoutsSection from './_components/PayoutsSection';
 import AppearanceSection from './_components/AppearanceSection';
-import SlotDefaultsSection from './_components/SlotDefaultsSection';
 import ObsSourcesSection from './_components/ObsSourcesSection';
 import SessionKeySection from './_components/SessionKeySection';
-import NotificationsSection from './_components/NotificationsSection';
-import ModerationSection from './_components/ModerationSection';
-import DangerZoneSection from './_components/DangerZoneSection';
 
 const RAIL: RailGroup[] = [
   {
@@ -24,15 +20,6 @@ const RAIL: RailGroup[] = [
       { id: 'profile', label: 'Profile', icon: '◉' },
       { id: 'payouts', label: 'Payouts', icon: '€' },
       { id: 'appearance', label: 'Appearance', icon: '◐' },
-      // Account rail item scrolls to danger-zone — no dedicated Account section in v3 handoff yet.
-      { id: 'danger-zone', label: 'Account', icon: '☉' },
-    ],
-  },
-  {
-    title: 'Stream',
-    items: [
-      { id: 'slot-defaults', label: 'Slot defaults', icon: '▣' },
-      { id: 'obs-sources', label: 'OBS sources', icon: '▹' },
     ],
   },
   {
@@ -42,15 +29,9 @@ const RAIL: RailGroup[] = [
     ],
   },
   {
-    title: 'Alerts',
+    title: 'Stream',
     items: [
-      { id: 'notifications', label: 'Notifications', icon: '◇' },
-    ],
-  },
-  {
-    title: 'Safety',
-    items: [
-      { id: 'moderation', label: 'Moderation', icon: '✘' },
+      { id: 'obs-sources', label: 'OBS sources', icon: '▹' },
     ],
   },
 ];
@@ -177,15 +158,11 @@ export default function SettingsPage() {
           initialSkinId={state.profile.skin}
           initialThemeColor={state.profile.theme_color ?? null}
         />
-        <SlotDefaultsSection />
-        <ObsSourcesSection username={state.profile.username ?? 'your-handle'} />
         <SessionKeySection
           supabase={supabase}
           savedSolanaWallet={state.profile.solana_wallet ?? null}
         />
-        <NotificationsSection />
-        <ModerationSection />
-        <DangerZoneSection />
+        <ObsSourcesSection username={state.profile.username ?? 'your-handle'} />
       </SettingsLayout>
     </main>
   );
