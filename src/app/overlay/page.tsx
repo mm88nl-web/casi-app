@@ -21,6 +21,7 @@ import {
 } from '@/lib/solana-network';
 import Logo from './_components/Logo';
 import Countdown from './_components/Countdown';
+import SlotTile from './_components/SlotTile';
 import { getSecondsRemaining, formatTime } from './_components/time';
 import {
   VIEWER_NAME_KEY,
@@ -1507,249 +1508,53 @@ function OverlayContent() {
               />
             )}
             {elements.map((el: any) => {
-              const activeBooking   = getActiveBookingForSlot(el.id);
-              const isOccupied      = !!activeBooking;
-              const queueCount      = queueCounts[el.id]||0;
-              const isSelected      = selectedSlot?.id===el.id;
+              const activeBooking    = getActiveBookingForSlot(el.id);
               const myBookingForSlot = getMyBookingForSlot(el.id);
-              const myIsExpiring    = myBookingForSlot && expiringSoon.has(myBookingForSlot.id);
-              const isLocked        = !!el.locked;
-              // Estimated wait for a viewer joining the queue right now:
-              // remaining time on the live beam + sum of every queued
-              // booking's duration. Matches the booking-form estimate at
-              // line 2193 so slot pill and form agree. Clamp to ≥1 min so
-              // the pill never reads "0m wait" when there's genuinely a
-              // live beam and queue ahead.
-              const activeRemainingMin = activeBooking ? Math.max(0, getSecondsRemaining(activeBooking) / 60) : 0;
-              const queueOnSlot        = approvedQueuedBookings.filter((b:any) => b.element_id === el.id);
-              const queueDurationMin   = queueOnSlot.reduce((sum: number, b:any) => sum + Number(b.duration_minutes || 0), 0);
-              const waitMin            = Math.max(1, Math.round(activeRemainingMin + queueDurationMin));
-              // Viewer has a preview ready (upload or validated URL)
-              const viewerHasPreview = isSelected && (
+              const queueOnSlot      = approvedQueuedBookings.filter((b: any) => b.element_id === el.id);
+              const queueDurationMin = queueOnSlot.reduce((sum: number, b: any) => sum + Number(b.duration_minutes || 0), 0);
+              const isSelectedHere   = selectedSlot?.id === el.id;
+              const isOccupied       = !!activeBooking;
+              const myIsExpiring     = !!myBookingForSlot && expiringSoon.has(myBookingForSlot.id);
+              const showExtend       = myBookingForSlot?.status === 'active' && expiringSoon.has(myBookingForSlot.id) && canExtend(el.id);
+
+              // Viewer's staged upload / URL preview — only meaningful for
+              // the slot they're booking right now. Falls back to whatever
+              // the element row has stored for everyone else.
+              const hasPreview = isSelectedHere && (
                 (uploadMode === 'upload' && !!uploadedUrl) ||
-                (uploadMode === 'url' && imageValid && !!imageUrl)
+                (uploadMode === 'url'    && imageValid && !!imageUrl)
               );
-              const displayImage: string|null = viewerHasPreview
+              const displayImage: string | null = hasPreview
                 ? (uploadMode === 'upload' ? uploadedUrl! : imageUrl)
                 : (el.image_url || null);
-              const displayFileType: 'image'|'video'|null = viewerHasPreview
+              const displayFileType: 'image' | 'video' | null = hasPreview
                 ? (uploadMode === 'upload' ? uploadedFileType : getUrlFileType(imageUrl))
                 : (activeBooking?.file_type ?? null);
-              const showExtend = myBookingForSlot?.status==='active' && expiringSoon.has(myBookingForSlot.id) && canExtend(el.id);
 
-              // Keying the media container on activeBooking.id re-mounts it
-              // on every pending→active transition so `.beam-glow`'s CSS
-              // animation plays fresh. Key stays stable while a single beam
-              // is live, then changes on the next one.
-              const mediaKey = `${el.id}-${activeBooking?.id ?? 'none'}`;
-              const shapeClass =
-                el.shape === 'rounded' ? 'beam-shape-rounded' :
-                el.shape === 'circle'  ? 'beam-shape-circle'  :
-                el.shape === 'hex'     ? 'beam-shape-hex'     :
-                '';
-              const glowClass = isOccupied && (el.glow_on_start ?? true) && !el.is_background ? 'beam-glow' : '';
-
-              // Banner slots render the viewer's message as a scrolling
-              // marquee in place of the normal image/video content. Falls
-              // back to the regular media path if the slot is a banner but
-              // no booking is active (just show the empty placeholder).
-              const isBannerActive = el.shape === 'banner' && isOccupied && !!activeBooking?.message;
-
-              // The slot itself is the click target — tapping an open beam
-              // (or a queued occupied one) opens the booking form. Disabled
-              // when the viewer already has a booking here, the slot is
-              // locked, or another slot's form is already open (one at a
-              // time). Extend / Join queue / Book all route through the
-              // same openSlot call with different modes.
-              const clickable = !isOBS && !isLocked && !myBookingForSlot && !selectedSlot;
-              const handleSlotClick = clickable ? () => openSlot(el, isOccupied) : undefined;
-              const isSelectedHere = selectedSlot?.id === el.id;
-
-              // Per-booking customization: when the viewer is staging a
-              // new booking on this slot, mirror their live form values
-              // so they preview exactly what'll go on stream. Otherwise
-              // honor whatever the active booking has stored. Defaults
-              // match BANNER_*_RANGE.default / MEDIA_*_RANGE.default in
-              // src/lib/banner.ts.
-              const cFontPx   = isSelectedHere ? bannerFontPx    : Number(activeBooking?.banner_font_px    ?? 28);
-              const cSpeedSec = isSelectedHere ? bannerSpeedSecs : Number(activeBooking?.banner_speed_secs ?? 20);
-              const cOffX     = isSelectedHere ? mediaOffsetX    : Number(activeBooking?.media_offset_x    ?? 50);
-              const cOffY     = isSelectedHere ? mediaOffsetY    : Number(activeBooking?.media_offset_y    ?? 50);
-              const cZoom     = isSelectedHere ? mediaZoom       : Number(activeBooking?.media_zoom        ?? 1);
-              const hasCustomCrop = cOffX !== 50 || cOffY !== 50 || cZoom !== 1;
-              // circle/hex masks only look right with `cover` — letterbox
-              // would leave empty wedges inside the clip-path. Backdrops
-              // also cover. Other shapes stay `contain` (preserving the
-              // viewer's aspect ratio) UNLESS they've customized — that
-              // signals intentional cropping.
-              const useCover = el.is_background || el.shape === 'circle' || el.shape === 'hex' || hasCustomCrop;
-              const objectFitCss: 'cover' | 'contain' = useCover ? 'cover' : 'contain';
-              const mediaInlineStyle: React.CSSProperties = {
-                width: '100%', height: '100%',
-                objectFit: objectFitCss,
-                objectPosition: `${cOffX}% ${cOffY}%`,
-                transform: cZoom !== 1 ? `scale(${cZoom})` : undefined,
-                pointerEvents: 'none',
-              };
+              const clickable = !isOBS && !el.locked && !myBookingForSlot && !selectedSlot;
 
               return (
-                <div
+                <SlotTile
                   key={el.id}
-                  onClick={handleSlotClick}
-                  style={{
-                    position: 'absolute',
-                    left: `${el.pos_x}%`, top: `${el.pos_y}%`,
-                    width: `${el.width}%`, height: `${el.height}%`,
-                    zIndex: el.is_background ? 10 : 50,
-                    cursor: clickable ? 'pointer' : 'default',
-                    transition: 'all 0.35s cubic-bezier(0.16,1,0.3,1)',
-                  }}
-                >
-                  {isBannerActive ? (
-                    <div key={mediaKey} className={`beam-banner ${glowClass}`.trim()}>
-                      <span
-                        className="beam-banner-track"
-                        style={{ fontSize: cFontPx, animationDuration: `${cSpeedSec}s` }}
-                      >{activeBooking.message}</span>
-                    </div>
-                  ) : displayImage ? (
-                    <div key={mediaKey} className={`${shapeClass} ${glowClass}`.trim()} style={{ position:'relative', width:'100%', height:'100%' }}>
-                      {/* Backdrop fills (cover, crop as needed). Shape-able
-                          beams use cover when they're masked (circle/hex)
-                          or when the viewer customized the crop; otherwise
-                          contain preserves their aspect ratio. */}
-                      {displayFileType === 'video'
-                        ? <video key={displayImage} src={displayImage} autoPlay loop muted playsInline style={{ ...mediaInlineStyle, opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} />
-                        : <img key={displayImage ?? 'empty'} src={displayImage} style={{ ...mediaInlineStyle, opacity: viewerHasPreview && !isOBS ? 0.65 : 1 }} alt="" />
-                      }
-                      {viewerHasPreview && !isOBS && <div style={{ position:'absolute', inset:0, borderRadius:4, boxShadow:`inset 0 0 0 2px rgba(${accentColorRgb},0.5)`, pointerEvents:'none' }} />}
-                    </div>
-                  ) : el.shape === 'banner' && !isOccupied && !isLocked && !isOBS ? (
-                    // Empty banner on the viewer overlay (but NOT on OBS —
-                    // stream shouldn't show placeholder text permanently).
-                    // Scroll a soft "tip to try" message so viewers can see
-                    // what the slot will do before they send a flash.
-                    <div className="beam-banner" style={{ opacity: 0.5, borderColor: `rgba(${tcRgb}, 0.3)` }}>
-                      <span className="beam-banner-track" style={{ color: `rgba(${tcRgb}, 0.7)` }}>
-                        ▰ Banner · your message scrolls here · tip to try
-                      </span>
-                    </div>
-                  ) : (
-                    <div className={shapeClass} style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:el.is_background?12:6, border:`1.5px dashed ${isLocked?'rgba(248,113,113,0.3)':isOccupied?`rgba(${tcRgb},0.31)`:el.is_background?'rgba(168,85,247,0.3)':`rgba(${tcRgb},0.25)`}`, background:isLocked?'rgba(248,113,113,0.03)':isOccupied?`rgba(${tcRgb},0.02)`:el.is_background?'rgba(168,85,247,0.03)':`rgba(${tcRgb},0.02)` }}>
-                      <span style={{ fontSize:el.is_background?20:14, marginBottom:4 }}>{isLocked?'🔒':isOccupied?(el.shape==='banner'?'▰':''):el.is_background?'🖼':el.shape==='banner'?'▰':'✦'}</span>
-                      {isOccupied && <span style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:`rgba(${tcRgb},0.69)` }}><Countdown booking={activeBooking} onExpire={() => clientExpireBooking(activeBooking)} /></span>}
-                    </div>
-                  )}
-
-                  {/* Selection outline — mirrors the admin studio's selection
-                      glow so the booking-form modal below has a clear visual
-                      anchor back to the slot that triggered it. */}
-                  {isSelectedHere && !isOBS && (
-                    <div style={{ position:'absolute', inset:-3, borderRadius:10, border:`2px solid ${accentColor}`, boxShadow:`0 0 0 4px rgba(${accentColorRgb},0.15)`, pointerEvents:'none', zIndex:15 }} />
-                  )}
-
-                  {/* Price badge — corner-mounted inside the slot (bottom-
-                      centre on backdrops, top-right on beams) so slots
-                      pinned to the canvas edge don't have their price
-                      label hanging off-screen like the old stack did. */}
-                  {el.price_value >= 0 && !isOBS && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        ...(el.is_background
-                          ? { bottom: 12, left: '50%', transform: 'translateX(-50%)' }
-                          : { top: 6, right: 6 }),
-                        background: 'rgba(5,5,5,0.92)',
-                        border: `1px solid ${Number(el.price_value)===0 ? 'rgba(74,222,128,0.35)' : 'rgba(255,255,255,0.08)'}`,
-                        borderRadius: 20,
-                        padding: '3px 10px',
-                        pointerEvents: 'none',
-                        zIndex: 20,
-                        fontFamily: "var(--font-casi-mono),monospace",
-                        fontSize: 10,
-                        color: Number(el.price_value)===0 ? '#4ade80' : tc,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {Number(el.price_value)===0 ? '★ Free' : `$${el.price_value}/${el.price_unit}`}
-                      {el.max_duration_minutes && <span style={{ color:'#555', marginLeft: 6, fontSize: 9 }}>· max {el.max_duration_minutes}m</span>}
-                    </div>
-                  )}
-
-                  {/* Status badge — locked / my booking state, top-left so
-                      it doesn't collide with the price on the right. */}
-                  {!isOBS && (isLocked || myBookingForSlot) && (
-                    <div
-                      style={{
-                        position: 'absolute', top: 6, left: 6,
-                        zIndex: 20, pointerEvents: 'none',
-                        fontFamily: "var(--font-casi-mono),monospace", fontSize: 9,
-                        padding: '3px 10px', borderRadius: 20, border: '1px solid',
-                        ...(isLocked
-                          ? { color: 'rgba(248,113,113,0.6)', borderColor: 'rgba(248,113,113,0.25)', background: 'rgba(248,113,113,0.08)' }
-                          : myIsExpiring
-                            ? { color: '#facc15', borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.08)' }
-                            : myBookingForSlot!.status === 'active'
-                              ? { color: tc, borderColor: `rgba(${tcRgb},0.3)`, background: `rgba(${tcRgb},0.08)` }
-                              : myBookingForSlot!.status === 'approved_queued'
-                                ? { color: tc, borderColor: `rgba(${tcRgb},0.22)`, background: `rgba(${tcRgb},0.05)` }
-                                : { color: 'var(--casi-text-muted)', borderColor: 'var(--casi-border)', background: 'rgba(255,255,255,0.03)' }
-                        ),
-                      }}
-                    >
-                      {isLocked
-                        ? '🔒 Locked'
-                        : myIsExpiring
-                          ? '⚠ Expiring'
-                          : myBookingForSlot!.status === 'active'
-                            ? '● Your beam'
-                            : myBookingForSlot!.status === 'approved_queued'
-                              ? '⏳ Queued'
-                              : '⌛ Pending'}
-                    </div>
-                  )}
-
-                  {/* Wait estimate — always shown on occupied slots (even
-                      with an empty queue) so viewers know how long they'd
-                      wait before clicking through to the booking form.
-                      Queue count joins the text when ≥1 viewer is already
-                      in line. */}
-                  {!isOBS && isOccupied && !myBookingForSlot && !isLocked && (
-                    <div
-                      style={{
-                        position: 'absolute', bottom: 6, right: 6,
-                        zIndex: 20, pointerEvents: 'none',
-                        fontFamily: "var(--font-casi-mono),monospace", fontSize: 9,
-                        color: `rgba(${tcRgb},0.8)`,
-                        background: 'rgba(5,5,5,0.85)',
-                        border: `1px solid rgba(${tcRgb},0.22)`,
-                        borderRadius: 20, padding: '2px 8px',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      ⏳ {queueCount > 0 ? `${queueCount} queued · ` : ''}~{waitMin}m wait
-                    </div>
-                  )}
-
-                  {/* Extend — viewer's own beam is expiring and eligible.
-                      Separate button so it doesn't collapse into the slot
-                      click (which would just re-open the booking form in
-                      book-new mode). */}
-                  {!isOBS && showExtend && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); openSlot(el, false, true); }}
-                      style={{
-                        position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)',
-                        background: '#eab308', border: 'none', borderRadius: 20,
-                        padding: '4px 14px', fontFamily: "var(--font-casi-sans),sans-serif",
-                        fontWeight: 700, fontSize: 10, textTransform: 'uppercase',
-                        color: 'var(--casi-bg)', cursor: 'pointer', zIndex: 25,
-                      }}
-                    >
-                      Extend
-                    </button>
-                  )}
-                </div>
+                  el={el}
+                  activeBooking={activeBooking}
+                  myBookingForSlot={myBookingForSlot}
+                  queueCount={queueCounts[el.id] || 0}
+                  queueDurationMin={queueDurationMin}
+                  isOBS={isOBS}
+                  isSelectedHere={isSelectedHere}
+                  showExtend={!!showExtend}
+                  myIsExpiring={myIsExpiring}
+                  viewerPreview={{ hasPreview, displayImage, displayFileType }}
+                  viewerCustomization={{ bannerFontPx, bannerSpeedSecs, mediaOffsetX, mediaOffsetY, mediaZoom }}
+                  accentColor={accentColor}
+                  accentColorRgb={accentColorRgb}
+                  tc={tc}
+                  tcRgb={tcRgb}
+                  onSlotClick={clickable ? () => openSlot(el, isOccupied) : undefined}
+                  onExtendClick={showExtend ? () => openSlot(el, false, true) : undefined}
+                  onCountdownExpire={clientExpireBooking}
+                />
               );
             })}
 
