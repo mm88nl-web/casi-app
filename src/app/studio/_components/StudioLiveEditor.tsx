@@ -278,12 +278,28 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
           const isSelected = selectedSlotId === el.id;
           const state = slotState[el.id]; // 'active' | 'queued' | undefined
           const isActive = state === 'active';
+          // Circle and hex shapes need a pixel-square box or the clip-path
+          // collapses to an oval / flattened hex. The autosnap on shape
+          // change + onResizeStop keep stored dims in ratio, but legacy
+          // rows or partial saves can drift — clamp here so the rendered
+          // box is always square regardless of what's in the DB.
+          const isSquareShape = el.shape === 'circle' || el.shape === 'hex';
+          const renderedWidthPx = el.is_background
+            ? dimensions.width
+            : isSquareShape
+              ? Math.min((el.width / 100) * dimensions.width, (el.height / 100) * dimensions.height)
+              : (el.width / 100) * dimensions.width;
+          const renderedHeightPx = el.is_background
+            ? dimensions.height
+            : isSquareShape
+              ? Math.min((el.width / 100) * dimensions.width, (el.height / 100) * dimensions.height)
+              : (el.height / 100) * dimensions.height;
           return (
             <Rnd
               key={el.id}
               size={{
-                width: el.is_background ? '100%' : `${(el.width / 100) * dimensions.width}px`,
-                height: el.is_background ? '100%' : `${(el.height / 100) * dimensions.height}px`,
+                width: el.is_background ? '100%' : `${renderedWidthPx}px`,
+                height: el.is_background ? '100%' : `${renderedHeightPx}px`,
               }}
               position={{
                 x: el.is_background ? 0 : (el.pos_x / 100) * dimensions.width,
@@ -372,32 +388,48 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
                       <div style={{
                         width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
                         alignItems: 'center', justifyContent: 'center',
-                        border: `1.5px dashed ${el.locked ? 'rgba(248,113,113,0.3)' : el.is_background ? 'rgba(168,85,247,0.35)' : 'rgba(var(--casi-accent-rgb),0.35)'}`,
+                        // Bumped from 1.5px / .35 alpha to 2px / .55 alpha so empty
+                        // slots pop on the canvas — they read as the streamer's
+                        // accent color instead of disappearing into the bg.
+                        border: `2px dashed ${el.locked ? 'rgba(248,113,113,0.4)' : el.is_background ? 'rgba(153,69,255,0.5)' : 'rgba(var(--casi-accent-rgb),0.55)'}`,
                         borderRadius: el.is_background ? 12 : 6,
-                        background: el.locked ? 'rgba(248,113,113,0.04)' : el.is_background ? 'rgba(168,85,247,0.04)' : 'rgba(var(--casi-accent-rgb),0.04)',
+                        background: el.locked ? 'rgba(248,113,113,0.05)' : el.is_background ? 'rgba(153,69,255,0.06)' : 'rgba(var(--casi-accent-rgb),0.07)',
                       }}>
                         {el.locked ? (
-                          <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, color: 'rgba(248,113,113,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>
+                          <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, color: 'rgba(248,113,113,0.6)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>
                         ) : null}
-                        <span style={{ fontSize: el.is_background ? 24 : 16, marginBottom: 4 }}>
+                        <span style={{ fontSize: el.is_background ? 24 : 18, marginBottom: 4, opacity: 0.9 }}>
                           {el.is_background ? '🖼️' : el.shape === 'banner' ? '▰' : '✦'}
                         </span>
                         <span style={{
-                          fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, textTransform: 'uppercase', letterSpacing: 1,
-                          color: el.locked ? 'rgba(248,113,113,0.5)' : el.is_background ? 'rgba(168,85,247,0.6)' : 'rgba(var(--casi-accent-rgb),0.6)',
+                          fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1.5,
+                          color: el.locked ? 'rgba(248,113,113,0.65)' : el.is_background ? 'rgba(153,69,255,0.85)' : 'var(--casi-accent)',
                         }}>
                           {el.locked ? 'No requests' : el.is_background ? 'Backdrop' : el.shape === 'banner' ? 'Banner' : 'Beam'}
                         </span>
                         {el.price_value > 0 && !el.locked ? (
                           <span style={{
-                            fontFamily: 'var(--font-casi-mono),monospace', fontSize: 11, fontWeight: 500, marginTop: 3,
-                            color: el.is_background ? 'rgba(168,85,247,0.9)' : 'var(--casi-accent)',
+                            fontFamily: 'var(--font-casi-mono),monospace', fontSize: 11, fontWeight: 600, marginTop: 4,
+                            color: el.is_background ? 'rgba(153,69,255,0.95)' : 'var(--casi-accent)',
                           }}>${el.price_value}/{el.price_unit}</span>
                         ) : null}
                       </div>
                     )
                   ) : (
-                    <SlotMedia src={el.image_url} fileType={null} style={{ width: '100%', height: '100%', objectFit: el.is_background ? 'cover' : 'contain', pointerEvents: 'none' }} />
+                    // 'cover' for shaped slots (circle, hex) so the image fills
+                    // the shape — 'contain' would letterbox a portrait photo
+                    // inside a circle and leave dead space. Backdrops and
+                    // rect/rounded keep their previous behavior.
+                    <SlotMedia
+                      src={el.image_url}
+                      fileType={null}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: (el.is_background || isSquareShape) ? 'cover' : 'contain',
+                        pointerEvents: 'none',
+                      }}
+                    />
                   )}
                 </div>
                 {isSelected && !el.is_background ? (

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import SlotMedia from '@/components/SlotMedia';
 
 export type QueueItem = {
   id: string;
@@ -13,6 +14,14 @@ export type QueueItem = {
   /** When true this row shows a "Manage →" link to /admin instead of buttons —
    *  for bookings/flashes whose approve flow isn't wired here yet. */
   readOnly?: boolean;
+  /** Viewer's uploaded media — when present, renders as the row thumb so
+   *  the streamer sees what they're approving before clicking. */
+  mediaUrl?: string | null;
+  /** image | video — drives the SlotMedia branch. */
+  fileType?: string | null;
+  /** Slot shape so the thumb is masked to match the on-stream rendering
+   *  (circle / hex / banner / rounded / rect). */
+  shape?: string | null;
 };
 
 type Props = {
@@ -115,6 +124,12 @@ export default function ApprovalQueue({
             const isPending = pendingIds?.has(item.id) ?? false;
             return (
               <div key={item.id} className={`casi-q-r ${item.kind}`}>
+                <QueueThumb
+                  mediaUrl={item.mediaUrl}
+                  fileType={item.fileType}
+                  shape={item.shape}
+                  kind={item.kind}
+                />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     className="truncate"
@@ -216,5 +231,77 @@ export default function ApprovalQueue({
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * 40×40 thumbnail at the start of each queue row. When the booking has
+ * uploaded media, renders it through SlotMedia masked to match the
+ * on-stream slot shape (circle / hex / banner / rounded / rect) so the
+ * streamer sees exactly what's about to land. Falls back to a kind-glyph
+ * (✦ for beams, ⚡ for flashes) when no media — pending booking before
+ * upload, text-only flash, or detached row.
+ */
+function QueueThumb({
+  mediaUrl,
+  fileType,
+  shape,
+  kind,
+}: {
+  mediaUrl?: string | null;
+  fileType?: string | null;
+  shape?: string | null;
+  kind: 'beam' | 'flash';
+}) {
+  const baseTile: React.CSSProperties = {
+    width: '40px',
+    height: '40px',
+    borderRadius: '7px',
+    background: 'var(--casi-surface-2)',
+    border: '1px solid var(--casi-border)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '14px',
+    color: 'var(--casi-accent)',
+    flexShrink: 0,
+    overflow: 'hidden',
+    position: 'relative',
+  };
+
+  if (!mediaUrl) {
+    return (
+      <div style={baseTile} aria-hidden>
+        {kind === 'flash' ? '⚡' : '✦'}
+      </div>
+    );
+  }
+
+  const clipPath =
+    shape === 'circle' ? 'circle(50%)' :
+    shape === 'hex' ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' :
+    undefined;
+  const borderRadius =
+    shape === 'rounded' ? 8 :
+    shape === 'rect' || shape === 'banner' ? 4 :
+    shape === 'backdrop' ? 4 :
+    7;
+
+  return (
+    <div
+      style={{
+        ...baseTile,
+        borderRadius: shape === 'circle' || shape === 'hex' ? 0 : borderRadius,
+        background: 'var(--casi-bg)',
+      }}
+    >
+      <div style={{ width: '100%', height: '100%', clipPath }}>
+        <SlotMedia
+          src={mediaUrl}
+          fileType={fileType ?? null}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      </div>
+    </div>
   );
 }

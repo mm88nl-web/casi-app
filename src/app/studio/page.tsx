@@ -82,7 +82,10 @@ type FlashRow = {
   viewer_wallet: string | null;
 };
 
-function bookingToQueueItem(b: BookingRow): QueueItem {
+function bookingToQueueItem(
+  b: BookingRow,
+  shape: string | null = null,
+): QueueItem {
   const who = b.viewer_name || 'anon';
   const snippet = b.message
     ? `"${b.message.slice(0, 28)}${b.message.length > 28 ? '…' : ''}"`
@@ -104,6 +107,9 @@ function bookingToQueueItem(b: BookingRow): QueueItem {
     subtitle: `${timeAgo(b.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · ${duration}m${b.file_type === 'video' ? ' · video' : ''}${rate > 0 ? ` · ${rate}/${b.price_unit}` : ''}`,
     priceLabel,
     readOnly: false,
+    mediaUrl: b.image_url,
+    fileType: b.file_type,
+    shape,
   };
 }
 
@@ -500,7 +506,10 @@ export default function StudioPage() {
 
   const queue: QueueItem[] = [
     ...pendingBookings.map((b) => ({
-      item: bookingToQueueItem(b),
+      // Pass slot shape so the row thumb gets the same on-stream mask
+      // (circle / hex / banner / rounded / rect) — gives the streamer a
+      // "this is what'll appear on stream" preview before tapping Approve.
+      item: bookingToQueueItem(b, b.element_id ? elementsById[b.element_id]?.shape ?? null : null),
       ts: new Date(b.created_at).getTime(),
     })),
     ...pendingFlashes.map((f) => ({
