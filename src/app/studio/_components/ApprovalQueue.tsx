@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
 
 export type QueueItem = {
   id: string;
@@ -11,8 +10,6 @@ export type QueueItem = {
   /** The final total paid — not the rate. For a 5m beam at 2 USDC/min this
    *  is "10 USDC", not "2 USDC". */
   priceLabel: string;
-  /** Label rendered above priceLabel ("Total", "Refund", etc.). Defaults to "Total". */
-  priceLeader?: string;
   /** When true this row shows a "Manage →" link to /admin instead of buttons —
    *  for bookings/flashes whose approve flow isn't wired here yet. */
   readOnly?: boolean;
@@ -30,246 +27,194 @@ type Props = {
   emptyLabel?: string;
 };
 
-type FilterKey = 'all' | 'beam' | 'flash';
-
-const FILTERS: { id: FilterKey; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'beam', label: 'Beam' },
-  { id: 'flash', label: 'Flash' },
-];
-
-export default function ApprovalQueue({ items, onApprove, onReject, readOnly, pendingIds, emptyLabel }: Props) {
-  const [filter, setFilter] = useState<FilterKey>('all');
-
-  const counts = useMemo(
-    () => ({
-      all: items.length,
-      beam: items.filter((i) => i.kind === 'beam').length,
-      flash: items.filter((i) => i.kind === 'flash').length,
-    }),
-    [items],
-  );
-
-  const visible = useMemo(
-    () => (filter === 'all' ? items : items.filter((i) => i.kind === filter)),
-    [items, filter],
-  );
-
+/**
+ * v7 .q-r.beam / .q-r.flash flat-row list. The kind shows as a 3px
+ * left-border rail (accent for beams, "live" green for flashes — both
+ * the same teal in Casi Dark, but the alpha differs to keep them
+ * visually distinct). Filter tabs from v3 dropped to match v7.
+ */
+export default function ApprovalQueue({
+  items,
+  onApprove,
+  onReject,
+  readOnly,
+  pendingIds,
+  emptyLabel,
+}: Props) {
   return (
-    <section
-      className="overflow-hidden"
-      style={{
-        background: 'var(--casi-surface)',
-        border: '1px solid var(--casi-border)',
-        borderRadius: '18px',
-      }}
-    >
-      <header
-        className="flex items-center justify-between"
-        style={{ padding: '16px 18px', borderBottom: '1px solid var(--casi-border)' }}
-      >
-        <h3
-          className="font-bold"
-          style={{ fontSize: '15px', letterSpacing: '-0.3px', color: 'var(--casi-text)' }}
-        >
-          Pending approval
-        </h3>
-        <span
-          className="font-mono uppercase"
-          style={{
-            fontSize: '10px',
-            letterSpacing: '0.15em',
-            color: 'var(--casi-text-faint)',
-          }}
-        >
-          Reject = instant refund · {items.length} waiting
-        </span>
-      </header>
+    <section className="flex flex-col">
+      <style>{`
+        .casi-q-r {
+          display: flex; align-items: center; gap: 14px;
+          padding: 13px 16px;
+          border-bottom: 1px solid var(--casi-border);
+          border-left: 3px solid transparent;
+          transition: background .12s, border-color .12s;
+        }
+        .casi-q-r:last-child { border-bottom: none; }
+        .casi-q-r:hover { background: rgba(255,255,255,0.01); }
+        .casi-q-r.beam { border-left-color: rgba(var(--casi-accent-rgb), 0.35); }
+        .casi-q-r.flash { border-left-color: rgba(var(--casi-accent-rgb), 0.15); }
+        .casi-q-no:hover { border-color: rgba(239,68,68,0.3) !important; color: #f87171 !important; }
+      `}</style>
 
       <div
-        className="flex gap-1"
+        className="font-mono uppercase flex items-center"
         style={{
-          padding: '8px 12px',
-          background: 'var(--casi-bg)',
-          borderBottom: '1px solid var(--casi-border)',
+          gap: '8px',
+          fontSize: '11px',
+          fontWeight: 600,
+          color: 'var(--casi-text-mid)',
+          letterSpacing: '0.08em',
+          paddingBottom: '10px',
         }}
       >
-        {FILTERS.map((opt) => {
-          const on = filter === opt.id;
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => setFilter(opt.id)}
-              className="font-mono uppercase transition-colors"
-              style={{
-                padding: '6px 10px',
-                borderRadius: '6px',
-                fontSize: '10px',
-                letterSpacing: '0.1em',
-                color: on ? 'var(--casi-text)' : 'var(--casi-text-dim)',
-                background: on ? 'var(--casi-surface)' : 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              {opt.label}
-              <span style={{ color: 'var(--casi-accent)', marginLeft: '4px' }}>
-                {counts[opt.id]}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {visible.length === 0 ? (
-        <div
-          className="font-mono uppercase text-center"
+        <span>Pending approval</span>
+        <span
           style={{
-            padding: '32px 16px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minWidth: '18px',
+            height: '18px',
+            padding: '0 5px',
+            borderRadius: '5px',
+            background: 'rgba(var(--casi-accent-rgb), 0.12)',
+            color: 'var(--casi-accent)',
+            fontFamily: 'var(--font-casi-mono), monospace',
             fontSize: '10px',
-            letterSpacing: '0.15em',
-            color: 'var(--casi-text-faint)',
           }}
         >
-          {emptyLabel ?? 'Nothing waiting'}
-        </div>
-      ) : (
-        visible.map((item, idx) => (
+          {items.length}
+        </span>
+      </div>
+
+      <div
+        style={{
+          border: '1px solid var(--casi-border)',
+          borderRadius: '10px',
+          overflow: 'hidden',
+          background: 'var(--casi-surface)',
+        }}
+      >
+        {items.length === 0 ? (
           <div
-            key={item.id}
-            className="grid items-center gap-2.5"
+            className="font-mono uppercase text-center"
             style={{
-              gridTemplateColumns: 'auto 1fr auto',
-              padding: '12px 16px',
-              borderBottom: idx === visible.length - 1 ? 'none' : '1px solid var(--casi-border)',
+              padding: '32px 16px',
+              fontSize: '10px',
+              letterSpacing: '0.15em',
+              color: 'var(--casi-text-faint)',
             }}
           >
-            <span
-              className="text-center font-mono uppercase"
-              style={{
-                width: '44px',
-                padding: '4px 6px',
-                borderRadius: '6px',
-                background: 'rgba(var(--casi-accent-rgb), 0.1)',
-                color: 'var(--casi-accent)',
-                fontSize: '9px',
-                letterSpacing: '0.1em',
-              }}
-            >
-              {item.kind === 'beam' ? 'Beam' : 'Flash'}
-            </span>
-            <div>
-              <div
-                className="font-semibold"
-                style={{ fontSize: '13px', color: 'var(--casi-text)', lineHeight: 1.3 }}
-              >
-                {item.name}
-              </div>
-              <div
-                className="font-mono uppercase"
-                style={{
-                  fontSize: '10px',
-                  letterSpacing: '0.1em',
-                  color: 'var(--casi-text-dim)',
-                  marginTop: '3px',
-                }}
-              >
-                {item.subtitle}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="mr-1 text-right">
-                <div
-                  className="font-mono uppercase"
-                  style={{
-                    fontSize: '9px',
-                    letterSpacing: '0.12em',
-                    color: 'var(--casi-text-faint)',
-                    marginBottom: '1px',
-                  }}
-                >
-                  {item.priceLeader ?? 'Total'}
+            {emptyLabel ?? 'Nothing waiting'}
+          </div>
+        ) : (
+          items.map(item => {
+            const ro = item.readOnly ?? readOnly;
+            const isPending = pendingIds?.has(item.id) ?? false;
+            return (
+              <div key={item.id} className={`casi-q-r ${item.kind}`}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    className="truncate"
+                    style={{
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      color: 'var(--casi-text)',
+                      marginBottom: '2px',
+                    }}
+                  >
+                    {item.name}
+                  </div>
+                  <div
+                    className="truncate"
+                    style={{ fontSize: '11.5px', color: 'var(--casi-text-mid)' }}
+                  >
+                    {item.subtitle}
+                  </div>
                 </div>
                 <div
-                  className="font-mono font-medium"
-                  style={{ fontSize: '13px', color: 'var(--casi-accent)' }}
+                  style={{
+                    fontFamily: 'var(--font-casi-mono), monospace',
+                    fontSize: '14px',
+                    color: 'var(--casi-accent)',
+                    whiteSpace: 'nowrap',
+                    marginRight: '4px',
+                  }}
                 >
                   {item.priceLabel}
                 </div>
+                {ro ? (
+                  <Link
+                    href="/admin"
+                    title="Manage in classic studio"
+                    className="font-mono uppercase"
+                    style={{
+                      padding: '7px 11px',
+                      borderRadius: '7px',
+                      background: 'transparent',
+                      border: '1px solid var(--casi-border-2)',
+                      color: 'var(--casi-text-dim)',
+                      fontSize: '10px',
+                      letterSpacing: '0.1em',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    Manage →
+                  </Link>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onApprove?.(item.id)}
+                      disabled={isPending}
+                      title="Approve"
+                      style={{
+                        padding: '7px 13px',
+                        borderRadius: '7px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        background: 'rgba(var(--casi-accent-rgb), 0.07)',
+                        border: '1px solid rgba(var(--casi-accent-rgb), 0.22)',
+                        color: 'var(--casi-accent)',
+                        cursor: isPending ? 'wait' : 'pointer',
+                        opacity: isPending ? 0.5 : 1,
+                        fontFamily: 'inherit',
+                        transition: 'background .14s',
+                      }}
+                    >
+                      {isPending ? '…' : 'Approve'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onReject?.(item.id)}
+                      disabled={isPending}
+                      title={`Deny · ${item.priceLabel} refunded`}
+                      className="casi-q-no"
+                      style={{
+                        padding: '7px 11px',
+                        borderRadius: '7px',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        background: 'transparent',
+                        border: '1px solid var(--casi-border-2)',
+                        color: 'var(--casi-text-dim)',
+                        cursor: isPending ? 'wait' : 'pointer',
+                        opacity: isPending ? 0.5 : 1,
+                        fontFamily: 'inherit',
+                        transition: 'all .14s',
+                      }}
+                    >
+                      Deny
+                    </button>
+                  </>
+                )}
               </div>
-              {(item.readOnly ?? readOnly) ? (
-                <Link
-                  href="/admin"
-                  title="Approve or reject in the classic studio — the real payment + escrow flow runs there for now."
-                  className="font-mono uppercase"
-                  style={{
-                    padding: '7px 11px',
-                    borderRadius: '7px',
-                    background: 'transparent',
-                    border: '1px solid var(--casi-border-2)',
-                    color: 'var(--casi-text-dim)',
-                    fontSize: '10px',
-                    letterSpacing: '0.1em',
-                    textDecoration: 'none',
-                  }}
-                >
-                  Manage →
-                </Link>
-              ) : (
-                <>
-                  {(() => {
-                    const isPending = pendingIds?.has(item.id) ?? false;
-                    return (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => onReject?.(item.id)}
-                          disabled={isPending}
-                          className="font-extrabold font-mono uppercase transition-colors"
-                          title={`Deny · ${item.priceLabel} refunded`}
-                          style={{
-                            padding: '8px 12px',
-                            borderRadius: '7px',
-                            background: 'transparent',
-                            color: 'var(--casi-text-dim)',
-                            border: '1px solid var(--casi-border-2)',
-                            fontSize: '10px',
-                            letterSpacing: '0.12em',
-                            cursor: isPending ? 'wait' : 'pointer',
-                            opacity: isPending ? 0.5 : 1,
-                          }}
-                        >
-                          Deny
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onApprove?.(item.id)}
-                          disabled={isPending}
-                          className="font-extrabold"
-                          style={{
-                            padding: '7px 11px',
-                            borderRadius: '7px',
-                            background: 'var(--casi-accent)',
-                            color: '#050505',
-                            border: 'none',
-                            fontFamily: 'var(--font-casi-sans)',
-                            fontSize: '11px',
-                            cursor: isPending ? 'wait' : 'pointer',
-                            opacity: isPending ? 0.5 : 1,
-                          }}
-                        >
-                          {isPending ? '…' : 'Approve'}
-                        </button>
-                      </>
-                    );
-                  })()}
-                </>
-              )}
-            </div>
-          </div>
-        ))
-      )}
+            );
+          })
+        )}
+      </div>
     </section>
   );
 }
