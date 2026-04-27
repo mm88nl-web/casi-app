@@ -63,8 +63,8 @@ export default function StudioFrame({
               Studio beta
             </span>
             <Link
-              href="/admin/settings"
-              title="Profile, payouts, OBS sources, session key"
+              href="/studio/settings"
+              title="Profile, payouts, appearance, OBS sources, session key"
               className="font-mono uppercase"
               style={navChipStyle()}
             >
