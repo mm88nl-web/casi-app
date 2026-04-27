@@ -155,6 +155,7 @@ export default function SettingsPage() {
         <AppearanceSection
           supabase={supabase}
           profileId={state.profile.id}
+          username={state.profile.username ?? null}
           initialSkinId={state.profile.skin}
           initialThemeColor={state.profile.theme_color ?? null}
         />

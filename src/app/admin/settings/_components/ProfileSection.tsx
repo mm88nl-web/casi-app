@@ -29,6 +29,8 @@ export default function ProfileSection({ supabase, profile }: Props) {
   const [displayName, setDisplayName] = useState(profile.display_name ?? '');
   const [slug, setSlug] = useState(profile.username ?? '');
   const [bio, setBio] = useState(profile.bio ?? '');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(profile.avatar_url ?? null);
+  const [avatarBusy, setAvatarBusy] = useState<'upload' | 'remove' | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -39,13 +41,14 @@ export default function ProfileSection({ supabase, profile }: Props) {
     bio: profile.bio ?? '',
   });
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
   }, []);
 
-  const persist = async (patch: Partial<{ display_name: string; username: string; bio: string }>) => {
+  const persist = async (patch: Partial<{ display_name: string; username: string; bio: string; avatar_url: string | null }>) => {
     setSaveState('saving');
     setErrorMsg(null);
     const { error } = await supabase.from('profiles').update(patch).eq('id', profile.id);
@@ -84,6 +87,60 @@ export default function ProfileSection({ supabase, profile }: Props) {
     persist({ bio: trimmed });
   };
 
+  // Avatar upload — uses the same `casi-media` bucket as preview-bg uploads.
+  // Path is keyed by profile.id + ext so re-uploading replaces in place via
+  // upsert; we don't manage versioning since the public URL doesn't cache
+  // bust on its own. (If that ever bites, append a `?v=${Date.now()}` to the
+  // saved URL.)
+  const onAvatarFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-pick of the same filename
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setSaveState('error');
+      setErrorMsg('Avatar too large — keep it under 2 MB.');
+      return;
+    }
+    if (!/^image\//.test(file.type)) {
+      setSaveState('error');
+      setErrorMsg('Pick an image file.');
+      return;
+    }
+    setAvatarBusy('upload');
+    setErrorMsg(null);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png';
+      const path = `${profile.id}-avatar.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('casi-media')
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from('casi-media').getPublicUrl(path);
+      // Cache-bust so the new image shows immediately (Supabase Storage CDN
+      // can serve the old object for ~minutes after an upsert).
+      const cacheBusted = `${publicUrl}?v=${Date.now()}`;
+      setAvatarUrl(cacheBusted);
+      await persist({ avatar_url: cacheBusted });
+    } catch (err) {
+      setSaveState('error');
+      setErrorMsg(err instanceof Error ? err.message : 'Avatar upload failed');
+    } finally {
+      setAvatarBusy(null);
+    }
+  };
+
+  const onRemoveAvatar = async () => {
+    if (!avatarUrl) return;
+    setAvatarBusy('remove');
+    setErrorMsg(null);
+    try {
+      setAvatarUrl(null);
+      await persist({ avatar_url: null });
+    } finally {
+      setAvatarBusy(null);
+    }
+  };
+
   const initial = (displayName || slug || '?').slice(0, 1).toUpperCase();
 
   return (
@@ -103,13 +160,14 @@ export default function ProfileSection({ supabase, profile }: Props) {
     >
       <div className="mb-5 flex items-center gap-4">
         <div
-          className="flex shrink-0 items-center justify-center"
+          className="flex shrink-0 items-center justify-center overflow-hidden"
           style={{
             width: '72px',
             height: '72px',
             borderRadius: '16px',
-            background:
-              'linear-gradient(135deg, rgba(var(--casi-accent-rgb), 0.5), rgba(var(--casi-accent2-rgb), 0.4))',
+            background: avatarUrl
+              ? '#000'
+              : 'linear-gradient(135deg, rgba(var(--casi-accent-rgb), 0.5), rgba(var(--casi-accent2-rgb), 0.4))',
             fontFamily: 'var(--font-casi-sans)',
             fontSize: '28px',
             fontWeight: 800,
@@ -117,11 +175,40 @@ export default function ProfileSection({ supabase, profile }: Props) {
           }}
           aria-hidden
         >
-          {initial}
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : (
+            initial
+          )}
         </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png, image/jpeg, image/webp, image/gif"
+          onChange={onAvatarFilePicked}
+          style={{ display: 'none' }}
+        />
         <div className="flex flex-col items-start gap-1.5">
-          <GhostButton type="button" disabled>Upload avatar</GhostButton>
-          <GhostButton type="button" variant="danger" disabled>Remove</GhostButton>
+          <GhostButton
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={avatarBusy !== null}
+          >
+            {avatarBusy === 'upload' ? 'Uploading…' : avatarUrl ? 'Replace' : 'Upload avatar'}
+          </GhostButton>
+          <GhostButton
+            type="button"
+            variant="danger"
+            onClick={onRemoveAvatar}
+            disabled={!avatarUrl || avatarBusy !== null}
+          >
+            {avatarBusy === 'remove' ? 'Removing…' : 'Remove'}
+          </GhostButton>
         </div>
       </div>
 

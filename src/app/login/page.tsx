@@ -3,6 +3,18 @@ import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 
+/** Google's "G" mark — official 4-color SVG, no external assets. */
+function GoogleG() {
+  return (
+    <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/>
+      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+      <path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.5c-2 1.5-4.5 2.5-7.5 2.5-5.3 0-9.7-3.3-11.3-8L6 32.6C9.4 39.6 16.1 44 24 44z"/>
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4 5.5l6.5 5.5c-.5.4 6.2-4.5 6.2-15 0-1.3-.1-2.4-.4-3.5z"/>
+    </svg>
+  );
+}
+
 function Logo({ scale = 0.45 }: { scale?: number }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width={400 * scale} height={200 * scale}>
@@ -45,13 +57,44 @@ export default function AuthPage() {
   const supabase = useRef(createClient()).current;
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
-  // Redirect to studio if already signed in, and respect ?tab=signup
+  // Redirect to studio if already signed in, and respect ?tab=signup.
+  // Special case — `?finish=true` lands here from /auth/callback when a
+  // Google sign-in succeeded but the user has no profiles row yet. We
+  // jump them to step 2 (username) of signup with display_name + avatar
+  // pre-filled from their Google metadata. The auth.users row already
+  // exists, so the final submit just inserts into profiles.
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.replace('/admin');
-    });
     const params = new URLSearchParams(window.location.search);
+    const finish = params.get('finish') === 'true';
+    const oauthErr = params.get('oauth_error');
+    if (oauthErr) setError(oauthErr);
     if (params.get('tab') === 'signup') setMode('signup');
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) return;
+      // If the URL says ?finish=true OR they have a session but no profile,
+      // pivot into the post-OAuth profile-setup flow.
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      if (profile && !finish) {
+        router.replace('/admin');
+        return;
+      }
+      // Profile missing → finish setup. Pre-fill from Google metadata.
+      const meta = session.user.user_metadata || {};
+      setMode('signup');
+      setStep('username');
+      setRegEmail(session.user.email ?? '');
+      setDisplayName(meta.full_name || meta.name || '');
+      if (typeof meta.avatar_url === 'string' && meta.avatar_url.startsWith('http')) {
+        setAvatarUrl(meta.avatar_url);
+        setAvatarValid(true);
+      }
+      setAcceptedTos(true); // Google ToS-equivalent — they signed in via Google.
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const switchMode = (m: 'signin' | 'signup') => {
@@ -68,6 +111,25 @@ export default function AuthPage() {
     const { error: err } = await supabase.auth.signInWithPassword({ email, password });
     if (err) { setError(err.message); setLoading(false); }
     else router.push('/admin');
+  };
+
+  /* ── Sign in or sign up with Google ──
+   * Same call for both — Supabase creates an auth.users row on first
+   * sign-in, returns an existing session on subsequent ones. The
+   * /auth/callback route distinguishes new vs returning by checking
+   * whether a `profiles` row exists for the user.
+   */
+  const handleGoogleAuth = async () => {
+    setLoading(true);
+    setError('');
+    const { error: err } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${origin}/auth/callback${mode === 'signup' ? '?next=/admin' : ''}`,
+      },
+    });
+    if (err) { setError(err.message); setLoading(false); }
+    // No success branch — Supabase redirects the tab to Google.
   };
 
   /* ── Sign up ── step 1 */
@@ -101,24 +163,39 @@ export default function AuthPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const { data: authData, error: authError } = await supabase.auth.signUp({ email: regEmail, password: regPassword });
-    if (authError) {
-      const msg = authError.message.toLowerCase();
-      if (msg.includes('already registered') || msg.includes('already in use') || msg.includes('already exists')) {
-        // Auto-switch to sign-in with email pre-filled
-        setError('That email already has an account — signing you in instead.');
-        setEmail(regEmail);
-        setPassword('');
-        setMode('signin');
-      } else {
-        setError(authError.message);
+
+    // Two paths converge here:
+    //   1. Email/password signup — auth user doesn't exist yet, sign them up.
+    //   2. Post-Google "finish profile" — auth user exists, just need to
+    //      INSERT into profiles. We detect this by checking the current
+    //      session: if it's already authenticated, skip auth.signUp.
+    const { data: { session } } = await supabase.auth.getSession();
+    let userId = session?.user.id ?? null;
+
+    if (!userId) {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: regEmail,
+        password: regPassword,
+      });
+      if (authError) {
+        const msg = authError.message.toLowerCase();
+        if (msg.includes('already registered') || msg.includes('already in use') || msg.includes('already exists')) {
+          setError('That email already has an account — signing you in instead.');
+          setEmail(regEmail);
+          setPassword('');
+          setMode('signin');
+        } else {
+          setError(authError.message);
+        }
+        setLoading(false);
+        return;
       }
-      setLoading(false);
-      return;
+      if (!authData.user) { setError('Signup failed — please try again'); setLoading(false); return; }
+      userId = authData.user.id;
     }
-    if (!authData.user) { setError('Signup failed — please try again'); setLoading(false); return; }
+
     const { error: profileError } = await supabase.from('profiles').insert({
-      id: authData.user.id,
+      id: userId,
       username,
       display_name: displayName || username,
       bio: bio || null,
@@ -263,6 +340,24 @@ export default function AuthPage() {
         .auth-btn:hover:not(:disabled) { background: #ff9030; transform: translateY(-1px); }
         .auth-btn:disabled { background: #1c1c1c; color: #444; cursor: not-allowed; transform: none; }
 
+        /* OAuth — Google */
+        .auth-oauth-btn {
+          width: 100%; background: #fff; color: #1f1f1f; border: 1px solid #1c1c1c;
+          border-radius: 10px; padding: 12px 14px;
+          font-family: var(--font-casi-sans), sans-serif; font-weight: 700; font-size: 14px;
+          display: flex; align-items: center; justify-content: center; gap: 10px;
+          cursor: pointer; transition: all .15s; margin-bottom: 18px;
+        }
+        .auth-oauth-btn:hover:not(:disabled) { background: #f4f4f4; transform: translateY(-1px); }
+        .auth-oauth-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+        .auth-oauth-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+        .auth-or {
+          display: flex; align-items: center; gap: 12px; margin: 4px 0 18px;
+          font-family: var(--font-casi-mono), monospace; font-size: 9px;
+          letter-spacing: 2px; text-transform: uppercase; color: #444;
+        }
+        .auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: #1c1c1c; }
+
         .auth-btn-row { display: flex; gap: 10px; margin-top: 8px; }
         .auth-btn-back {
           flex-shrink: 0; background: rgba(255,255,255,0.04); border: 1px solid #1c1c1c;
@@ -351,6 +446,11 @@ export default function AuthPage() {
               <>
                 <div className="auth-title">Welcome back</div>
                 <div className="auth-subtitle">Sign in to your studio</div>
+                <button type="button" onClick={handleGoogleAuth} disabled={loading} className="auth-oauth-btn">
+                  <GoogleG />
+                  Continue with Google
+                </button>
+                <div className="auth-or">or use email</div>
                 <form onSubmit={handleSignIn}>
                   <div className="auth-field">
                     <label className="auth-label">Email</label>
@@ -377,6 +477,11 @@ export default function AuthPage() {
               <>
                 <div className="auth-title">Create your studio</div>
                 <div className="auth-subtitle">Step 1 of 3 — Account</div>
+                <button type="button" onClick={handleGoogleAuth} disabled={loading} className="auth-oauth-btn">
+                  <GoogleG />
+                  Continue with Google
+                </button>
+                <div className="auth-or">or use email</div>
                 <form onSubmit={handleAccountStep}>
                   <div className="auth-field">
                     <label className="auth-label">Email</label>
