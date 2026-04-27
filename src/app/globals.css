@@ -44,46 +44,10 @@ body {
   font-family: var(--font-casi-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* ── Casi responsive grids ── one place, so the 4 redesign surfaces stack
-   to one column on narrow viewports instead of overflowing sideways. */
-
-/* Landing split-door hero: 2-col on desktop, stack on mobile. */
-.casi-grid-hero {
-  display: grid;
-  grid-template-columns: 1fr;
-}
-@media (min-width: 900px) {
-  .casi-grid-hero { grid-template-columns: 1fr 1fr; }
-}
-.casi-hero-panel {
-  padding: 56px 24px;
-}
-@media (min-width: 900px) {
-  .casi-hero-panel { padding: 80px 64px; }
-}
-.casi-hero-panel[data-hero-left] {
-  border-bottom: 1px solid var(--casi-border);
-}
-@media (min-width: 900px) {
-  .casi-hero-panel[data-hero-left] {
-    border-bottom: none;
-    border-right: 1px solid var(--casi-border);
-  }
-}
-
-/* Landing trust strip: 3 promise cards → stack / 3-col. */
-.casi-grid-trust {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
-}
-@media (min-width: 768px) {
-  .casi-grid-trust { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-.casi-trust-pad { padding: 48px 24px; }
-@media (min-width: 900px) {
-  .casi-trust-pad { padding: 80px 40px; }
-}
+/* ── Casi responsive grids ── one place, so the redesign surfaces stack
+   to one column on narrow viewports instead of overflowing sideways.
+   Landing-specific helpers were removed when LandingSplitDoor / TrustStrip
+   migrated their layout into component-scoped <style> blocks (v7). */
 
 /* Viewer booking split: stream/feed column + booking panel. */
 .casi-grid-viewer {

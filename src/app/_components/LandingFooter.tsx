@@ -11,25 +11,27 @@ const FOOTER_LINKS = [
 export default function LandingFooter() {
   return (
     <footer
-      className="flex flex-wrap items-center justify-between gap-4"
+      className="casi-l-foot flex flex-wrap items-center justify-between"
       style={{
-        padding: '24px 32px',
+        gap: '12px',
+        padding: '18px 36px',
         borderTop: '1px solid var(--casi-border)',
         color: 'var(--casi-text-mid)',
         fontSize: '12px',
       }}
     >
-      <div className="flex items-center gap-2">
-        <CasiLogo size={18} opacity={0.8} />
+      <style>{`
+        .casi-l-foot-links a { color: var(--casi-text-mid); text-decoration: none; transition: color .15s; }
+        .casi-l-foot-links a:hover { color: var(--casi-text); }
+      `}</style>
+
+      <div className="flex items-center" style={{ gap: '7px' }}>
+        <CasiLogo size={28} color="var(--casi-text-mid)" opacity={0.4} />
         <span>© 2026</span>
       </div>
-      <div className="flex flex-wrap items-center gap-5">
-        {FOOTER_LINKS.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            style={{ color: 'var(--casi-text-mid)', textDecoration: 'none' }}
-          >
+      <div className="casi-l-foot-links flex flex-wrap items-center" style={{ gap: '18px' }}>
+        {FOOTER_LINKS.map(link => (
+          <Link key={link.href} href={link.href}>
             {link.label}
           </Link>
         ))}
