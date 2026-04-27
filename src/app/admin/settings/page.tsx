@@ -125,6 +125,23 @@ export default function SettingsPage() {
           >
             ↩ Classic studio
           </Link>
+          <Link
+            href="/studio"
+            title="Try the new studio dashboard"
+            className="font-mono uppercase"
+            style={{
+              fontSize: '10px',
+              letterSpacing: '0.15em',
+              textDecoration: 'none',
+              padding: '5px 10px',
+              borderRadius: '999px',
+              background: 'rgba(245, 130, 32, 0.08)',
+              border: '1px solid rgba(245, 130, 32, 0.3)',
+              color: '#F58220',
+            }}
+          >
+            New studio →
+          </Link>
           <WalletNav />
         </div>
       </nav>
