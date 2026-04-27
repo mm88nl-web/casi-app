@@ -32,7 +32,7 @@ function OBSContent() {
         supabase.from('overlay_elements').select('*').eq('profile_id', profileId),
         supabase
           .from('bookings')
-          .select('id, element_id, message, status')
+          .select('id, element_id, message, status, banner_font_px, banner_speed_secs, media_offset_x, media_offset_y, media_zoom')
           .eq('profile_id', profileId)
           .eq('status', 'active'),
       ]);
@@ -111,6 +111,8 @@ function OBSContent() {
           // Banner: render the viewer's message as a marquee instead of
           // their uploaded image (they may not have uploaded one at all).
           if (isBannerActive) {
+            const bFont  = Number(active?.banner_font_px    ?? 28);
+            const bSpeed = Number(active?.banner_speed_secs ?? 20);
             return (
               <div key={el.id} style={{
                 position: 'absolute',
@@ -120,7 +122,10 @@ function OBSContent() {
                 transition: 'all 0.5s cubic-bezier(0.16,1,0.3,1)',
               }}>
                 <div key={mediaKey} className={`obs-banner ${glowClass}`.trim()}>
-                  <span className="obs-banner-track">{active.message}</span>
+                  <span
+                    className="obs-banner-track"
+                    style={{ fontSize: bFont, animationDuration: `${bSpeed}s` }}
+                  >{active.message}</span>
                 </div>
               </div>
             );
@@ -129,6 +134,12 @@ function OBSContent() {
           // Image/video slot — skip rows that have no media set yet; they
           // haven't had an active beam on them. (Banner rows handled above.)
           if (!el.image_url) return null;
+
+          const offX = Number(active?.media_offset_x ?? 50);
+          const offY = Number(active?.media_offset_y ?? 50);
+          const zoom = Number(active?.media_zoom     ?? 1);
+          const hasCustomCrop = offX !== 50 || offY !== 50 || zoom !== 1;
+          const useCover = el.is_background || el.shape === 'circle' || el.shape === 'hex' || hasCustomCrop;
 
           return (
             <div key={el.id} style={{
@@ -150,10 +161,12 @@ function OBSContent() {
                   style={{
                     width: '100%',
                     height: '100%',
-                    // Beam slots: contain so the viewer's upload keeps its
-                    // aspect ratio. Backdrop: cover so the full canvas
-                    // stays filled (edges crop, not stretch).
-                    objectFit: el.is_background ? 'cover' : 'contain',
+                    // Backdrop / circle / hex / custom-cropped: cover so
+                    // the mask fills (edges crop, not stretch). Plain
+                    // rect/rounded preserves aspect ratio with contain.
+                    objectFit: useCover ? 'cover' : 'contain',
+                    objectPosition: `${offX}% ${offY}%`,
+                    transform: zoom !== 1 ? `scale(${zoom})` : undefined,
                     pointerEvents: 'none',
                     filter: el.is_background ? undefined : 'drop-shadow(0 10px 30px rgba(0,0,0,0.5))',
                   }}

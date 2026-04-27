@@ -46,3 +46,49 @@ export function validateBannerBooking(
   }
   return { ok: true };
 }
+
+// Per-booking customization clamps — kept in one place so the three
+// /api/bookings/create-* routes can't drift, and the same bounds match
+// the DB check constraints in 20260430000000_booking_customization.sql.
+// Defaults (BANNER_DEFAULT_*, MEDIA_DEFAULT_*) describe what the render
+// path falls back to when the booking row's column is null.
+export const BANNER_FONT_PX_RANGE   = { min: 16, max: 96, default: 28 } as const;
+export const BANNER_SPEED_SECS_RANGE = { min: 5,  max: 60, default: 20 } as const;
+export const MEDIA_OFFSET_RANGE     = { min: 0,  max: 100, default: 50 } as const;
+export const MEDIA_ZOOM_RANGE       = { min: 1,  max: 4,   default: 1  } as const;
+
+function clampOrNull(v: unknown, lo: number, hi: number): number | null {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(hi, Math.max(lo, n));
+}
+
+export type BookingCustomization = {
+  banner_font_px: number | null;
+  banner_speed_secs: number | null;
+  media_offset_x: number | null;
+  media_offset_y: number | null;
+  media_zoom: number | null;
+};
+
+/**
+ * Clamp + normalize the five customization fields off a request body.
+ * Returns nulls for fields the client didn't send (so the DB falls back
+ * to defaults at render time). Banner fields only matter for banner slots
+ * but we don't gate on shape here — the render path already ignores them
+ * for non-banner shapes.
+ */
+export function sanitizeBookingCustomization(body: Record<string, unknown>): BookingCustomization {
+  const fontRaw  = body.banner_font_px;
+  const speedRaw = body.banner_speed_secs;
+  const offXRaw  = body.media_offset_x;
+  const offYRaw  = body.media_offset_y;
+  const zoomRaw  = body.media_zoom;
+  return {
+    banner_font_px:    fontRaw  == null ? null : clampOrNull(fontRaw,  BANNER_FONT_PX_RANGE.min,    BANNER_FONT_PX_RANGE.max),
+    banner_speed_secs: speedRaw == null ? null : clampOrNull(speedRaw, BANNER_SPEED_SECS_RANGE.min, BANNER_SPEED_SECS_RANGE.max),
+    media_offset_x:    offXRaw  == null ? null : clampOrNull(offXRaw,  MEDIA_OFFSET_RANGE.min,      MEDIA_OFFSET_RANGE.max),
+    media_offset_y:    offYRaw  == null ? null : clampOrNull(offYRaw,  MEDIA_OFFSET_RANGE.min,      MEDIA_OFFSET_RANGE.max),
+    media_zoom:        zoomRaw  == null ? null : clampOrNull(zoomRaw,  MEDIA_ZOOM_RANGE.min,        MEDIA_ZOOM_RANGE.max),
+  };
+}

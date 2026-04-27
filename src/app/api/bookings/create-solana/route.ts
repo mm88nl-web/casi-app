@@ -27,7 +27,7 @@ import { createClient } from '@supabase/supabase-js';
 import { SystemProgram } from '@solana/web3.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { deriveEscrowPda, PROGRAM_ID } from '@/lib/casi-escrow';
-import { validateBannerBooking } from '@/lib/banner';
+import { validateBannerBooking, sanitizeBookingCustomization } from '@/lib/banner';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -93,6 +93,7 @@ export async function POST(req: Request) {
     is_queued,
     queue_position,
   } = body;
+  const customization = sanitizeBookingCustomization(body);
 
   if (!profile_id || !element_id || !viewer_name) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -167,6 +168,7 @@ export async function POST(req: Request) {
       is_queued: !!is_queued,
       queue_position: is_queued ? queue_position ?? null : null,
       cancel_token: cancelToken,
+      ...customization,
     })
     .select('id')
     .single();

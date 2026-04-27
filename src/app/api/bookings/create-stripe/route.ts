@@ -32,7 +32,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
-import { validateBannerBooking } from '@/lib/banner';
+import { validateBannerBooking, sanitizeBookingCustomization } from '@/lib/banner';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -99,6 +99,7 @@ export async function POST(req: Request) {
     queue_position,
     is_extend,
   } = body;
+  const customization = sanitizeBookingCustomization(body);
 
   if (!profile_id || !element_id || !viewer_name) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -183,6 +184,7 @@ export async function POST(req: Request) {
       payment_method: 'stripe',
       is_queued: !!is_queued,
       queue_position: is_queued ? queue_position ?? null : null,
+      ...customization,
     })
     .select('id')
     .single();

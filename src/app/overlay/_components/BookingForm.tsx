@@ -2,6 +2,7 @@
 
 import { BANNER_MAX_MESSAGE } from '@/lib/banner';
 import TurnstileWidget from '@/components/TurnstileWidget';
+import CustomizePanel from './CustomizePanel';
 import { formatTime, getSecondsRemaining } from './time';
 
 type Slot = {
@@ -61,6 +62,19 @@ type Props = {
   onTurnstileVerify: (t: string) => void;
   onTurnstileExpire: () => void;
 
+  // Customize (banner font/speed + media offset/zoom)
+  customizeOpen: boolean;
+  onCustomizeToggle: () => void;
+  bannerFontPx: number;
+  onBannerFontPxChange: (n: number) => void;
+  bannerSpeedSecs: number;
+  onBannerSpeedSecsChange: (n: number) => void;
+  mediaOffsetX: number;
+  mediaOffsetY: number;
+  onMediaOffsetChange: (x: number, y: number) => void;
+  mediaZoom: number;
+  onMediaZoomChange: (n: number) => void;
+
   // Submit
   canSubmit: boolean;
   submitting: boolean;
@@ -81,8 +95,21 @@ export default function BookingForm(props: Props) {
     estimatedCost, walletConnected, usdcBalance,
     activeBookings, approvedQueuedBookings,
     turnstileToken, onTurnstileVerify, onTurnstileExpire,
+    customizeOpen, onCustomizeToggle,
+    bannerFontPx, onBannerFontPxChange,
+    bannerSpeedSecs, onBannerSpeedSecsChange,
+    mediaOffsetX, mediaOffsetY, onMediaOffsetChange,
+    mediaZoom, onMediaZoomChange,
     canSubmit, submitting, connecting, onStripeSubmit, onSolanaPay,
   } = props;
+
+  // The customize panel re-uses whatever the viewer has staged in the
+  // upload / URL inputs above so they see exactly what the streamer
+  // will get on stream.
+  const customizePreviewUrl: string | null =
+    uploadMode === 'upload' ? uploadedUrl : (imageValid && imageUrl ? imageUrl : null);
+  const customizePreviewFileType: 'image' | 'video' | null =
+    uploadMode === 'upload' ? uploadedFileType : (imageUrl ? getUrlFileType(imageUrl) : null);
 
   const isFreeSlot = Number(slot.price_value) === 0;
   const freeBlocked = isFreeSlot && !turnstileToken;
@@ -304,6 +331,26 @@ export default function BookingForm(props: Props) {
           </div>
         </div>
       </div>
+
+      <CustomizePanel
+        shape={slot.shape}
+        open={customizeOpen}
+        onToggle={onCustomizeToggle}
+        accentColor={accentColor}
+        accentColorRgb={accentColorRgb}
+        message={message}
+        bannerFontPx={bannerFontPx}
+        onBannerFontPxChange={onBannerFontPxChange}
+        bannerSpeedSecs={bannerSpeedSecs}
+        onBannerSpeedSecsChange={onBannerSpeedSecsChange}
+        mediaPreviewUrl={customizePreviewUrl}
+        mediaPreviewFileType={customizePreviewFileType}
+        mediaOffsetX={mediaOffsetX}
+        mediaOffsetY={mediaOffsetY}
+        onMediaOffsetChange={onMediaOffsetChange}
+        mediaZoom={mediaZoom}
+        onMediaZoomChange={onMediaZoomChange}
+      />
 
       {/* USDC cost preview (paid slots only) */}
       {!isFreeSlot && (
