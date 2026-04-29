@@ -1,10 +1,11 @@
 # Solana Foundation Grant — `casi-escrow` primitive
 
-Working draft for the grant application. Replace each `[TODO: ...]` and
-`[CONFIRM: ...]` marker before submitting (only four left: last name, email,
-audit firm name, and audit quote amount). The grant funds the `casi-escrow`
-Anchor program (audit + SDK + public-good deliverables); CASI the consumer
-product is the reference integration that motivates and stress-tests it.
+Working draft for the grant application. Two `[TODO: ...]` markers remain
+in Section 4 — the audit firm name and the audit quote amount — both
+unblocked once Sec3 / OtterSec / Neodyme reply with written quotes. The
+grant funds the `casi-escrow` Anchor program (audit + SDK + public-good
+deliverables); CASI the consumer product is the reference integration
+that motivates and stress-tests it.
 
 ---
 
@@ -14,10 +15,10 @@ product is the reference integration that motivates and stress-tests it.
 |---|---|
 | Project name | CASI |
 | Website URL | https://casi.gg |
-| Country | Netherlands `[CONFIRM: best guess from your GitHub handle and locale signals — change if wrong]` |
+| Country | Netherlands |
 | First name | Matthew |
-| Last name | `[TODO: legal last name]` |
-| Email | `[TODO: same email you used for the Sec3 outreach to Jack Tsai]` |
+| Last name | Melendez |
+| Email | mm88nl@gmail.com |
 | Funding category | Developer Tooling |
 
 ---
@@ -93,7 +94,7 @@ deliverables. Update this number once the audit firm's quote is finalised.)
 
 ## 6. Why You?  *(≥100 words)*
 
-> I'm Matthew `[TODO: last name]`, the solo founder of CASI. I'll be honest with the Foundation up front: I'm not a career Solana developer, and I'm not pretending to be one. I'm a non-technical builder who saw a gap — streamers want to monetize their on-stream real estate, not just take chat tips, and there's no on-chain primitive that handles the time-vested "rent this slot for N minutes" pattern. I built CASI and the `casi-escrow` Anchor program over the last few weeks using modern AI-assisted tooling, working from the official `solana-developers/program-examples` escrow template and applying conventional Anchor patterns: PDA-owned vault ATAs, `token_interface` for Token-2022 compatibility, `transfer_checked` with mint + decimals on every SPL transfer, `u128` intermediate arithmetic with `checked_sub`, and `has_one` constraints on every relationship.
+> I'm Matthew Melendez, the solo founder of CASI. I'll be honest with the Foundation up front: I'm not a career Solana developer, and I'm not pretending to be one. I'm a non-technical builder who saw a gap — streamers want to monetize their on-stream real estate, not just take chat tips, and there's no on-chain primitive that handles the time-vested "rent this slot for N minutes" pattern. I built CASI and the `casi-escrow` Anchor program over the last few weeks using modern AI-assisted tooling, working from the official `solana-developers/program-examples` escrow template and applying conventional Anchor patterns: PDA-owned vault ATAs, `token_interface` for Token-2022 compatibility, `transfer_checked` with mint + decimals on every SPL transfer, `u128` intermediate arithmetic with `checked_sub`, and `has_one` constraints on every relationship.
 >
 > The result is on Solana devnet at https://casi.gg today. The program is ~1.2k LOC of Rust, ships with an 18-test integration suite covering vesting math, anti-grief, and conservation invariants, and has been exercised continuously by the consumer product across all four primitives (flashes, beams, backdrops, delegated session-key approve/settle). The design decisions worth flagging are the ones that limit the blast radius of mistakes: settlement is liveness-safe by construction (anyone can crank after the duration; anyone can refund after the 7-day pending timeout, so neither party can lock the other's funds), and the session-key delegation scope is enforced **on-chain** (a leaked session key cannot redirect funds outside the program's declared destinations). All material is published in `programs/casi-escrow/PRIMITIVE.md` and `FEE_MODEL.md` — reviewers can read the program directly and form their own view in 30 minutes.
 >
