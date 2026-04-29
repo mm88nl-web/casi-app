@@ -16,6 +16,33 @@ function GoogleG() {
   );
 }
 
+/** Twitch glyph — official purple, no external assets. */
+function TwitchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="#9146FF" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path d="M2.149 0L.537 4.119v16.836h5.731V24h3.224l3.045-3.045h4.657L23.463 14.5V0H2.149zm19.165 13.612l-3.582 3.582h-5.731l-3.045 3.045v-3.045H4.119V1.612h17.195v12zm-4.93-9.493v6.687h-2.149V4.119h2.149zm-5.731 0v6.687H8.504V4.119h2.149z"/>
+    </svg>
+  );
+}
+
+/** Discord glyph — official blurple, no external assets. */
+function DiscordIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="#5865F2" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 00-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 00-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02C2.05 9.41 1.3 13.39 1.67 17.32c0 .02.01.04.03.05 1.79 1.32 3.5 2.13 5.19 2.66.03.01.06 0 .07-.02.39-.54.74-1.11 1.04-1.71.02-.04 0-.08-.04-.09-.56-.21-1.09-.47-1.61-.78-.04-.02-.04-.08 0-.11.11-.08.22-.17.32-.25.02-.02.05-.02.07-.01 3.42 1.56 7.13 1.56 10.51 0 .02-.01.05-.01.07.01.1.09.21.17.32.25.04.03.04.09 0 .11-.51.31-1.05.57-1.61.78-.04.01-.05.06-.04.09.31.6.66 1.17 1.04 1.71.03.02.06.03.09.02 1.7-.53 3.41-1.34 5.2-2.66.02-.01.03-.03.03-.05.43-4.52-.79-8.47-3.32-11.95-.01-.01-.02-.02-.03-.02zM8.52 14.91c-1.03 0-1.89-.95-1.89-2.12 0-1.17.84-2.12 1.89-2.12 1.06 0 1.91.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12zm6.97 0c-1.03 0-1.89-.95-1.89-2.12 0-1.17.84-2.12 1.89-2.12 1.06 0 1.91.96 1.89 2.12 0 1.17-.83 2.12-1.89 2.12z"/>
+    </svg>
+  );
+}
+
+/** X (Twitter) glyph — neutral fill since X dropped its blue. */
+function XIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+    </svg>
+  );
+}
+
 type Step = 'account' | 'username' | 'profile';
 const STEPS: Step[] = ['account', 'username', 'profile'];
 const STEP_LABELS = ['Account', 'Username', 'Profile'];
@@ -100,23 +127,30 @@ export default function AuthPage() {
     else router.push('/admin');
   };
 
-  /* ── Sign in or sign up with Google ──
+  /* ── Sign in or sign up with an OAuth provider ──
    * Same call for both — Supabase creates an auth.users row on first
    * sign-in, returns an existing session on subsequent ones. The
    * /auth/callback route distinguishes new vs returning by checking
-   * whether a `profiles` row exists for the user.
+   * whether a `profiles` row exists for the user, regardless of which
+   * provider was used.
+   *
+   * Each provider must also be enabled in the Supabase Dashboard
+   * (Authentication → Providers) with its client id + secret. If a
+   * provider is enabled in the UI here but not in the dashboard, the
+   * button will surface a "provider is not enabled" error.
    */
-  const handleGoogleAuth = async () => {
+  type OAuthProvider = 'google' | 'twitch' | 'discord' | 'twitter';
+  const handleOAuth = async (provider: OAuthProvider) => {
     setLoading(true);
     setError('');
     const { error: err } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
+      provider,
       options: {
         redirectTo: `${origin}/auth/callback${mode === 'signup' ? '?next=/admin' : ''}`,
       },
     });
     if (err) { setError(err.message); setLoading(false); }
-    // No success branch — Supabase redirects the tab to Google.
+    // No success branch — Supabase redirects the tab to the provider.
   };
 
   /* ── Sign up ── step 1 */
@@ -437,9 +471,21 @@ export default function AuthPage() {
               <>
                 <div className="auth-title">Welcome back</div>
                 <div className="auth-subtitle">Sign in to your studio</div>
-                <button type="button" onClick={handleGoogleAuth} disabled={loading} className="auth-oauth-btn">
+                <button type="button" onClick={() => handleOAuth('google')} disabled={loading} className="auth-oauth-btn">
                   <GoogleG />
                   Continue with Google
+                </button>
+                <button type="button" onClick={() => handleOAuth('twitch')} disabled={loading} className="auth-oauth-btn">
+                  <TwitchIcon />
+                  Continue with Twitch
+                </button>
+                <button type="button" onClick={() => handleOAuth('discord')} disabled={loading} className="auth-oauth-btn">
+                  <DiscordIcon />
+                  Continue with Discord
+                </button>
+                <button type="button" onClick={() => handleOAuth('twitter')} disabled={loading} className="auth-oauth-btn">
+                  <XIcon />
+                  Continue with X
                 </button>
                 <div className="auth-or">or use email</div>
                 <form onSubmit={handleSignIn}>
@@ -468,9 +514,21 @@ export default function AuthPage() {
               <>
                 <div className="auth-title">Create your studio</div>
                 <div className="auth-subtitle">Step 1 of 3 — Account</div>
-                <button type="button" onClick={handleGoogleAuth} disabled={loading} className="auth-oauth-btn">
+                <button type="button" onClick={() => handleOAuth('google')} disabled={loading} className="auth-oauth-btn">
                   <GoogleG />
                   Continue with Google
+                </button>
+                <button type="button" onClick={() => handleOAuth('twitch')} disabled={loading} className="auth-oauth-btn">
+                  <TwitchIcon />
+                  Continue with Twitch
+                </button>
+                <button type="button" onClick={() => handleOAuth('discord')} disabled={loading} className="auth-oauth-btn">
+                  <DiscordIcon />
+                  Continue with Discord
+                </button>
+                <button type="button" onClick={() => handleOAuth('twitter')} disabled={loading} className="auth-oauth-btn">
+                  <XIcon />
+                  Continue with X
                 </button>
                 <div className="auth-or">or use email</div>
                 <form onSubmit={handleAccountStep}>
