@@ -1,9 +1,10 @@
 # Solana Foundation Grant — `casi-escrow` primitive
 
-Working draft for the grant application. Replace each `[FILL IN: ...]`
-placeholder before submitting. The grant funds the `casi-escrow` Anchor
-program (audit + SDK + public-good deliverables); CASI the consumer product
-is the reference integration that motivates and stress-tests it.
+Working draft for the grant application. Replace each `[TODO: ...]` and
+`[CONFIRM: ...]` marker before submitting (only four left: last name, email,
+audit firm name, and audit quote amount). The grant funds the `casi-escrow`
+Anchor program (audit + SDK + public-good deliverables); CASI the consumer
+product is the reference integration that motivates and stress-tests it.
 
 ---
 
@@ -13,10 +14,10 @@ is the reference integration that motivates and stress-tests it.
 |---|---|
 | Project name | CASI |
 | Website URL | https://casi.gg |
-| Country | `[FILL IN: primary country of operations]` |
-| First name | `[FILL IN: legal first name]` |
-| Last name | `[FILL IN: legal last name]` |
-| Email | `[FILL IN: project email — use the same one as the audit-firm outreach]` |
+| Country | Netherlands `[CONFIRM: best guess from your GitHub handle and locale signals — change if wrong]` |
+| First name | Matthew |
+| Last name | `[TODO: legal last name]` |
+| Email | `[TODO: same email you used for the Sec3 outreach to Jack Tsai]` |
 | Funding category | Developer Tooling |
 
 ---
@@ -57,8 +58,8 @@ deliverables. Update this number once the audit firm's quote is finalised.)
 > **Total: $25,000.** All deliverables Apache-2.0 and public.
 >
 > **Milestone 1 — $18,000 — External audit + remediation** *(est. 6 weeks)*
-> - Audit firm: `[FILL IN: chosen firm — Sec3 / OtterSec / Neodyme]` — quoted at `[FILL IN: $X,XXX]` (written quote attached).
-> - Remediation contractor (sourced via Superteam Earn or audit-firm referral): `[FILL IN: ~$3,000]`, applies firm's findings to the program.
+> - Audit firm: `[TODO: name once a written quote is accepted — outreach is open with Sec3 (Jack Tsai), OtterSec, and Neodyme]` — quoted at `[TODO: $XX,XXX]` (written quote attached).
+> - Remediation contractor (sourced via Superteam Earn or audit-firm referral): $3,000, applies firm's findings to the program.
 > - Audit report and remediation diff published in the repo.
 > - Tag `casi-escrow` v1.0.0 and deploy to mainnet-beta.
 > - **Acceptance:** audit report committed; high/critical findings closed; mainnet program ID announced.
@@ -92,13 +93,11 @@ deliverables. Update this number once the audit firm's quote is finalised.)
 
 ## 6. Why You?  *(≥100 words)*
 
-> I'm `[FILL IN: full legal name]`, the solo founder of CASI. I designed and shipped the entire stack: the Next.js + Supabase application, the Stripe Connect direct-charge flow with column-level RLS for sensitive fields, and the `casi-escrow` Anchor program in Rust — including the session-key delegation system, the permissionless `cancel_stale_pending` crank, and the integration tests that cover vesting and anti-grief invariants.
+> I'm Matthew `[TODO: last name]`, the solo founder of CASI. I'll be honest with the Foundation up front: I'm not a career Solana developer, and I'm not pretending to be one. I'm a non-technical builder who saw a gap — streamers want to monetize their on-stream real estate, not just take chat tips, and there's no on-chain primitive that handles the time-vested "rent this slot for N minutes" pattern. I built CASI and the `casi-escrow` Anchor program over the last few weeks using modern AI-assisted tooling, working from the official `solana-developers/program-examples` escrow template and applying conventional Anchor patterns: PDA-owned vault ATAs, `token_interface` for Token-2022 compatibility, `transfer_checked` with mint + decimals on every SPL transfer, `u128` intermediate arithmetic with `checked_sub`, and `has_one` constraints on every relationship.
 >
-> Prior experience: `[FILL IN: 2–3 sentences — past Solana hackathons / placements, prior web3 work, founding/eng background, anything that signals you can ship correctness-sensitive code. If you don't have specific Solana hackathon credentials, lean on the Anchor program itself: it's a non-trivial piece of correct-by-construction Rust with vesting math, delegation, and a state machine — that's the credential.]`
+> The result is on Solana devnet at https://casi.gg today. The program is ~1.2k LOC of Rust, ships with an 18-test integration suite covering vesting math, anti-grief, and conservation invariants, and has been exercised continuously by the consumer product across all four primitives (flashes, beams, backdrops, delegated session-key approve/settle). The design decisions worth flagging are the ones that limit the blast radius of mistakes: settlement is liveness-safe by construction (anyone can crank after the duration; anyone can refund after the 7-day pending timeout, so neither party can lock the other's funds), and the session-key delegation scope is enforced **on-chain** (a leaked session key cannot redirect funds outside the program's declared destinations). All material is published in `programs/casi-escrow/PRIMITIVE.md` and `FEE_MODEL.md` — reviewers can read the program directly and form their own view in 30 minutes.
 >
-> What makes me the right person to ship this: most on-chain primitives are built by protocol teams that ship a CLI and never finish a real-world integration. The CASI consumer product exercises the program continuously and exposes failure modes synthetic tests miss. I designed the on-chain state machine to be liveness-safe by construction: neither viewer nor streamer can lock the other's funds — anyone can crank a stuck escrow after the duration or after the 7-day pending timeout. That's the kind of decision that's only obvious if you've thought carefully about both sides of the table.
->
-> Where I'm not strong: I'm a solo builder using modern AI-assisted tooling. For a money-moving program I want third-party audit + remediation support, which is what this grant funds. The grant is structured so every dollar goes to named external work (audit firm, remediation contractor, documentation contractor) — I'm the project lead and accountable party, but the technical work is done by specialists.
+> The grant funds the part I can't do credibly alone: external review by a recognized Solana audit firm, remediation by a contractor sourced via the audit firm or Superteam Earn, and a documentation contractor for the SDK + tutorial + public-cranker operator playbook. I'm the project lead and accountable party for milestone delivery; the technical work goes to specialists. The structure is deliberate — every grant dollar goes to named external work, not to my personal runway, because I think that's the most defensible way for a non-traditional builder to ship a money-moving primitive responsibly. If the audit reveals a fundamental design flaw, the grant has paid for finding it before mainnet rather than after.
 
 ---
 
