@@ -1,5 +1,8 @@
 # CASI
 
+[![CI](https://github.com/mm88nl-web/casi-app/actions/workflows/ci.yml/badge.svg)](https://github.com/mm88nl-web/casi-app/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+
 A streamer monetization platform with three earn-surfaces — **flashes** (paid
 chat), **beams** (time-rented slot overlays), and **backdrops** (full-frame
 rentals) — each payable via Stripe (manual-capture + prorated refund), Solana
