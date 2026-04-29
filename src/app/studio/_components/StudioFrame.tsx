@@ -156,7 +156,7 @@ export default function StudioFrame({
             Dashboard
           </ModeTab>
           <ModeTab href="/studio/live" active={activeMode === 'live'}>
-            Live editor
+            Live
           </ModeTab>
         </div>
 

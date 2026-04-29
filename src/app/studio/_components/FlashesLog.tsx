@@ -12,7 +12,11 @@ export type FlashLogItem = {
 
 type Props = {
   items: FlashLogItem[];
-  totals: { count: number; eur: string; usdc: string };
+  /** Today's total in the streamer's chosen display currency, pre-formatted
+   *  (e.g. "€48", "5 USDC", or "—" when zero). Other-rail flashes are
+   *  excluded from this number — they still appear as rows above so the
+   *  streamer sees them, just don't count toward the total. */
+  total: string;
   /** Called when the streamer clicks Refund on a flash row. Receives the
    *  flash id (without the "flash-" prefix, just the raw UUID). */
   onRefund?: (flashId: string) => void;
@@ -32,7 +36,7 @@ const CHIP_CLASS: Record<FlashLogItem['chip']['kind'], string> = {
  * Footer tile shows today's totals. Filter tabs from v3 dropped — v7
  * has none, the log is short enough to scan.
  */
-export default function FlashesLog({ items, totals, onRefund, refunding }: Props) {
+export default function FlashesLog({ items, total, onRefund, refunding }: Props) {
   return (
     <section className="flex flex-col">
       <style>{`
@@ -178,9 +182,7 @@ export default function FlashesLog({ items, totals, onRefund, refunding }: Props
             background: 'rgba(255,255,255,0.01)',
           }}
         >
-          Today: <strong style={{ color: 'var(--casi-accent)', fontWeight: 500, marginLeft: '4px', fontFamily: 'var(--font-casi-mono), monospace' }}>{totals.eur}</strong>
-          <span style={{ opacity: 0.4 }}>·</span>
-          <strong style={{ color: 'var(--casi-accent)', fontWeight: 500, fontFamily: 'var(--font-casi-mono), monospace' }}>{totals.usdc}</strong>
+          Today: <strong style={{ color: 'var(--casi-accent)', fontWeight: 500, marginLeft: '4px', fontFamily: 'var(--font-casi-mono), monospace' }}>{total}</strong>
         </div>
       </div>
     </section>

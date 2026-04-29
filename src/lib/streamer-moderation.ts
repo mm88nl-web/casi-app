@@ -294,6 +294,7 @@ export async function denyBooking(
 export async function endBeamEarly(
   ctx: ModerationContext,
   booking: BookingLike,
+  opts: { skipAutoAdvance?: boolean } = {},
 ): Promise<ModerationResult> {
   // Track whether we proved the Solana escrow closed on-chain during this
   // flow — if so we null escrow_pda on the expire update so the viewer's
@@ -350,6 +351,18 @@ export async function endBeamEarly(
     .update(expireUpdate)
     .eq('id', booking.id);
   if (expireErr) return { ok: false, message: expireErr.message };
+
+  // skipAutoAdvance: clear the slot's image_url but don't promote the next
+  // queued booking. Caller (Play Now) will overwrite the image_url when it
+  // promotes the booking it actually wants on stream. End-Stream callers
+  // leave it cleared, which is correct for an offline streamer.
+  if (booking.element_id && opts.skipAutoAdvance) {
+    await ctx.supabase
+      .from('overlay_elements')
+      .update({ image_url: '' })
+      .eq('id', booking.element_id);
+    return { ok: true };
+  }
 
   // 4. Auto-promote next queued, same as admin's expireBooking.
   if (booking.element_id) {
@@ -422,6 +435,56 @@ export async function endBeamEarly(
  *   5. After a successful chain tx, POST /api/flashes/moderate with
  *      tx_signature so the server verifies and flips DB.
  */
+/**
+ * Promote a queued booking to active right now. Mirror of admin/page.tsx's
+ * playNow. Streamer flow: a viewer is already paid + waiting in the queue
+ * for a slot; the streamer wants this booking on stream right now instead
+ * of the one currently airing.
+ *
+ * Sequence:
+ * 1. Find the booking currently airing on the same element_id and end it
+ *    via `endBeamEarly` with `skipAutoAdvance: true` — that path settles
+ *    the on-chain escrow (delegate first, wallet fallback), prorates
+ *    Stripe, and crucially does NOT promote the queue's first row (we're
+ *    about to promote a specific one ourselves).
+ * 2. For Solana bookings: start_beam on-chain (delegate → wallet fallback).
+ *    Required before the DB flip — otherwise a later settle reverts with
+ *    NotActive and the streamer's vesting clock starts ticking on a
+ *    booking the program doesn't think is active.
+ * 3. Flip the chosen booking to active, started_at = now.
+ * 4. Copy its image_url onto overlay_elements so the overlay picks it up.
+ */
+export async function playNowBooking(
+  ctx: ModerationContext,
+  booking: BookingLike,
+  currentActive: BookingLike | null,
+): Promise<ModerationResult> {
+  if (currentActive) {
+    const kicked = await endBeamEarly(ctx, currentActive, { skipAutoAdvance: true });
+    if (!kicked.ok) return kicked;
+  }
+
+  if (booking.payment_method === 'solana') {
+    const startResult = await startSolanaBeamOnChain(ctx, booking);
+    if (!startResult.ok) return startResult;
+  }
+
+  const { error: bErr } = await ctx.supabase
+    .from('bookings')
+    .update({ status: 'active', started_at: new Date().toISOString() })
+    .eq('id', booking.id);
+  if (bErr) return { ok: false, message: bErr.message };
+
+  if (booking.element_id && booking.image_url) {
+    await ctx.supabase
+      .from('overlay_elements')
+      .update({ image_url: booking.image_url })
+      .eq('id', booking.element_id);
+  }
+
+  return { ok: true, optimistic: 'active' };
+}
+
 export async function moderateFlash(
   ctx: ModerationContext,
   flash: FlashLike,
@@ -530,6 +593,122 @@ export async function moderateFlash(
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) };
   }
+}
+
+export type EndStreamStep = 'kick-active' | 'deny-pending' | 'deny-flash' | 'deny-queued' | 'set-offline';
+
+export type EndStreamProgress = {
+  /** Total individual rows to clean up (actives + pendings + flashes + queued). */
+  total: number;
+  /** Rows handled so far (success or failure both increment). */
+  done: number;
+  /** What kind of row is being processed right now. */
+  step: EndStreamStep;
+  /** Stable id of the row being processed — for matching against UI state. */
+  currentId: string | null;
+};
+
+export type EndStreamFailure = {
+  step: EndStreamStep;
+  id: string;
+  message: string;
+};
+
+export type EndStreamResult = {
+  ok: boolean;
+  failures: EndStreamFailure[];
+};
+
+/**
+ * Shut a stream down cleanly. End every active beam (settle on-chain or
+ * prorate Stripe), refund every pending request and flash, deny every
+ * queued booking, then flip is_live=false on the streamer's profile.
+ *
+ * Sequential, not parallel — wallet popups must come up one at a time when
+ * the delegate isn't installed (parallel would interleave Solana sigs and
+ * the user has no idea which booking they're approving), and the delegated
+ * cranker rate-limits sensibly under sequential load.
+ *
+ * Failures don't halt the loop. A single stuck row (chain reverted, network
+ * blip) shouldn't strand the rest of the viewers waiting for refunds — we
+ * collect failures and surface them at the end so the streamer can retry.
+ *
+ * Solana queued-booking caveat (documented in AGENTS.md): the on-chain
+ * Pending state can only be closed by the viewer or the 7-day permissionless
+ * crank. denyBooking flips DB to 'denied' and leaves escrow_pda set, so
+ * the viewer's overlay shows a "Recover USDC" chip on next visit (any
+ * device, any time — wallet-scoped query). Cleanup is guaranteed; just
+ * not always instant on the Solana queued path.
+ */
+export async function endStreamCleanly(
+  ctx: ModerationContext,
+  data: {
+    actives: BookingLike[];
+    pendingBookings: Array<BookingLike & { payment_method?: string | null }>;
+    pendingFlashes: FlashLike[];
+    queuedBookings: Array<BookingLike & { payment_method?: string | null }>;
+    profileId: string;
+  },
+  hooks?: {
+    onProgress?: (p: EndStreamProgress) => void;
+  },
+): Promise<EndStreamResult> {
+  const failures: EndStreamFailure[] = [];
+  const total =
+    data.actives.length +
+    data.pendingBookings.length +
+    data.pendingFlashes.length +
+    data.queuedBookings.length +
+    1; // +1 for the final set-offline write
+  let done = 0;
+
+  const tick = (step: EndStreamStep, id: string | null) => {
+    hooks?.onProgress?.({ total, done, step, currentId: id });
+  };
+
+  for (const b of data.actives) {
+    const id = String(b.id);
+    tick('kick-active', id);
+    const r = await endBeamEarly(ctx, b, { skipAutoAdvance: true });
+    if (!r.ok) failures.push({ step: 'kick-active', id, message: r.message ?? 'unknown' });
+    done += 1;
+  }
+
+  for (const b of data.pendingBookings) {
+    const id = String(b.id);
+    tick('deny-pending', id);
+    const r = await denyBooking(ctx, b.id, b.payment_method);
+    if (!r.ok) failures.push({ step: 'deny-pending', id, message: r.message ?? 'unknown' });
+    done += 1;
+  }
+
+  for (const f of data.pendingFlashes) {
+    tick('deny-flash', f.id);
+    const r = await moderateFlash(ctx, f, 'deny');
+    if (!r.ok) failures.push({ step: 'deny-flash', id: f.id, message: r.message ?? 'unknown' });
+    done += 1;
+  }
+
+  for (const b of data.queuedBookings) {
+    const id = String(b.id);
+    tick('deny-queued', id);
+    const r = await denyBooking(ctx, b.id, b.payment_method);
+    if (!r.ok) failures.push({ step: 'deny-queued', id, message: r.message ?? 'unknown' });
+    done += 1;
+  }
+
+  tick('set-offline', data.profileId);
+  const { error: liveErr } = await ctx.supabase
+    .from('profiles')
+    .update({ is_live: false })
+    .eq('id', data.profileId);
+  if (liveErr) {
+    failures.push({ step: 'set-offline', id: data.profileId, message: liveErr.message });
+  }
+  done += 1;
+  hooks?.onProgress?.({ total, done, step: 'set-offline', currentId: null });
+
+  return { ok: failures.length === 0, failures };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

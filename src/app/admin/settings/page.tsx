@@ -42,7 +42,7 @@ type LoadState =
   | { kind: 'missing-profile' }
   | { kind: 'ready'; profile: ProfileRow };
 
-const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color';
+const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color, display_currency';
 
 export default function SettingsPage() {
   const router = useRouter();

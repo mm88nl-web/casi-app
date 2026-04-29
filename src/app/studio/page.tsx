@@ -1,15 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { createClient } from '@/utils/supabase/client';
 import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
-import { approveBooking, denyBooking, endBeamEarly, moderateFlash, type ModerationContext } from '@/lib/streamer-moderation';
+import { approveBooking, denyBooking, endBeamEarly, endStreamCleanly, moderateFlash, playNowBooking, type EndStreamProgress, type ModerationContext } from '@/lib/streamer-moderation';
 import EarningsBar from '@/components/EarningsBar';
-import AiringNow, { type AiringItem } from './_components/AiringNow';
+import AiringNow, { type AiringItem, type QueuedRowItem } from './_components/AiringNow';
 import ApprovalQueue, { type QueueItem } from './_components/ApprovalQueue';
+import EndStreamDialog, { type DelegateHealth } from './_components/EndStreamDialog';
 import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
 import StudioFrame from './_components/StudioFrame';
 
@@ -21,7 +22,23 @@ const BOOKING_COLS =
   'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, started_at, escrow_pda, viewer_wallet, is_queued';
 const FLASH_COLS =
   'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, escrow_pda, viewer_wallet';
-const PROFILE_COLS = 'id, username, solana_wallet, is_live';
+const PROFILE_COLS = 'id, username, solana_wallet, is_live, display_currency';
+
+type DisplayCurrency = 'eur' | 'usd' | 'usdc';
+
+const CURRENCY_SYMBOL: Record<DisplayCurrency, string> = {
+  eur: '€',
+  usd: '$',
+  usdc: '',
+};
+
+function formatTotal(currency: DisplayCurrency, amount: number): string {
+  if (amount === 0) return '—';
+  if (currency === 'usdc') {
+    return `${amount.toFixed(amount % 1 === 0 ? 0 : 2)} USDC`;
+  }
+  return `${CURRENCY_SYMBOL[currency]}${amount.toFixed(0)}`;
+}
 
 const LOG_LIMIT = 50;
 
@@ -147,11 +164,24 @@ function slotLabel(
   return `${shape} · ${pos}`;
 }
 
+function bookingTotal(b: BookingRow): { total: number; isUsdc: boolean; label: string } {
+  const duration = Number(b.duration_minutes) || 0;
+  const rate = Number(b.price_value) || 0;
+  const unitMinutes = b.price_unit === 'hr' ? 60 : 1;
+  const total = rate * (duration / unitMinutes);
+  const isUsdc = b.payment_method === 'usdc' || b.payment_method === 'solana';
+  const fmt = total.toFixed(total % 1 === 0 ? 0 : 2);
+  return {
+    total,
+    isUsdc,
+    label: isUsdc ? `${fmt} USDC` : `€${fmt}`,
+  };
+}
+
 function bookingToAiringItem(b: BookingRow): AiringItem {
   const who = b.viewer_name || 'anon';
   const snippet = b.message ? `"${b.message.slice(0, 40)}"` : b.file_type === 'video' ? 'video clip' : 'image';
-  const isUsdc = b.payment_method === 'usdc' || b.payment_method === 'solana';
-  const priceLabel = isUsdc ? `${Number(b.price_value)} USDC` : `€${Number(b.price_value)}`;
+  const { total, label } = bookingTotal(b);
   const startMs = b.started_at ? new Date(b.started_at).getTime() : Date.now();
   const durationSecs = (Number(b.duration_minutes) || 0) * 60;
   const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
@@ -160,8 +190,21 @@ function bookingToAiringItem(b: BookingRow): AiringItem {
     id: `booking-${b.id}`,
     icon: b.file_type === 'video' ? '▶' : '◆',
     name: `${who} · ${snippet}`,
-    subtitle: `Beam · ${priceLabel}`,
+    subtitle: total > 0 ? `Beam · ${label}` : 'Beam',
     remaining: formatRemaining(remaining),
+  };
+}
+
+function bookingToQueuedRow(b: BookingRow): QueuedRowItem {
+  const { label } = bookingTotal(b);
+  return {
+    id: String(b.id),
+    viewerName: b.viewer_name || 'anon',
+    message: b.message,
+    total: label,
+    durationMin: Number(b.duration_minutes) || 0,
+    fileType: b.file_type,
+    mediaUrl: b.image_url,
   };
 }
 
@@ -189,6 +232,7 @@ type Profile = {
   username: string | null;
   solana_wallet: string | null;
   is_live: boolean | null;
+  display_currency: DisplayCurrency | null;
 };
 
 type LoadState =
@@ -199,6 +243,7 @@ type LoadState =
 
 export default function StudioPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [supabase] = useState<SupabaseClient>(() => createClient());
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
 
@@ -208,10 +253,13 @@ export default function StudioPage() {
   const [queuedBookings, setQueuedBookings] = useState<BookingRow[]>([]);
   const [elementsById, setElementsById] = useState<Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }>>({});
   const [flashLogRaw, setFlashLogRaw] = useState<FlashRow[]>([]);
-  const [flashTotals, setFlashTotals] = useState({ count: 0, eur: '€0', usdc: '0 USDC' });
   const [moderating, setModerating] = useState<Set<string>>(new Set());
   const [endingEarly, setEndingEarly] = useState<Set<string>>(new Set());
   const [refundingFlash, setRefundingFlash] = useState<Set<string>>(new Set());
+  const [playingNowId, setPlayingNowId] = useState<string | null>(null);
+  const [endStreamOpen, setEndStreamOpen] = useState(false);
+  const [endStreamProgress, setEndStreamProgress] = useState<EndStreamProgress | null>(null);
+  const [delegateHealth, setDelegateHealth] = useState<DelegateHealth>('unknown');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [togglingLive, setTogglingLive] = useState(false);
 
@@ -259,27 +307,7 @@ export default function StudioPage() {
     }
     setElementsById(elementsMap);
 
-    const logRows = (logFlashesRes.data ?? []) as FlashRow[];
-    setFlashLogRaw(logRows);
-
-    let eurCents = 0;
-    let usdcUnits = 0;
-    let count = 0;
-    for (const row of logRows) {
-      if (row.status === 'denied') continue;
-      count += 1;
-      const cents = row.amount_cents ?? 0;
-      if (row.payment_method === 'usdc' || row.payment_method === 'solana') {
-        usdcUnits += cents / 100;
-      } else if (row.payment_method !== 'free') {
-        eurCents += cents;
-      }
-    }
-    setFlashTotals({
-      count,
-      eur: `€${(eurCents / 100).toFixed(0)}`,
-      usdc: `${usdcUnits.toFixed(0)} USDC`,
-    });
+    setFlashLogRaw((logFlashesRes.data ?? []) as FlashRow[]);
   }, [supabase]);
 
   useEffect(() => {
@@ -351,6 +379,38 @@ export default function StudioPage() {
     return () => clearInterval(t);
   }, []);
 
+  // /studio/live's End Stream button bounces here with ?end=true so the
+  // dashboard (which has actives/pendings/queued/flashes loaded) handles
+  // the confirm + shutdown sequence in one place. Clear the param after
+  // opening so a refresh doesn't re-trigger it.
+  useEffect(() => {
+    if (searchParams.get('end') !== 'true') return;
+    if (state.kind !== 'ready' || !state.profile.is_live) return;
+    setEndStreamOpen(true);
+    setDelegateHealth('unknown');
+    router.replace('/studio');
+    // probeDelegate runs from toggleLive's offline branch normally; for
+    // the URL-driven path we trigger it here.
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      try {
+        const res = await fetch('/api/solana/delegates/status', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (!res.ok) return;
+        const body = await res.json();
+        const s = String(body?.state ?? body?.status ?? '').toLowerCase();
+        setDelegateHealth(
+          s === 'installed' || s === 'healthy' ? 'healthy'
+          : s === 'expired' ? 'expired'
+          : s === 'revoked' ? 'revoked'
+          : 'absent'
+        );
+      } catch { /* best-effort */ }
+    })();
+  }, [searchParams, state, router, supabase]);
+
   const moderationCtx = useMemo<ModerationContext | null>(() => {
     if (state.kind !== 'ready') return null;
     const signer = publicKey && signTransaction
@@ -409,18 +469,85 @@ export default function StudioPage() {
     }
   }, [moderationCtx, pendingBookings, pendingFlashes, markModerating]);
 
+  const probeDelegate = useCallback(async (): Promise<DelegateHealth> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return 'unknown';
+      const res = await fetch('/api/solana/delegates/status', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return 'unknown';
+      const body = await res.json();
+      // /api/solana/delegates/status returns a state field per
+      // DelegateKeyCard's contract. Map to our local enum.
+      const s = String(body?.state ?? body?.status ?? '').toLowerCase();
+      if (s === 'installed' || s === 'healthy') return 'healthy';
+      if (s === 'expired') return 'expired';
+      if (s === 'revoked') return 'revoked';
+      return 'absent';
+    } catch {
+      return 'unknown';
+    }
+  }, [supabase]);
+
   const toggleLive = useCallback(async () => {
     if (state.kind !== 'ready' || togglingLive) return;
-    const next = !state.profile.is_live;
-    setTogglingLive(true);
-    setState({ kind: 'ready', profile: { ...state.profile, is_live: next } });
-    const { error } = await supabase.from('profiles').update({ is_live: next }).eq('id', state.profile.id);
-    if (error) {
-      setState({ kind: 'ready', profile: { ...state.profile, is_live: !next } });
-      setErrorMsg(error.message);
+    const goingLive = !state.profile.is_live;
+
+    // Going LIVE → just flip the flag, no confirm needed.
+    if (goingLive) {
+      setTogglingLive(true);
+      setState({ kind: 'ready', profile: { ...state.profile, is_live: true } });
+      const { error } = await supabase.from('profiles').update({ is_live: true }).eq('id', state.profile.id);
+      if (error) {
+        setState({ kind: 'ready', profile: { ...state.profile, is_live: false } });
+        setErrorMsg(error.message);
+      }
+      setTogglingLive(false);
+      return;
     }
-    setTogglingLive(false);
-  }, [state, supabase, togglingLive]);
+
+    // Going OFFLINE → open confirm + probe delegate so the dialog can
+    // warn about wallet popups. The actual shutdown runs from the
+    // dialog's onConfirm via confirmEndStream below.
+    setDelegateHealth('unknown');
+    setEndStreamOpen(true);
+    probeDelegate().then(setDelegateHealth);
+  }, [state, supabase, togglingLive, probeDelegate]);
+
+  const confirmEndStream = useCallback(async () => {
+    if (state.kind !== 'ready' || !moderationCtx || endStreamProgress) return;
+    setErrorMsg(null);
+    setEndStreamProgress({ total: 0, done: 0, step: 'kick-active', currentId: null });
+
+    const result = await endStreamCleanly(
+      moderationCtx,
+      {
+        actives: activeBookings,
+        pendingBookings,
+        pendingFlashes,
+        queuedBookings,
+        profileId: state.profile.id,
+      },
+      { onProgress: setEndStreamProgress },
+    );
+
+    setEndStreamProgress(null);
+    setEndStreamOpen(false);
+
+    // Optimistic local clear — realtime sub will reconcile too.
+    setActiveBookings([]);
+    setPendingBookings([]);
+    setPendingFlashes([]);
+    setQueuedBookings([]);
+    setState({ kind: 'ready', profile: { ...state.profile, is_live: false } });
+
+    if (!result.ok) {
+      const head = result.failures[0];
+      const more = result.failures.length > 1 ? ` (+${result.failures.length - 1} more)` : '';
+      setErrorMsg(`${head.message}${more}`);
+    }
+  }, [state, moderationCtx, activeBookings, pendingBookings, pendingFlashes, queuedBookings, endStreamProgress]);
 
   const handleEndEarly = useCallback(async (bookingId: string) => {
     if (!moderationCtx) return;
@@ -442,6 +569,32 @@ export default function StudioPage() {
     }
     setActiveBookings((prev) => prev.filter((b) => String(b.id) !== bookingId));
   }, [moderationCtx, activeBookings]);
+
+  const handlePlayNow = useCallback(async (queuedBookingId: string) => {
+    if (!moderationCtx || playingNowId) return;
+    const queued = queuedBookings.find((b) => String(b.id) === queuedBookingId);
+    if (!queued || !queued.element_id) return;
+    const current = activeBookings.find((b) => b.element_id === queued.element_id) ?? null;
+
+    setPlayingNowId(queuedBookingId);
+    setErrorMsg(null);
+    const result = await playNowBooking(moderationCtx, queued, current);
+    setPlayingNowId(null);
+
+    if (!result.ok) {
+      setErrorMsg(result.message);
+      return;
+    }
+    // Optimistic local update — realtime sub will reconcile within ~ms.
+    if (current) {
+      setActiveBookings((prev) => prev.filter((b) => String(b.id) !== String(current.id)));
+    }
+    setQueuedBookings((prev) => prev.filter((b) => String(b.id) !== queuedBookingId));
+    setActiveBookings((prev) => [
+      ...prev,
+      { ...queued, status: 'active', started_at: new Date().toISOString() } as BookingRow,
+    ]);
+  }, [moderationCtx, queuedBookings, activeBookings, playingNowId]);
 
   const handleReject = useCallback(async (queueId: string) => {
     if (!moderationCtx) return;
@@ -503,6 +656,28 @@ export default function StudioPage() {
 
   const { profile } = state;
   const slug = profile.username ?? 'streamer';
+  const displayCurrency: DisplayCurrency = profile.display_currency ?? 'eur';
+
+  // Sum today's approved flashes in the streamer's chosen currency only —
+  // ignore the other rail to keep the tile honest. Free flashes never count
+  // (no money moved). v1 is no FX: a streamer set to EUR who took a USDC
+  // tip sees their EUR total tick up by 0 and the USDC row in the log makes
+  // it obvious where it went.
+  const isUsdcRow = (m: string | null) => m === 'usdc' || m === 'solana';
+  let todayCents = 0;
+  for (const row of flashLogRaw) {
+    if (row.status === 'denied' || row.payment_method === 'free') continue;
+    const cents = row.amount_cents ?? 0;
+    if (displayCurrency === 'usdc') {
+      if (isUsdcRow(row.payment_method)) todayCents += cents;
+    } else {
+      // 'eur' or 'usd' — sum non-USDC rows. Stripe Connect already settles
+      // in the streamer's payout currency, so the cents are already in that
+      // currency; we don't FX-convert.
+      if (!isUsdcRow(row.payment_method)) todayCents += cents;
+    }
+  }
+  const todayTotal = formatTotal(displayCurrency, todayCents / 100);
 
   const queue: QueueItem[] = [
     ...pendingBookings.map((b) => ({
@@ -518,9 +693,12 @@ export default function StudioPage() {
     })),
   ].sort((a, b) => b.ts - a.ts).map(({ item }) => item);
 
-  const queueCountByElement = queuedBookings.reduce<Record<string, number>>((acc, b) => {
+  // Per-slot queue grouping: each element_id → its sorted list of queued
+  // bookings. Already sorted by approved_at ascending in the reload query,
+  // so position = array index + 1 here.
+  const queueByElement = queuedBookings.reduce<Record<string, QueuedRowItem[]>>((acc, b) => {
     if (!b.element_id) return acc;
-    acc[b.element_id] = (acc[b.element_id] ?? 0) + 1;
+    (acc[b.element_id] ??= []).push(bookingToQueuedRow(b));
     return acc;
   }, {});
 
@@ -532,10 +710,16 @@ export default function StudioPage() {
     const element = b.element_id ? elementsById[b.element_id] : undefined;
     const label = slotLabel(element);
     const subtitle = label ? `${label} · ${base.subtitle}` : base.subtitle;
+    // Decorate queued rows with this slot's shape so the queue thumbs
+    // reuse the same circle/hex/rounded mask the active row above shows.
+    const rawQueue = b.element_id ? (queueByElement[b.element_id] ?? []) : [];
+    const queue = rawQueue.map((q) => ({ ...q, shape: element?.shape ?? null }));
     return {
       ...base,
       subtitle,
-      queueCount: b.element_id ? queueCountByElement[b.element_id] : undefined,
+      queue,
+      onPlayNow: handlePlayNow,
+      playingNowId,
       onEndEarly: () => handleEndEarly(bookingId),
       endingEarly: endingEarly.has(bookingId),
       mediaUrl: b.image_url,
@@ -556,9 +740,8 @@ export default function StudioPage() {
       onDismissError={() => setErrorMsg(null)}
     >
       <EarningsBar
-        viewerLink={`www.casi.gg/overlay?s=${slug}`}
-        todayEur={flashTotals.eur === '€0' ? '—' : flashTotals.eur}
-        todayUsdc={flashTotals.usdc === '0 USDC' ? '—' : flashTotals.usdc}
+        viewerLink={`casi.gg/overlay?s=${slug}`}
+        today={todayTotal}
         pending={queue.length}
       />
 
@@ -574,9 +757,23 @@ export default function StudioPage() {
 
       <FlashesLog
         items={flashLog}
-        totals={flashTotals}
+        total={todayTotal}
         onRefund={handleFlashRefund}
         refunding={refundingFlash}
+      />
+
+      <EndStreamDialog
+        open={endStreamOpen}
+        onClose={() => { if (!endStreamProgress) setEndStreamOpen(false); }}
+        counts={{
+          actives: activeBookings.length,
+          pendingBookings: pendingBookings.length,
+          pendingFlashes: pendingFlashes.length,
+          queuedBookings: queuedBookings.length,
+        }}
+        delegate={delegateHealth}
+        progress={endStreamProgress}
+        onConfirm={confirmEndStream}
       />
     </StudioFrame>
   );
