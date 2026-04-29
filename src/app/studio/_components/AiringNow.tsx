@@ -29,81 +29,52 @@ type Props = {
   items: AiringItem[];
 };
 
+/**
+ * v7 .air-r flat-row list. Section title + count above; rounded
+ * border-shell wraps the rows inside.
+ */
 export default function AiringNow({ items }: Props) {
   return (
-    <section
-      className="flex flex-col gap-3"
-      style={{
-        background: 'var(--casi-surface)',
-        border: '1px solid var(--casi-border)',
-        borderRadius: '18px',
-        padding: '18px',
-      }}
-    >
-      <header
-        className="flex items-center justify-between font-bold"
-        style={{ fontSize: '15px', letterSpacing: '-0.3px', color: 'var(--casi-text)' }}
-      >
-        <span>Airing now</span>
-        <span
-          className="font-mono uppercase"
-          style={{
-            fontSize: '10px',
-            letterSpacing: '0.15em',
-            padding: '3px 10px',
-            borderRadius: '999px',
-            background: 'rgba(var(--casi-accent2-rgb), 0.1)',
-            color: 'var(--casi-accent2)',
-            border: '1px solid rgba(var(--casi-accent2-rgb), 0.25)',
-            fontWeight: 500,
-          }}
-        >
-          {items.length} live
-        </span>
-      </header>
+    <section className="flex flex-col">
+      <style>{`
+        .casi-air-r { display: flex; align-items: center; gap: 14px; padding: 13px 16px; border-bottom: 1px solid var(--casi-border); transition: background .12s; }
+        .casi-air-r:last-child { border-bottom: none; }
+        .casi-air-r:hover { background: rgba(255,255,255,0.01); }
+        .casi-air-end:hover { border-color: rgba(239,68,68,0.3) !important; color: #f87171 !important; }
+      `}</style>
 
-      {/* Scroll container — approved flashes never auto-expire (pending | approved | denied),
-          so a streamer with a long stream accumulates dozens of "on stream" rows. Cap the
-          visible area at ~5 rows and scroll the rest so the rest of /studio stays reachable. */}
+      <SectionTitle title="Airing now" count={items.length} />
+
       <div
-        className="flex flex-col gap-2 overflow-y-auto pr-1"
         style={{
-          maxHeight: '340px',
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'var(--casi-border-2) transparent',
+          border: '1px solid var(--casi-border)',
+          borderRadius: '10px',
+          overflow: 'hidden',
+          background: 'var(--casi-surface)',
+          maxHeight: '380px',
+          overflowY: 'auto',
         }}
       >
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className="grid items-center gap-2.5 shrink-0"
-            style={{
-              gridTemplateColumns: '36px 1fr auto',
-              padding: '10px 12px',
-              background: 'var(--casi-bg)',
-              border: '1px solid var(--casi-border-2)',
-              borderRadius: '10px',
-            }}
-          >
+        {items.map(item => (
+          <div key={item.id} className="casi-air-r">
             <AiringThumb
               mediaUrl={item.mediaUrl}
               fileType={item.fileType}
               shape={item.shape}
               icon={item.icon}
             />
-            <div className="min-w-0">
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div
-                className="font-semibold truncate"
-                style={{ fontSize: '13px', color: 'var(--casi-text)' }}
+                className="truncate"
+                style={{ fontSize: '13px', fontWeight: 600, color: 'var(--casi-text)' }}
               >
                 {item.name}
               </div>
               <div
-                className="font-mono uppercase truncate"
+                className="truncate"
                 style={{
-                  fontSize: '10px',
-                  letterSpacing: '0.1em',
-                  color: 'var(--casi-text-dim)',
+                  fontSize: '11.5px',
+                  color: 'var(--casi-text-mid)',
                   marginTop: '2px',
                 }}
               >
@@ -118,49 +89,55 @@ export default function AiringNow({ items }: Props) {
                 ) : null}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {item.remaining ? (
-                <div
-                  className="font-mono font-medium"
-                  style={{ fontSize: '14px', color: 'var(--casi-accent2)' }}
-                >
-                  {item.remaining}
-                </div>
-              ) : (
-                <div
-                  className="font-mono uppercase"
-                  style={{
-                    fontSize: '10px',
-                    letterSpacing: '0.15em',
-                    color: 'var(--casi-accent2)',
-                  }}
-                >
-                  on stream
-                </div>
-              )}
-              {item.onEndEarly ? (
-                <button
-                  type="button"
-                  onClick={item.onEndEarly}
-                  disabled={item.endingEarly}
-                  title="End early · prorata refund to viewer"
-                  className="font-mono uppercase transition-colors"
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    background: 'transparent',
-                    border: '1px solid var(--casi-border-2)',
-                    color: 'var(--casi-text-dim)',
-                    fontSize: '10px',
-                    letterSpacing: '0.12em',
-                    cursor: item.endingEarly ? 'wait' : 'pointer',
-                    opacity: item.endingEarly ? 0.5 : 1,
-                  }}
-                >
-                  {item.endingEarly ? '…' : 'End early'}
-                </button>
-              ) : null}
-            </div>
+            {item.remaining ? (
+              <div
+                style={{
+                  fontFamily: 'var(--font-casi-mono), monospace',
+                  fontSize: '20px',
+                  color: 'var(--casi-accent)',
+                  whiteSpace: 'nowrap',
+                  letterSpacing: '-0.5px',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {item.remaining}
+              </div>
+            ) : (
+              <div
+                className="font-mono uppercase"
+                style={{
+                  fontSize: '10px',
+                  letterSpacing: '0.15em',
+                  color: 'var(--casi-accent)',
+                }}
+              >
+                on stream
+              </div>
+            )}
+            {item.onEndEarly ? (
+              <button
+                type="button"
+                onClick={item.onEndEarly}
+                disabled={item.endingEarly}
+                title="End early · prorata refund to viewer"
+                className="casi-air-end"
+                style={{
+                  padding: '6px 11px',
+                  borderRadius: '6px',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  border: '1px solid var(--casi-border-2)',
+                  background: 'transparent',
+                  color: 'var(--casi-text-dim)',
+                  cursor: item.endingEarly ? 'wait' : 'pointer',
+                  opacity: item.endingEarly ? 0.5 : 1,
+                  fontFamily: 'inherit',
+                  transition: 'border-color .14s, color .14s',
+                }}
+              >
+                {item.endingEarly ? '…' : 'End early'}
+              </button>
+            ) : null}
           </div>
         ))}
       </div>
@@ -168,10 +145,45 @@ export default function AiringNow({ items }: Props) {
   );
 }
 
+function SectionTitle({ title, count }: { title: string; count: number }) {
+  return (
+    <div
+      className="font-mono uppercase flex items-center"
+      style={{
+        gap: '8px',
+        fontSize: '11px',
+        fontWeight: 600,
+        color: 'var(--casi-text-mid)',
+        letterSpacing: '0.08em',
+        paddingBottom: '10px',
+      }}
+    >
+      <span>{title}</span>
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minWidth: '18px',
+          height: '18px',
+          padding: '0 5px',
+          borderRadius: '5px',
+          background: 'rgba(var(--casi-accent-rgb), 0.12)',
+          color: 'var(--casi-accent)',
+          fontFamily: 'var(--font-casi-mono), monospace',
+          fontSize: '10px',
+        }}
+      >
+        {count}
+      </span>
+    </div>
+  );
+}
+
 /**
- * 36×36 slot thumbnail, masked to the element's shape. When the booking has
- * no media (pending or a banner beam with text only) or no shape is known,
- * falls back to the plain emoji icon tile we were rendering before.
+ * 44×44 slot thumbnail, masked to the element's shape. When the booking has
+ * no media (pending, banner-text-only, detached) or no shape is known,
+ * falls back to the plain emoji icon tile.
  */
 function AiringThumb({
   mediaUrl,
@@ -184,30 +196,33 @@ function AiringThumb({
   shape?: string | null;
   icon: string;
 }) {
-  const size = 36;
+  const size = 44;
   const baseTile: React.CSSProperties = {
     width: `${size}px`,
     height: `${size}px`,
-    borderRadius: '8px',
-    background:
-      'linear-gradient(135deg, rgba(var(--casi-accent2-rgb), 0.3), rgba(var(--casi-accent-rgb), 0.2))',
-    fontSize: '16px',
+    borderRadius: '7px',
+    background: 'var(--casi-surface-2)',
+    border: '1px solid var(--casi-border)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '14px',
+    color: 'var(--casi-accent)',
     flexShrink: 0,
     overflow: 'hidden',
     position: 'relative',
+    outline: '2px solid rgba(var(--casi-accent-rgb), 0.2)',
+    outlineOffset: '2px',
   };
 
-  // No media (pending booking, banner text-only, detached row): plain icon tile.
   if (!mediaUrl) {
     return (
-      <div className="flex items-center justify-center" style={baseTile} aria-hidden>
+      <div style={baseTile} aria-hidden>
         {icon}
       </div>
     );
   }
 
-  // Per-shape mask. Matches the overlay / StudioLiveEditor rules so the
-  // thumb looks like a miniature of what viewers see on stream.
   const clipPath =
     shape === 'circle' ? 'circle(50%)' :
     shape === 'hex' ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' :
@@ -216,23 +231,17 @@ function AiringThumb({
     shape === 'rounded' ? 8 :
     shape === 'rect' || shape === 'banner' ? 4 :
     shape === 'backdrop' ? 4 :
-    8;
+    7;
 
   return (
     <div
       style={{
         ...baseTile,
         borderRadius: shape === 'circle' || shape === 'hex' ? 0 : borderRadius,
-        background: '#0a0a0a',
+        background: 'var(--casi-bg)',
       }}
     >
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          clipPath,
-        }}
-      >
+      <div style={{ width: '100%', height: '100%', clipPath }}>
         <SlotMedia
           src={mediaUrl}
           fileType={fileType ?? null}

@@ -1,277 +1,215 @@
 import type { ReactNode } from 'react';
 
-function CardShell({
-  num,
-  title,
-  visual,
-  body,
-}: {
-  num: string;
-  title: string;
-  visual: ReactNode;
-  body: ReactNode;
-}) {
-  return (
-    <article
-      className="flex flex-col"
-      style={{
-        padding: '28px 26px 30px',
-        border: '1px solid var(--casi-border)',
-        borderRadius: '18px',
-        background: 'var(--casi-surface)',
-        gap: '22px',
-        minHeight: '280px',
-      }}
-    >
-      <div
-        className="font-mono uppercase"
-        style={{
-          fontSize: '10px',
-          letterSpacing: '0.24em',
-          color: 'var(--casi-accent)',
-        }}
-      >
-        {num}
-      </div>
-
-      <div>{visual}</div>
-
-      <div>
-        <h4
-          className="font-bold"
-          style={{
-            fontSize: '20px',
-            letterSpacing: '-0.5px',
-            marginBottom: '10px',
-            color: 'var(--casi-text)',
-          }}
-        >
-          {title}
-        </h4>
-        <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'var(--casi-text-dim)' }}>{body}</p>
-      </div>
-    </article>
-  );
-}
-
-function ZeroFeeVisual() {
-  return (
-    <div className="flex items-baseline gap-3">
-      <span
-        className="font-extrabold"
-        style={{
-          fontSize: '72px',
-          lineHeight: 0.9,
-          letterSpacing: '-4px',
-          color: 'var(--casi-accent)',
-        }}
-      >
-        0%
-      </span>
-      <span
-        className="font-mono uppercase"
-        style={{
-          fontSize: '10px',
-          letterSpacing: '0.2em',
-          color: 'var(--casi-text-mid)',
-        }}
-      >
-        platform
-        <br />
-        fee
-      </span>
-    </div>
-  );
-}
-
-function RailPill({
-  mark,
-  label,
-  hint,
-  tone,
-}: {
-  mark: ReactNode;
-  label: string;
-  hint?: string;
-  tone: 'accent' | 'accent2' | 'muted';
-}) {
-  const tones: Record<string, { fg: string; bg: string; border: string }> = {
-    accent: {
-      fg: 'var(--casi-accent)',
-      bg: 'rgba(var(--casi-accent-rgb), 0.08)',
-      border: 'rgba(var(--casi-accent-rgb), 0.25)',
-    },
-    accent2: {
-      fg: 'var(--casi-accent2)',
-      bg: 'rgba(var(--casi-accent2-rgb), 0.08)',
-      border: 'rgba(var(--casi-accent2-rgb), 0.25)',
-    },
-    muted: {
-      fg: 'var(--casi-text-mid)',
-      bg: 'var(--casi-bg)',
-      border: 'var(--casi-border-2)',
-    },
-  };
-  const t = tones[tone];
-  return (
-    <div
-      className="flex items-center gap-2.5"
-      style={{
-        padding: '9px 12px',
-        borderRadius: '10px',
-        background: t.bg,
-        border: `1px solid ${t.border}`,
-      }}
-    >
-      <span
-        aria-hidden
-        className="flex items-center justify-center font-mono"
-        style={{
-          width: '20px',
-          height: '20px',
-          borderRadius: '5px',
-          background: t.bg,
-          color: t.fg,
-          fontSize: '12px',
-        }}
-      >
-        {mark}
-      </span>
-      <span
-        className="font-semibold"
-        style={{ fontSize: '13px', color: 'var(--casi-text)' }}
-      >
-        {label}
-      </span>
-      {hint ? (
-        <span
-          className="ml-auto font-mono uppercase"
-          style={{
-            fontSize: '9px',
-            letterSpacing: '0.18em',
-            color: 'var(--casi-text-faint)',
-          }}
-        >
-          {hint}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function PayRailsVisual() {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <RailPill mark="$" label="Cards via Stripe" hint="2.9%" tone="accent" />
-      <RailPill mark="◎" label="USDC on Solana" hint="on-chain" tone="accent2" />
-      <RailPill mark="♡" label="Free tier" hint="off by default" tone="muted" />
-    </div>
-  );
-}
-
-function ApprovalChipVisual() {
-  return (
-    <div className="flex flex-col gap-2.5">
-      <div
-        className="inline-flex items-center gap-2 self-start"
-        style={{
-          padding: '8px 12px',
-          borderRadius: '999px',
-          background: 'rgba(var(--casi-accent2-rgb), 0.1)',
-          border: '1px solid rgba(var(--casi-accent2-rgb), 0.35)',
-        }}
-      >
-        <span
-          aria-hidden
-          style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            background: 'var(--casi-accent2)',
-            boxShadow: '0 0 10px rgba(var(--casi-accent2-rgb), 0.7)',
-          }}
-        />
-        <span
-          className="font-mono uppercase"
-          style={{
-            fontSize: '11px',
-            letterSpacing: '0.14em',
-            color: 'var(--casi-accent2)',
-          }}
-        >
-          approved · 4s
-        </span>
-      </div>
-      <div
-        className="inline-flex items-center gap-2 self-start font-mono uppercase"
-        style={{
-          fontSize: '10px',
-          letterSpacing: '0.18em',
-          color: 'var(--casi-text-mid)',
-        }}
-      >
-        <span aria-hidden style={{ color: 'var(--casi-text-faint)' }}>
-          ↩
-        </span>
-        denied → full refund
-      </div>
-      <div
-        className="inline-flex items-center gap-2 self-start font-mono uppercase"
-        style={{
-          fontSize: '10px',
-          letterSpacing: '0.18em',
-          color: 'var(--casi-text-mid)',
-        }}
-      >
-        <span aria-hidden style={{ color: 'var(--casi-text-faint)' }}>
-          ⏲
-        </span>
-        stopped → prorated back
-      </div>
-    </div>
-  );
-}
-
+/**
+ * v7 trust band — full-bleed horizontal row with three trust items
+ * separated by vertical borders. Replaces the v3 card-grid layout.
+ *
+ *  01 · revenue         02 · payment rails       03 · protection
+ *  0%                   [Stripe / USDC / Free]   [Approved chip + lines]
+ *  We don't touch …     Pay any way              Tap yes — or money …
+ *
+ * Stacks vertically below 680px.
+ */
 export default function TrustStrip() {
   return (
-    <section
-      className="mx-auto casi-grid-trust casi-trust-pad"
-      style={{ maxWidth: '1200px' }}
-    >
-      <CardShell
-        num="01"
-        visual={<ZeroFeeVisual />}
-        title="We don't touch your money"
-        body={
-          <>
-            Cards flow through Stripe straight to the streamer. USDC sits in an on-chain escrow
-            contract. Casi is software — not a bank, not a processor. Every euro lands in the
-            streamer&apos;s account.
-          </>
+    <section className="casi-trust-band">
+      <style>{`
+        .casi-trust-band {
+          display: flex; align-items: stretch;
+          border-top: 1px solid var(--casi-border);
+          border-bottom: 1px solid var(--casi-border);
         }
+        @media (max-width: 680px) {
+          .casi-trust-band { flex-direction: column; }
+        }
+        .casi-trust-item {
+          flex: 1;
+          padding: 44px 40px;
+          display: flex; flex-direction: column; gap: 16px;
+          border-right: 1px solid var(--casi-border);
+        }
+        .casi-trust-item:last-child { border-right: none; }
+        @media (max-width: 680px) {
+          .casi-trust-item { border-right: none; border-bottom: 1px solid var(--casi-border); }
+          .casi-trust-item:last-child { border-bottom: none; }
+        }
+        .casi-trust-n {
+          font-family: var(--font-casi-mono), monospace;
+          font-size: 9.5px;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          color: var(--casi-text-faint);
+        }
+        .casi-trust-stat {
+          font-family: var(--font-casi-display), var(--font-casi-sans), sans-serif;
+          font-weight: 800;
+          font-size: clamp(48px, 5vw, 72px);
+          letter-spacing: -3px;
+          line-height: 0.88;
+          color: var(--casi-accent);
+        }
+        .casi-trust-claim {
+          font-family: var(--font-casi-display), var(--font-casi-sans), sans-serif;
+          font-weight: 700;
+          font-size: 17px;
+          letter-spacing: -0.3px;
+          color: var(--casi-text);
+        }
+        .casi-trust-copy {
+          font-size: 13px;
+          line-height: 1.7;
+          color: var(--casi-text-mid);
+        }
+      `}</style>
+
+      <TrustItem num="01 · revenue" claim="We don't touch your money"
+        copy="Cards go straight to Stripe. USDC sits in open-source on-chain escrow. Casi is software — not a bank."
+        visual={<div className="casi-trust-stat">0%</div>}
       />
-      <CardShell
-        num="02"
-        visual={<PayRailsVisual />}
-        title="Pay any way"
-        body={
-          <>
-            Cards via Stripe, USDC on Solana, or a free tier for streamers who want to grow first,
-            earn second. One booking flow, two rails, one signature.
-          </>
-        }
+
+      <TrustItem num="02 · payment rails" claim="Pay any way"
+        copy="Card or USDC, one booking flow. Free tier for streamers who want to grow first."
+        visual={<PaymentRails />}
       />
-      <CardShell
-        num="03"
-        visual={<ApprovalChipVisual />}
-        title="Streamer taps yes — or the money comes back"
-        body={
-          <>
-            Nothing goes on screen without approval. Denied in seconds? Full refund, automatically.
-            Stopped mid-beam? You get the unused portion back, prorated to the second.
-          </>
-        }
+
+      <TrustItem num="03 · protection" claim="Tap yes — or the money comes back"
+        copy="Nothing goes live without the streamer's approval. Every denial triggers an automatic refund."
+        visual={<ProtectionVisual />}
       />
     </section>
+  );
+}
+
+function TrustItem({
+  num,
+  visual,
+  claim,
+  copy,
+}: {
+  num: string;
+  visual: ReactNode;
+  claim: string;
+  copy: ReactNode;
+}) {
+  return (
+    <div className="casi-trust-item">
+      <div className="casi-trust-n">{num}</div>
+      {visual}
+      <div>
+        <div className="casi-trust-claim" style={{ marginBottom: '8px' }}>{claim}</div>
+        <p className="casi-trust-copy">{copy}</p>
+      </div>
+    </div>
+  );
+}
+
+function PaymentRails() {
+  return (
+    <>
+      <style>{`
+        .casi-rail-wrap { display: flex; flex-direction: column; gap: 8px; }
+        .casi-rail {
+          display: flex; align-items: center; gap: 10px;
+          padding: 10px 12px; border-radius: 8px;
+        }
+        .casi-rail-ico {
+          width: 24px; height: 24px; border-radius: 6px;
+          display: flex; align-items: center; justify-content: center;
+          font-family: var(--font-casi-mono), monospace; font-size: 12px;
+          flex-shrink: 0;
+        }
+        .casi-rail-name { font-size: 13px; font-weight: 600; flex: 1; }
+        .casi-rail-note { font-family: var(--font-casi-mono), monospace; font-size: 9.5px; color: var(--casi-text-dim); }
+      `}</style>
+      <div className="casi-rail-wrap">
+        <div
+          className="casi-rail"
+          style={{
+            background: 'rgba(var(--casi-accent-rgb), 0.05)',
+            border: '1px solid rgba(var(--casi-accent-rgb), 0.16)',
+          }}
+        >
+          <span
+            className="casi-rail-ico"
+            style={{
+              background: 'rgba(var(--casi-accent-rgb), 0.1)',
+              color: 'var(--casi-accent)',
+            }}
+          >
+            $
+          </span>
+          <span className="casi-rail-name">Cards via Stripe</span>
+          <span className="casi-rail-note">2.9%</span>
+        </div>
+        <div
+          className="casi-rail"
+          style={{
+            background: 'rgba(var(--casi-accent-rgb), 0.05)',
+            border: '1px solid rgba(var(--casi-accent-rgb), 0.15)',
+          }}
+        >
+          <span
+            className="casi-rail-ico"
+            style={{
+              background: 'rgba(var(--casi-accent-rgb), 0.1)',
+              color: 'var(--casi-accent)',
+            }}
+          >
+            ◎
+          </span>
+          <span className="casi-rail-name">USDC on Solana</span>
+          <span className="casi-rail-note">on-chain</span>
+        </div>
+        <div
+          className="casi-rail"
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--casi-border)',
+          }}
+        >
+          <span className="casi-rail-ico" style={{ color: 'var(--casi-text-dim)' }}>♡</span>
+          <span className="casi-rail-name" style={{ color: 'var(--casi-text-dim)' }}>Free tier</span>
+          <span className="casi-rail-note">opt-in</span>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ProtectionVisual() {
+  return (
+    <>
+      <style>{`
+        .casi-appr-stack { display: flex; flex-direction: column; gap: 10px; }
+        .casi-appr-chip {
+          display: inline-flex; align-items: center; gap: 8px; align-self: flex-start;
+          padding: 8px 14px; border-radius: 6px;
+          font-size: 12px;
+          color: var(--casi-accent);
+          background: rgba(var(--casi-accent-rgb), 0.07);
+          border: 1px solid rgba(var(--casi-accent-rgb), 0.18);
+        }
+        .casi-appr-chip-dot {
+          width: 6px; height: 6px; border-radius: 50%;
+          background: var(--casi-accent); flex-shrink: 0;
+        }
+        .casi-appr-line {
+          display: flex; align-items: center; gap: 10px;
+          font-size: 12px; color: var(--casi-text-mid);
+        }
+        .casi-appr-line::before {
+          content: ''; display: block; width: 14px; height: 1px;
+          background: var(--casi-text-dim); flex-shrink: 0;
+        }
+      `}</style>
+      <div className="casi-appr-stack">
+        <div className="casi-appr-chip">
+          <span className="casi-appr-chip-dot" />
+          Approved · 4 seconds
+        </div>
+        <div className="casi-appr-line">Denied → full refund instantly</div>
+        <div className="casi-appr-line">Stopped mid-beam → prorated back</div>
+      </div>
+    </>
   );
 }

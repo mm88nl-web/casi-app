@@ -1,7 +1,5 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-
 export type FlashLogItem = {
   id: string;
   time: string;
@@ -22,130 +20,63 @@ type Props = {
   refunding?: ReadonlySet<string>;
 };
 
-type FilterKey = 'all' | 'paid' | 'free' | 'pinned' | 'refunded';
-
-const FILTERS: { id: FilterKey; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'paid', label: 'Paid' },
-  { id: 'free', label: 'Free' },
-  { id: 'pinned', label: 'Pinned' },
-  { id: 'refunded', label: 'Refunded' },
-];
-
-const CHIP_STYLES: Record<FlashLogItem['chip']['kind'], { bg: string; fg: string; border: string }> = {
-  free: {
-    bg: 'rgba(100, 220, 160, 0.1)',
-    fg: '#5ee0a3',
-    border: 'rgba(100, 220, 160, 0.25)',
-  },
-  usdc: {
-    bg: 'rgba(153, 69, 255, 0.12)',
-    fg: '#b98bff',
-    border: 'rgba(153, 69, 255, 0.25)',
-  },
-  eur: {
-    bg: 'rgba(var(--casi-accent-rgb), 0.12)',
-    fg: 'var(--casi-accent)',
-    border: 'rgba(var(--casi-accent-rgb), 0.25)',
-  },
+const CHIP_CLASS: Record<FlashLogItem['chip']['kind'], string> = {
+  usdc: 'u',
+  eur: 'e',
+  free: 'f',
 };
 
+/**
+ * v7 .fl-r flat-row list. Time / who / message / amount-chip / Refund.
+ * Refunded rows dim to .38 opacity and the message strikes through.
+ * Footer tile shows today's totals. Filter tabs from v3 dropped — v7
+ * has none, the log is short enough to scan.
+ */
 export default function FlashesLog({ items, totals, onRefund, refunding }: Props) {
-  const [filter, setFilter] = useState<FilterKey>('all');
-
-  const counts = useMemo(
-    () => ({
-      all: items.length,
-      paid: items.filter((i) => i.chip.kind !== 'free' && !i.refunded).length,
-      free: items.filter((i) => i.chip.kind === 'free').length,
-      pinned: items.filter((i) => i.pinned).length,
-      refunded: items.filter((i) => i.refunded).length,
-    }),
-    [items],
-  );
-
-  const visible = useMemo(() => {
-    if (filter === 'all') return items;
-    if (filter === 'paid') return items.filter((i) => i.chip.kind !== 'free' && !i.refunded);
-    if (filter === 'free') return items.filter((i) => i.chip.kind === 'free');
-    if (filter === 'pinned') return items.filter((i) => i.pinned);
-    return items.filter((i) => i.refunded);
-  }, [items, filter]);
-
   return (
-    <section
-      className="flex flex-col overflow-hidden"
-      style={{
-        background: 'var(--casi-surface)',
-        border: '1px solid var(--casi-border)',
-        borderRadius: '18px',
-      }}
-    >
-      <header
-        className="flex items-center justify-between"
-        style={{ padding: '16px 18px', borderBottom: '1px solid var(--casi-border)' }}
-      >
-        <h3
-          className="font-bold flex items-center gap-2"
-          style={{ fontSize: '15px', letterSpacing: '-0.3px', color: 'var(--casi-text)' }}
-        >
-          <span aria-hidden style={{ color: 'var(--casi-accent)', fontSize: '16px' }}>
-            ⚡
-          </span>
-          Flashes — live log
-        </h3>
-        <span
-          className="font-mono uppercase"
-          style={{
-            fontSize: '10px',
-            letterSpacing: '0.13em',
-            color: 'var(--casi-text-dim)',
-          }}
-        >
-          Today · <b style={{ color: 'var(--casi-accent)', fontWeight: 500 }}>{totals.count}</b> flashes ·{' '}
-          <b style={{ color: 'var(--casi-accent)', fontWeight: 500 }}>{totals.eur}</b> +{' '}
-          <b style={{ color: 'var(--casi-accent)', fontWeight: 500 }}>{totals.usdc}</b>
-        </span>
-      </header>
+    <section className="flex flex-col">
+      <style>{`
+        .casi-fl-r {
+          display: flex; align-items: center; gap: 10px;
+          padding: 10px 16px;
+          border-bottom: 1px solid var(--casi-border);
+          transition: background .12s;
+        }
+        .casi-fl-r:last-child { border-bottom: none; }
+        .casi-fl-r:hover { background: rgba(255,255,255,0.01); }
+        .casi-fl-r.ref { opacity: 0.38; }
+        .casi-fl-amt.u { color: var(--casi-accent); background: rgba(var(--casi-accent-rgb), 0.07); }
+        .casi-fl-amt.e { color: var(--casi-accent); background: rgba(var(--casi-accent-rgb), 0.07); }
+        .casi-fl-amt.f { color: var(--casi-text-dim); background: var(--casi-surface-2); }
+        .casi-fl-refund:hover {
+          border-color: rgba(239,68,68,0.3) !important;
+          color: #f87171 !important;
+        }
+      `}</style>
 
       <div
-        className="flex gap-1"
+        className="font-mono uppercase flex items-center"
         style={{
-          padding: '8px 12px',
-          background: 'var(--casi-bg)',
-          borderBottom: '1px solid var(--casi-border)',
+          gap: '8px',
+          fontSize: '11px',
+          fontWeight: 600,
+          color: 'var(--casi-text-mid)',
+          letterSpacing: '0.08em',
+          paddingBottom: '10px',
         }}
       >
-        {FILTERS.map((opt) => {
-          const on = filter === opt.id;
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => setFilter(opt.id)}
-              className="font-mono uppercase transition-colors"
-              style={{
-                padding: '6px 10px',
-                borderRadius: '6px',
-                fontSize: '10px',
-                letterSpacing: '0.1em',
-                color: on ? 'var(--casi-text)' : 'var(--casi-text-dim)',
-                background: on ? 'var(--casi-surface)' : 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              {opt.label}
-              <span style={{ color: 'var(--casi-accent)', marginLeft: '4px' }}>
-                {counts[opt.id]}
-              </span>
-            </button>
-          );
-        })}
+        Flashes · today
       </div>
 
-      <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
-        {visible.length === 0 ? (
+      <div
+        style={{
+          border: '1px solid var(--casi-border)',
+          borderRadius: '10px',
+          overflow: 'hidden',
+          background: 'var(--casi-surface)',
+        }}
+      >
+        {items.length === 0 ? (
           <div
             className="font-mono uppercase text-center"
             style={{
@@ -155,173 +86,103 @@ export default function FlashesLog({ items, totals, onRefund, refunding }: Props
               color: 'var(--casi-text-faint)',
             }}
           >
-            No flashes match
+            No flashes yet today
           </div>
         ) : (
-          visible.map((flash, idx) => (
-            <FlashRow
-              key={flash.id}
-              flash={flash}
-              isLast={idx === visible.length - 1}
-              onRefund={onRefund}
-              isRefunding={refunding?.has(flash.id) ?? false}
-            />
-          ))
+          items.map(flash => {
+            const isRefunding = refunding?.has(flash.id) ?? false;
+            const chipClass = CHIP_CLASS[flash.chip.kind];
+            return (
+              <div key={flash.id} className={`casi-fl-r${flash.refunded ? ' ref' : ''}`}>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-casi-mono), monospace',
+                    fontSize: '10px',
+                    color: 'var(--casi-text-faint)',
+                    width: '32px',
+                    flexShrink: 0,
+                  }}
+                >
+                  {flash.time}
+                </span>
+                <span
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: 'var(--casi-text)',
+                    flexShrink: 0,
+                    minWidth: '80px',
+                  }}
+                >
+                  {flash.who}
+                </span>
+                <span
+                  className="truncate"
+                  style={{
+                    fontSize: '12.5px',
+                    color: 'var(--casi-text-mid)',
+                    flex: 1,
+                    minWidth: 0,
+                    textDecoration: flash.refunded ? 'line-through' : 'none',
+                  }}
+                >
+                  {flash.message}
+                </span>
+                <span
+                  className={`casi-fl-amt ${chipClass}`}
+                  style={{
+                    fontFamily: 'var(--font-casi-mono), monospace',
+                    fontSize: '11.5px',
+                    flexShrink: 0,
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                  }}
+                >
+                  {flash.refunded ? 'refunded' : flash.chip.label}
+                </span>
+                {!flash.refunded && onRefund ? (
+                  <button
+                    type="button"
+                    onClick={() => onRefund(flash.id)}
+                    disabled={isRefunding}
+                    className="casi-fl-refund"
+                    title="Deny and refund"
+                    style={{
+                      padding: '4px 9px',
+                      borderRadius: '5px',
+                      fontSize: '10.5px',
+                      border: '1px solid var(--casi-border)',
+                      color: 'var(--casi-text-faint)',
+                      background: 'transparent',
+                      cursor: isRefunding ? 'wait' : 'pointer',
+                      opacity: isRefunding ? 0.5 : 1,
+                      fontFamily: 'inherit',
+                      transition: 'all .13s',
+                    }}
+                  >
+                    {isRefunding ? '…' : 'Refund'}
+                  </button>
+                ) : null}
+              </div>
+            );
+          })
         )}
-      </div>
-    </section>
-  );
-}
-
-function FlashRow({
-  flash,
-  isLast,
-  onRefund,
-  isRefunding,
-}: {
-  flash: FlashLogItem;
-  isLast: boolean;
-  onRefund?: (flashId: string) => void;
-  isRefunding: boolean;
-}) {
-  const chip = CHIP_STYLES[flash.chip.kind];
-  return (
-    <div
-      className="grid items-center gap-2.5 transition-colors"
-      style={{
-        gridTemplateColumns: 'auto auto 1fr auto',
-        padding: '10px 16px',
-        borderBottom: isLast ? 'none' : '1px solid var(--casi-border)',
-        opacity: flash.refunded ? 0.45 : 1,
-      }}
-    >
-      <span
-        className="font-mono whitespace-nowrap"
-        style={{ fontSize: '10px', letterSpacing: '0.1em', color: 'var(--casi-text-faint)' }}
-      >
-        {flash.time}
-      </span>
-      <span
-        className="font-mono whitespace-nowrap"
-        style={{
-          padding: '3px 7px',
-          borderRadius: '4px',
-          background: chip.bg,
-          color: chip.fg,
-          border: `1px solid ${chip.border}`,
-          fontSize: '10px',
-          letterSpacing: '0.05em',
-        }}
-      >
-        {flash.chip.label}
-      </span>
-      <div className="flex items-baseline gap-2 min-w-0" style={{ fontSize: '13px' }}>
-        <span
-          className="font-bold whitespace-nowrap"
-          style={{ color: 'var(--casi-text)', fontFamily: 'var(--font-casi-sans)' }}
-        >
-          {flash.who}
-        </span>
-        <span
-          className="truncate"
+        <div
           style={{
-            color: 'var(--casi-text-dim)',
-            textDecoration: flash.refunded ? 'line-through' : 'none',
+            padding: '10px 16px',
+            borderTop: '1px solid var(--casi-border)',
+            fontSize: '12px',
+            color: 'var(--casi-text-mid)',
+            display: 'flex',
+            gap: '16px',
+            background: 'rgba(255,255,255,0.01)',
           }}
         >
-          {flash.message}
-        </span>
-        {flash.pinned ? (
-          <span
-            className="font-mono uppercase ml-1 whitespace-nowrap"
-            style={{
-              fontSize: '9px',
-              letterSpacing: '0.12em',
-              color: 'var(--casi-accent)',
-              padding: '2px 6px',
-              border: '1px dashed rgba(var(--casi-accent-rgb), 0.4)',
-              borderRadius: '3px',
-            }}
-          >
-            Pinned
-          </span>
-        ) : null}
+          Today: <strong style={{ color: 'var(--casi-accent)', fontWeight: 500, marginLeft: '4px', fontFamily: 'var(--font-casi-mono), monospace' }}>{totals.eur}</strong>
+          <span style={{ opacity: 0.4 }}>·</span>
+          <strong style={{ color: 'var(--casi-accent)', fontWeight: 500, fontFamily: 'var(--font-casi-mono), monospace' }}>{totals.usdc}</strong>
+        </div>
       </div>
-      <div className="flex gap-1">
-        {!flash.refunded ? (
-          <>
-            {/* Pin + Block are shell-only for now — no schema support.
-                Refund wires the real approve_flash / deny_flash path. */}
-            <FlashActButton variant="pin" disabled title="Pinning isn't wired yet">
-              {flash.pinned ? 'Unpin' : 'Pin'}
-            </FlashActButton>
-            <FlashActButton
-              variant="refund"
-              onClick={onRefund ? () => onRefund(flash.id) : undefined}
-              disabled={isRefunding || !onRefund}
-              title={onRefund ? 'Deny and refund' : 'Refund handler not wired'}
-            >
-              {isRefunding ? '…' : 'Refund'}
-            </FlashActButton>
-            <FlashActButton variant="block" disabled title="Blocking isn't wired yet">
-              Block
-            </FlashActButton>
-          </>
-        ) : (
-          <span
-            className="font-mono uppercase"
-            style={{
-              padding: '4px 9px',
-              borderRadius: '6px',
-              border: '1px solid var(--casi-border-2)',
-              color: 'var(--casi-text-faint)',
-              fontSize: '10px',
-              letterSpacing: '0.1em',
-            }}
-          >
-            Refunded
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function FlashActButton({
-  variant,
-  children,
-  onClick,
-  disabled,
-  title,
-}: {
-  variant: 'pin' | 'refund' | 'block';
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  title?: string;
-}) {
-  return (
-    <button
-      type="button"
-      data-variant={variant}
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="flash-act font-mono uppercase transition-colors"
-      style={{
-        padding: '4px 9px',
-        borderRadius: '6px',
-        background: 'transparent',
-        border: '1px solid var(--casi-border-2)',
-        color: 'var(--casi-text-dim)',
-        fontSize: '10px',
-        letterSpacing: '0.1em',
-        fontWeight: 500,
-        opacity: disabled ? 0.35 : 1,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-      }}
-    >
-      {children}
-    </button>
+    </section>
   );
 }

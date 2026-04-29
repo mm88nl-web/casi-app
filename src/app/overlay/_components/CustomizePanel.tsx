@@ -207,6 +207,42 @@ export default function CustomizePanel({
                   )}
                 </div>
               </div>
+              {/* Explicit X / Y sliders so both axes are visible to the
+                  streamer. Drag-to-pan above still works in tandem. With
+                  objectFit:cover, an image whose aspect ratio matches the
+                  box (e.g. portrait photo in a 1:1 circle) has no slack
+                  in one axis — that slider then has no visible effect
+                  until zoom is bumped above 1×, which adds slack in both
+                  axes. Showing the slider regardless makes the
+                  interaction discoverable. */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <label className="bf-lbl" style={{ marginBottom: 0 }}>Horizontal</label>
+                  <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, color: '#666' }}>{Math.round(mediaOffsetX)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={MEDIA_OFFSET_RANGE.min} max={MEDIA_OFFSET_RANGE.max} step={1}
+                  value={mediaOffsetX}
+                  onChange={(e) => onMediaOffsetChange(Number(e.target.value), mediaOffsetY)}
+                  style={{ width: '100%', accentColor }}
+                  disabled={!mediaPreviewUrl}
+                />
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <label className="bf-lbl" style={{ marginBottom: 0 }}>Vertical</label>
+                  <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, color: '#666' }}>{Math.round(mediaOffsetY)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={MEDIA_OFFSET_RANGE.min} max={MEDIA_OFFSET_RANGE.max} step={1}
+                  value={mediaOffsetY}
+                  onChange={(e) => onMediaOffsetChange(mediaOffsetX, Number(e.target.value))}
+                  style={{ width: '100%', accentColor }}
+                  disabled={!mediaPreviewUrl}
+                />
+              </div>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <label className="bf-lbl" style={{ marginBottom: 0 }}>Zoom</label>

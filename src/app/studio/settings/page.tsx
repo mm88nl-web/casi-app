@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import CasiLogo from '@/components/CasiLogo';
-import WalletNav from '@/components/WalletNav';
+import Nav from '@/components/Nav';
+import WalletPill from '@/components/WalletPill';
 import SettingsLayout, { type RailGroup } from '@/components/settings/SettingsLayout';
 import ProfileSection, { type ProfileRow } from '@/components/settings/ProfileSection';
 import PayoutsSection from '@/components/settings/PayoutsSection';
@@ -15,26 +15,25 @@ import SessionKeySection from '@/components/settings/SessionKeySection';
 
 const RAIL: RailGroup[] = [
   {
-    title: 'You',
-    items: [
-      { id: 'profile', label: 'Profile', icon: '◉' },
-      { id: 'payouts', label: 'Payouts', icon: '€' },
-      { id: 'appearance', label: 'Appearance', icon: '◐' },
-    ],
+    title: 'Account',
+    items: [{ id: 'profile', label: 'Profile' }],
   },
   {
-    title: 'Wallet',
-    items: [
-      { id: 'session-key', label: 'Session key', icon: '⚿' },
-    ],
+    title: 'Payouts',
+    items: [{ id: 'payouts', label: 'Payouts' }],
   },
   {
-    title: 'Stream',
+    title: 'Studio',
     items: [
-      { id: 'obs-sources', label: 'OBS sources', icon: '▹' },
+      { id: 'appearance', label: 'Appearance' },
+      { id: 'obs-sources', label: 'OBS sources' },
+      { id: 'session-key', label: 'Session key' },
     ],
   },
 ];
+
+const PROFILE_COLS =
+  'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color';
 
 type LoadState =
   | { kind: 'loading' }
@@ -42,9 +41,13 @@ type LoadState =
   | { kind: 'missing-profile' }
   | { kind: 'ready'; profile: ProfileRow };
 
-const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color';
-
-export default function SettingsPage() {
+/**
+ * /studio/settings — v7 settings surface. Shares the section components
+ * with /admin/settings (under src/components/settings/) but ships a
+ * leaner v7 nav: Casi logo · "↩ Dashboard" · "Settings" · WalletPill.
+ * Rail mirrors v7's Account / Payouts / Studio grouping.
+ */
+export default function StudioSettingsPage() {
   const router = useRouter();
   const [supabase] = useState(() => createClient());
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
@@ -72,9 +75,7 @@ export default function SettingsPage() {
       setState({ kind: 'ready', profile: data as ProfileRow });
     };
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [supabase, router]);
 
   if (state.kind === 'loading' || state.kind === 'anonymous') {
@@ -91,75 +92,19 @@ export default function SettingsPage() {
 
   return (
     <main className="min-h-screen" style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}>
-      <nav
-        className="flex items-center justify-between"
-        style={{ padding: '18px 32px', borderBottom: '1px solid var(--casi-border)' }}
-      >
-        <Link
-          href="/"
-          className="flex items-center gap-2"
-          style={{ color: 'var(--casi-text)', textDecoration: 'none' }}
-        >
-          <CasiLogo size={72} />
-          <span
-            className="font-extrabold"
-            style={{ fontFamily: 'var(--font-casi-sans)', fontSize: '22px', letterSpacing: '-1px' }}
-          >
-            casi
-          </span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/admin"
-            title="Classic studio (current production)"
-            className="font-mono uppercase"
-            style={{
-              fontSize: '10px',
-              letterSpacing: '0.15em',
-              textDecoration: 'none',
-              color: 'var(--casi-text-dim)',
-              padding: '5px 10px',
-              borderRadius: '999px',
-              border: '1px solid var(--casi-border-2)',
-            }}
-          >
-            ↩ Classic studio
-          </Link>
-          <Link
-            href="/studio/settings"
-            title="Try the new settings"
-            className="font-mono uppercase"
-            style={{
-              fontSize: '10px',
-              letterSpacing: '0.15em',
-              textDecoration: 'none',
-              padding: '5px 10px',
-              borderRadius: '999px',
-              background: 'rgba(var(--casi-accent-rgb), 0.08)',
-              border: '1px solid rgba(var(--casi-accent-rgb), 0.3)',
-              color: 'var(--casi-accent)',
-            }}
-          >
-            New settings →
-          </Link>
-          <WalletNav />
-        </div>
-      </nav>
-
-      <div
-        className="mx-auto"
-        style={{ maxWidth: '1200px', padding: '28px 32px 0' }}
-      >
-        <h1
-          className="font-extrabold"
-          style={{ fontSize: '30px', letterSpacing: '-1.2px', color: 'var(--casi-text)' }}
-        >
-          Settings
-        </h1>
-        <p className="mt-1" style={{ color: 'var(--casi-text-dim)', fontSize: '14px' }}>
-          Everything about your account, stream, payouts, and rules — in one place.
-        </p>
-      </div>
+      <Nav
+        right={
+          <>
+            <Link href="/studio" className="font-mono uppercase" style={navChipStyle()}>
+              ↩ Dashboard
+            </Link>
+            <span className="font-mono uppercase" style={navChipStyle({ active: true })}>
+              Settings
+            </span>
+            <WalletPill />
+          </>
+        }
+      />
 
       <SettingsLayout rail={RAIL}>
         <ProfileSection supabase={supabase} profile={state.profile} />
@@ -176,14 +121,29 @@ export default function SettingsPage() {
           initialSkinId={state.profile.skin}
           initialThemeColor={state.profile.theme_color ?? null}
         />
+        <ObsSourcesSection username={state.profile.username ?? 'your-handle'} />
         <SessionKeySection
           supabase={supabase}
           savedSolanaWallet={state.profile.solana_wallet ?? null}
         />
-        <ObsSourcesSection username={state.profile.username ?? 'your-handle'} />
       </SettingsLayout>
     </main>
   );
+}
+
+function navChipStyle({ active = false }: { active?: boolean } = {}): React.CSSProperties {
+  return {
+    fontSize: '11px',
+    fontWeight: 500,
+    color: active ? 'var(--casi-accent)' : 'var(--casi-text-dim)',
+    background: active ? 'rgba(var(--casi-accent-rgb), 0.06)' : 'transparent',
+    border: `1px solid ${active ? 'rgba(var(--casi-accent-rgb), 0.2)' : 'var(--casi-border)'}`,
+    padding: '5px 11px',
+    borderRadius: '6px',
+    textDecoration: 'none',
+    transition: 'color .14s',
+    fontFamily: 'inherit',
+  };
 }
 
 function StatusScreen({ children }: { children: React.ReactNode }) {
@@ -192,10 +152,7 @@ function StatusScreen({ children }: { children: React.ReactNode }) {
       className="min-h-screen flex items-center justify-center"
       style={{ background: 'var(--casi-bg)', color: 'var(--casi-text-dim)' }}
     >
-      <div
-        className="font-mono uppercase"
-        style={{ fontSize: '11px', letterSpacing: '0.2em' }}
-      >
+      <div className="font-mono uppercase" style={{ fontSize: '11px', letterSpacing: '0.2em' }}>
         {children}
       </div>
     </main>

@@ -1,64 +1,49 @@
 'use client';
 
-import Link from 'next/link';
-import CasiLogo from '@/components/CasiLogo';
-import WalletNav from '@/components/WalletNav';
+import Nav from '@/components/Nav';
+import WalletPill from '@/components/WalletPill';
 
 type Props = {
   liveCount: number;
 };
 
+/**
+ * Landing-page top bar. Shared <Nav> shell with the live-streamer count
+ * and the wallet pill in the right slot. v7 renders the count as plain
+ * dim text + a pulsing teal dot — much subtler than the v3 chip.
+ */
 export default function LandingNav({ liveCount }: Props) {
   return (
-    <nav
-      className="flex items-center justify-between"
-      style={{ padding: '18px 32px', borderBottom: '1px solid var(--casi-border)' }}
-    >
-      <Link
-        href="/"
-        className="flex items-center gap-2"
-        style={{ color: 'var(--casi-text)', textDecoration: 'none' }}
-      >
-        <CasiLogo size={72} />
-        <span
-          className="font-extrabold"
-          style={{
-            fontFamily: 'var(--font-casi-sans)',
-            fontSize: '22px',
-            letterSpacing: '-1px',
-          }}
-        >
-          casi
-        </span>
-      </Link>
-
-      <div className="flex items-center gap-3">
-        <span
-          className="inline-flex items-center gap-2 font-mono uppercase"
-          style={{
-            padding: '6px 12px',
-            borderRadius: '999px',
-            background: 'rgba(var(--casi-accent2-rgb), 0.08)',
-            border: '1px solid rgba(var(--casi-accent2-rgb), 0.3)',
-            color: 'var(--casi-accent2)',
-            fontSize: '11px',
-            letterSpacing: '0.14em',
-          }}
-        >
+    <Nav
+      brandHref="/"
+      right={
+        <>
           <span
-            aria-hidden
-            style={{
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              background: 'var(--casi-accent2)',
-              boxShadow: '0 0 8px rgba(var(--casi-accent2-rgb), 0.7)',
-            }}
-          />
-          {liveCount} live now
-        </span>
-        <WalletNav />
-      </div>
-    </nav>
+            className="flex items-center"
+            style={{ gap: '6px', fontSize: '12.5px', color: 'var(--casi-text-mid)' }}
+          >
+            <span
+              aria-hidden
+              className="casi-live-dot"
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: 'var(--casi-accent)',
+              }}
+            />
+            {liveCount} live now
+          </span>
+          <WalletPill />
+          <style>{`
+            .casi-live-dot { animation: casi-live-blink 2s ease-in-out infinite; }
+            @keyframes casi-live-blink {
+              0%, 100% { opacity: 1; }
+              50%       { opacity: 0.25; }
+            }
+          `}</style>
+        </>
+      }
+    />
   );
 }

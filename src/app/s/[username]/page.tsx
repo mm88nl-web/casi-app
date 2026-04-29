@@ -5,9 +5,9 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/utils/supabase/client';
-import CasiLogo from '@/components/CasiLogo';
 import SkinProvider from '@/components/SkinProvider';
-import WalletNav from '@/components/WalletNav';
+import Nav from '@/components/Nav';
+import WalletPill from '@/components/WalletPill';
 import StreamerBar from './_components/StreamerBar';
 import StreamPreview from './_components/StreamPreview';
 import FlashesFeed, { type Flash } from './_components/FlashesFeed';
@@ -160,54 +160,10 @@ export default function ViewerBookingPage() {
       {/* Inherit the streamer's skin + theme colour — this overrides the user-picked skin for this page. */}
       <SkinProvider skin={profile.skin} themeColor={profile.theme_color} />
 
-      <nav
-        className="flex items-center justify-between"
-        style={{ padding: '18px 32px', borderBottom: '1px solid var(--casi-border)' }}
-      >
-        <Link
-          href="/"
-          className="flex items-center gap-2"
-          style={{ color: 'var(--casi-text)', textDecoration: 'none' }}
-        >
-          <CasiLogo size={72} />
-          <span
-            className="font-extrabold"
-            style={{ fontFamily: 'var(--font-casi-sans)', fontSize: '22px', letterSpacing: '-1px' }}
-          >
-            casi
-          </span>
-        </Link>
-
-        <div className="flex items-center gap-3">
-          <span
-            className="inline-flex items-center gap-2 font-mono uppercase"
-            style={{
-              padding: '6px 12px',
-              borderRadius: '999px',
-              background: profile.is_live
-                ? 'rgba(var(--casi-accent2-rgb), 0.08)'
-                : 'var(--casi-surface)',
-              border: `1px solid ${profile.is_live ? 'rgba(var(--casi-accent2-rgb), 0.3)' : 'var(--casi-border)'}`,
-              color: profile.is_live ? 'var(--casi-accent2)' : 'var(--casi-text-dim)',
-              fontSize: '11px',
-              letterSpacing: '0.14em',
-            }}
-          >
-            <span
-              aria-hidden
-              style={{
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                background: profile.is_live ? 'var(--casi-accent2)' : 'var(--casi-text-faint)',
-                boxShadow: profile.is_live ? '0 0 8px rgba(var(--casi-accent2-rgb), 0.7)' : 'none',
-              }}
-            />
-            {profile.is_live ? 'Live' : 'Offline'}
-          </span>
-          <WalletNav />
-        </div>
-      </nav>
+      {/* v7 nav. The live badge moved into StreamerBar (vb-head) since v7
+          surfaces it there next to the streamer's avatar; keeping it in the
+          nav too would be redundant. */}
+      <Nav right={<WalletPill />} />
 
       <div
         className="mx-auto casi-grid-viewer casi-page-pad"

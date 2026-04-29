@@ -3,36 +3,38 @@ import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 
 const CSS = `
-  .sd-wrap { position: relative; max-width: 520px; margin: 0 auto; }
+  .sd-wrap { position: relative; max-width: 520px; margin: 0; }
 
   .sd-bar {
     display: flex; align-items: center;
-    background: #0a0a0a; border: 1px solid #1c1c1c; border-radius: 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--casi-border-2); border-radius: 10px;
     overflow: hidden; transition: border-color .2s;
   }
-  .sd-bar:focus-within { border-color: rgba(245,130,32,0.45); }
-  .sd-bar.open { border-radius: 12px 12px 0 0; border-color: rgba(245,130,32,0.45); }
+  .sd-bar:focus-within { border-color: rgba(var(--casi-accent-rgb), 0.4); }
+  .sd-bar.open { border-radius: 10px 10px 0 0; border-color: rgba(var(--casi-accent-rgb), 0.4); }
 
   .sd-input {
     flex: 1; background: none; border: none; outline: none;
-    padding: 14px 18px; font-family: var(--font-casi-sans), sans-serif; font-size: 15px;
-    color: #e8e8e8;
+    padding: 13px 16px; font-family: var(--font-casi-sans), sans-serif; font-size: 14px;
+    color: var(--casi-text);
   }
-  .sd-input::placeholder { color: #333; }
+  .sd-input::placeholder { color: var(--casi-text-dim); }
 
   .sd-clear {
-    background: none; border: none; color: #444; cursor: pointer;
-    padding: 0 16px; font-size: 18px; line-height: 1;
+    background: none; border: none; color: var(--casi-text-dim); cursor: pointer;
+    padding: 0 14px; font-size: 18px; line-height: 1;
     transition: color .15s; flex-shrink: 0;
   }
-  .sd-clear:hover { color: #e8e8e8; }
+  .sd-clear:hover { color: var(--casi-text); }
 
   /* ── Dropdown ── */
   .sd-drop {
     position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
-    background: #0a0a0a; border: 1px solid rgba(245,130,32,0.45);
-    border-top: none; border-radius: 0 0 12px 12px;
-    box-shadow: 0 24px 48px rgba(0,0,0,0.75);
+    background: var(--casi-surface-2);
+    border: 1px solid rgba(var(--casi-accent-rgb), 0.4);
+    border-top: none; border-radius: 0 0 10px 10px;
+    box-shadow: 0 24px 48px rgba(0,0,0,0.55);
     animation: sd-in .12s ease;
     overflow: hidden;
   }
@@ -41,19 +43,19 @@ const CSS = `
   .sd-status {
     padding: 18px; text-align: center;
     font-family: var(--font-casi-mono), monospace; font-size: 11px;
-    color: #333; letter-spacing: 1px;
+    color: var(--casi-text-dim); letter-spacing: 1px;
   }
 
   .sd-result {
     display: flex; align-items: center; gap: 12px;
     padding: 11px 16px; text-decoration: none;
-    border-top: 1px solid #111; transition: background .12s;
+    border-top: 1px solid var(--casi-border); transition: background .12s;
   }
   .sd-result:hover { background: rgba(255,255,255,0.03); }
 
   .sd-avatar {
     width: 38px; height: 38px; border-radius: 8px;
-    background: #111; border: 1px solid #1c1c1c;
+    background: var(--casi-surface); border: 1px solid var(--casi-border);
     flex-shrink: 0; display: flex; align-items: center;
     justify-content: center; font-size: 16px; overflow: hidden;
   }
@@ -61,19 +63,19 @@ const CSS = `
 
   .sd-info { flex: 1; min-width: 0; }
   .sd-name-row { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; flex-wrap: wrap; }
-  .sd-name { font-size: 13px; font-weight: 700; color: #e8e8e8; }
+  .sd-name { font-size: 13px; font-weight: 700; color: var(--casi-text); }
   .sd-live-badge {
     display: inline-flex; align-items: center; gap: 3px;
-    background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25);
-    color: #f87171; font-family: var(--font-casi-mono), monospace;
+    background: rgba(var(--casi-accent-rgb), 0.09); border: 1px solid rgba(var(--casi-accent-rgb), 0.25);
+    color: var(--casi-accent); font-family: var(--font-casi-mono), monospace;
     font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
-    padding: 1px 6px; border-radius: 10px;
+    padding: 1px 6px; border-radius: 4px;
   }
-  .sd-live-dot { width: 4px; height: 4px; border-radius: 50%; background: #f87171; animation: sd-pulse 1.5s infinite; }
+  .sd-live-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--casi-accent); animation: sd-pulse 1.5s infinite; }
   @keyframes sd-pulse { 0%,100%{opacity:1} 50%{opacity:.2} }
-  .sd-handle { font-family: var(--font-casi-mono), monospace; font-size: 10px; color: #444; }
+  .sd-handle { font-family: var(--font-casi-mono), monospace; font-size: 10px; color: var(--casi-text-dim); }
   .sd-bio {
-    font-family: var(--font-casi-mono), monospace; font-size: 10px; color: #2f2f2f;
+    font-family: var(--font-casi-mono), monospace; font-size: 10px; color: var(--casi-text-faint);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
   }
   .sd-cta {
@@ -84,21 +86,21 @@ const CSS = `
 
   /* ── Footer ── */
   .sd-footer {
-    padding: 9px 16px; border-top: 1px solid #111;
+    padding: 9px 16px; border-top: 1px solid var(--casi-border);
     display: flex; align-items: center; justify-content: space-between;
   }
   .sd-toggle {
     display: flex; align-items: center; gap: 6px;
     font-family: var(--font-casi-mono), monospace; font-size: 9px;
     letter-spacing: 1.5px; text-transform: uppercase;
-    color: #444; background: none; border: none; cursor: pointer;
+    color: var(--casi-text-dim); background: none; border: none; cursor: pointer;
     padding: 4px 8px; border-radius: 6px; transition: all .12s;
   }
-  .sd-toggle:hover { background: rgba(255,255,255,0.04); color: #888; }
-  .sd-toggle.on { color: #f87171; }
+  .sd-toggle:hover { background: rgba(255,255,255,0.04); color: var(--casi-text-mid); }
+  .sd-toggle.on { color: var(--casi-accent); }
   .sd-toggle-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
   .sd-toggle.on .sd-toggle-dot { animation: sd-pulse 1.5s infinite; }
-  .sd-count { font-family: var(--font-casi-mono), monospace; font-size: 9px; color: #2f2f2f; }
+  .sd-count { font-family: var(--font-casi-mono), monospace; font-size: 9px; color: var(--casi-text-faint); }
 
   /* ── Live strip ── */
   .sd-strip {
@@ -109,20 +111,20 @@ const CSS = `
 
   .sd-chip {
     display: inline-flex; align-items: center; gap: 6px;
-    background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.18);
+    background: rgba(var(--casi-accent-rgb), 0.06); border: 1px solid rgba(var(--casi-accent-rgb), 0.18);
     border-radius: 20px; padding: 5px 10px 5px 8px;
     text-decoration: none; white-space: nowrap; flex-shrink: 0;
     transition: background .15s, border-color .15s;
   }
-  .sd-chip:hover { background: rgba(239,68,68,0.11); border-color: rgba(239,68,68,0.32); }
-  .sd-chip-dot { width: 5px; height: 5px; border-radius: 50%; background: #f87171; animation: sd-pulse 1.5s infinite; flex-shrink: 0; }
+  .sd-chip:hover { background: rgba(var(--casi-accent-rgb), 0.11); border-color: rgba(var(--casi-accent-rgb), 0.32); }
+  .sd-chip-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--casi-accent); animation: sd-pulse 1.5s infinite; flex-shrink: 0; }
   .sd-chip-av {
-    width: 18px; height: 18px; border-radius: 50%; background: #1c1c1c;
+    width: 18px; height: 18px; border-radius: 50%; background: var(--casi-border);
     display: flex; align-items: center; justify-content: center;
     font-size: 9px; overflow: hidden; flex-shrink: 0;
   }
   .sd-chip-av img { width: 100%; height: 100%; object-fit: cover; }
-  .sd-chip-name { font-family: var(--font-casi-mono), monospace; font-size: 10px; color: #ccc; letter-spacing: 0.3px; }
+  .sd-chip-name { font-family: var(--font-casi-mono), monospace; font-size: 10px; color: var(--casi-text); letter-spacing: 0.3px; }
 
   /* Mobile */
   @media (max-width: 640px) {
@@ -235,7 +237,10 @@ export default function SearchDropdown() {
                     <div className="sd-handle">@{p.username}</div>
                     {p.bio && <div className="sd-bio">{p.bio}</div>}
                   </div>
-                  <span className="sd-cta" style={{ color: p.is_live ? '#06b6d4' : '#444' }}>
+                  <span
+                    className="sd-cta"
+                    style={{ color: p.is_live ? 'var(--casi-accent)' : 'var(--casi-text-dim)' }}
+                  >
                     {p.is_live ? 'Watch →' : 'View →'}
                   </span>
                 </a>

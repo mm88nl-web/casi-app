@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
+import CasiLogo from '@/components/CasiLogo';
 
 /** Google's "G" mark — official 4-color SVG, no external assets. */
 function GoogleG() {
@@ -11,20 +12,6 @@ function GoogleG() {
       <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
       <path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.5c-2 1.5-4.5 2.5-7.5 2.5-5.3 0-9.7-3.3-11.3-8L6 32.6C9.4 39.6 16.1 44 24 44z"/>
       <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4 5.5l6.5 5.5c-.5.4 6.2-4.5 6.2-15 0-1.3-.1-2.4-.4-3.5z"/>
-    </svg>
-  );
-}
-
-function Logo({ scale = 0.45 }: { scale?: number }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width={400 * scale} height={200 * scale}>
-      <g stroke="#F58220" fill="#F58220" strokeWidth="16" strokeLinecap="round">
-        <line x1="50" y1="60" x2="350" y2="60" />
-        <line x1="20" y1="100" x2="380" y2="100" />
-        <line x1="50" y1="140" x2="350" y2="140" />
-      </g>
-      <path fill="#F58220" stroke="none" d="M 90,100 C 130,30 270,30 310,100 C 270,170 130,170 90,100 Z" />
-      <circle fill="#050505" cx="200" cy="100" r="45" />
     </svg>
   );
 }
@@ -219,7 +206,7 @@ export default function AuthPage() {
 
         .auth-page {
           min-height: 100vh;
-          background: #050505;
+          background: var(--casi-bg);
           display: grid;
           grid-template-columns: 1fr 1fr;
           font-family: var(--font-casi-sans), sans-serif;
@@ -227,159 +214,161 @@ export default function AuthPage() {
 
         /* Left panel */
         .auth-left {
-          background: #080808;
-          border-right: 1px solid #111;
+          background: var(--casi-surface);
+          border-right: 1px solid var(--casi-border);
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          padding: 48px;
+          padding: 52px 48px;
           position: relative;
           overflow: hidden;
         }
+        /* Accent radial glow — bottom-left corner */
         .auth-left::before {
           content: '';
           position: absolute;
-          bottom: -120px; left: -120px;
-          width: 480px; height: 480px;
-          background: radial-gradient(circle, rgba(245,130,32,0.07) 0%, transparent 65%);
+          bottom: -140px; left: -100px;
+          width: 500px; height: 500px;
+          background: radial-gradient(circle, rgba(var(--casi-accent-rgb),0.07) 0%, transparent 65%);
           pointer-events: none;
         }
+        /* v7 dot grid (replaces v3 line grid) */
         .auth-left::after {
           content: '';
           position: absolute; inset: 0;
-          background-image:
-            linear-gradient(rgba(245,130,32,0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(245,130,32,0.03) 1px, transparent 1px);
-          background-size: 48px 48px;
+          background-image: radial-gradient(circle, rgba(var(--casi-accent-rgb),0.12) 1px, transparent 1px);
+          background-size: 32px 32px;
+          opacity: 0.4;
           pointer-events: none;
         }
-        .auth-brand { position: relative; z-index: 1; }
-        .auth-brand-name { font-size: 28px; font-weight: 800; color: #F58220; letter-spacing: -1px; margin-top: 12px; }
-        .auth-brand-tag  { font-family: var(--font-casi-mono), monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #444; margin-top: 4px; }
+        .auth-brand { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; }
+        .auth-brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 0; }
+        .auth-brand-name { font-family: var(--font-casi-display), var(--font-casi-sans), sans-serif; font-size: 22px; font-weight: 800; color: var(--casi-accent); letter-spacing: 0.5px; }
+        .auth-brand-tag  { font-family: var(--font-casi-mono), monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--casi-text-dim); margin-top: 5px; }
 
         .auth-quote { position: relative; z-index: 1; }
-        .auth-quote-text { font-size: 22px; font-weight: 700; color: #e8e8e8; line-height: 1.3; letter-spacing: -0.5px; margin-bottom: 12px; }
-        .auth-quote-text .o { color: #F58220; }
-        .auth-quote-sub  { font-family: var(--font-casi-mono), monospace; font-size: 11px; color: #444; letter-spacing: 1px; }
+        .auth-quote-text { font-family: var(--font-casi-display), var(--font-casi-sans), sans-serif; font-size: clamp(22px, 2.5vw, 30px); font-weight: 800; color: var(--casi-text); line-height: 1.2; letter-spacing: -1px; margin-bottom: 14px; }
+        /* Outline treatment — same move as the landing headline */
+        .auth-quote-text .o { -webkit-text-stroke: 1.5px rgba(var(--casi-accent-rgb), 0.65); color: transparent; }
+        .auth-quote-sub  { font-family: var(--font-casi-mono), monospace; font-size: 11px; color: var(--casi-text-dim); letter-spacing: 0.14em; text-transform: uppercase; }
 
         /* Step indicators */
-        .left-steps { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 16px; }
+        .left-steps { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 0; }
         .left-step  { display: flex; align-items: center; gap: 14px; }
         .left-step-dot {
           width: 32px; height: 32px; border-radius: 50%;
           display: flex; align-items: center; justify-content: center;
           font-family: var(--font-casi-mono), monospace; font-size: 11px; font-weight: 500;
-          flex-shrink: 0; transition: all .3s;
+          flex-shrink: 0; transition: all .25s;
         }
-        .left-step-dot.done    { background: #F58220; color: #050505; }
-        .left-step-dot.current { background: rgba(245,130,32,0.15); border: 1px solid rgba(245,130,32,0.4); color: #F58220; }
-        .left-step-dot.pending { background: rgba(255,255,255,0.04); border: 1px solid #1c1c1c; color: #333; }
-        .left-step-label { font-family: var(--font-casi-mono), monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; transition: color .3s; }
-        .left-step-label.done    { color: #F58220; }
-        .left-step-label.current { color: #e8e8e8; }
-        .left-step-label.pending { color: #333; }
-        .left-step-connector { width: 1px; height: 16px; background: #1c1c1c; margin-left: 15px; }
+        .left-step-dot.done    { background: var(--casi-accent); color: var(--casi-bg); }
+        .left-step-dot.current { background: rgba(var(--casi-accent-rgb),0.14); border: 1px solid rgba(var(--casi-accent-rgb),0.4); color: var(--casi-accent); }
+        .left-step-dot.pending { background: rgba(255,255,255,0.04); border: 1px solid var(--casi-border); color: var(--casi-text-dim); }
+        .left-step-label { font-family: var(--font-casi-mono), monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; transition: color .25s; }
+        .left-step-label.done    { color: var(--casi-accent); }
+        .left-step-label.current { color: var(--casi-text); }
+        .left-step-label.pending { color: var(--casi-text-dim); }
+        .left-step-connector { width: 1px; height: 20px; background: var(--casi-border); margin-left: 15px; }
 
         /* Right panel */
         .auth-right {
           display: flex; align-items: center; justify-content: center;
-          padding: 48px 40px; background: #050505;
+          padding: 52px 44px; background: var(--casi-bg);
         }
-        .auth-form-wrap { width: 100%; max-width: 400px; }
+        .auth-form-wrap { width: 100%; max-width: 380px; }
 
         /* Mode tabs */
         .auth-tabs {
-          display: flex; background: rgba(255,255,255,0.04); border: 1px solid #1c1c1c;
-          border-radius: 12px; padding: 4px; margin-bottom: 32px; gap: 4px;
+          display: flex; background: var(--casi-surface); border: 1px solid var(--casi-border);
+          border-radius: 11px; padding: 4px; margin-bottom: 32px; gap: 3px;
         }
         .auth-tab {
           flex: 1; font-family: var(--font-casi-sans), sans-serif; font-weight: 700; font-size: 13px;
-          text-transform: uppercase; letter-spacing: 0.3px;
-          padding: 10px 0; border: none; border-radius: 9px;
-          cursor: pointer; transition: all .2s; background: none; color: #555;
+          padding: 9px 0; border: none; border-radius: 8px;
+          cursor: pointer; transition: all .18s; background: none; color: var(--casi-text-mid);
         }
-        .auth-tab.active { background: #F58220; color: #050505; }
-        .auth-tab:not(.active):hover { color: #e8e8e8; }
+        .auth-tab.active { background: var(--casi-accent); color: var(--casi-bg); }
+        .auth-tab:not(.active):hover { color: var(--casi-text); }
 
-        .auth-title    { font-size: 26px; font-weight: 800; color: #f0f0f0; letter-spacing: -1px; margin-bottom: 6px; }
-        .auth-subtitle { font-family: var(--font-casi-mono), monospace; font-size: 11px; color: #444; letter-spacing: 1px; margin-bottom: 32px; }
+        .auth-title    { font-family: var(--font-casi-display), var(--font-casi-sans), sans-serif; font-size: 26px; font-weight: 800; color: var(--casi-text); letter-spacing: -1px; margin-bottom: 5px; }
+        .auth-subtitle { font-family: var(--font-casi-mono), monospace; font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--casi-text-dim); margin-bottom: 28px; }
 
-        .auth-field { margin-bottom: 16px; }
+        .auth-field { margin-bottom: 14px; }
         .auth-label {
-          font-family: var(--font-casi-mono), monospace; font-size: 10px; letter-spacing: 2px;
-          text-transform: uppercase; color: #555; display: block; margin-bottom: 8px;
+          font-family: var(--font-casi-mono), monospace; font-size: 9.5px; letter-spacing: 0.2em;
+          text-transform: uppercase; color: var(--casi-text-mid); display: block; margin-bottom: 7px;
         }
         .auth-input {
-          width: 100%; background: #0a0a0a; border: 1px solid #1c1c1c;
-          border-radius: 10px; padding: 13px 16px; font-size: 14px;
-          color: #e8e8e8; outline: none; transition: border-color .2s;
+          width: 100%; background: var(--casi-surface); border: 1px solid var(--casi-border);
+          border-radius: 9px; padding: 12px 14px; font-size: 14px;
+          color: var(--casi-text); outline: none; transition: border-color .18s;
           font-family: var(--font-casi-sans), sans-serif;
         }
-        .auth-input::placeholder { color: #333; }
-        .auth-input:focus  { border-color: rgba(245,130,32,0.4); }
-        .auth-input.valid  { border-color: rgba(74,222,128,0.4); }
-        .auth-input.invalid { border-color: rgba(248,113,113,0.4); }
+        .auth-input::placeholder { color: var(--casi-text-dim); }
+        .auth-input:focus  { border-color: rgba(var(--casi-accent-rgb),0.45); }
+        .auth-input.valid  { border-color: rgba(var(--casi-accent-rgb),0.45); }
+        .auth-input.invalid { border-color: rgba(239,68,68,0.4); }
 
-        .auth-hint     { font-family: var(--font-casi-mono), monospace; font-size: 10px; margin-top: 6px; min-height: 16px; }
-        .auth-hint.ok  { color: #4ade80; }
+        .auth-hint     { font-family: var(--font-casi-mono), monospace; font-size: 10px; margin-top: 5px; min-height: 15px; }
+        .auth-hint.ok  { color: var(--casi-accent); }
         .auth-hint.err { color: #f87171; }
-        .auth-hint.dim { color: #444; }
+        .auth-hint.dim { color: var(--casi-text-dim); }
 
         .auth-error {
-          background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2);
+          background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2);
           border-radius: 8px; padding: 10px 14px;
           font-family: var(--font-casi-mono), monospace; font-size: 11px; color: #f87171; margin-bottom: 16px;
         }
 
         .auth-btn {
-          width: 100%; background: #F58220; border: none; border-radius: 10px;
-          padding: 14px; font-family: var(--font-casi-sans), sans-serif; font-weight: 800; font-size: 14px;
-          text-transform: uppercase; letter-spacing: 0.5px; color: #050505;
-          cursor: pointer; transition: all .2s; margin-top: 8px;
+          width: 100%; background: var(--casi-accent); border: none; border-radius: 9px;
+          padding: 13px; font-family: var(--font-casi-display), var(--font-casi-sans), sans-serif; font-weight: 800; font-size: 14px;
+          letter-spacing: -0.2px; color: var(--casi-bg);
+          cursor: pointer; transition: opacity .15s, transform .15s; margin-top: 6px;
         }
-        .auth-btn:hover:not(:disabled) { background: #ff9030; transform: translateY(-1px); }
-        .auth-btn:disabled { background: #1c1c1c; color: #444; cursor: not-allowed; transform: none; }
+        .auth-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+        .auth-btn:disabled { background: var(--casi-surface-2); color: var(--casi-text-dim); cursor: not-allowed; transform: none; }
 
         /* OAuth — Google */
         .auth-oauth-btn {
-          width: 100%; background: #fff; color: #1f1f1f; border: 1px solid #1c1c1c;
+          width: 100%; background: #fff; color: #1f1f1f; border: 1px solid var(--casi-border);
           border-radius: 10px; padding: 12px 14px;
           font-family: var(--font-casi-sans), sans-serif; font-weight: 700; font-size: 14px;
           display: flex; align-items: center; justify-content: center; gap: 10px;
-          cursor: pointer; transition: all .15s; margin-bottom: 18px;
+          cursor: pointer; transition: all .15s; margin-bottom: 16px;
         }
-        .auth-oauth-btn:hover:not(:disabled) { background: #f4f4f4; transform: translateY(-1px); }
+        .auth-oauth-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
         .auth-oauth-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
         .auth-oauth-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
         .auth-or {
-          display: flex; align-items: center; gap: 12px; margin: 4px 0 18px;
+          display: flex; align-items: center; gap: 12px; margin-bottom: 18px;
           font-family: var(--font-casi-mono), monospace; font-size: 9px;
-          letter-spacing: 2px; text-transform: uppercase; color: #444;
+          letter-spacing: 2px; text-transform: uppercase; color: var(--casi-text-dim);
         }
-        .auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: #1c1c1c; }
+        .auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--casi-border); }
 
-        .auth-btn-row { display: flex; gap: 10px; margin-top: 8px; }
+        .auth-btn-row { display: flex; gap: 10px; margin-top: 6px; }
         .auth-btn-back {
-          flex-shrink: 0; background: rgba(255,255,255,0.04); border: 1px solid #1c1c1c;
-          border-radius: 10px; padding: 14px 20px; font-family: var(--font-casi-sans), sans-serif;
-          font-weight: 700; font-size: 13px; text-transform: uppercase; color: #555;
-          cursor: pointer; transition: all .2s;
+          flex-shrink: 0; background: var(--casi-surface); border: 1px solid var(--casi-border);
+          border-radius: 9px; padding: 13px 18px; font-family: var(--font-casi-sans), sans-serif;
+          font-weight: 700; font-size: 13px; color: var(--casi-text-mid);
+          cursor: pointer; transition: all .15s;
         }
-        .auth-btn-back:hover { background: rgba(255,255,255,0.08); color: #e8e8e8; }
+        .auth-btn-back:hover { border-color: var(--casi-border-2); color: var(--casi-text); }
 
         /* Username input */
         .username-wrap { position: relative; }
-        .username-at   { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-family: var(--font-casi-mono), monospace; font-size: 14px; color: #444; pointer-events: none; }
+        .username-at   { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-family: var(--font-casi-mono), monospace; font-size: 14px; color: var(--casi-text-dim); pointer-events: none; }
         .username-input { padding-left: 28px !important; }
 
         /* URL preview */
-        .url-preview       { background: rgba(245,130,32,0.05); border: 1px solid rgba(245,130,32,0.12); border-radius: 8px; padding: 12px 14px; margin-top: 12px; }
-        .url-preview-label { font-family: var(--font-casi-mono), monospace; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: #555; margin-bottom: 4px; }
-        .url-preview-value { font-family: var(--font-casi-mono), monospace; font-size: 11px; color: #F58220; word-break: break-all; }
+        .url-preview       { background: rgba(var(--casi-accent-rgb),0.05); border: 1px solid rgba(var(--casi-accent-rgb),0.15); border-radius: 8px; padding: 12px 14px; margin-top: 10px; }
+        .url-preview-label { font-family: var(--font-casi-mono), monospace; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--casi-text-dim); margin-bottom: 4px; }
+        .url-preview-value { font-family: var(--font-casi-mono), monospace; font-size: 11px; color: var(--casi-accent); word-break: break-all; }
 
         /* Avatar row */
-        .avatar-row    { display: flex; align-items: center; gap: 16px; }
-        .avatar-circle { width: 56px; height: 56px; border-radius: 50%; border: 1px dashed #222; background: #0a0a0a; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+        .avatar-row    { display: flex; align-items: center; gap: 14px; }
+        .avatar-circle { width: 52px; height: 52px; border-radius: 12px; border: 1px dashed var(--casi-border); background: var(--casi-surface); overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 20px; }
 
         /* Mobile */
         @media (max-width: 768px) {
@@ -395,8 +384,10 @@ export default function AuthPage() {
         {/* ── Left branding panel ── */}
         <div className="auth-left">
           <div className="auth-brand">
-            <Logo scale={0.45} />
-            <div className="auth-brand-name">casi</div>
+            <div className="auth-brand-row">
+              <CasiLogo size={60} color="var(--casi-accent)" bgColor="var(--casi-bg)" />
+              <span className="auth-brand-name">casi</span>
+            </div>
             <div className="auth-brand-tag">Stream monetization</div>
           </div>
 
@@ -498,18 +489,18 @@ export default function AuthPage() {
                       {regPassword.length === 0 ? 'At least 6 characters' : regPassword.length < 6 ? `${6 - regPassword.length} more needed` : '✓ Looks good'}
                     </div>
                   </div>
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: '#999', lineHeight: 1.5, cursor: 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, fontFamily: "var(--font-casi-mono), monospace", fontSize: 10.5, color: 'var(--casi-text-mid)', lineHeight: 1.5, cursor: 'pointer' }}>
                     <input
                       type="checkbox"
                       checked={acceptedTos}
                       onChange={(e) => setAcceptedTos(e.target.checked)}
-                      style={{ marginTop: 2, accentColor: '#F58220', cursor: 'pointer' }}
+                      style={{ marginTop: 2, accentColor: 'var(--casi-accent)', cursor: 'pointer' }}
                     />
                     <span>
                       I agree to the{' '}
-                      <a href="/legal/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#F58220' }}>Terms of Service</a>,{' '}
-                      <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#F58220' }}>Privacy Policy</a>, and{' '}
-                      <a href="/legal/aup" target="_blank" rel="noopener noreferrer" style={{ color: '#F58220' }}>Acceptable Use Policy</a>. I confirm I am 18 or older.
+                      <a href="/legal/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--casi-accent)' }}>Terms of Service</a>,{' '}
+                      <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--casi-accent)' }}>Privacy Policy</a>, and{' '}
+                      <a href="/legal/aup" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--casi-accent)' }}>Acceptable Use Policy</a>. I confirm I am 18 or older.
                     </span>
                   </label>
                   {error && <div className="auth-error" style={{ marginTop: 12 }}>{error}</div>}
@@ -584,9 +575,9 @@ export default function AuthPage() {
                       onChange={(e) => setDisplayName(e.target.value)} autoFocus />
                   </div>
                   <div className="auth-field">
-                    <label className="auth-label">Bio <span style={{ color: '#333', textTransform: 'none', fontSize: 9 }}>— optional</span></label>
+                    <label className="auth-label">Bio <span style={{ color: 'var(--casi-text-faint)', textTransform: 'none', fontSize: 9 }}>— optional</span></label>
                     <textarea placeholder="What do you stream?" rows={3} maxLength={160}
-                      style={{ width: '100%', background: '#0a0a0a', border: '1px solid #1c1c1c', borderRadius: 10, padding: '13px 16px', fontSize: 14, color: '#e8e8e8', outline: 'none', fontFamily: "var(--font-casi-sans), sans-serif", resize: 'none', transition: 'border-color .2s' }}
+                      style={{ width: '100%', background: 'var(--casi-surface)', border: '1px solid var(--casi-border)', borderRadius: 9, padding: '12px 14px', fontSize: 14, color: 'var(--casi-text)', outline: 'none', fontFamily: "var(--font-casi-sans), sans-serif", resize: 'none', transition: 'border-color .18s', lineHeight: 1.5 }}
                       value={bio} onChange={(e) => setBio(e.target.value)} />
                     <div className="auth-hint dim" style={{ textAlign: 'right' }}>{bio.length}/160</div>
                   </div>

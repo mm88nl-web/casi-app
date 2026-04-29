@@ -1301,7 +1301,7 @@ export default function AdminStudio() {
           </div>
           <div className="tnr">
             <Link
-              href={view === 'settings' ? '/admin/settings' : '/studio'}
+              href={view === 'settings' ? '/studio/settings' : '/studio'}
               title={view === 'settings' ? 'Try new settings' : 'Try new studio dashboard'}
               style={{
                 fontFamily: 'var(--font-casi-mono, ui-monospace, monospace)',
@@ -1311,9 +1311,9 @@ export default function AdminStudio() {
                 textDecoration: 'none',
                 padding: '5px 10px',
                 borderRadius: '999px',
-                background: 'rgba(245, 130, 32, 0.08)',
-                border: '1px solid rgba(245, 130, 32, 0.3)',
-                color: '#F58220',
+                background: 'rgba(var(--casi-accent-rgb), 0.08)',
+                border: '1px solid rgba(var(--casi-accent-rgb), 0.3)',
+                color: 'var(--casi-accent)',
               }}
             >
               {view === 'settings' ? 'New settings' : 'New studio'} →
