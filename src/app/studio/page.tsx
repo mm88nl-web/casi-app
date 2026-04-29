@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
@@ -241,7 +241,21 @@ type LoadState =
   | { kind: 'missing-profile' }
   | { kind: 'ready'; profile: Profile };
 
+/**
+ * useSearchParams() puts the page on the dynamic-render path, which Next's
+ * static-export pass refuses to traverse without a Suspense boundary above
+ * it. Wrap the inner component so the build can prerender the shell while
+ * the params resolve client-side.
+ */
 export default function StudioPage() {
+  return (
+    <Suspense fallback={<StatusScreen>Loading studio…</StatusScreen>}>
+      <StudioPageInner />
+    </Suspense>
+  );
+}
+
+function StudioPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [supabase] = useState<SupabaseClient>(() => createClient());
