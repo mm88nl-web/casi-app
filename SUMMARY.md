@@ -1,34 +1,44 @@
 # CASI — Project Summary
 
-Snapshot for picking up across chat sessions. Reflects the repo at branch
-`claude/continue-casi-work-PvzRm` (HEAD = `c09b252` at time of writing).
+Snapshot for picking up across chat sessions. Reflects `origin/main` as of
+2026-04-29. Working branch: `claude/review-solana-grant-C02xG`.
 
-> ⚠️ **READ THIS FIRST** — every branch mistake in the 2026-04-17 session
-> came from assuming the working copy matched the remote. Before doing
-> ANYTHING else in a new chat:
+> ⚠️ **READ THIS FIRST** — branch drift was the #1 footgun in earlier
+> sessions (see Common Pitfalls below). Before doing anything else:
 > ```
 > cd ~/casi-app
 > git fetch origin
-> git checkout claude/continue-casi-work-PvzRm
+> git checkout claude/review-solana-grant-C02xG
 > git pull
-> git branch --show-current    # MUST print claude/continue-casi-work-PvzRm
-> git log --oneline -3          # top commit should be c09b252 or later
+> git branch --show-current    # MUST print claude/review-solana-grant-C02xG
 > grep -c 'pub mod fee_wallet' programs/casi-escrow/src/lib.rs   # must be 0
 > grep cluster Anchor.toml      # must say "Localnet"
 > ```
 > If any of those don't match, stop and fix before writing or deploying.
 
-## Current state (2026-04-17)
+## Current state (2026-04-29)
 
-- **Anchor program deployed to devnet**: `Dkai2s6Rwreyh51bajqLYMJdfHE6Gonwz9vFw6joUfRd`
-  (no-fee, 100% viewer→streamer payout)
+- **Repository visibility**: PUBLIC on GitHub, Apache-2.0 license set on the repo metadata. Founder: Matthew Melendez (`mm88nl@gmail.com`), Netherlands.
+- **Anchor program deployed to devnet**: `Dkai2s6Rwreyh51bajqLYMJdfHE6Gonwz9vFw6joUfRd` (no-fee, 100% viewer→streamer payout). **Frozen pre-audit** — bug fixes only.
 - **Dead program IDs on devnet** (do not redeploy to these — permanently retired via `solana program close`):
   - `78bw5wjc3hdLYxf5kcMX1eSAvbtPyjvcYo2GZsJyzvYo` (deployed from wrong branch with fee code)
   - `DqpeEBpVpPpEVNStq3iUgS6a4jFSsGpkusxYf1rrxTkC` (same)
 - **Deploy wallet**: `8TzUa1U5EEcWHBwbTDhNutyMj2NmTh2gsfcuvVYnGQUv` (upgrade authority)
-- **Production URL**: `https://www.casi.gg` (apex `casi.gg` → 307 redirects; always use the `www.` form in server-to-server calls)
-- **Admin header refactored**: utility bar (wallet pill + save status) above main nav (logo + tabs + Go Live + action buttons). No more horizontal overflow.
-- **Stripe Janitor GHA fixed**: GitHub `APP_URL` secret pointing at `https://www.casi.gg`, `CRON_SECRET` rotated + synced with Vercel Production env. Currently green, runs every 5 min.
+- **Production URL**: `https://www.casi.gg` (apex `casi.gg` → 307 redirects; always use the `www.` form in server-to-server calls). Live on Solana **devnet** with test USDC; banner in app reads "DEV PREVIEW · RUNNING ON SOLANA DEVNET · NO REAL FUNDS INVOLVED · SMART CONTRACT AUDIT IN PROGRESS."
+- **v7 design system shipped** (Phases 0–7, commits `7c3a60f` through `59f96f5`). Default skin: Casi Dark, accent `#0DCFB0` (teal) + accent2 `#9945FF` (Solana purple). Old skins (Void, Neon, Terminal, Ember, Chrome) are gone. New 7 skins: `casi-dark`, `twitch`, `kick`, `youtube`, `cyber`, `mono`, `rose`.
+- **Studio split**: `/studio` (dashboard) + `/studio/live` (canvas editor) since Phase 4. `/studio/settings` is now the canonical settings home.
+- **Auth on `/login`**: email/password + four OAuth providers — **Google** (working), **Twitch / Discord / X** (code shipped commit `f52366f`, **need Supabase Dashboard configuration** with each provider's client id + secret before buttons succeed). Callback at `src/app/auth/callback/route.ts`.
+- **Stripe Janitor GHA**: green, runs every 5 min, hits `https://www.casi.gg/api/cron/stripe-janitor`.
+- **Cranker**: `SOLANA_CRANKER_KEYPAIR` env required for delegated approve/settle UX. Daily monitor at `/api/cron/cranker-monitor` warns at 0.005 SOL, errors at 0.001 SOL.
+
+## Solana Foundation grant — IN FLIGHT
+
+- **Working draft**: [`grant-answers.md`](./grant-answers.md) at repo root. All identity fields filled (Matthew Melendez, mm88nl@gmail.com, Netherlands). Honest non-technical-founder framing in the "Why You" section.
+- **Two TODOs remain**, both blocked on audit-firm replies: the audit firm name and the quoted amount in Milestone 1.
+- **Ask**: $25,000 USD, structured as audit + remediation contractor ($18k) + SDK contractor ($5k) + public cranker + design note ($2k). All deliverables Apache-2.0.
+- **Framing**: the grant funds the `casi-escrow` Anchor program as a **reusable time-vested USDC escrow primitive** (developer tooling category). CASI the consumer product is the *reference integration*, not the deliverable. CASI sustains itself separately via streamer SaaS.
+- **Audit firm outreach**: contacted **Sec3** (Jack Tsai replied with their process — 5-stage flow including code review + 2 auditors + recheck), **OtterSec**, and **Neodyme**. Awaiting written quotes (5–7 day turnaround typical). Realistic range for ~1.2k LOC Anchor program: $15–25k. Sec3 contact: `jack@sec3.dev` / Telegram `vibes8760`.
+- **Next milestone for the grant**: when the first acceptable quote lands, fill the two TODOs in `grant-answers.md` and submit the Solana Foundation grant form.
 
 ## What it is
 
@@ -128,29 +138,37 @@ Server: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET
 
 ## Skins
 
-`src/lib/skins.ts`: 6 presets (`casi-dark`, `void`, `neon`, `twitch`, `terminal`, `ember`, `chrome`) injected as CSS custom properties via `SkinProvider`. Streamer can override accent with custom hex.
+`src/lib/skins.ts`: 7 v7 presets — `casi-dark` (default, teal `#0DCFB0` + Solana purple `#9945FF`), `twitch`, `kick`, `youtube`, `cyber`, `mono`, `rose`. Each declares `accent`, `accent2`, `bg`, `surface`, `border`, `text`, `textMuted` plus RGB-channel duplicates for `rgba()`. Injected as CSS custom properties via two providers:
 
-## Recent commits (top of branch `claude/continue-casi-work-PvzRm`)
+- **`UserSkinProvider`** (`src/components/UserSkinProvider.tsx`) — the logged-in streamer's own pages (`/admin`, `/studio`).
+- **`SkinProvider`** (`src/components/SkinProvider.tsx`) — viewer-facing pages scoped to a streamer (`/overlay?s=username`, `/s/username`).
+
+Per-streamer overrides on `profiles`:
+- `profiles.skin` → picks one of the 7 ids. Defaults to `casi-dark`.
+- `profiles.theme_color` → optional custom accent hex that overrides the skin's accent. NULL = use the skin default.
+
+Picker UI in `src/app/admin/settings/_components/AppearanceSection.tsx` (also surfaced from `/studio/settings`). Common confusion: when a streamer says "the colors look wrong," check `profiles.theme_color` first — they probably picked Gold or another preset.
+
+## Recent commits (top of `origin/main` as of 2026-04-29)
 
 ```
-c09b252 ui(admin): split header into utility bar + main nav
-e7d6e18 fix(anchor): default provider to Localnet, not Devnet
-900071b chore: gitignore rust build artifacts (target/, Cargo.lock)
+ae4112c Fill in identity placeholders in grant draft
+f52366f Add Twitch / Discord / X OAuth to /login
+e7bce6f Merge PR #56 — share HTML file
+8617a74 Studio + booking polish from streamshot review
+59f96f5 Phase 7: auth — v7 token migration of /login
+a083e5f Phase 6: viewer surfaces — /overlay restyle + /s/[username] v7 venue header
+c0e3b77 Phase 5: /studio/settings + share section components
+8a101e0 Phase 4: studio split — /studio (dashboard) + /studio/live (editor)
+b22684a Phase 3: landing — v7 split-door hero, trust band, footer
+7a2177b Phase 2: shared v7 components
+7c3a60f Phase 1: foundation — v7 tokens, fonts, skins
+4786cf6 Add Google sign-in / sign-up to /login
+f929bc3 feat(p0): captcha + content moderation + legal pages + abuse reporting
 46fa5ab refactor(escrow): strip 5% platform fee — 100% viewer→streamer
-44ac5ba docs: refresh SUMMARY handoff with security-audit commits
-14d0e59 fix(security): tighten bookings RLS — lock INSERT columns, split UPDATE
-480021e chore(web): update homepage platform-fee stat to 0%
-c72b806 fix(security): timing-safe compare on Helius webhook secret
-16df4bf refactor(stripe): switch to Connect Direct Charges with zero platform fee
-bfedf96 fix(payments): close amount-tampering hole in booking checkout
 ```
 
-Active themes: web-tier security audit hardening + on-chain fee stripped +
-program live on devnet + admin header refactor + cron wired up. Fee-removal
-fully shipped: `fee_wallet` account, `FEE_BPS` constant, `InvalidFeeWallet`
-error all gone from `programs/casi-escrow/src/lib.rs`. Tests assert 100%
-payout. Program `Dkai2s6Rwreyh51bajqLYMJdfHE6Gonwz9vFw6joUfRd` deployed to
-devnet 2026-04-17; upgrade authority = `8TzUa1U5EEcWHBwbTDhNutyMj2NmTh2gsfcuvVYnGQUv`.
+Active themes: v7 design system fully shipped; auth expanded to Google + Twitch + Discord + X (code shipped, dashboard config pending for non-Google providers); grant proposal in flight with audit-firm outreach open; repo public + Apache-2.0 + SECURITY.md + CI badge. Fee-removal stayed in: `fee_wallet` account, `FEE_BPS` constant, `InvalidFeeWallet` error all gone from `programs/casi-escrow/src/lib.rs`. Program `Dkai2s6Rwreyh51bajqLYMJdfHE6Gonwz9vFw6joUfRd` still on devnet pending external audit.
 
 ## Known gaps / loose ends
 
@@ -165,38 +183,29 @@ devnet 2026-04-17; upgrade authority = `8TzUa1U5EEcWHBwbTDhNutyMj2NmTh2gsfcuvVYn
 
 ## Handoff to next session
 
-Project state as of `c09b252` (2026-04-17, branch `claude/continue-casi-work-PvzRm`):
-- Anchor program builds + tests pass on local validator.
+Project state as of 2026-04-29:
+- Anchor program builds + tests pass on local validator. Frozen pre-audit (bug fixes only).
 - Program deployed to devnet at `Dkai2s6Rwreyh51bajqLYMJdfHE6Gonwz9vFw6joUfRd` (no-fee, 100% payout). Upgrade authority: `8TzUa1U5EEcWHBwbTDhNutyMj2NmTh2gsfcuvVYnGQUv`.
-- `Anchor.toml` [provider] cluster is now `Localnet` — keeps `anchor test` off real devnet. ALWAYS verify this is `Localnet` before running tests.
-- Stripe Janitor GHA green, runs every 5 min, pings `https://www.casi.gg/api/cron/stripe-janitor` with bearer token.
-- Admin header split into utility bar (wallet pill + save status) + main nav — no overflow on narrow viewports.
+- `Anchor.toml` [provider] cluster is `Localnet` — keeps `anchor test` off real devnet. ALWAYS verify this is `Localnet` before running tests.
+- Stripe Janitor GHA green.
+- v7 design system shipped on main (Phases 0–7); studio split into dashboard + live; `/login` has Google + Twitch + Discord + X (Twitch/Discord/X buttons need provider config in Supabase Dashboard before they work).
+- Repo public, Apache-2.0, SECURITY.md present, README cleaned up, CI badge in README.
+- Solana Foundation grant draft in `grant-answers.md` with two TODOs left (audit firm name + quote $).
 
-### Next task: onboarding UX polish (roadmap item 2)
+### Next task: wait on audit-firm replies, then submit the grant
 
-Audit surfaced 6 gaps in the streamer-signup-through-first-tip path. All changes are copy + small UI, no schema/migration work:
+The high-leverage path forward is small and external:
 
-1. **"Your viewer link" card** at the top of `/admin` — show `https://www.casi.gg/overlay?s={username}` with one-click copy. Reduces "where do I send my viewers?" friction.
-   - File: `src/app/admin/page.tsx` (add card just under the `.util-bar`)
+1. **Audit firms reply with quotes** (Sec3 / OtterSec / Neodyme — outreach sent, 5–7 day SLA typical). When the first acceptable quote lands, fill the two TODOs in `grant-answers.md` and submit the Solana Foundation grant form.
+2. **Configure Twitch / Discord / X OAuth in Supabase Dashboard** — the buttons exist on `/login` but currently throw "provider is not enabled" until each provider's client id + secret is pasted in. Per-provider setup steps documented in the chat history; rough flow: register an app on the provider dev portal → set OAuth callback URL to `https://<supabase-project-ref>.supabase.co/auth/v1/callback` → paste credentials into Supabase Dashboard → Authentication → Providers.
+3. **Don't ship new product features pre-mainnet.** Pro-tier streamer SaaS is the planned monetization (custom branding, auto-approve rules, team accounts, analytics — Streamlabs Ultra-style $10–30/mo). Intentionally premature; first build the audited mainnet primitive + onboard a closed-beta cohort of streamers, then layer SaaS on top.
 
-2. **"Send test Flash" button** — free-tier self-send so streamers see the overlay animation before any viewer arrives. Hits existing `POST /api/flashes/create` with `payment_method: 'free'`.
-   - File: `src/app/admin/page.tsx` (button next to the new viewer-link card)
+### What NOT to do (carried forward — earned the hard way)
 
-3. **Terminology sweep** — "rent your slots" is opaque. Replace with "let viewers tip to display an image/video in this slot" in hover tooltips + empty-states on the admin canvas.
-   - Files: `src/app/admin/page.tsx`, `src/app/overlay/page.tsx`
-
-4. **OBS help panel** — collapsible `<details>` in admin Settings tab with the exact browser-source URL (`https://www.casi.gg/obs?s={username}&layer=beams`), recommended dimensions (1920×1080), and "refresh cache" note. Currently streamers have to guess.
-   - File: `src/app/admin/page.tsx` (Settings tab area)
-
-5. **Payment method hints** on `/profile/edit` — two lines next to each payment section:
-   - Stripe: "Accept card tips (EUR). Stripe takes ~2.9% + €0.25 per tip — CASI takes 0%."
-   - Solana: "Accept USDC tips on Solana. Near-zero fees, paid out on-chain instantly. CASI takes 0%."
-   - File: `src/app/profile/edit/page.tsx`
-
-6. **Beam-vs-Flash explainer** — inline banner on first admin load explaining the three surfaces (Flash = one-shot popup, Beam = timed display, Backdrop = background takeover). Dismissable via `localStorage`.
-   - File: `src/app/admin/page.tsx` (top banner, conditional on `!localStorage.getItem('casi-onboarding-seen')`)
-
-Scope is intentionally copy/UI only — no new routes, no schema changes, no payment-flow edits. Estimate: one focused session.
+- **Don't add a protocol fee on either rail.** 100% direct viewer→streamer is load-bearing for the regulatory posture (software, not payments) and the grant story. If you think a take rate makes sense, talk to the founder first — there are cleaner ways to monetize that don't require touching funds.
+- **Don't refactor the Anchor program before the audit.** It's frozen. Bug fixes only, with a test demonstrating the bug.
+- **Don't add an OAuth provider in code without enabling it in the Supabase Dashboard.** Buttons render but throw on click.
+- **Don't hardcode brand colors.** Use the `var(--accent)` / `var(--accent2)` tokens; per-streamer overrides come from `profiles.theme_color`.
 
 ### Common pitfalls we hit (don't repeat):
 1. **Branch drift is the #1 footgun.** User's deploy box pulled from a stale branch twice this session, deploying fee code to devnet and burning ~2.5 SOL. ALWAYS run the verification block at the top of this file before deploying.

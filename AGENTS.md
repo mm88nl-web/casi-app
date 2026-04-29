@@ -8,14 +8,31 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 CASI lets livestream viewers pay to put their image / video / message **on stream** as an overlay for a fixed duration. Streamers run OBS with a CASI browser-source URL; viewers book a slot via the web app; the streamer approves, the beam appears, the timer expires, payment settles.
 
+## Current project state (April 2026)
+
+**Phase**: pre-mainnet. The web app and `casi-escrow` Anchor program run on Solana **devnet** at https://casi.gg. Mainnet launch is gated on an external audit currently being scoped.
+
+**Repository**: public on GitHub at `mm88nl-web/casi-app`, **Apache-2.0** for the entire codebase. Founder: Matthew Melendez (mm88nl@gmail.com), Netherlands, solo non-technical builder using AI-assisted tooling.
+
+**Grant in flight**: a Solana Foundation grant application is being prepared, framed around `casi-escrow` as a reusable time-vested USDC escrow primitive (developer tooling category, $25k ask). Working draft lives at [`grant-answers.md`](./grant-answers.md) with two remaining TODOs (audit firm name + quote amount) blocked on quote replies. The grant funds: external audit + remediation contractor, `@casi/escrow-sdk` npm package + tutorial, public `cancel_stale_pending` cranker + design note. CASI itself is positioned as the *reference integration* — the consumer product is sustained separately by streamer SaaS, not the grant.
+
+**Audit outreach**: written quote requests sent to **Sec3** (Jack Tsai replied with their process; awaiting estimate), **OtterSec**, and **Neodyme**. Realistic budget for ~1.2k LOC Anchor program: $15–25k for the audit + ~$3k for a remediation contractor sourced via Superteam Earn or audit-firm referral.
+
+**Monetization posture**: **no protocol fees, ever** — 100% of every booking flows directly viewer→streamer on both rails. CASI never holds, routes, or skims funds (legal posture: software company, not a payment processor). Future revenue is planned via streamer SaaS (Streamlabs Ultra-style $10–30/mo Pro tier with custom branding, auto-approve rules, team accounts, analytics) and possibly brand-deal advertising once there's enough streamer inventory. None of that is shipped yet.
+
+**Recent design overhauls**: `v7` design system (Phases 0–7) replaced the old v3 — new tokens, fonts (Bricolage Grotesque + JetBrains Mono), 7-skin palette. Default skin is **Casi Dark** (teal `#0DCFB0` + Solana purple `#9945FF`). The `/studio` page was split in Phase 4 into `/studio` (dashboard) and `/studio/live` (canvas editor). Auth in Phase 7: `/login` now offers Google + Twitch + Discord + X OAuth alongside email/password (each provider must be enabled in the Supabase Dashboard separately).
+
+**What an agent picking this up should NOT do**: don't add protocol fees on the Stripe or Solana rail; don't refactor the Anchor program before audit; don't build new Pro-tier features pre-mainnet; don't widen RLS to fix permission errors (always go column-level). Read the rest of this file before changing money-moving code.
+
 ## Stack at a glance
 
 - **Frontend**: Next.js App Router, TypeScript, Supabase JS client, Solana wallet-adapter (Phantom et al.).
 - **Backend**: Next.js Route Handlers under `src/app/api/`. Webhook endpoints, cron jobs, payment flows all live here. Server routes use the Supabase service-role key and bypass RLS.
 - **Database**: Supabase (Postgres + PostgREST + RLS). Hosted. Migrations in `supabase/migrations/` with timestamp prefixes.
 - **Payments**:
-  - **Stripe Connect Direct Charges** for fiat. Streamers onboard via Connect; charges land on their connected account with application-fee splits.
-  - **Solana escrow** for crypto. Anchor program in `programs/casi-escrow/`. Viewer stakes SOL into a PDA; `CasiEscrowClient` in `src/lib/casi-escrow.ts` wraps the IDL. Prorated settle on early end, refund on cancel.
+  - **Stripe Connect Direct Charges** for fiat. Streamers onboard via Connect; charges land on their connected account. **No application-fee skim** (the previous 5% platform fee was stripped in commit `46fa5ab`). 100% of the charge goes to the streamer.
+  - **Solana escrow** for crypto. Anchor program in `programs/casi-escrow/`. Viewer locks **USDC** in a PDA-owned vault ATA; `CasiEscrowClient` in `src/lib/casi-escrow.ts` wraps the IDL. Prorated settle on early end, refund on cancel. SOL is only used for transaction fees (paid by the cranker for delegated calls; otherwise by the wallet signer).
+- **Auth**: `/login` (single page covering both sign-in and 3-step signup). Supabase email/password + four OAuth providers — Google, Twitch, Discord, X (Twitter) — wired in `src/app/login/page.tsx`. OAuth callback at `src/app/auth/callback/route.ts` is provider-agnostic. **Each OAuth provider must be enabled in the Supabase Dashboard** (Authentication → Providers) with its own client id + secret, or the button throws "provider is not enabled."
 - **Hosting**: Vercel. Cron jobs defined in `vercel.json`. **On Hobby plan — daily-only cron, no more.**
 - **Tests**: `ts-mocha` over `tests/unit/*.test.ts`. Run `npm test`.
 
@@ -26,12 +43,21 @@ src/app/
   admin/              legacy streamer dashboard (auth-gated)
     page.tsx          main file — kept <2k lines by design
     _components/      private components (underscore = Next.js ignores for routing)
-    settings/         v3 settings home — payouts, session key, accent picker, etc.
-      _components/    one component per section
-  studio/             v3 streamer dashboard redesign (canvas + airing + queue)
+    settings/         settings home — payouts, session key, accent picker, etc.
+      _components/    one component per section (incl. AppearanceSection.tsx)
+  studio/             v7 streamer cockpit — split into two pages (Phase 4):
+    page.tsx          /studio = dashboard (stats, share section, live status)
+    live/page.tsx     /studio/live = canvas editor (slots / pricing / approvals)
+    settings/         v7 settings home (mirrors /admin/settings; canonical home)
+    setup/            initial-setup flow for fresh streamer accounts
+    _components/      shared studio chrome
   overlay/            OBS browser-source target (renders active beams)
   s/[username]/       shareable streamer landing page — bio + live indicator +
                       flashes feed + hero CTA to /overlay (NOT a booking surface)
+  login/              single-page auth (sign-in + 3-step signup); 4 OAuth
+                      providers + email/password
+  auth/callback/      OAuth callback route — provider-agnostic, hands off to
+                      /login?finish=true if the user has no profiles row yet
   api/
     bookings/         create/expire/advance/deny + per-rail variants
     stripe/           authorize, cancel, webhook, end-early, approve-queue
@@ -76,10 +102,75 @@ Every bookable row has a `status` lifecycle: `pending → approved_queued | acti
 - **Streamer-initiated mutations** use the Supabase session bearer. Streamers can only mutate their own `profile_id` rows.
 - When adding a new sensitive column to `bookings` or `flashes`, **extend the column-level GRANT list** in a migration — don't rely on RLS alone.
 
+## Auth providers (read this before touching `/login`)
+
+The `/login` page (`src/app/login/page.tsx`) is the single auth surface — same page handles sign-in, 3-step signup, and post-OAuth profile finalization (`?finish=true` query param). No separate `/signup` page; `/signup` redirects here with `?tab=signup`.
+
+**Providers wired in code**:
+
+- **Email + password** (Supabase native, always available).
+- **Google OAuth** (commit `4786cf6`).
+- **Twitch OAuth** (commit `f52366f`).
+- **Discord OAuth** (commit `f52366f`).
+- **X / Twitter OAuth** (commit `f52366f`).
+
+All four OAuth buttons call a single generic `handleOAuth(provider)` → `supabase.auth.signInWithOAuth({ provider })`. The OAuth callback at `src/app/auth/callback/route.ts` is provider-agnostic — it exchanges the code for a session and routes based on whether a `profiles` row exists.
+
+**Each provider must be separately enabled in the Supabase Dashboard** (Authentication → Providers) with its client id + secret. Google is configured today. Twitch / Discord / X were added in code but **may not be enabled in the dashboard yet** — if a streamer clicks one of those buttons and gets "provider is not enabled," the dashboard config is the missing piece, not the code. The Supabase OAuth callback URL pattern is `https://<project-ref>.supabase.co/auth/v1/callback`.
+
+**First-time OAuth signup flow**:
+1. User clicks "Continue with Twitch" (or any OAuth provider) on `/login`.
+2. Supabase redirects to provider, provider returns to `/auth/callback?code=...`.
+3. `exchangeCodeForSession` writes the cookie, then we check for a `profiles` row.
+4. **Profile exists** → redirect to `/admin` (or `?next` destination).
+5. **Profile missing** → redirect to `/login?finish=true`. Login page detects this, jumps the user to step 2 (username) of signup with display_name + avatar pre-filled from provider metadata. Final submit just inserts into `profiles` (auth.users already created).
+
+**Don'ts**:
+- Don't add a provider to the login page without also enabling it in the Supabase Dashboard — the buttons render but throw on click.
+- Don't try to do post-OAuth profile creation server-side from `/auth/callback`. The current flow intentionally bounces the user back through the multi-step signup UI so they pick a username + bio. Skipping that gives you orphan profiles with auto-generated usernames.
+
+## Theme system (skins + per-user accent override)
+
+The v7 design system (Phases 0–7) is token-driven via CSS variables, with per-streamer overrides persisted in the database.
+
+**Skins** are defined in `src/lib/skins.ts`. There are 7 presets, each declaring `accent`, `accent2`, `bg`, `surface`, `border`, `text`, `textMuted` plus RGB-channel duplicates for `rgba()` usage:
+
+| Skin id | Name | Accent | Accent2 |
+|---|---|---|---|
+| `casi-dark` (default) | Casi Dark | `#0DCFB0` (teal) | `#9945FF` (Solana purple) |
+| `twitch` | Twitch | `#9146FF` | `#772CE8` |
+| `kick` | Kick | `#53FC18` | `#00cc00` |
+| `youtube` | YouTube | `#FF0000` | `#cc0000` |
+| `cyber` | Cyber | `#06B6D4` | `#9945FF` |
+| `mono` | Mono | `#E8E8E8` (greyscale) | `#888888` |
+| `rose` | Rose | `#F472B6` | `#9945FF` |
+
+Old skins from earlier phases (`Void`, `Neon`, `Terminal`, `Ember`, `Chrome`) **no longer exist** — don't add them back without updating the v7 token system.
+
+**Per-streamer overrides** live on the `profiles` table:
+- `profiles.skin` — picks one of the 7 skin ids above. Defaults to `casi-dark`.
+- `profiles.theme_color` — optional **custom accent** that overrides the skin's accent for that streamer's surfaces (their `/admin`, `/studio`, and the viewer-facing `/overlay?s=username` and `/s/username` pages). Stored as a hex string. NULL means "use the skin's default accent."
+
+The accent picker UI lives in `src/app/admin/settings/_components/AppearanceSection.tsx` (also surfaced in `/studio/settings`). It offers a preset row (Casi Orange, Twitch Purple, Cyber Cyan, YouTube Red, Matrix Green, Kick Green, Rose Pink, Gold, Pure White) plus a custom hex input.
+
+**Where colors are applied**:
+- `src/components/UserSkinProvider.tsx` — sets CSS variables for the **logged-in streamer's own pages** (admin / studio). Reads from `profiles` and localStorage.
+- `src/components/SkinProvider.tsx` — sets CSS variables for **viewer-facing pages scoped to a streamer** (`/overlay?s=username`, `/s/username`). The viewer sees the streamer's chosen skin + accent.
+- `src/app/globals.css` lines 3–24 — the `casi-dark` defaults at the `:root` level for unauthenticated visitors.
+
+**Common confusion**: if a streamer says "the colors look wrong," check `profiles.theme_color` first — they probably picked Gold (`#FACC15`) or another preset that overrides the teal default. The fix is in Settings → Appearance, not in code.
+
+**Don'ts**:
+- Don't hardcode brand colors in components. Use the `var(--accent)` / `var(--accent2)` tokens. Two known exceptions: the yellow "Extend" mode button in `overlay/page.tsx` (`#eab308`, intentional design) and the OAuth provider brand-color SVG icons in `login/page.tsx`.
+- Don't bypass the SkinProvider for viewer-facing pages — the streamer's accent must propagate to the overlay or the brand consistency breaks.
+
 ## Admin / Studio conventions
 
 - `src/app/admin/page.tsx` is the legacy kitchen sink — canvas, requests queue, modals, toasts. Kept together because state flows top-down and splitting the state shards makes things worse. Every self-contained UI chunk is extracted into `_components/`.
-- `src/app/studio/page.tsx` is the v3 redesign of the same surface — leaner cockpit, mobile-friendly, same data sources.
+- **`/studio` is the v7 streamer cockpit, split into two pages** (Phase 4):
+  - `src/app/studio/page.tsx` is the **dashboard** — stats, share section, live status, no canvas editing.
+  - `src/app/studio/live/page.tsx` is the **canvas editor** — slot positioning, pricing, approvals queue, the actual moderation surface.
+  - Both call the same moderation lib (see below); they differ only in layout and which surfaces they expose.
 - **Both pages share moderation handlers via `src/lib/streamer-moderation.ts`.** The lib is the single source of truth for `approveBooking`, `denyBooking`, `endBeamEarly`, `moderateFlash`, plus the escrow primitives `startSolanaBeamOnChain` and `settleOrClearSolanaEscrow`. Admin's local handlers are thin adapters that pipe React state (toasts, optimistic updates) around lib calls — don't add new business logic to them, edit the lib instead.
 - When adding a new card or panel, follow the existing split pattern: one component per file, props-driven, variant prop (e.g. `kind: 'beam' | 'backdrop'`) to share a component across similar but differently-themed surfaces.
 - Admin's four core handlers (`playNow`, `kickBeam`, `approveBooking`, `denyBooking`) close over supabase + profile + state and get passed into card components as callbacks. Don't duplicate them into children.
@@ -254,11 +345,16 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 
 ## When in doubt
 
+- **Don't add a protocol fee on either rail.** 100% of every booking flows direct viewer→streamer. CASI's positioning depends on this (regulatory posture: software, not payments) and the grant story depends on it. If you think you need a take rate, you don't — talk to the founder first.
 - **Don't broaden RLS or add table-level GRANTs.** Go column-level.
 - **Don't touch `admin/page.tsx` without extracting the piece you added to `_components/`** if it's more than ~30 lines of JSX.
 - **Don't put new moderation logic in `admin/page.tsx`.** The four core handlers live in `src/lib/streamer-moderation.ts` so /admin and /studio share one implementation. Admin's local handlers are thin adapters that translate `ModerationResult` to toasts + optimistic state. New logic goes in the lib.
+- **Don't hardcode brand colors.** Use `var(--accent)` / `var(--accent2)` tokens; per-streamer overrides come from `profiles.theme_color` via the SkinProvider.
+- **Don't add an OAuth provider in code without enabling it in the Supabase Dashboard** (Authentication → Providers + client id/secret). The button will throw on click.
 - **Don't add every-minute cron on Hobby.** Deploy will fail.
 - **Don't call `select('*')` on bookings.** Use the explicit column list already in `admin/page.tsx` / `overlay/page.tsx`.
 - **Don't auto-promote Solana queue on expire.** Escrow program isn't wired for it.
 - **Don't flip a Solana booking's DB status without reconciling the chain first.** DB status ≠ escrow status; acting on the DB alone leaves funds stuck or over-vested to the streamer. Use `settleOrClearSolanaEscrow` or equivalent probe-first logic.
 - **Don't build a second booking surface.** `/overlay` is the canonical Stripe + Solana booking flow; `/s/[username]` is a marketing landing page that funnels into it. If you need richer in-page booking on /s/[username], wire it through `/api/stripe/authorize` + `CasiEscrowClient` — never a parallel implementation.
+- **Don't refactor the Anchor program before the audit.** It's frozen pending external review. Bug fixes only, and only with a clear test demonstrating the bug.
+- **Don't ship new Pro-tier streamer features pre-mainnet.** SaaS upsell is the planned monetization but it's premature — focus is shipping mainnet + onboarding the first cohort.
