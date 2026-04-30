@@ -181,17 +181,34 @@ function bookingTotal(b: BookingRow): { total: number; isUsdc: boolean; label: s
 function bookingToAiringItem(b: BookingRow): AiringItem {
   const who = b.viewer_name || 'anon';
   const snippet = b.message ? `"${b.message.slice(0, 40)}"` : b.file_type === 'video' ? 'video clip' : 'image';
-  const { total, label } = bookingTotal(b);
+  const { total, isUsdc, label } = bookingTotal(b);
   const startMs = b.started_at ? new Date(b.started_at).getTime() : Date.now();
   const durationSecs = (Number(b.duration_minutes) || 0) * 60;
   const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
   const remaining = Math.max(0, durationSecs - elapsed);
+
+  // Live vested-amount display — same math the on-chain program uses
+  // (vested = total × min(elapsed, duration) / duration), so the streamer
+  // sees the number that actually settles when the beam ends. Stripe rail
+  // prorates the same way at /api/stripe/end-early. The per-second tick on
+  // /studio re-renders this so it counts up live.
+  let earnedLabel: string | undefined;
+  if (total > 0 && durationSecs > 0) {
+    const vested = total * Math.min(elapsed, durationSecs) / durationSecs;
+    const vestedFmt = vested.toFixed(vested % 1 === 0 ? 0 : 2);
+    const totalFmt = total.toFixed(total % 1 === 0 ? 0 : 2);
+    earnedLabel = isUsdc
+      ? `${vestedFmt} / ${totalFmt} USDC`
+      : `€${vestedFmt} / €${totalFmt}`;
+  }
+
   return {
     id: `booking-${b.id}`,
     icon: b.file_type === 'video' ? '▶' : '◆',
     name: `${who} · ${snippet}`,
     subtitle: total > 0 ? `Beam · ${label}` : 'Beam',
     remaining: formatRemaining(remaining),
+    earnedLabel,
   };
 }
 

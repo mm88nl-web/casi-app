@@ -26,6 +26,11 @@ export type AiringItem = {
   subtitle: string;
   /** Countdown for timed items (beams). */
   remaining?: string;
+  /** Live earned / total label, e.g. "€4 / €10" or "8 / 20 USDC". Computed
+   *  by the parent each tick using the same vesting math the on-chain
+   *  program runs at settle, so the number reads as "what the streamer
+   *  pockets if this beam ends right now". Hidden for free beams. */
+  earnedLabel?: string;
   /** End-early handler — only for items the streamer can actually kick. */
   onEndEarly?: () => void;
   /** True while end-early is in flight. Disables the button. */
@@ -144,15 +149,38 @@ export default function AiringNow({ items }: Props) {
                 {item.remaining ? (
                   <div
                     style={{
-                      fontFamily: 'var(--font-casi-mono), monospace',
-                      fontSize: '20px',
-                      color: 'var(--casi-accent)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-end',
                       whiteSpace: 'nowrap',
-                      letterSpacing: '-0.5px',
-                      fontVariantNumeric: 'tabular-nums',
                     }}
                   >
-                    {item.remaining}
+                    <div
+                      style={{
+                        fontFamily: 'var(--font-casi-mono), monospace',
+                        fontSize: '20px',
+                        color: 'var(--casi-accent)',
+                        letterSpacing: '-0.5px',
+                        fontVariantNumeric: 'tabular-nums',
+                        lineHeight: 1.05,
+                      }}
+                    >
+                      {item.remaining}
+                    </div>
+                    {item.earnedLabel ? (
+                      <div
+                        style={{
+                          fontFamily: 'var(--font-casi-mono), monospace',
+                          fontSize: '10.5px',
+                          color: 'var(--casi-text-mid)',
+                          marginTop: '3px',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                        title="Earned so far / total — vests with the timer"
+                      >
+                        {item.earnedLabel}
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <div
