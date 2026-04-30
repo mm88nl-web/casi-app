@@ -12,6 +12,7 @@ import AiringNow, { type AiringItem, type QueuedRowItem } from './_components/Ai
 import ApprovalQueue, { type QueueItem } from './_components/ApprovalQueue';
 import EndStreamDialog, { type DelegateHealth } from './_components/EndStreamDialog';
 import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
+import PreviewBookingModal, { type PreviewBooking } from './_components/PreviewBookingModal';
 import StudioFrame from './_components/StudioFrame';
 
 // Explicit column lists. BOOKING_COLS adds the moderation-critical fields the
@@ -19,7 +20,7 @@ import StudioFrame from './_components/StudioFrame';
 // escrow_pda / viewer_wallet (Solana settle on deny), image_url (overlay copy
 // on approve).
 const BOOKING_COLS =
-  'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, started_at, escrow_pda, viewer_wallet, is_queued';
+  'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, payment_intent_id, tx_signature, started_at, escrow_pda, viewer_wallet, is_queued';
 const FLASH_COLS =
   'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, escrow_pda, viewer_wallet';
 const PROFILE_COLS = 'id, username, solana_wallet, is_live, display_currency';
@@ -84,11 +85,28 @@ type BookingRow = {
   price_value: number | string;
   price_unit: string | null;
   payment_method: string | null;
+  payment_intent_id: string | null;
+  tx_signature: string | null;
   started_at: string | null;
   escrow_pda: string | null;
   viewer_wallet: string | null;
   is_queued: boolean | null;
 };
+
+// Mirrors admin/page.tsx's isPaymentConfirmed. Approve must stay gated until
+// the viewer's funds are real — Stripe PI created OR Solana tx_signature
+// stored OR the booking is genuinely free. Approving without payment lets
+// the streamer flip status='active' for nothing in escrow, which on Solana
+// reverts at start_beam time and on Stripe leaves a stale row that can't
+// be captured.
+function isPaymentConfirmed(b: BookingRow): boolean {
+  return !!(
+    b.payment_intent_id ||
+    b.tx_signature ||
+    b.payment_method === 'free' ||
+    Number(b.price_value) === 0
+  );
+}
 
 type FlashRow = {
   id: string;
@@ -130,6 +148,7 @@ function bookingToQueueItem(
     mediaUrl: b.image_url,
     fileType: b.file_type,
     shape,
+    paymentConfirmed: isPaymentConfirmed(b),
   };
 }
 
@@ -294,6 +313,7 @@ function StudioPageInner() {
   const [endingEarly, setEndingEarly] = useState<Set<string>>(new Set());
   const [refundingFlash, setRefundingFlash] = useState<Set<string>>(new Set());
   const [playingNowId, setPlayingNowId] = useState<string | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [endStreamOpen, setEndStreamOpen] = useState(false);
   const [endStreamProgress, setEndStreamProgress] = useState<EndStreamProgress | null>(null);
   const [delegateHealth, setDelegateHealth] = useState<DelegateHealth>('unknown');
@@ -480,6 +500,15 @@ function StudioPageInner() {
       const raw = queueId.slice('booking-'.length);
       const booking = pendingBookings.find((b) => String(b.id) === raw);
       if (!booking) return;
+      // Defensive payment-gate. UI already disables the button when the
+      // booking isn't paid, but realtime sub races + admin overlap mean a
+      // streamer could in theory click between "no payment" and "paid"
+      // states. Refuse server-side (here) to keep the on-chain Pending
+      // start_beam from reverting.
+      if (!isPaymentConfirmed(booking)) {
+        setErrorMsg('Viewer hasn’t paid yet — give it a moment, then try again.');
+        return;
+      }
       markModerating(queueId, true);
       const result = await approveBooking(moderationCtx, booking);
       markModerating(queueId, false);
@@ -788,6 +817,7 @@ function StudioPageInner() {
         items={queue}
         onApprove={handleApprove}
         onReject={handleReject}
+        onPreview={setPreviewId}
         pendingIds={moderating}
         emptyLabel="No pending bookings · nothing to approve"
       />
@@ -812,8 +842,91 @@ function StudioPageInner() {
         progress={endStreamProgress}
         onConfirm={confirmEndStream}
       />
+
+      <PreviewBookingModal
+        booking={buildPreview(previewId, pendingBookings, pendingFlashes, elementsById)}
+        onClose={() => setPreviewId(null)}
+        onApprove={handleApprove}
+        onDeny={handleReject}
+      />
     </StudioFrame>
   );
+}
+
+/**
+ * Resolve a preview-modal id ("booking-123" or "flash-uuid") back to the
+ * raw row plus formatted display strings. Returns null when the id isn't
+ * set or its row dropped out of the pending lists (approved / denied
+ * elsewhere) — modal closes itself on null.
+ */
+function buildPreview(
+  id: string | null,
+  pendingBookings: BookingRow[],
+  pendingFlashes: FlashRow[],
+  elementsById: Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null }>,
+): PreviewBooking | null {
+  if (!id) return null;
+  if (id.startsWith('booking-')) {
+    const raw = id.slice('booking-'.length);
+    const b = pendingBookings.find((x) => String(x.id) === raw);
+    if (!b) return null;
+    const duration = Number(b.duration_minutes) || 0;
+    const rate = Number(b.price_value) || 0;
+    const unitMinutes = b.price_unit === 'hr' ? 60 : 1;
+    const total = rate * (duration / unitMinutes);
+    const isUsdc = b.payment_method === 'usdc' || b.payment_method === 'solana';
+    const fmt = (n: number) => n.toFixed(n % 1 === 0 ? 0 : 2);
+    const totalLabel = isUsdc ? `${fmt(total)} USDC` : `€${fmt(total)}`;
+    const rateLabel = isUsdc ? `${fmt(rate)} USDC/${b.price_unit}` : `€${fmt(rate)}/${b.price_unit}`;
+    const durationLabel = duration >= 60
+      ? `${Math.floor(duration / 60)}h${duration % 60 ? ` ${duration % 60}m` : ''}`
+      : `${duration}m`;
+    const element = b.element_id ? elementsById[b.element_id] : undefined;
+    return {
+      id,
+      kind: 'beam',
+      viewerName: b.viewer_name || 'anon',
+      message: b.message,
+      imageUrl: b.image_url,
+      fileType: b.file_type,
+      shape: element?.shape ?? null,
+      rateLabel,
+      totalLabel,
+      durationLabel,
+      paymentConfirmed: isPaymentConfirmed(b),
+      slotLabel: slotLabel(element),
+    };
+  }
+  if (id.startsWith('flash-')) {
+    const raw = id.slice('flash-'.length);
+    const f = pendingFlashes.find((x) => x.id === raw);
+    if (!f) return null;
+    const isUsdc = f.payment_method === 'usdc' || f.payment_method === 'solana';
+    const isFree = f.payment_method === 'free';
+    const cents = f.amount_cents ?? 0;
+    const totalLabel = isFree
+      ? 'Free'
+      : isUsdc
+        ? `${(cents / 100).toFixed(0)} USDC`
+        : `€${(cents / 100).toFixed(2)}`;
+    return {
+      id,
+      kind: 'flash',
+      viewerName: f.viewer_name || 'anon',
+      message: f.message,
+      imageUrl: null,
+      fileType: null,
+      shape: null,
+      rateLabel: '',
+      totalLabel,
+      durationLabel: '',
+      // Flashes get gated server-side already; no payment_intent_id /
+      // tx_signature fields on the FlashRow projection used here. Treat
+      // visible-in-pending as "paid enough to surface the modal".
+      paymentConfirmed: true,
+    };
+  }
+  return null;
 }
 
 function StatusScreen({ children }: { children: React.ReactNode }) {
