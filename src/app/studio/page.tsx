@@ -61,9 +61,12 @@ function timeAgo(createdAt: string): string {
 }
 
 function formatRemaining(secs: number): string {
-  if (secs <= 0) return '0:00';
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
+  // Floor first — duration_minutes can be fractional (e.g. 0.5min for tests)
+  // so durationSecs - elapsed is a float, and `s = float % 60` produced
+  // "3:34.9999..." in the timer.
+  const total = Math.max(0, Math.floor(secs));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
@@ -195,8 +198,11 @@ function bookingToAiringItem(b: BookingRow): AiringItem {
   let earnedLabel: string | undefined;
   if (total > 0 && durationSecs > 0) {
     const vested = total * Math.min(elapsed, durationSecs) / durationSecs;
-    const vestedFmt = vested.toFixed(vested % 1 === 0 ? 0 : 2);
-    const totalFmt = total.toFixed(total % 1 === 0 ? 0 : 2);
+    // Match decimals on both sides — "1 / 8.17 USDC" reads as a typo;
+    // "1.42 / 8.17 USDC" reads as the running tally it actually is.
+    const decimals = total % 1 === 0 && vested % 1 === 0 ? 0 : 2;
+    const vestedFmt = vested.toFixed(decimals);
+    const totalFmt = total.toFixed(decimals);
     earnedLabel = isUsdc
       ? `${vestedFmt} / ${totalFmt} USDC`
       : `€${vestedFmt} / €${totalFmt}`;
