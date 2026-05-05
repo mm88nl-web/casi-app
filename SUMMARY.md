@@ -1,16 +1,17 @@
 # CASI — Project Summary
 
 Snapshot for picking up across chat sessions. Reflects `origin/main` as of
-2026-04-29. Working branch: `claude/review-solana-grant-C02xG`.
+2026-04-30 (with PR #59 still open against main). Working branch:
+`claude/fix-ui-issues-G4Dnn` (PR #59 — studio dashboard polish).
 
 > ⚠️ **READ THIS FIRST** — branch drift was the #1 footgun in earlier
 > sessions (see Common Pitfalls below). Before doing anything else:
 > ```
 > cd ~/casi-app
 > git fetch origin
-> git checkout claude/review-solana-grant-C02xG
+> git checkout claude/fix-ui-issues-G4Dnn   # OR whatever branch is active
 > git pull
-> git branch --show-current    # MUST print claude/review-solana-grant-C02xG
+> git branch --show-current    # confirm match
 > grep -c 'pub mod fee_wallet' programs/casi-escrow/src/lib.rs   # must be 0
 > grep cluster Anchor.toml      # must say "Localnet"
 > ```
@@ -149,9 +150,22 @@ Per-streamer overrides on `profiles`:
 
 Picker UI in `src/app/admin/settings/_components/AppearanceSection.tsx` (also surfaced from `/studio/settings`). Common confusion: when a streamer says "the colors look wrong," check `profiles.theme_color` first — they probably picked Gold or another preset.
 
-## Recent commits (top of `origin/main` as of 2026-04-29)
+## Recent commits
+
+**On branch `claude/fix-ui-issues-G4Dnn` (PR #59, open against main):**
 
 ```
+1b83317 Approval queue: payment-gate Approve + click-to-preview modal
+f9cb8bf Airing row: fix float precision in timer + vested-amount decimals
+d889d37 Show live vested-amount on each Airing row
+7a85638 Wrap StudioPage in Suspense for useSearchParams build
+5778de1 Studio dashboard: per-slot queue, currency setting, End Stream confirm
+```
+
+**`origin/main` head (as of 2026-04-30, before PR #59 lands):**
+
+```
+bd97cdd Merge pull request #58 (grant docs handoff)
 ae4112c Fill in identity placeholders in grant draft
 f52366f Add Twitch / Discord / X OAuth to /login
 e7bce6f Merge PR #56 — share HTML file
@@ -161,25 +175,30 @@ a083e5f Phase 6: viewer surfaces — /overlay restyle + /s/[username] v7 venue h
 c0e3b77 Phase 5: /studio/settings + share section components
 8a101e0 Phase 4: studio split — /studio (dashboard) + /studio/live (editor)
 b22684a Phase 3: landing — v7 split-door hero, trust band, footer
-7a2177b Phase 2: shared v7 components
-7c3a60f Phase 1: foundation — v7 tokens, fonts, skins
-4786cf6 Add Google sign-in / sign-up to /login
-f929bc3 feat(p0): captcha + content moderation + legal pages + abuse reporting
 46fa5ab refactor(escrow): strip 5% platform fee — 100% viewer→streamer
 ```
 
-Active themes: v7 design system fully shipped; auth expanded to Google + Twitch + Discord + X (code shipped, dashboard config pending for non-Google providers); grant proposal in flight with audit-firm outreach open; repo public + Apache-2.0 + SECURITY.md + CI badge. Fee-removal stayed in: `fee_wallet` account, `FEE_BPS` constant, `InvalidFeeWallet` error all gone from `programs/casi-escrow/src/lib.rs`. Program `Dkai2s6Rwreyh51bajqLYMJdfHE6Gonwz9vFw6joUfRd` still on devnet pending external audit.
+Active themes: v7 design system shipped; studio dashboard heavily polished in PR #59 (per-slot queue + Play Now, End Stream confirm + delegate-driven shutdown, payment-gate, click-to-preview, live vested-amount, currency picker); auth expanded to Google + Twitch + Discord + X (code shipped, dashboard config pending for non-Google providers); grant proposal in flight with audit-firm outreach open; repo public + Apache-2.0 + SECURITY.md + CI badge. Fee-removal stayed in: `fee_wallet` account, `FEE_BPS` constant, `InvalidFeeWallet` error all gone from `programs/casi-escrow/src/lib.rs`. Program `Dkai2s6Rwreyh51bajqLYMJdfHE6Gonwz9vFw6joUfRd` still on devnet pending external audit.
 
 ## Known gaps / loose ends
 
+**Code-level:**
 - **Stack-frame warnings** — `ApproveFlash` + `SettleBeam` context structs exceed BPF's 4KB stack by ~800–1000 bytes. Builds succeed, tests pass, but edge-case UB possible. Fix: `Box<InterfaceAccount<...>>` around the biggest fields.
 - Solana defaults to **devnet** via `src/lib/solana-network.ts:NETWORK`. Flip to `'mainnet'` to switch USDC mint, wallet-adapter cluster, and Solscan cluster query in one line. Program must be re-deployed to mainnet (new program ID).
-- Stripe currency hardcoded **EUR** (`stripe/authorize/route.ts`)
+- Stripe currency hardcoded **EUR** (`stripe/authorize/route.ts`) — `profiles.display_currency` only affects dashboard tile rendering, not the charge currency.
 - `expire-bookings` and `auto-expire` Edge Functions exist but are not the active cron path (GitHub Actions `stripe-janitor` is)
 - `/v`, `/setup`, `/join` pages orphaned; `bonk-ui-source/` checked in but unused (Privy remnants)
 - Admin canvas (drag/resize) not optimised for touch
 - Helius webhook uses single shared secret, no per-event signature
 - Flash end-early proration not wired (flashes are one-shot tips by design; beams + backdrops have proration via `stripe/end-early`)
+- Per-IP rate-limit only on booking-creation routes — proxy pool bypasses. Add per-`profile_id` rate limit alongside per-IP.
+- Slot-shape rendering asymmetry — editor clamps circle/hex slots to a pixel-square via `min(width%·W, height%·H)`; overlay uses straight `width%×height%`. New rows save in 9/16 ratio so they match, but legacy rows can drift. Diagnostic: `select id, shape, width, height, round(height::numeric * 9 / 16, 2) as expected from overlay_elements where shape in ('circle', 'hex') and abs(width - height * 9.0 / 16.0) > 0.5;`. If non-empty, normalize via `update overlay_elements set width = round(height::numeric * 9 / 16, 2) where shape in ('circle', 'hex');`.
+
+**Compliance / product gaps (pre-mainnet checklist):**
+- **No custom SMTP wired in code.** Verification + password-reset emails use Supabase's default sender; deliverability is poor. Configure Resend/Postmark + SPF/DKIM/DMARC on `casi.gg` in the Supabase Dashboard before mainnet.
+- **No onboarding email drip.** Streamer signs up → verification → silence. Activation is going to suffer post-mainnet. Loops / Customer.io / Resend-with-Supabase-trigger all viable; 3-email sequence is the minimum (Day 0 / Day 2 / Day 7).
+- **No imprint + cookie banner.** Founder is in Netherlands; Dutch law + GDPR require both. `/legal/privacy` exists but lists only email contacts (no company name / KvK / address). Auth uses cookies — even essential-only requires a disclosure.
+- **No demo video / screenshot on landing.** `LandingSplitDoor` is interactive but text-only. Single highest-leverage marketing fix when the product is polished enough for it.
 
 ## Handoff to next session
 
@@ -192,13 +211,24 @@ Project state as of 2026-04-29:
 - Repo public, Apache-2.0, SECURITY.md present, README cleaned up, CI badge in README.
 - Solana Foundation grant draft in `grant-answers.md` with two TODOs left (audit firm name + quote $).
 
-### Next task: wait on audit-firm replies, then submit the grant
+### Next task: merge PR #59, then wait on audit + ship compliance fixes
 
-The high-leverage path forward is small and external:
+1. **Merge PR #59** ([github.com/mm88nl-web/casi-app/pull/59](https://github.com/mm88nl-web/casi-app/pull/59)). Branch `claude/fix-ui-issues-G4Dnn` is `mergeable_state: clean`, all 5 commits pushed. Migration `20260502000000_profile_display_currency.sql` already applied in Supabase Dashboard. Per repo convention (#56-58), use a merge commit not squash.
+2. **Audit firms reply with quotes** (Sec3 / OtterSec / Neodyme — outreach sent, 5–7 day SLA typical). When the first acceptable quote lands, fill the two TODOs in `grant-answers.md` and submit the Solana Foundation grant form.
+3. **Configure custom SMTP in Supabase Dashboard.** Auth → SMTP Settings → Resend or Postmark with verified `casi.gg` domain + SPF/DKIM/DMARC. Test with mail-tester.com. ~30 min, biggest deliverability lift.
+4. **Configure Twitch / Discord / X OAuth in Supabase Dashboard** — the buttons exist on `/login` but currently throw "provider is not enabled" until each provider's client id + secret is pasted in. Rough flow: register an app on the provider dev portal → set OAuth callback URL to `https://<supabase-project-ref>.supabase.co/auth/v1/callback` → paste credentials into Supabase Dashboard → Authentication → Providers. **Note**: X/Twitter is the painful one; expect phone-number friction and possibly a paid tier requirement.
+5. **Add imprint + cookie banner.** Dutch law + GDPR require both. Imprint on `/legal/imprint` or in the landing footer with company name (or sole-proprietorship), KvK/registration number if any, Netherlands address, contact email. Cookie banner can be minimal essential-only acknowledgement.
+6. **Don't ship new product features pre-mainnet.** Pro-tier streamer SaaS is the planned monetization (custom branding, auto-approve rules, team accounts, analytics — Streamlabs Ultra-style $10–30/mo). Intentionally premature; first build the audited mainnet primitive + onboard a closed-beta cohort of streamers, then layer SaaS on top.
 
-1. **Audit firms reply with quotes** (Sec3 / OtterSec / Neodyme — outreach sent, 5–7 day SLA typical). When the first acceptable quote lands, fill the two TODOs in `grant-answers.md` and submit the Solana Foundation grant form.
-2. **Configure Twitch / Discord / X OAuth in Supabase Dashboard** — the buttons exist on `/login` but currently throw "provider is not enabled" until each provider's client id + secret is pasted in. Per-provider setup steps documented in the chat history; rough flow: register an app on the provider dev portal → set OAuth callback URL to `https://<supabase-project-ref>.supabase.co/auth/v1/callback` → paste credentials into Supabase Dashboard → Authentication → Providers.
-3. **Don't ship new product features pre-mainnet.** Pro-tier streamer SaaS is the planned monetization (custom branding, auto-approve rules, team accounts, analytics — Streamlabs Ultra-style $10–30/mo). Intentionally premature; first build the audited mainnet primitive + onboard a closed-beta cohort of streamers, then layer SaaS on top.
+### Marketing posture (pre-mainnet)
+
+**Post now (forgiving Solana audiences):** Solana Discord servers (Superteam, Foundation, Solana Mobile, Helius), r/solana, Indie Hackers, Solana-Twitter. Lead with the open-source escrow primitive + audit-pending + Apache-2.0; CASI-the-product is the reference integration.
+
+**Wait for mainnet + audit + demo video:** Hacker News (Show HN), Product Hunt, r/Twitch, r/Streamers, r/CryptoCurrency. These crowds judge against polished SaaS + are unforgiving of devnet bugs.
+
+### Competitive landscape (for context)
+
+Closest mechanical: **Streamlabs Media Share** + **StreamElements Media Share** + **Tangia** — viewers tip to play YouTube/TikTok clips on stream, ~10¢/sec. Different mechanic (clip-only, no upload, no time-vested escrow). Closest crypto-native: **stream.gift** (Solana donations on Twitch), **StreamerCoin** (token model), **Blurt** (Dialect blinks). Closest pattern: **Sollinked** ($30k Hyperdrive winner, paid-email USDC escrow — proves the category is fundable; CASI extends it to live video with time-vesting). None of the competitors are open source under permissive licenses. CASI's defensible niche: high-stakes paid takeovers + open-source primitive + 0% take rate.
 
 ### What NOT to do (carried forward — earned the hard way)
 
