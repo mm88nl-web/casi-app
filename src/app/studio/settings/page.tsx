@@ -33,7 +33,7 @@ const RAIL: RailGroup[] = [
 ];
 
 const PROFILE_COLS =
-  'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color';
+  'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color, display_currency';
 
 type LoadState =
   | { kind: 'loading' }

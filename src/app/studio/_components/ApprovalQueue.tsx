@@ -22,12 +22,19 @@ export type QueueItem = {
   /** Slot shape so the thumb is masked to match the on-stream rendering
    *  (circle / hex / banner / rounded / rect). */
   shape?: string | null;
+  /** Set false until the viewer has actually paid (Stripe PI created or
+   *  Solana tx confirmed). Disables Approve and shows "Awaiting payment"
+   *  so the streamer can't accidentally flip status='active' on an
+   *  un-funded escrow. Free flashes / bookings come through as true. */
+  paymentConfirmed?: boolean;
 };
 
 type Props = {
   items: QueueItem[];
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
+  /** Click the row's thumb / name to open a full preview modal. */
+  onPreview?: (id: string) => void;
   /** Global fallback — when a QueueItem doesn't set readOnly, this prop wins. */
   readOnly?: boolean;
   /** Per-row disabled state — set while an approve/reject is in flight. */
@@ -46,6 +53,7 @@ export default function ApprovalQueue({
   items,
   onApprove,
   onReject,
+  onPreview,
   readOnly,
   pendingIds,
   emptyLabel,
@@ -122,33 +130,66 @@ export default function ApprovalQueue({
           items.map(item => {
             const ro = item.readOnly ?? readOnly;
             const isPending = pendingIds?.has(item.id) ?? false;
+            // Gate Approve on real payment. `paymentConfirmed === undefined`
+            // means the caller didn't pass it (flashes today) — treat as
+            // confirmed so we don't accidentally lock the existing flash
+            // moderation flow which already gates server-side.
+            const paid = item.paymentConfirmed !== false;
+            const previewable = !!onPreview && !ro;
             return (
               <div key={item.id} className={`casi-q-r ${item.kind}`}>
-                <QueueThumb
-                  mediaUrl={item.mediaUrl}
-                  fileType={item.fileType}
-                  shape={item.shape}
-                  kind={item.kind}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    className="truncate"
-                    style={{
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      color: 'var(--casi-text)',
-                      marginBottom: '2px',
-                    }}
-                  >
-                    {item.name}
+                <button
+                  type="button"
+                  onClick={previewable ? () => onPreview!(item.id) : undefined}
+                  disabled={!previewable}
+                  title={previewable ? 'Preview' : undefined}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    flex: 1,
+                    minWidth: 0,
+                    padding: 0,
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'inherit',
+                    textAlign: 'left',
+                    cursor: previewable ? 'zoom-in' : 'default',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <QueueThumb
+                    mediaUrl={item.mediaUrl}
+                    fileType={item.fileType}
+                    shape={item.shape}
+                    kind={item.kind}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      className="truncate"
+                      style={{
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: 'var(--casi-text)',
+                        marginBottom: '2px',
+                      }}
+                    >
+                      {item.name}
+                    </div>
+                    <div
+                      className="truncate"
+                      style={{ fontSize: '11.5px', color: 'var(--casi-text-mid)' }}
+                    >
+                      {item.subtitle}
+                      {!paid ? (
+                        <>
+                          <span style={{ opacity: 0.4, margin: '0 6px' }}>·</span>
+                          <span style={{ color: '#eab308' }}>awaiting payment</span>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
-                  <div
-                    className="truncate"
-                    style={{ fontSize: '11.5px', color: 'var(--casi-text-mid)' }}
-                  >
-                    {item.subtitle}
-                  </div>
-                </div>
+                </button>
                 <div
                   style={{
                     fontFamily: 'var(--font-casi-mono), monospace',
@@ -183,23 +224,23 @@ export default function ApprovalQueue({
                     <button
                       type="button"
                       onClick={() => onApprove?.(item.id)}
-                      disabled={isPending}
-                      title="Approve"
+                      disabled={isPending || !paid}
+                      title={paid ? 'Approve' : 'Awaiting viewer payment — refresh in a moment'}
                       style={{
                         padding: '7px 13px',
                         borderRadius: '7px',
                         fontSize: '12px',
                         fontWeight: 600,
-                        background: 'rgba(var(--casi-accent-rgb), 0.07)',
-                        border: '1px solid rgba(var(--casi-accent-rgb), 0.22)',
-                        color: 'var(--casi-accent)',
-                        cursor: isPending ? 'wait' : 'pointer',
+                        background: paid ? 'rgba(var(--casi-accent-rgb), 0.07)' : 'transparent',
+                        border: `1px solid ${paid ? 'rgba(var(--casi-accent-rgb), 0.22)' : 'var(--casi-border)'}`,
+                        color: paid ? 'var(--casi-accent)' : 'var(--casi-text-faint)',
+                        cursor: isPending ? 'wait' : (paid ? 'pointer' : 'not-allowed'),
                         opacity: isPending ? 0.5 : 1,
                         fontFamily: 'inherit',
                         transition: 'background .14s',
                       }}
                     >
-                      {isPending ? '…' : 'Approve'}
+                      {isPending ? '…' : (paid ? 'Approve' : 'Awaiting payment')}
                     </button>
                     <button
                       type="button"

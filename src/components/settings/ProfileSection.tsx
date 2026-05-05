@@ -16,7 +16,16 @@ export type ProfileRow = {
   solana_wallet: string | null;
   stripe_account_id: string | null;
   theme_color: string | null;
+  display_currency: 'eur' | 'usd' | 'usdc' | null;
 };
+
+export type DisplayCurrency = 'eur' | 'usd' | 'usdc';
+
+const CURRENCY_OPTIONS: ReadonlyArray<{ id: DisplayCurrency; label: string; symbol: string }> = [
+  { id: 'eur', label: 'EUR', symbol: '€' },
+  { id: 'usd', label: 'USD', symbol: '$' },
+  { id: 'usdc', label: 'USDC', symbol: '◎' },
+];
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -31,6 +40,7 @@ export default function ProfileSection({ supabase, profile }: Props) {
   const [bio, setBio] = useState(profile.bio ?? '');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile.avatar_url ?? null);
   const [avatarBusy, setAvatarBusy] = useState<'upload' | 'remove' | null>(null);
+  const [currency, setCurrency] = useState<DisplayCurrency>(profile.display_currency ?? 'eur');
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -48,7 +58,7 @@ export default function ProfileSection({ supabase, profile }: Props) {
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
   }, []);
 
-  const persist = async (patch: Partial<{ display_name: string; username: string; bio: string; avatar_url: string | null }>) => {
+  const persist = async (patch: Partial<{ display_name: string; username: string; bio: string; avatar_url: string | null; display_currency: DisplayCurrency }>) => {
     setSaveState('saving');
     setErrorMsg(null);
     const { error } = await supabase.from('profiles').update(patch).eq('id', profile.id);
@@ -244,6 +254,44 @@ export default function ProfileSection({ supabase, profile }: Props) {
             onBlur={onBlurBio}
             style={settingsTextareaStyle}
           />
+        </FieldRow>
+      </div>
+
+      <div style={{ marginTop: '16px' }}>
+        <FieldRow label="Dashboard currency · what your studio totals show in">
+          <div className="flex" style={{ gap: '6px' }}>
+            {CURRENCY_OPTIONS.map((opt) => {
+              const active = currency === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    if (currency === opt.id) return;
+                    setCurrency(opt.id);
+                    persist({ display_currency: opt.id });
+                  }}
+                  className="font-mono uppercase"
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '7px',
+                    fontSize: '11px',
+                    letterSpacing: '0.1em',
+                    fontWeight: 600,
+                    background: active ? 'rgba(var(--casi-accent-rgb), 0.08)' : 'transparent',
+                    border: `1px solid ${active ? 'rgba(var(--casi-accent-rgb), 0.35)' : 'var(--casi-border-2)'}`,
+                    color: active ? 'var(--casi-accent)' : 'var(--casi-text-dim)',
+                    cursor: 'pointer',
+                    transition: 'border-color .14s, color .14s, background .14s',
+                  }}
+                  aria-pressed={active}
+                >
+                  <span style={{ marginRight: '6px' }}>{opt.symbol}</span>
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
         </FieldRow>
       </div>
     </SettingsSection>

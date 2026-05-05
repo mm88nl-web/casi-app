@@ -5,21 +5,23 @@ import { useEffect, useRef, useState } from 'react';
 type EarningsBarProps = {
   /** Public viewer-facing URL the streamer shares (e.g. casi.gg/overlay?s=foo). */
   viewerLink: string;
-  /** Today's EUR earnings — pre-formatted (e.g. "€48"). */
-  todayEur: string;
-  /** Today's USDC earnings — pre-formatted (e.g. "12"). */
-  todayUsdc: string;
+  /** Today's earnings in the streamer's chosen display currency, pre-formatted
+   *  (e.g. "€48", "$12", "5 USDC", or "—" when zero). The currency choice
+   *  lives on `profiles.display_currency`; the dashboard parent picks one
+   *  rail's totals to show here so the tile reads as a single mental model
+   *  number rather than two columns of "is this useful?". */
+  today: string;
   /** Pending count — bookings + flashes awaiting approval. */
   pending: number | string;
 };
 
 /**
  * Compact unified earnings strip across the top of the studio dashboard.
- * v7 collapses the v3 4-stat layout into "viewer-link + Copy" + 3 numeric
- * tiles. EUR uses --casi-accent (teal in Casi Dark), USDC uses Solana
- * green-teal #14F195, Pending reuses --casi-accent.
+ * One viewer-link + Copy on the left, then two numeric tiles on the right
+ * (Today / Pending). The Today tile shows whichever currency the streamer
+ * picked in Settings → Profile → Dashboard currency.
  */
-export default function EarningsBar({ viewerLink, todayEur, todayUsdc, pending }: EarningsBarProps) {
+export default function EarningsBar({ viewerLink, today, pending }: EarningsBarProps) {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -117,8 +119,7 @@ export default function EarningsBar({ viewerLink, todayEur, todayUsdc, pending }
         </button>
       </div>
 
-      <Stat label="Today · EUR" value={todayEur} color="var(--casi-accent)" />
-      <Stat label="Today · USDC" value={todayUsdc} color="#14F195" />
+      <Stat label="Today" value={today} color="var(--casi-accent)" />
       <Stat label="Pending" value={String(pending)} color="var(--casi-accent)" last />
     </div>
   );

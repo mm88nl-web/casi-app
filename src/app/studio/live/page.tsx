@@ -62,16 +62,25 @@ export default function StudioLivePage() {
 
   const toggleLive = useCallback(async () => {
     if (state.kind !== 'ready' || togglingLive) return;
-    const next = !state.profile.is_live;
+
+    // Going OFFLINE → bounce to the dashboard with ?end=true so the
+    // confirm dialog there (which already has actives/pendings/queued
+    // loaded) handles the full shutdown sequence in one place.
+    if (state.profile.is_live) {
+      router.push('/studio?end=true');
+      return;
+    }
+
+    // Going LIVE → just flip the flag here.
     setTogglingLive(true);
-    setState({ kind: 'ready', profile: { ...state.profile, is_live: next } });
-    const { error } = await supabase.from('profiles').update({ is_live: next }).eq('id', state.profile.id);
+    setState({ kind: 'ready', profile: { ...state.profile, is_live: true } });
+    const { error } = await supabase.from('profiles').update({ is_live: true }).eq('id', state.profile.id);
     if (error) {
-      setState({ kind: 'ready', profile: { ...state.profile, is_live: !next } });
+      setState({ kind: 'ready', profile: { ...state.profile, is_live: false } });
       setErrorMsg(error.message);
     }
     setTogglingLive(false);
-  }, [state, supabase, togglingLive]);
+  }, [state, supabase, togglingLive, router]);
 
   if (state.kind === 'loading' || state.kind === 'anonymous') {
     return <StatusScreen>Loading editor…</StatusScreen>;
