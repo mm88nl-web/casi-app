@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import CasiLogo from '@/components/CasiLogo';
+import { CasiMark } from '@/components/v9';
 
 /** Google's "G" mark — official 4-color SVG, no external assets. */
 function GoogleG() {
@@ -277,8 +277,8 @@ export default function AuthPage() {
         }
         .auth-brand { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; }
         .auth-brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 0; }
-        .auth-brand-name { font-family: var(--font-casi-display), var(--font-casi-sans), sans-serif; font-size: 22px; font-weight: 800; color: var(--casi-accent); letter-spacing: 0.5px; }
-        .auth-brand-tag  { font-family: var(--font-casi-mono), monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--casi-text-dim); margin-top: 5px; }
+        .auth-brand-name { font-family: var(--H); font-size: 28px; font-weight: 800; color: var(--text); letter-spacing: -0.04em; }
+        .auth-brand-tag  { font-family: var(--M); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-4); margin-top: 5px; }
 
         .auth-quote { position: relative; z-index: 1; }
         .auth-quote-text { font-family: var(--font-casi-display), var(--font-casi-sans), sans-serif; font-size: clamp(22px, 2.5vw, 30px); font-weight: 800; color: var(--casi-text); line-height: 1.2; letter-spacing: -1px; margin-bottom: 14px; }
@@ -419,8 +419,8 @@ export default function AuthPage() {
         <div className="auth-left">
           <div className="auth-brand">
             <div className="auth-brand-row">
-              <CasiLogo size={60} color="var(--casi-accent)" bgColor="var(--casi-bg)" />
-              <span className="auth-brand-name">casi</span>
+              <CasiMark width={60} height={30} />
+              <span className="auth-brand-name">casi<span style={{ color: 'var(--ink)' }}>.</span></span>
             </div>
             <div className="auth-brand-tag">Stream monetization</div>
           </div>

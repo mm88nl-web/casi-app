@@ -8,7 +8,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 CASI lets livestream viewers pay to put their image / video / message **on stream** as an overlay for a fixed duration. Streamers run OBS with a CASI browser-source URL; viewers book a slot via the web app; the streamer approves, the beam appears, the timer expires, payment settles.
 
-## Current project state (April 2026)
+## Current project state (May 2026)
 
 **Phase**: pre-mainnet. The web app and `casi-escrow` Anchor program run on Solana **devnet** at https://casi.gg. Mainnet launch is gated on an external audit currently being scoped.
 
@@ -20,7 +20,7 @@ CASI lets livestream viewers pay to put their image / video / message **on strea
 
 **Monetization posture**: **no protocol fees, ever** — 100% of every booking flows directly viewer→streamer on both rails. CASI never holds, routes, or skims funds (legal posture: software company, not a payment processor). Future revenue is planned via streamer SaaS (Streamlabs Ultra-style $10–30/mo Pro tier with custom branding, auto-approve rules, team accounts, analytics) and possibly brand-deal advertising once there's enough streamer inventory. None of that is shipped yet.
 
-**Recent design overhauls**: `v7` design system (Phases 0–7) replaced the old v3 — new tokens, fonts (Bricolage Grotesque + JetBrains Mono), 7-skin palette. Default skin is **Casi Dark** (teal `#0DCFB0` + Solana purple `#9945FF`). The `/studio` page was split in Phase 4 into `/studio` (dashboard) and `/studio/live` (canvas editor). Auth in Phase 7: `/login` now offers Google + Twitch + Discord + X OAuth alongside email/password (each provider must be enabled in the Supabase Dashboard separately).
+**Recent design overhauls**: `v9` design system (May 2026) replaced v7's 7-skin variable bag with a **two-color contract** (`--ink` + `--paper`) — see "Theme system" below. Fonts moved to Bricolage Grotesque + JetBrains Mono + Instrument Serif (Barlow + DM_Mono are gone from `layout.tsx`). Default ink stayed teal `#0DCFB0` so existing streamers don't see a brand flip; cinnabar `#FF5C2E` is now an opt-in skin. Per-streamer `profiles.skin` + `profiles.theme_color` overrides still work — they now drive `--ink` + `--paper` instead of the old per-skin variable bag. v7 tokens (`--casi-accent`, `--casi-bg`, …) are aliased onto v9 in `globals.css` so legacy code keeps rendering. Dev tools (`DevScreenSwitcher` + `DevTweaksPanel`, mounted in `layout.tsx`) ship gated to `NODE_ENV !== 'production'`. Earlier `v7` (Phases 0–7) introduced the `/studio` split (dashboard + live editor) and the four OAuth providers on `/login` — both still live.
 
 **Studio dashboard polish (PR #59, May 2026)**: per-slot inline queue under each Airing row with **Play now** per queued booking; **End Stream** confirm dialog driving sequential delegate-first shutdown via `endStreamCleanly` (kick actives → deny pendings → deny flashes → deny queue → flip `is_live`); **payment-gate** on Approve (gated on `payment_intent_id || tx_signature || free || price_value === 0`, mirroring admin); **click-to-preview modal** on pending rows; **live vested-amount** under each Airing timer (matches the on-chain settle math); streamer-level **`profiles.display_currency`** preference (eur / usd / usdc) with a picker under Profile in Settings — collapses dashboard tiles to a single currency. "Live editor" tab renamed to **"Live"**. See `studio/_components/EndStreamDialog.tsx`, `studio/_components/PreviewBookingModal.tsx`, and migration `20260502000000_profile_display_currency.sql`.
 
@@ -131,40 +131,59 @@ All four OAuth buttons call a single generic `handleOAuth(provider)` → `supaba
 - Don't add a provider to the login page without also enabling it in the Supabase Dashboard — the buttons render but throw on click.
 - Don't try to do post-OAuth profile creation server-side from `/auth/callback`. The current flow intentionally bounces the user back through the multi-step signup UI so they pick a username + bio. Skipping that gives you orphan profiles with auto-generated usernames.
 
-## Theme system (skins + per-user accent override)
+## Theme system — v9 two-color (ink + paper)
 
-The v7 design system (Phases 0–7) is token-driven via CSS variables, with per-streamer overrides persisted in the database.
+The v9 design system replaces v7's 7-skin variable bag with a **two-color contract**: `--ink` (accent) and `--paper` (background). Every other token (text scale, surfaces, lines, ink tints, on-ink) is derived from those two via `color-mix()` in `src/app/globals.css`. Skin/user providers only set the two roots; the rest falls out for free.
 
-**Skins** are defined in `src/lib/skins.ts`. There are 7 presets, each declaring `accent`, `accent2`, `bg`, `surface`, `border`, `text`, `textMuted` plus RGB-channel duplicates for `rgba()` usage:
+| Token group | Vars |
+|---|---|
+| Roots | `--ink`, `--paper` |
+| Ink ladder | `--ink-04`, `--ink-08`, `--ink-14`, `--ink-22`, `--ink-40`, `--ink-70` |
+| Text scale | `--text`, `--text-2`, `--text-3`, `--text-4` |
+| Surfaces / lines | `--surf`, `--surf-2`, `--line`, `--line-2`, `--on-ink` |
+| Type | `--H` (Bricolage display), `--B` (Bricolage body), `--M` (JetBrains Mono), `--S` (Instrument Serif) |
+| Density | `--gap`, `--pad` |
 
-| Skin id | Name | Accent | Accent2 |
+**Light/dark**: opt-in via `[data-paper="light"]` on a wrapper element. The `DevTweaksPanel` flips it automatically when paper is bright.
+
+**Backwards-compat alias layer**: every v7 token (`--casi-accent`, `--casi-bg`, `--casi-surface`, `--casi-border`, `--casi-text`, `--casi-text-muted`, `--casi-surface-2`, `--casi-border-2`, `--casi-text-mid`, `--casi-text-dim`, `--casi-text-faint`) is aliased onto its v9 equivalent in `:root`. Existing components that read `var(--casi-*)` keep rendering correctly. **New code should use the v9 tokens directly.**
+
+**Skins** in `src/lib/skins.ts` still exist as 7 presets, but each entry now also declares `ink` + `paper` (== accent + bg in v9 vocabulary). Default `--ink` stays teal `#0DCFB0` so existing streamers don't see a brand-color flip.
+
+| Skin id | Name | Ink | Paper |
 |---|---|---|---|
-| `casi-dark` (default) | Casi Dark | `#0DCFB0` (teal) | `#9945FF` (Solana purple) |
-| `twitch` | Twitch | `#9146FF` | `#772CE8` |
-| `kick` | Kick | `#53FC18` | `#00cc00` |
-| `youtube` | YouTube | `#FF0000` | `#cc0000` |
-| `cyber` | Cyber | `#06B6D4` | `#9945FF` |
-| `mono` | Mono | `#E8E8E8` (greyscale) | `#888888` |
-| `rose` | Rose | `#F472B6` | `#9945FF` |
-
-Old skins from earlier phases (`Void`, `Neon`, `Terminal`, `Ember`, `Chrome`) **no longer exist** — don't add them back without updating the v7 token system.
+| `casi-dark` (default) | Casi Dark | `#0DCFB0` (teal) | `#0C0D11` |
+| `twitch` | Twitch | `#9146FF` | `#0E0E1A` |
+| `kick` | Kick | `#53FC18` | `#0A1A0A` |
+| `youtube` | YouTube | `#FF0000` | `#0D0606` |
+| `cyber` | Cyber | `#06B6D4` | `#050A12` |
+| `mono` | Mono | `#E8E8E8` | `#0A0A0A` |
+| `rose` | Rose | `#F472B6` | `#0A0515` |
 
 **Per-streamer overrides** live on the `profiles` table:
-- `profiles.skin` — picks one of the 7 skin ids above. Defaults to `casi-dark`.
-- `profiles.theme_color` — optional **custom accent** that overrides the skin's accent for that streamer's surfaces (their `/admin`, `/studio`, and the viewer-facing `/overlay?s=username` and `/s/username` pages). Stored as a hex string. NULL means "use the skin's default accent."
+- `profiles.skin` — picks one of the 7 skin ids above.
+- `profiles.theme_color` — optional **custom ink override** for that streamer's surfaces. Stored as a hex string. NULL means "use the skin's ink."
 
-The accent picker UI lives in `src/app/admin/settings/_components/AppearanceSection.tsx` (also surfaced in `/studio/settings`). It offers a preset row (Casi Orange, Twitch Purple, Cyber Cyan, YouTube Red, Matrix Green, Kick Green, Rose Pink, Gold, Pure White) plus a custom hex input.
+**Where colors are applied** (unchanged from v7):
+- `src/components/UserSkinProvider.tsx` — logged-in streamer's own pages.
+- `src/components/SkinProvider.tsx` — viewer-facing pages scoped to a streamer (`/overlay?s=username`, `/s/username`). Both providers now write `--ink` + `--paper` (the rest derives via `color-mix`); v7 alias writes are kept in sync for backward-compat.
+- `src/app/globals.css` — v9 root defaults + `[data-paper="light"]` variant + v9 chrome classes (`.casi-v9-nav`, `.casi-v9-mark`, `.casi-v9-wordmark`, `.casi-v9-marquee`, `.casi-v9-foot`, `.casi-v9-vb-*`, etc).
 
-**Where colors are applied**:
-- `src/components/UserSkinProvider.tsx` — sets CSS variables for the **logged-in streamer's own pages** (admin / studio). Reads from `profiles` and localStorage.
-- `src/components/SkinProvider.tsx` — sets CSS variables for **viewer-facing pages scoped to a streamer** (`/overlay?s=username`, `/s/username`). The viewer sees the streamer's chosen skin + accent.
-- `src/app/globals.css` lines 3–24 — the `casi-dark` defaults at the `:root` level for unauthenticated visitors.
+**v9 component library** in `src/components/v9/`:
+- `CasiMark` — 3-stripe + lozenge SVG with `var(--paper)` cutout (auto-adapts when paper changes).
+- `Wordmark` — `casi.` with ink-color dot.
+- `NavBar` — sticky nav: logo + wordmark left, optional `liveLabel`, `chips`, default `WalletButton` on the right.
+- `WalletButton` — pre-connect pill (the connected wallet pill is still `WalletPill` until that's ported).
+- `Marquee`, `Footer` — shared chrome.
+- `DevScreenSwitcher`, `DevTweaksPanel` — dev-only tools, mounted in `src/app/layout.tsx`, gated to `NODE_ENV !== 'production'`. Hide via `localStorage.casi-v9-devbar='off'`. Tweaks panel persists to `localStorage.casi-v9-tweaks`.
 
-**Common confusion**: if a streamer says "the colors look wrong," check `profiles.theme_color` first — they probably picked Gold (`#FACC15`) or another preset that overrides the teal default. The fix is in Settings → Appearance, not in code.
+**Common confusion**: if a streamer says "the colors look wrong," check `profiles.theme_color` first — they probably picked a preset (Gold, Rose) that overrides the teal default ink. Fix in Settings → Appearance.
 
 **Don'ts**:
-- Don't hardcode brand colors in components. Use the `var(--accent)` / `var(--accent2)` tokens. Two known exceptions: the yellow "Extend" mode button in `overlay/page.tsx` (`#eab308`, intentional design) and the OAuth provider brand-color SVG icons in `login/page.tsx`.
-- Don't bypass the SkinProvider for viewer-facing pages — the streamer's accent must propagate to the overlay or the brand consistency breaks.
+- Don't hardcode brand colors in components. Use `var(--ink)` (or v7-alias `var(--casi-accent)`) and the derived ladder. Known exceptions: yellow "Extend" mode button in `overlay/page.tsx` (`#eab308`), OAuth provider brand-color SVG icons in `login/page.tsx`.
+- Don't bypass `SkinProvider` for viewer-facing pages — the streamer's accent must propagate to the overlay or brand consistency breaks.
+- Don't reintroduce `--casi-accent2`. v9 is two-color only; the legacy purple is preserved as a static alias for any code that still reads it, but new code should compose with `--ink` only.
+- Don't mount the dev tools (`DevScreenSwitcher` / `DevTweaksPanel`) anywhere outside `layout.tsx` — they auto-gate on `NODE_ENV` and would render twice.
 
 ## Admin / Studio conventions
 

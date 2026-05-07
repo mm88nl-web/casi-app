@@ -1,26 +1,574 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════════════════════
+   v9 TWO-COLOR SYSTEM
+   ───────────────────────────────────────────────────────────────────────
+   Everything theming-related derives from two roots:
+     --ink   accent / brand color (defaults to Casi teal #0DCFB0)
+     --paper page background     (defaults to near-black #0B0B0C)
+   Skin/user providers only need to set those two — the rest of the ladder
+   (ink tints, surfaces, lines, text scale, on-ink) falls out of color-mix.
+   v7 tokens (--casi-accent, --casi-bg, …) are aliased onto v9 so existing
+   components don't break during the port.
+   ═══════════════════════════════════════════════════════════════════════ */
 :root {
   --background: #ffffff;
   --foreground: #171717;
 
-  /* ── Casi skin tokens ── defaults match Casi Dark, overridden by SkinProvider / UserSkinProvider */
-  --casi-accent:      #0DCFB0;
+  /* ── v9 roots: the only colors that matter ── */
+  --ink:   #0DCFB0;
+  --paper: #0B0B0C;
+
+  /* Derived — tints of ink against paper */
+  --ink-04: color-mix(in oklab, var(--ink) 4%,  var(--paper));
+  --ink-08: color-mix(in oklab, var(--ink) 8%,  var(--paper));
+  --ink-14: color-mix(in oklab, var(--ink) 14%, var(--paper));
+  --ink-22: color-mix(in oklab, var(--ink) 22%, var(--paper));
+  --ink-40: color-mix(in oklab, var(--ink) 40%, var(--paper));
+  --ink-70: color-mix(in oklab, var(--ink) 70%, var(--paper));
+
+  /* Text scale on paper — derived from inverse of paper */
+  --text:    color-mix(in oklab, var(--paper) 6%,  white);
+  --text-2:  color-mix(in oklab, var(--paper) 25%, white);
+  --text-3:  color-mix(in oklab, var(--paper) 50%, white);
+  --text-4:  color-mix(in oklab, var(--paper) 70%, white);
+
+  /* Surfaces / dividers — slight lifts from paper */
+  --surf:   color-mix(in oklab, var(--paper) 92%, white);
+  --surf-2: color-mix(in oklab, var(--paper) 86%, white);
+  --line:   color-mix(in oklab, var(--paper) 80%, white);
+  --line-2: color-mix(in oklab, var(--paper) 65%, white);
+
+  /* Inverse — for text/icons that sit ON ink */
+  --on-ink: color-mix(in oklab, var(--paper) 90%, black);
+
+  /* Type — v9 vocabulary, fed by next/font CSS variables */
+  --H: var(--font-casi-display), var(--font-casi-sans), system-ui, sans-serif;
+  --B: var(--font-casi-sans), system-ui, sans-serif;
+  --M: var(--font-casi-mono), ui-monospace, monospace;
+  --S: var(--font-casi-serif), Georgia, serif;
+
+  /* Density */
+  --gap: 24px;
+  --pad: 32px;
+
+  /* ── v7 alias layer — keeps existing components rendering correctly ── */
+  --casi-accent:      var(--ink);
   --casi-accent-rgb:  13, 207, 176;
   --casi-accent2:     #9945FF;
   --casi-accent2-rgb: 153, 69, 255;
-  --casi-bg:          #0C0D11;
-  --casi-surface:     #13151C;
-  --casi-border:      #1E2130;
-  --casi-text:        #E8EAED;
-  --casi-text-muted:  #5E6278;
+  --casi-bg:          var(--paper);
+  --casi-surface:     var(--surf);
+  --casi-border:      var(--line);
+  --casi-text:        var(--text);
+  --casi-text-muted:  var(--text-3);
 
-  /* Extended tokens — skin-independent, match redesign v7 handoff */
-  --casi-surface-2:   #191C27;
-  --casi-border-2:    #272B3D;
-  --casi-text-mid:    #5E6278;
-  --casi-text-dim:    #30334A;
-  --casi-text-faint:  #1A1D27;
+  /* Extended v7 tokens — kept skin-independent for now */
+  --casi-surface-2:   var(--surf-2);
+  --casi-border-2:    var(--line-2);
+  --casi-text-mid:    var(--text-3);
+  --casi-text-dim:    var(--text-4);
+  --casi-text-faint:  color-mix(in oklab, var(--paper) 92%, white);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   v9 CHROME — shared across every screen
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Nav */
+.casi-v9-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--pad);
+  height: 60px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  position: sticky;
+  top: 0;
+  z-index: 300;
+}
+.casi-v9-nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+}
+.casi-v9-mark {
+  display: block;
+  flex-shrink: 0;
+  color: var(--ink);
+}
+.casi-v9-wordmark {
+  font-family: var(--H);
+  font-weight: 800;
+  font-size: 24px;
+  letter-spacing: -0.04em;
+  color: var(--text);
+  font-feature-settings: "ss01";
+}
+.casi-v9-wordmark .casi-v9-dot {
+  color: var(--ink);
+}
+.casi-v9-nav-r {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.casi-v9-nav-live {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--M);
+  font-size: 10.5px;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+}
+.casi-v9-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 0 0 0 var(--ink);
+  animation: casi-v9-pulse 1.8s ease-out infinite;
+}
+@keyframes casi-v9-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--ink) 60%, transparent); }
+  100% { box-shadow: 0 0 0 8px color-mix(in oklab, var(--ink)  0%, transparent); }
+}
+.casi-v9-nav-chip {
+  font-family: var(--M);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-3);
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  letter-spacing: 0.04em;
+  transition: all 0.14s;
+  cursor: pointer;
+  background: transparent;
+}
+.casi-v9-nav-chip:hover {
+  color: var(--text);
+  border-color: var(--line-2);
+}
+.casi-v9-nav-chip.casi-v9-hi {
+  color: var(--ink);
+  background: var(--ink-08);
+  border-color: color-mix(in oklab, var(--ink) 30%, var(--paper));
+}
+
+/* Connect-wallet pill */
+.casi-v9-wlt-connect {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-family: var(--M);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--ink);
+  cursor: pointer;
+  transition: all 0.14s;
+}
+.casi-v9-wlt-connect:hover {
+  background: color-mix(in oklab, var(--ink) 88%, white);
+}
+.casi-v9-wlt-connect svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Marquee */
+.casi-v9-marquee {
+  display: flex;
+  overflow: hidden;
+  white-space: nowrap;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-family: var(--M);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+}
+.casi-v9-marquee-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 32px;
+  padding: 11px 16px;
+  flex-shrink: 0;
+  animation: casi-v9-scroll-x 40s linear infinite;
+}
+.casi-v9-marquee-track span {
+  display: inline-flex;
+  align-items: center;
+  gap: 32px;
+}
+.casi-v9-marquee-track::after {
+  content: "✺";
+  opacity: 0.5;
+  margin-left: 32px;
+}
+@keyframes casi-v9-scroll-x {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
+}
+
+/* Footer */
+.casi-v9-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 24px var(--pad);
+  font-family: var(--M);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+}
+.casi-v9-foot-links {
+  display: flex;
+  gap: 20px;
+}
+.casi-v9-foot-links a {
+  transition: color 0.14s;
+}
+.casi-v9-foot-links a:hover {
+  color: var(--ink);
+}
+
+/* Viewer-screen streamer header (.vb-head) — used by /overlay viewer mode
+   and the /s/[username] landing page. Single avatar tile + name + bio +
+   live badge + overlay link, on a soft surface gradient. */
+.casi-v9-vb-head {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 32px var(--pad);
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(to bottom, var(--surf), var(--paper) 90%);
+}
+.casi-v9-vb-avatar {
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  background: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--H);
+  font-weight: 800;
+  font-size: 38px;
+  color: var(--on-ink);
+  letter-spacing: -0.04em;
+  overflow: hidden;
+}
+.casi-v9-vb-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.casi-v9-vb-info {
+  flex: 1;
+  min-width: 0;
+}
+.casi-v9-vb-name {
+  font-family: var(--H);
+  font-weight: 800;
+  font-variation-settings: 'opsz' 48;
+  font-size: 36px;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.casi-v9-vb-bio {
+  font-size: 14px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.casi-v9-vb-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.casi-v9-vb-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-family: var(--M);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.casi-v9-vb-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--on-ink);
+}
+.casi-v9-vb-overlay-link {
+  font-family: var(--M);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.14s;
+}
+.casi-v9-vb-overlay-link:hover {
+  color: var(--ink);
+}
+@media (max-width: 640px) {
+  .casi-v9-vb-head {
+    padding: 20px 16px;
+    gap: 16px;
+  }
+  .casi-v9-vb-avatar {
+    width: 56px;
+    height: 56px;
+    font-size: 26px;
+  }
+  .casi-v9-vb-name {
+    font-size: 26px;
+  }
+}
+
+/* Booking-form internals — v9 .media-tabs / .upload-zone / .viewing-as-row.
+   Used by /overlay/_components/BookingForm.tsx to replace the v7 inline-
+   styled toggle, drop area and viewer chip. Same class names as v9 with a
+   `casi-v9-` prefix so they don't collide with anything in scope. */
+.casi-v9-media-tabs {
+  display: flex;
+  background: var(--ink-04);
+  border: 1px solid var(--ink-22);
+  padding: 3px;
+  gap: 0;
+  margin-bottom: 10px;
+}
+.casi-v9-media-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-family: var(--M);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.14s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.casi-v9-media-tab.casi-v9-on {
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 700;
+}
+.casi-v9-media-tab svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.casi-v9-upload-zone {
+  border: 2px dashed var(--ink-40);
+  position: relative;
+  overflow: hidden;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 18px 14px;
+  gap: 10px;
+  transition: all 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0,
+    transparent 9px,
+    var(--ink-04) 9px,
+    var(--ink-04) 10px
+  );
+}
+.casi-v9-upload-zone:hover {
+  border-color: var(--ink);
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--ink-04) 0,
+    var(--ink-04) 9px,
+    var(--ink-08) 9px,
+    var(--ink-08) 10px
+  );
+}
+.casi-v9-upload-zone.casi-v9-loaded {
+  border-style: solid;
+  border-color: var(--ink);
+  background-image: none;
+  background: var(--ink-04);
+}
+.casi-v9-upload-ico {
+  width: 36px;
+  height: 36px;
+  background: var(--ink);
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3v12'/><path d='M7 8l5-5 5 5'/><path d='M5 19h14'/></svg>") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3v12'/><path d='M7 8l5-5 5 5'/><path d='M5 19h14'/></svg>") center / contain no-repeat;
+  transition: transform 0.2s;
+}
+.casi-v9-upload-zone:hover .casi-v9-upload-ico {
+  transform: translateY(-3px);
+}
+.casi-v9-upload-hint {
+  font-family: var(--H);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.5;
+}
+.casi-v9-upload-hint em {
+  display: block;
+  font-family: var(--M);
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+}
+.casi-v9-upload-formats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.casi-v9-upload-fmt {
+  font-family: var(--M);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  padding: 3px 8px;
+  background: var(--surf);
+  border: 1px solid var(--ink-22);
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+
+.casi-v9-viewing-as {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surf);
+  border: 1px solid var(--line-2);
+  padding: 12px 14px;
+  transition: border-color 0.14s;
+}
+.casi-v9-viewing-as:hover { border-color: var(--ink-40); }
+.casi-v9-va-avatar {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 220deg at 65% 35%,
+    color-mix(in oklab, var(--ink) 40%, white) 0deg,
+    var(--ink) 120deg,
+    color-mix(in oklab, var(--ink) 60%, black) 240deg,
+    color-mix(in oklab, var(--ink) 40%, white) 360deg
+  );
+  box-shadow: inset 0 0 0 1.5px var(--surf);
+}
+.casi-v9-va-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.casi-v9-va-name {
+  font-family: var(--B);
+  font-weight: 700;
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.casi-v9-va-tag {
+  font-family: var(--M);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.casi-v9-va-tag::before {
+  content: "";
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+.casi-v9-va-change {
+  font-family: var(--M);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid var(--line-2);
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.14s;
+}
+.casi-v9-va-change:hover { border-color: var(--ink); color: var(--ink); }
+
+/* Light-paper variant: text scale inverts. Opt-in via [data-paper="light"]
+   on a wrapper element; lets v9 surfaces support a light theme without
+   changing how SkinProvider works. */
+[data-paper="light"] {
+  --text:   color-mix(in oklab, var(--paper) 6%,  black);
+  --text-2: color-mix(in oklab, var(--paper) 25%, black);
+  --text-3: color-mix(in oklab, var(--paper) 50%, black);
+  --text-4: color-mix(in oklab, var(--paper) 70%, black);
+  --surf:   color-mix(in oklab, var(--paper) 96%, black);
+  --surf-2: color-mix(in oklab, var(--paper) 92%, black);
+  --line:   color-mix(in oklab, var(--paper) 88%, black);
+  --line-2: color-mix(in oklab, var(--paper) 75%, black);
+  --on-ink: color-mix(in oklab, var(--paper) 90%, white);
 }
 
 @theme inline {

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import CasiLogo from '@/components/CasiLogo';
+import { CasiMark, Wordmark } from '@/components/v9';
 
 type NavProps = {
   /** Where the brand mark links to. Defaults to `/`. */
@@ -36,18 +36,8 @@ export default function Nav({ brandHref = '/', left, right }: NavProps) {
           className="flex items-center"
           style={{ gap: '9px', color: 'var(--casi-text)', textDecoration: 'none' }}
         >
-          <CasiLogo size={62} />
-          <span
-            style={{
-              fontFamily: 'var(--font-casi-display), var(--font-casi-sans), sans-serif',
-              fontSize: '21px',
-              fontWeight: 800,
-              letterSpacing: '0.5px',
-              color: 'var(--casi-accent)',
-            }}
-          >
-            casi
-          </span>
+          <CasiMark width={50} height={25} />
+          <Wordmark />
         </Link>
         {left ?? null}
       </div>

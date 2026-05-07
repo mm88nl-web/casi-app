@@ -33,13 +33,17 @@ function applySkinToRoot(skin: Skin, themeColor: string | null) {
   const root = document.documentElement;
   // theme_color (when set) overrides accent only — skin still drives surfaces.
   // Same priority as <SkinProvider>: a custom hex always wins for --casi-accent.
-  if (themeColor && /^#[0-9A-Fa-f]{6}$/.test(themeColor)) {
-    root.style.setProperty('--casi-accent',     themeColor);
-    root.style.setProperty('--casi-accent-rgb', hexToRgbStr(themeColor));
-  } else {
-    root.style.setProperty('--casi-accent',     skin.accent);
-    root.style.setProperty('--casi-accent-rgb', skin.accentRgb);
-  }
+  const useOverride = themeColor && /^#[0-9A-Fa-f]{6}$/.test(themeColor);
+  const ink    = useOverride ? themeColor : skin.ink;
+  const inkRgb = useOverride ? hexToRgbStr(themeColor!) : skin.accentRgb;
+
+  // v9 roots — globals.css derives the rest of the ladder via color-mix().
+  root.style.setProperty('--ink',   ink);
+  root.style.setProperty('--paper', skin.paper);
+
+  // v7 alias layer kept in sync.
+  root.style.setProperty('--casi-accent',     ink);
+  root.style.setProperty('--casi-accent-rgb', inkRgb);
   root.style.setProperty('--casi-accent2',     skin.accent2);
   root.style.setProperty('--casi-accent2-rgb', skin.accent2Rgb);
   root.style.setProperty('--casi-bg',          skin.bg);
