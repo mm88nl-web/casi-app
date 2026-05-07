@@ -246,6 +246,111 @@
   color: var(--ink);
 }
 
+/* Viewer-screen streamer header (.vb-head) — used by /overlay viewer mode
+   and the /s/[username] landing page. Single avatar tile + name + bio +
+   live badge + overlay link, on a soft surface gradient. */
+.casi-v9-vb-head {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 32px var(--pad);
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(to bottom, var(--surf), var(--paper) 90%);
+}
+.casi-v9-vb-avatar {
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  background: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--H);
+  font-weight: 800;
+  font-size: 38px;
+  color: var(--on-ink);
+  letter-spacing: -0.04em;
+  overflow: hidden;
+}
+.casi-v9-vb-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.casi-v9-vb-info {
+  flex: 1;
+  min-width: 0;
+}
+.casi-v9-vb-name {
+  font-family: var(--H);
+  font-weight: 800;
+  font-variation-settings: 'opsz' 48;
+  font-size: 36px;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.casi-v9-vb-bio {
+  font-size: 14px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.casi-v9-vb-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.casi-v9-vb-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-family: var(--M);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.casi-v9-vb-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--on-ink);
+}
+.casi-v9-vb-overlay-link {
+  font-family: var(--M);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.14s;
+}
+.casi-v9-vb-overlay-link:hover {
+  color: var(--ink);
+}
+@media (max-width: 640px) {
+  .casi-v9-vb-head {
+    padding: 20px 16px;
+    gap: 16px;
+  }
+  .casi-v9-vb-avatar {
+    width: 56px;
+    height: 56px;
+    font-size: 26px;
+  }
+  .casi-v9-vb-name {
+    font-size: 26px;
+  }
+}
+
 /* Light-paper variant: text scale inverts. Opt-in via [data-paper="light"]
    on a wrapper element; lets v9 surfaces support a light theme without
    changing how SkinProvider works. */

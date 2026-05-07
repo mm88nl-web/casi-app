@@ -19,7 +19,7 @@ import {
   IS_MAINNET,
   WALLET_ADAPTER_CLUSTER,
 } from '@/lib/solana-network';
-import Logo from './_components/Logo';
+import { CasiMark, Wordmark } from '@/components/v9';
 import Countdown from './_components/Countdown';
 import { getSecondsRemaining, formatTime } from './_components/time';
 import {
@@ -1506,8 +1506,8 @@ function OverlayContent() {
         {!isOBS && (
           <nav className="ov-nav">
             <a href="/search" className="ov-logo">
-              <Logo scale={0.26} color={tc} />
-              <span className="ov-wm">casi</span>
+              <CasiMark width={50} height={25} />
+              <Wordmark />
             </a>
             <div className="ov-nav-right">
               {/* Wallet pill — net dot, USDC + SOL balances, identity dropdown.
@@ -1536,6 +1536,44 @@ function OverlayContent() {
               )}
             </div>
           </nav>
+        )}
+
+        {/* v9 streamer header — viewer-mode only. Reads display_name / avatar /
+            bio / is_live straight off the already-loaded `profile`. Skipped when
+            no profile (search-flow) and in OBS source mode. */}
+        {!isOBS && profile && (
+          <div className="casi-v9-vb-head">
+            <div className="casi-v9-vb-avatar">
+              {profile.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profile.avatar_url} alt="" />
+              ) : (
+                (profile.display_name || profile.username || '?').charAt(0).toUpperCase()
+              )}
+            </div>
+            <div className="casi-v9-vb-info">
+              <div className="casi-v9-vb-name">
+                {profile.display_name || profile.username}
+              </div>
+              {profile.bio && <div className="casi-v9-vb-bio">{profile.bio}</div>}
+              <div className="casi-v9-vb-status">
+                {profile.is_live && (
+                  <span className="casi-v9-vb-live-badge">
+                    <span className="casi-v9-vb-live-dot" />
+                    Live now
+                  </span>
+                )}
+                {profile.username && (
+                  <a
+                    href={`/overlay?s=${profile.username}`}
+                    className="casi-v9-vb-overlay-link"
+                  >
+                    ↗ /overlay?s={profile.username}
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         <main className={isOBS ? '' : 'ov-main'}>
