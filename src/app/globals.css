@@ -557,6 +557,131 @@
 .casi-v9-va-change:hover { border-color: var(--ink); color: var(--ink); }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   v9 VIEWER · BOOKING — screen 02
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 2-col body grid — stream preview/feed left, slots/booking right.
+   1-col on mobile. Used by /overlay non-OBS mode. */
+.casi-v9-vb-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 0;
+  align-items: start;
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 900px) {
+  .casi-v9-vb-body { grid-template-columns: 1fr; }
+}
+.casi-v9-vb-left {
+  padding: 24px var(--pad);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .casi-v9-vb-left {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+}
+.casi-v9-vb-right {
+  padding: 24px var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+/* "Available slots" eyebrow + .feed-head pattern (mono, with the 18px
+   ink rule prefix). */
+.casi-v9-bp-label,
+.casi-v9-feed-head {
+  font-family: var(--M);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.casi-v9-bp-label::before,
+.casi-v9-feed-head::before {
+  content: "";
+  display: block;
+  width: 18px;
+  height: 1px;
+  background: var(--ink);
+}
+
+/* Flashes-live feed — viewer-side recent approved flashes for this
+   streamer. 4-col grid: viewer name (90px) · message · amount · time. */
+.casi-v9-flash-list {
+  display: flex;
+  flex-direction: column;
+}
+.casi-v9-flash-item {
+  display: grid;
+  grid-template-columns: 90px 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.casi-v9-flash-item:last-child { border-bottom: none; }
+.casi-v9-flash-who {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.casi-v9-flash-msg {
+  font-family: var(--S);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.casi-v9-flash-amt {
+  font-family: var(--M);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  letter-spacing: 0.04em;
+}
+.casi-v9-flash-amt.casi-v9-u {
+  color: var(--ink);
+  background: var(--ink-08);
+  border: 1px solid var(--ink-22);
+}
+.casi-v9-flash-amt.casi-v9-e {
+  color: var(--text);
+  background: var(--surf-2);
+  border: 1px solid var(--line-2);
+}
+.casi-v9-flash-time {
+  font-family: var(--M);
+  font-size: 10.5px;
+  color: var(--text-4);
+}
+.casi-v9-flash-empty {
+  padding: 16px 0;
+  font-family: var(--M);
+  font-size: 11px;
+  color: var(--text-4);
+  letter-spacing: 0.04em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    v9 STUDIO LIVE EDITOR — screen 04
    ═══════════════════════════════════════════════════════════════════════ */
 
