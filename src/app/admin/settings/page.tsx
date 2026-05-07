@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import CasiLogo from '@/components/CasiLogo';
+import { CasiMark, Wordmark } from '@/components/v9';
 import WalletNav from '@/components/WalletNav';
 import SettingsLayout, { type RailGroup } from '@/components/settings/SettingsLayout';
 import ProfileSection, { type ProfileRow } from '@/components/settings/ProfileSection';
@@ -100,13 +100,8 @@ export default function SettingsPage() {
           className="flex items-center gap-2"
           style={{ color: 'var(--casi-text)', textDecoration: 'none' }}
         >
-          <CasiLogo size={72} />
-          <span
-            className="font-extrabold"
-            style={{ fontFamily: 'var(--font-casi-sans)', fontSize: '22px', letterSpacing: '-1px' }}
-          >
-            casi
-          </span>
+          <CasiMark width={56} height={28} />
+          <Wordmark />
         </Link>
         <div className="flex items-center gap-3">
           <Link

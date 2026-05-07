@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
-import Nav from '@/components/Nav';
+import type { CSSProperties, ReactNode } from 'react';
+import { NavBar } from '@/components/v9';
 import WalletPill from '@/components/WalletPill';
 
 type StudioFrameProps = {
@@ -22,11 +22,6 @@ type StudioFrameProps = {
   children: ReactNode;
 };
 
-/**
- * Shared layout for /studio and /studio/live: top nav, welcome header
- * with go-live toggle, and the mode tabs that switch between the two
- * routes. Both pages render their own content below.
- */
 export default function StudioFrame({
   username,
   isLive,
@@ -41,89 +36,82 @@ export default function StudioFrame({
   const slug = username || 'streamer';
 
   return (
-    <main
-      className="min-h-screen"
-      style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}
-    >
-      <Nav
-        right={
+    <main className="min-h-screen" style={{ background: 'var(--paper)', color: 'var(--text)' }}>
+      <NavBar
+        chips={
           <>
-            <Link
-              href="/admin"
-              title="Classic studio (current production)"
-              className="font-mono uppercase"
-              style={navChipStyle()}
-            >
+            <Link href="/admin" title="Classic studio (current production)" style={chipStyle()}>
               ↩ Classic
             </Link>
-            <span
-              className="font-mono uppercase"
-              style={navChipStyle({ active: true })}
-            >
-              Studio beta
-            </span>
-            <Link
-              href="/studio/settings"
-              title="Profile, payouts, appearance, OBS sources, session key"
-              className="font-mono uppercase"
-              style={navChipStyle()}
-            >
+            <span style={chipStyle({ active: true })}>Studio beta</span>
+            <Link href="/studio/settings" title="Profile, payouts, appearance" style={chipStyle()}>
               ⚙ Settings
             </Link>
-            <WalletPill />
           </>
         }
+        right={<WalletPill />}
       />
 
       <div
         className="mx-auto flex flex-col"
-        style={{ maxWidth: '1200px', padding: '32px 32px 72px', gap: '24px' }}
+        style={{ maxWidth: '1280px', padding: '36px var(--pad) 80px', gap: '24px' }}
       >
-        {/* Control header — welcome + live status + go/end toggle */}
+        {/* Control header — v9 .ctrl-header pattern */}
         <header
-          className="flex flex-wrap items-center justify-between"
+          className="flex flex-wrap items-end justify-between"
           style={{
-            gap: '16px',
-            paddingBottom: '20px',
-            borderBottom: '1px solid var(--casi-border)',
+            gap: '20px',
+            paddingBottom: '24px',
+            borderBottom: '1px solid var(--line)',
           }}
         >
           <h1
             style={{
-              fontFamily: 'var(--font-casi-display), var(--font-casi-sans), sans-serif',
+              fontFamily: 'var(--H)',
               fontWeight: 800,
-              fontSize: '28px',
-              letterSpacing: '0.5px',
-              lineHeight: 1.1,
-              color: 'var(--casi-text)',
+              fontVariationSettings: '"opsz" 64',
+              fontSize: 'clamp(32px, 4.4vw, 48px)',
+              letterSpacing: '-0.035em',
+              lineHeight: 1,
+              color: 'var(--text)',
             }}
           >
-            Welcome back, <span style={{ color: 'var(--casi-accent)' }}>@{slug}</span>
+            Welcome back,{' '}
+            <em
+              style={{
+                fontFamily: 'var(--S)',
+                fontWeight: 400,
+                fontStyle: 'italic',
+                color: 'var(--ink)',
+                fontSize: '0.95em',
+                letterSpacing: '-0.01em',
+              }}
+            >
+              @{slug}
+            </em>
           </h1>
-          <div className="flex items-center" style={{ gap: '10px' }}>
+          <div className="flex items-center" style={{ gap: '14px' }}>
             {isLive ? (
               <span
                 className="flex items-center"
-                style={{ gap: '7px', fontSize: '12.5px', color: 'var(--casi-accent)' }}
+                style={{
+                  gap: '8px',
+                  fontFamily: 'var(--M)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  letterSpacing: '0.16em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink)',
+                  padding: '7px 12px',
+                  border: '1px solid var(--ink)',
+                }}
               >
                 <span
                   aria-hidden
-                  className="casi-live-dot"
-                  style={{
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    background: 'var(--casi-accent)',
-                  }}
+                  className="casi-v9-live-dot"
+                  style={{ width: '6px', height: '6px', borderRadius: '50%' }}
                 />
                 Live now
-                <style>{`
-                  .casi-live-dot { animation: casi-live-blink 2s ease-in-out infinite; }
-                  @keyframes casi-live-blink {
-                    0%, 100% { opacity: 1; }
-                    50%       { opacity: 0.25; }
-                  }
-                `}</style>
               </span>
             ) : null}
             <button
@@ -132,16 +120,17 @@ export default function StudioFrame({
               disabled={togglingLive}
               title={isLive ? 'End stream' : 'Go live'}
               style={{
-                padding: '8px 16px',
-                borderRadius: '7px',
-                fontSize: '12px',
+                padding: '9px 16px',
+                fontFamily: 'var(--M)',
+                fontSize: '11px',
                 fontWeight: 600,
-                border: '1px solid var(--casi-border-2)',
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                border: '1px solid var(--line-2)',
                 background: 'transparent',
-                color: 'var(--casi-text-mid)',
+                color: 'var(--text-3)',
                 cursor: togglingLive ? 'wait' : 'pointer',
                 opacity: togglingLive ? 0.5 : 1,
-                fontFamily: 'inherit',
                 transition: 'border-color .14s, color .14s',
               }}
             >
@@ -150,8 +139,8 @@ export default function StudioFrame({
           </div>
         </header>
 
-        {/* Mode tabs — real route links so reload/bookmark land on the right surface */}
-        <div className="flex" style={{ gap: '0', borderBottom: '1px solid var(--casi-border)' }}>
+        {/* Mode tabs — v9 .mode-tabs */}
+        <div className="flex" style={{ gap: '0', borderBottom: '1px solid var(--line)' }}>
           <ModeTab href="/studio" active={activeMode === 'dashboard'} count={pendingCount}>
             Dashboard
           </ModeTab>
@@ -169,7 +158,6 @@ export default function StudioFrame({
               background: 'rgba(239, 68, 68, 0.08)',
               border: '1px solid rgba(239, 68, 68, 0.3)',
               color: '#f87171',
-              borderRadius: '10px',
               fontSize: '13px',
             }}
             role="alert"
@@ -180,15 +168,15 @@ export default function StudioFrame({
                 type="button"
                 onClick={onDismissError}
                 aria-label="Dismiss"
-                className="font-mono uppercase"
                 style={{
-                  padding: '4px 10px',
-                  borderRadius: '6px',
+                  padding: '5px 11px',
+                  fontFamily: 'var(--M)',
                   background: 'transparent',
                   border: '1px solid rgba(239, 68, 68, 0.4)',
                   color: '#f87171',
                   fontSize: '10px',
                   letterSpacing: '0.14em',
+                  textTransform: 'uppercase',
                   cursor: 'pointer',
                 }}
               >
@@ -204,18 +192,18 @@ export default function StudioFrame({
   );
 }
 
-function navChipStyle({ active = false }: { active?: boolean } = {}): React.CSSProperties {
+function chipStyle({ active = false }: { active?: boolean } = {}): CSSProperties {
   return {
-    fontSize: '11px',
+    fontFamily: 'var(--M)',
+    fontSize: '10.5px',
     fontWeight: 500,
-    color: active ? 'var(--casi-accent)' : 'var(--casi-text-dim)',
-    background: active ? 'rgba(var(--casi-accent-rgb), 0.06)' : 'transparent',
-    border: `1px solid ${active ? 'rgba(var(--casi-accent-rgb), 0.2)' : 'var(--casi-border)'}`,
-    padding: '5px 11px',
-    borderRadius: '6px',
+    letterSpacing: '0.04em',
+    color: active ? 'var(--ink)' : 'var(--text-3)',
+    background: active ? 'var(--ink-08)' : 'transparent',
+    border: `1px solid ${active ? 'color-mix(in oklab, var(--ink) 30%, var(--paper))' : 'var(--line)'}`,
+    padding: '7px 12px',
     textDecoration: 'none',
-    transition: 'color .14s',
-    fontFamily: 'inherit',
+    transition: 'color .14s, border-color .14s',
   };
 }
 
@@ -235,16 +223,17 @@ function ModeTab({
       href={href}
       aria-current={active ? 'page' : undefined}
       style={{
-        padding: '10px 20px 12px',
-        fontSize: '14px',
-        fontWeight: 600,
-        color: active ? 'var(--casi-text)' : 'var(--casi-text-mid)',
-        borderBottom: `2px solid ${active ? 'var(--casi-accent)' : 'transparent'}`,
+        padding: '14px 22px 16px',
+        fontFamily: 'var(--H)',
+        fontWeight: 700,
+        fontSize: '18px',
+        letterSpacing: '-0.02em',
+        color: active ? 'var(--text)' : 'var(--text-3)',
+        borderBottom: `2px solid ${active ? 'var(--ink)' : 'transparent'}`,
         marginBottom: '-1px',
         background: 'none',
         textDecoration: 'none',
         transition: 'color .14s',
-        fontFamily: 'inherit',
         display: 'inline-flex',
         alignItems: 'center',
       }}
@@ -256,14 +245,16 @@ function ModeTab({
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: '18px',
-            height: '18px',
-            borderRadius: '5px',
-            marginLeft: '7px',
-            background: 'rgba(var(--casi-accent-rgb), 0.12)',
-            color: 'var(--casi-accent)',
-            fontFamily: 'var(--font-casi-mono), monospace',
-            fontSize: '10px',
+            minWidth: '22px',
+            height: '22px',
+            padding: '0 6px',
+            marginLeft: '8px',
+            background: 'var(--ink)',
+            color: 'var(--on-ink)',
+            fontFamily: 'var(--M)',
+            fontSize: '10.5px',
+            fontWeight: 700,
+            verticalAlign: '1px',
           }}
         >
           {count}

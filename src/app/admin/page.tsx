@@ -19,7 +19,7 @@ import {
   denyBooking as libDenyBooking,
   type ModerationContext,
 } from '@/lib/streamer-moderation';
-import Logo from './_components/Logo';
+import { CasiMark, Wordmark } from '@/components/v9';
 import SlotMedia from '@/components/SlotMedia';
 import BeamTimer from './_components/BeamTimer';
 import SlotInfoPanel from './_components/SlotInfoPanel';
@@ -1101,8 +1101,8 @@ export default function AdminStudio() {
 
   if (!isReady || !profile) return (
     <div style={{ minHeight: '100vh', background: 'var(--casi-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
-      <Logo scale={0.5} />
-      <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--casi-accent)', animation: 'pulse 1.5s infinite' }}>Loading studio…</span>
+      <CasiMark width={120} height={60} />
+      <span style={{ fontFamily: 'var(--M)', fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink)', animation: 'pulse 1.5s infinite' }}>Loading studio…</span>
     </div>
   );
 
@@ -1287,8 +1287,8 @@ export default function AdminStudio() {
         <nav className="top-nav">
           <div className="tnl">
             <a href="/" className="nav-logo">
-              <Logo scale={0.36} />
-              <span className="nav-wm">casi</span>
+              <CasiMark width={50} height={25} />
+              <Wordmark />
             </a>
             <div className="nav-tabs">
               {(['studio', 'requests', 'settings'] as const).map(v => (
