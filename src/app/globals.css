@@ -1160,6 +1160,68 @@
 }
 .casi-v9-cp-del:hover { background: color-mix(in oklab, #ef4444 8%, var(--surf)); }
 
+/* Per-rail price row — Pricing tab. Glyph + name + input + unit. */
+.casi-v9-rail-row {
+  display: grid;
+  grid-template-columns: 26px 1fr 80px auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.casi-v9-rail-row:first-child {
+  border-top: none;
+  padding-top: 4px;
+}
+.casi-v9-rail-glyph {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--M);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  border: 1px solid var(--ink-22);
+}
+.casi-v9-rail-name {
+  font-family: var(--M);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.casi-v9-rail-name small {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 500;
+  color: var(--text-4);
+  letter-spacing: 0.06em;
+  margin-top: 1px;
+  text-transform: uppercase;
+}
+.casi-v9-rail-input {
+  width: 80px;
+  background: var(--paper);
+  border: 1px solid var(--line-2);
+  border-radius: 0;
+  padding: 6px 8px;
+  font-family: var(--M);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+  outline: none;
+  transition: border-color 0.14s;
+}
+.casi-v9-rail-input:focus { border-color: var(--ink); }
+.casi-v9-rail-unit {
+  font-family: var(--M);
+  font-size: 10px;
+  color: var(--text-4);
+  letter-spacing: 0.08em;
+}
+
 /* Light-paper variant: text scale inverts. Opt-in via [data-paper="light"]
    on a wrapper element; lets v9 surfaces support a light theme without
    changing how SkinProvider works. */
