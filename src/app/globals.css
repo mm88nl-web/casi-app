@@ -351,6 +351,211 @@
   }
 }
 
+/* Booking-form internals — v9 .media-tabs / .upload-zone / .viewing-as-row.
+   Used by /overlay/_components/BookingForm.tsx to replace the v7 inline-
+   styled toggle, drop area and viewer chip. Same class names as v9 with a
+   `casi-v9-` prefix so they don't collide with anything in scope. */
+.casi-v9-media-tabs {
+  display: flex;
+  background: var(--ink-04);
+  border: 1px solid var(--ink-22);
+  padding: 3px;
+  gap: 0;
+  margin-bottom: 10px;
+}
+.casi-v9-media-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-family: var(--M);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.14s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.casi-v9-media-tab.casi-v9-on {
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 700;
+}
+.casi-v9-media-tab svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.casi-v9-upload-zone {
+  border: 2px dashed var(--ink-40);
+  position: relative;
+  overflow: hidden;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 18px 14px;
+  gap: 10px;
+  transition: all 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0,
+    transparent 9px,
+    var(--ink-04) 9px,
+    var(--ink-04) 10px
+  );
+}
+.casi-v9-upload-zone:hover {
+  border-color: var(--ink);
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--ink-04) 0,
+    var(--ink-04) 9px,
+    var(--ink-08) 9px,
+    var(--ink-08) 10px
+  );
+}
+.casi-v9-upload-zone.casi-v9-loaded {
+  border-style: solid;
+  border-color: var(--ink);
+  background-image: none;
+  background: var(--ink-04);
+}
+.casi-v9-upload-ico {
+  width: 36px;
+  height: 36px;
+  background: var(--ink);
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3v12'/><path d='M7 8l5-5 5 5'/><path d='M5 19h14'/></svg>") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3v12'/><path d='M7 8l5-5 5 5'/><path d='M5 19h14'/></svg>") center / contain no-repeat;
+  transition: transform 0.2s;
+}
+.casi-v9-upload-zone:hover .casi-v9-upload-ico {
+  transform: translateY(-3px);
+}
+.casi-v9-upload-hint {
+  font-family: var(--H);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.5;
+}
+.casi-v9-upload-hint em {
+  display: block;
+  font-family: var(--M);
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+}
+.casi-v9-upload-formats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.casi-v9-upload-fmt {
+  font-family: var(--M);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  padding: 3px 8px;
+  background: var(--surf);
+  border: 1px solid var(--ink-22);
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+
+.casi-v9-viewing-as {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surf);
+  border: 1px solid var(--line-2);
+  padding: 12px 14px;
+  transition: border-color 0.14s;
+}
+.casi-v9-viewing-as:hover { border-color: var(--ink-40); }
+.casi-v9-va-avatar {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 220deg at 65% 35%,
+    color-mix(in oklab, var(--ink) 40%, white) 0deg,
+    var(--ink) 120deg,
+    color-mix(in oklab, var(--ink) 60%, black) 240deg,
+    color-mix(in oklab, var(--ink) 40%, white) 360deg
+  );
+  box-shadow: inset 0 0 0 1.5px var(--surf);
+}
+.casi-v9-va-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.casi-v9-va-name {
+  font-family: var(--B);
+  font-weight: 700;
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.casi-v9-va-tag {
+  font-family: var(--M);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.casi-v9-va-tag::before {
+  content: "";
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+.casi-v9-va-change {
+  font-family: var(--M);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid var(--line-2);
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.14s;
+}
+.casi-v9-va-change:hover { border-color: var(--ink); color: var(--ink); }
+
 /* Light-paper variant: text scale inverts. Opt-in via [data-paper="light"]
    on a wrapper element; lets v9 surfaces support a light theme without
    changing how SkinProvider works. */

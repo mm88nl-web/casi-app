@@ -152,37 +152,76 @@ export default function BookingForm(props: Props) {
         <div>
           <div style={{ marginBottom: 14 }}>
             <label className="bf-lbl">Beam media</label>
-            <div style={{ display: 'flex', gap: 0, marginBottom: 8, border: '1px solid var(--casi-border)', borderRadius: 8, overflow: 'hidden' }}>
+            <div className="casi-v9-media-tabs">
               {(['upload', 'url'] as const).map(m => (
                 <button
                   key={m}
+                  type="button"
                   onClick={() => onUploadModeChange(m)}
-                  style={{ flex: 1, padding: '5px 0', background: uploadMode === m ? accentColor : 'transparent', color: uploadMode === m ? 'var(--casi-bg)' : '#555', border: 'none', fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', fontWeight: uploadMode === m ? 700 : 400 }}
+                  className={`casi-v9-media-tab${uploadMode === m ? ' casi-v9-on' : ''}`}
                 >
-                  {m === 'upload' ? '↑ Upload' : '⇥ Link'}
+                  {m === 'upload' ? (
+                    <>
+                      <svg viewBox="0 0 24 24" aria-hidden>
+                        <path d="M12 4v12" />
+                        <path d="M7 9l5-5 5 5" />
+                        <path d="M5 20h14" />
+                      </svg>
+                      <span>Upload</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg viewBox="0 0 24 24" aria-hidden>
+                        <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+                        <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+                      </svg>
+                      <span>Link</span>
+                    </>
+                  )}
                 </button>
               ))}
             </div>
 
             {uploadMode === 'upload' ? (
               <div>
-                <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, border: `1.5px dashed ${uploadedUrl ? `rgba(${accentColorRgb},0.4)` : 'var(--casi-border)'}`, borderRadius: 8, padding: '18px 12px', cursor: uploading ? 'wait' : 'pointer', background: uploadedUrl ? `rgba(${accentColorRgb},0.04)` : 'transparent', transition: 'border-color .15s' }}>
+                <label
+                  className={`casi-v9-upload-zone${uploadedUrl ? ' casi-v9-loaded' : ''}`}
+                  style={{ cursor: uploading ? 'wait' : 'pointer' }}
+                >
                   <input
                     type="file"
                     accept="image/*,video/mp4,video/webm,video/quicktime"
                     style={{ display: 'none' }}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) onFileSelect(f); }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) onFileSelect(f);
+                    }}
                   />
-                  <span style={{ fontSize: 18 }}>{uploading ? '⟳' : uploadedUrl ? (uploadedFileType === 'video' ? '▶' : '🖼') : '↑'}</span>
-                  <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: uploadedUrl ? accentColor : '#555', letterSpacing: 0.5, textAlign: 'center' }}>
-                    {uploading ? 'Uploading…' : uploadedUrl ? `✓ ${uploadedFileType === 'video' ? 'Video' : 'Image'} ready` : 'Click to upload · img 5 MB · video 20 MB'}
+                  {!uploadedUrl && !uploading && <span className="casi-v9-upload-ico" aria-hidden />}
+                  <span className="casi-v9-upload-hint">
+                    {uploading
+                      ? 'Uploading…'
+                      : uploadedUrl
+                      ? `✓ ${uploadedFileType === 'video' ? 'Video' : 'Image'} ready`
+                      : 'Drop your beam · or click to browse'}
+                    {!uploadedUrl && !uploading && (
+                      <em>Img or video · 20 MB · 1080p max</em>
+                    )}
                   </span>
-                  {!uploadedUrl && <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: '#444' }}>jpg · png · gif · webp · mp4 · webm</span>}
+                  {!uploadedUrl && !uploading && (
+                    <div className="casi-v9-upload-formats">
+                      <span className="casi-v9-upload-fmt">JPG</span>
+                      <span className="casi-v9-upload-fmt">PNG</span>
+                      <span className="casi-v9-upload-fmt">GIF</span>
+                      <span className="casi-v9-upload-fmt">MP4</span>
+                      <span className="casi-v9-upload-fmt">WEBM</span>
+                    </div>
+                  )}
                 </label>
                 {uploadedUrl && (
                   <button
                     onClick={onRemoveUpload}
-                    style={{ background: 'none', border: 'none', fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: '#f87171', cursor: 'pointer', marginTop: 4 }}
+                    style={{ background: 'none', border: 'none', fontFamily: 'var(--M)', fontSize: 10, color: '#f87171', cursor: 'pointer', marginTop: 6, letterSpacing: '0.12em', textTransform: 'uppercase' }}
                   >
                     ✕ Remove
                   </button>
@@ -219,14 +258,18 @@ export default function BookingForm(props: Props) {
 
           <div>
             <label className="bf-lbl">Viewing as</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '10px 14px' }}>
-              <span className="vdot" />
-              <span style={{ fontFamily: "var(--font-casi-sans),sans-serif", fontWeight: 700, fontSize: 14, flex: 1 }}>@{savedViewerName}</span>
+            <div className="casi-v9-viewing-as">
+              <span className="casi-v9-va-avatar" aria-hidden />
+              <div className="casi-v9-va-info">
+                <span className="casi-v9-va-name">@{savedViewerName}</span>
+                <span className="casi-v9-va-tag">Local session</span>
+              </div>
               <button
+                type="button"
                 onClick={onChangeNameClick}
-                style={{ background: 'none', border: 'none', fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: '#444', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}
+                className="casi-v9-va-change"
               >
-                change
+                Change
               </button>
             </div>
           </div>
