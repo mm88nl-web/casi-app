@@ -213,7 +213,7 @@ export default function EndStreamDialog({ open, onClose, counts, delegate, progr
             disabled={running}
             style={{
               padding: '8px 14px',
-              borderRadius: '7px',
+              borderRadius: 0,
               border: '1px solid var(--casi-border-2)',
               background: 'transparent',
               color: 'var(--casi-text-mid)',
@@ -232,7 +232,7 @@ export default function EndStreamDialog({ open, onClose, counts, delegate, progr
             disabled={running || confirming}
             style={{
               padding: '8px 16px',
-              borderRadius: '7px',
+              borderRadius: 0,
               border: '1px solid rgba(239, 68, 68, 0.4)',
               background: 'rgba(239, 68, 68, 0.08)',
               color: '#f87171',

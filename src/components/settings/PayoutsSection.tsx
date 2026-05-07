@@ -42,7 +42,7 @@ function ConnectedCard({ logo, title, meta, action }: ConnectedCardProps) {
         padding: '14px 16px',
         background: 'var(--casi-bg)',
         border: '1px solid var(--casi-border-2)',
-        borderRadius: '10px',
+        borderRadius: 0,
       }}
     >
       <div className="flex items-center gap-3.5 min-w-0">
@@ -116,7 +116,7 @@ const STRIPE_LOGO = (
     style={{
       width: '40px',
       height: '40px',
-      borderRadius: '9px',
+      borderRadius: 0,
       background: '#635BFF',
       color: '#fff',
       fontFamily: 'var(--font-casi-sans)',
@@ -135,7 +135,7 @@ const SOLANA_LOGO = (
     style={{
       width: '40px',
       height: '40px',
-      borderRadius: '9px',
+      borderRadius: 0,
       background: 'linear-gradient(135deg, #9945FF, #14F195)',
       color: '#0a0a0a',
       fontSize: '18px',
@@ -402,7 +402,7 @@ export default function PayoutsSection({
         style={{
           background: 'rgba(var(--casi-accent2-rgb), 0.04)',
           border: '1px solid rgba(var(--casi-accent2-rgb), 0.2)',
-          borderRadius: '10px',
+          borderRadius: 0,
           padding: '12px 14px',
         }}
       >
@@ -411,7 +411,7 @@ export default function PayoutsSection({
           style={{
             width: '22px',
             height: '22px',
-            borderRadius: '5px',
+            borderRadius: 0,
             background: 'rgba(var(--casi-accent2-rgb), 0.15)',
             color: 'var(--casi-accent2)',
             fontSize: '12px',

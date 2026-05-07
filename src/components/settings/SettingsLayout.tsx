@@ -132,7 +132,7 @@ export default function SettingsLayout({ rail, children }: Props) {
                     width: '100%',
                     textAlign: 'left',
                     padding: '7px 8px',
-                    borderRadius: '6px',
+                    borderRadius: 0,
                     fontSize: '13px',
                     fontWeight: 500,
                     color: isActive ? 'var(--casi-text)' : 'var(--casi-text-dim)',

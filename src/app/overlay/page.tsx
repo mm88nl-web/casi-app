@@ -32,6 +32,7 @@ import {
 import NameEntryScreen from './_components/NameEntryScreen';
 import SolanaConfirmModal, { type TxStatus } from './_components/SolanaConfirmModal';
 import FlashFeed from './_components/FlashFeed';
+import ViewerFlashesFeed from './_components/ViewerFlashesFeed';
 import MyBeamsSection from './_components/MyBeamsSection';
 import SlotsList from './_components/SlotsList';
 import StuckFlashesPanel from './_components/StuckFlashesPanel';
@@ -1449,6 +1450,25 @@ function OverlayContent() {
         .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid rgba(var(--casi-accent-rgb),0.31); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--casi-text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
 
         .ov-main { max-width:1200px; margin:0 auto; padding:16px 20px 48px; }
+        /* v9 viewer 2-col body — canvas + flashes-feed left, slots/booking right.
+           Layout via CSS-grid placement on existing children, no JSX wrapping
+           (the canvas div is huge + closes over component state, extracting
+           it is fragile). MyBeams + StuckFlashes + FlashPanel span both cols
+           via .ov-full-row; canvas/feed sit in col 1, slots/booking in col 2.
+           In OBS mode .ov-v9 is not applied so the grid never engages. */
+        .ov-main.ov-v9 { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 24px 32px; align-items: start; max-width: 1280px; }
+        .ov-main.ov-v9 > .ov-full-row { grid-column: 1 / -1; }
+        .ov-main.ov-v9 > .stream-canvas { grid-column: 1; grid-row: 2; margin-bottom: 0; }
+        .ov-main.ov-v9 > .casi-v9-viewer-feed-wrap { grid-column: 1; grid-row: 3; }
+        .ov-main.ov-v9 > .slots-sec { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
+        .ov-main.ov-v9 > .bf { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
+        @media (max-width:900px) {
+          .ov-main.ov-v9 { grid-template-columns: 1fr; }
+          .ov-main.ov-v9 > .stream-canvas,
+          .ov-main.ov-v9 > .casi-v9-viewer-feed-wrap,
+          .ov-main.ov-v9 > .slots-sec,
+          .ov-main.ov-v9 > .bf { grid-column: 1; grid-row: auto; }
+        }
 
         .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
         .my-beams-lbl { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; }
@@ -1681,10 +1701,11 @@ function OverlayContent() {
           </div>
         )}
 
-        <main className={isOBS ? '' : 'ov-main'}>
+        <main className={isOBS ? '' : 'ov-main ov-v9'}>
 
           {/* MY BEAMS */}
           {!isOBS && !selectedSlot && (
+            <div className="ov-full-row">
             <MyBeamsSection
               bookings={visibleMyBookings}
               activeBookings={activeBookings}
@@ -1721,6 +1742,7 @@ function OverlayContent() {
               onReclaim={reclaimSolanaEscrow}
               onExpire={clientExpireBooking}
             />
+            </div>
           )}
 
           {/* STREAM CANVAS */}
@@ -1984,6 +2006,15 @@ function OverlayContent() {
             {isOBS && profile?.id && <FlashFeed profileId={profile.id} />}
           </div>
 
+          {/* v9 viewer-side recent-flashes feed — read-only list under the
+              canvas in the left col of the 2-col body. Hidden in OBS source
+              mode (this is viewer chrome, not stream content). */}
+          {!isOBS && profile?.id && (
+            <div className="casi-v9-viewer-feed-wrap">
+              <ViewerFlashesFeed supabase={supabase} profileId={profile.id} />
+            </div>
+          )}
+
           {/* BOOKING FORM */}
           {!isOBS && selectedSlot && (
             <BookingForm
@@ -2072,15 +2103,17 @@ function OverlayContent() {
               USDC without waiting on the streamer to act. Hidden in OBS
               mode (this is viewer chrome, not stream content). */}
           {!isOBS && !selectedSlot && (
-            <StuckFlashesPanel
-              flashes={myStuckFlashes}
-              reclaimingId={reclaimingFlash}
-              onReclaim={reclaimFlashEscrow}
-            />
+            <div className="ov-full-row">
+              <StuckFlashesPanel
+                flashes={myStuckFlashes}
+                reclaimingId={reclaimingFlash}
+                onReclaim={reclaimFlashEscrow}
+              />
+            </div>
           )}
 
           {!isOBS && profile?.id && !selectedSlot && (
-            <div style={{ marginTop:24 }}>
+            <div className="ov-full-row" style={{ marginTop:24 }}>
               <FlashPanel
                 profileId={profile.id}
                 viewerName={savedViewerName || null}

@@ -91,10 +91,10 @@ export default function AiringNow({ items }: Props) {
 
       <div
         style={{
-          border: '1px solid var(--casi-border)',
-          borderRadius: '10px',
+          border: '1px solid var(--line)',
+          borderRadius: 0,
+          background: 'var(--surf)',
           overflow: 'hidden',
-          background: 'var(--casi-surface)',
           maxHeight: '600px',
           overflowY: 'auto',
         }}
@@ -203,7 +203,7 @@ export default function AiringNow({ items }: Props) {
                     className="casi-air-end"
                     style={{
                       padding: '6px 11px',
-                      borderRadius: '6px',
+                      borderRadius: 0,
                       fontSize: '11px',
                       fontWeight: 500,
                       border: '1px solid var(--casi-border-2)',
@@ -277,7 +277,7 @@ export default function AiringNow({ items }: Props) {
                             className="casi-air-play"
                             style={{
                               padding: '5px 10px',
-                              borderRadius: '6px',
+                              borderRadius: 0,
                               fontSize: '11px',
                               fontWeight: 600,
                               border: '1px solid var(--casi-border-2)',
@@ -321,7 +321,7 @@ function QueueThumb({
   const baseTile: React.CSSProperties = {
     width: '32px',
     height: '32px',
-    borderRadius: '6px',
+    borderRadius: 0,
     background: 'var(--casi-surface-2)',
     border: '1px solid var(--casi-border)',
     flexShrink: 0,
@@ -370,7 +370,7 @@ function SectionTitle({ title, count }: { title: string; count: number }) {
           minWidth: '18px',
           height: '18px',
           padding: '0 5px',
-          borderRadius: '5px',
+          borderRadius: 0,
           background: 'rgba(var(--casi-accent-rgb), 0.12)',
           color: 'var(--casi-accent)',
           fontFamily: 'var(--font-casi-mono), monospace',
@@ -403,7 +403,7 @@ function AiringThumb({
   const baseTile: React.CSSProperties = {
     width: `${size}px`,
     height: `${size}px`,
-    borderRadius: '7px',
+    borderRadius: 0,
     background: 'var(--casi-surface-2)',
     border: '1px solid var(--casi-border)',
     display: 'flex',

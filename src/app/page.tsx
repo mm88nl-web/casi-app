@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
-import { NavBar, Marquee, Footer, WalletButton } from '@/components/v9';
+import { NavBar, Marquee, Footer } from '@/components/v9';
+import WalletPill from '@/components/WalletPill';
 
 export default function HomePage() {
   const [liveCount, setLiveCount] = useState<number | null>(null);
@@ -35,7 +36,7 @@ export default function HomePage() {
   return (
     <main className="casi-v9-landing">
       <Marquee text={marqueeText} />
-      <NavBar liveLabel={liveLabel} right={<WalletButton />} />
+      <NavBar liveLabel={liveLabel} right={<WalletPill />} />
 
       {/* HERO ────────────────────────────────────────────────────────── */}
       <section className="l-hero">
@@ -289,8 +290,9 @@ export default function HomePage() {
           line-height: 0.85;
         }
         .l-display :global(.underscore) {
-          border-bottom: 6px solid var(--ink);
-          padding-bottom: 0.04em;
+          display: inline-block;
+          line-height: 0.86;
+          box-shadow: inset 0 -8px 0 var(--ink);
         }
         .l-sub {
           margin-top: 32px;

@@ -54,7 +54,13 @@ export default function StudioFrame({
 
       <div
         className="mx-auto flex flex-col"
-        style={{ maxWidth: '1280px', padding: '36px var(--pad) 80px', gap: '24px' }}
+        // /studio/live needs more horizontal room for the 3-col Layers ·
+        // Canvas · Properties grid; everywhere else stays at 1280.
+        style={{
+          maxWidth: activeMode === 'live' ? '1480px' : '1280px',
+          padding: '36px var(--pad) 80px',
+          gap: '24px',
+        }}
       >
         {/* Control header — v9 .ctrl-header pattern */}
         <header
