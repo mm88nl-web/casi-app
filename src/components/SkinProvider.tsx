@@ -28,6 +28,12 @@ export default function SkinProvider({
     const accent    = themeColor ? themeColor : s.accent;
     const accentRgb = themeColor ? (hexToRgbStr(themeColor) ?? s.accentRgb) : s.accentRgb;
 
+    // v9 roots — derived ladder (--ink-04…70, --text…4, --surf*, --line*, --on-ink)
+    // is computed in globals.css via color-mix(), so two writes cover everything.
+    root.style.setProperty('--ink',   accent);
+    root.style.setProperty('--paper', s.paper);
+
+    // v7 alias layer kept in sync for components that read --casi-* directly.
     root.style.setProperty('--casi-accent',     accent);
     root.style.setProperty('--casi-accent-rgb', accentRgb);
     root.style.setProperty('--casi-accent2',     s.accent2);

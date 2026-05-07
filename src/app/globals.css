@@ -1,26 +1,89 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════════════════════
+   v9 TWO-COLOR SYSTEM
+   ───────────────────────────────────────────────────────────────────────
+   Everything theming-related derives from two roots:
+     --ink   accent / brand color (defaults to Casi teal #0DCFB0)
+     --paper page background     (defaults to near-black #0B0B0C)
+   Skin/user providers only need to set those two — the rest of the ladder
+   (ink tints, surfaces, lines, text scale, on-ink) falls out of color-mix.
+   v7 tokens (--casi-accent, --casi-bg, …) are aliased onto v9 so existing
+   components don't break during the port.
+   ═══════════════════════════════════════════════════════════════════════ */
 :root {
   --background: #ffffff;
   --foreground: #171717;
 
-  /* ── Casi skin tokens ── defaults match Casi Dark, overridden by SkinProvider / UserSkinProvider */
-  --casi-accent:      #0DCFB0;
+  /* ── v9 roots: the only colors that matter ── */
+  --ink:   #0DCFB0;
+  --paper: #0B0B0C;
+
+  /* Derived — tints of ink against paper */
+  --ink-04: color-mix(in oklab, var(--ink) 4%,  var(--paper));
+  --ink-08: color-mix(in oklab, var(--ink) 8%,  var(--paper));
+  --ink-14: color-mix(in oklab, var(--ink) 14%, var(--paper));
+  --ink-22: color-mix(in oklab, var(--ink) 22%, var(--paper));
+  --ink-40: color-mix(in oklab, var(--ink) 40%, var(--paper));
+  --ink-70: color-mix(in oklab, var(--ink) 70%, var(--paper));
+
+  /* Text scale on paper — derived from inverse of paper */
+  --text:    color-mix(in oklab, var(--paper) 6%,  white);
+  --text-2:  color-mix(in oklab, var(--paper) 25%, white);
+  --text-3:  color-mix(in oklab, var(--paper) 50%, white);
+  --text-4:  color-mix(in oklab, var(--paper) 70%, white);
+
+  /* Surfaces / dividers — slight lifts from paper */
+  --surf:   color-mix(in oklab, var(--paper) 92%, white);
+  --surf-2: color-mix(in oklab, var(--paper) 86%, white);
+  --line:   color-mix(in oklab, var(--paper) 80%, white);
+  --line-2: color-mix(in oklab, var(--paper) 65%, white);
+
+  /* Inverse — for text/icons that sit ON ink */
+  --on-ink: color-mix(in oklab, var(--paper) 90%, black);
+
+  /* Type — v9 vocabulary, fed by next/font CSS variables */
+  --H: var(--font-casi-display), var(--font-casi-sans), system-ui, sans-serif;
+  --B: var(--font-casi-sans), system-ui, sans-serif;
+  --M: var(--font-casi-mono), ui-monospace, monospace;
+  --S: var(--font-casi-serif), Georgia, serif;
+
+  /* Density */
+  --gap: 24px;
+  --pad: 32px;
+
+  /* ── v7 alias layer — keeps existing components rendering correctly ── */
+  --casi-accent:      var(--ink);
   --casi-accent-rgb:  13, 207, 176;
   --casi-accent2:     #9945FF;
   --casi-accent2-rgb: 153, 69, 255;
-  --casi-bg:          #0C0D11;
-  --casi-surface:     #13151C;
-  --casi-border:      #1E2130;
-  --casi-text:        #E8EAED;
-  --casi-text-muted:  #5E6278;
+  --casi-bg:          var(--paper);
+  --casi-surface:     var(--surf);
+  --casi-border:      var(--line);
+  --casi-text:        var(--text);
+  --casi-text-muted:  var(--text-3);
 
-  /* Extended tokens — skin-independent, match redesign v7 handoff */
-  --casi-surface-2:   #191C27;
-  --casi-border-2:    #272B3D;
-  --casi-text-mid:    #5E6278;
-  --casi-text-dim:    #30334A;
-  --casi-text-faint:  #1A1D27;
+  /* Extended v7 tokens — kept skin-independent for now */
+  --casi-surface-2:   var(--surf-2);
+  --casi-border-2:    var(--line-2);
+  --casi-text-mid:    var(--text-3);
+  --casi-text-dim:    var(--text-4);
+  --casi-text-faint:  color-mix(in oklab, var(--paper) 92%, white);
+}
+
+/* Light-paper variant: text scale inverts. Opt-in via [data-paper="light"]
+   on a wrapper element; lets v9 surfaces support a light theme without
+   changing how SkinProvider works. */
+[data-paper="light"] {
+  --text:   color-mix(in oklab, var(--paper) 6%,  black);
+  --text-2: color-mix(in oklab, var(--paper) 25%, black);
+  --text-3: color-mix(in oklab, var(--paper) 50%, black);
+  --text-4: color-mix(in oklab, var(--paper) 70%, black);
+  --surf:   color-mix(in oklab, var(--paper) 96%, black);
+  --surf-2: color-mix(in oklab, var(--paper) 92%, black);
+  --line:   color-mix(in oklab, var(--paper) 88%, black);
+  --line-2: color-mix(in oklab, var(--paper) 75%, black);
+  --on-ink: color-mix(in oklab, var(--paper) 90%, white);
 }
 
 @theme inline {

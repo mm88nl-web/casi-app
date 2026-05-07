@@ -1,7 +1,7 @@
 export type Skin = {
   id: string;
   name: string;
-  /** Primary brand colour */
+  /** Primary brand colour (v7 alias: same value as `ink`) */
   accent: string;
   /** RGB channels of accent (no `rgb()` wrapper) — for rgba() usage */
   accentRgb: string;
@@ -9,7 +9,7 @@ export type Skin = {
   accent2: string;
   /** RGB channels of accent2 */
   accent2Rgb: string;
-  /** Main page background */
+  /** Main page background (v7 alias: same value as `paper`) */
   bg: string;
   /** Card / panel background */
   surface: string;
@@ -19,6 +19,11 @@ export type Skin = {
   text: string;
   /** Secondary / label text */
   textMuted: string;
+  /** v9 root: brand/accent colour. Equal to `accent` — the providers wire this
+   *  into `--ink`, and globals.css derives the rest of the ladder via color-mix. */
+  ink: string;
+  /** v9 root: page background. Equal to `bg` — wired into `--paper`. */
+  paper: string;
 };
 
 export const SKINS: Skin[] = [
@@ -34,6 +39,8 @@ export const SKINS: Skin[] = [
     border:     '#1E2130',
     text:       '#E8EAED',
     textMuted:  '#5E6278',
+    ink:        '#0DCFB0',
+    paper:      '#0C0D11',
   },
   {
     id: 'twitch',
@@ -47,6 +54,8 @@ export const SKINS: Skin[] = [
     border:     '#2a2a3a',
     text:       '#efeff1',
     textMuted:  '#adadb8',
+    ink:        '#9146FF',
+    paper:      '#0e0e1a',
   },
   {
     id: 'kick',
@@ -60,6 +69,8 @@ export const SKINS: Skin[] = [
     border:     '#1d301d',
     text:       '#e8eee8',
     textMuted:  '#5a705a',
+    ink:        '#53FC18',
+    paper:      '#0a1a0a',
   },
   {
     id: 'youtube',
@@ -73,6 +84,8 @@ export const SKINS: Skin[] = [
     border:     '#2a1010',
     text:       '#f0e8e8',
     textMuted:  '#806060',
+    ink:        '#FF0000',
+    paper:      '#0d0606',
   },
   {
     id: 'cyber',
@@ -86,6 +99,8 @@ export const SKINS: Skin[] = [
     border:     '#1a2435',
     text:       '#e0eaf5',
     textMuted:  '#506075',
+    ink:        '#06B6D4',
+    paper:      '#050a12',
   },
   {
     id: 'mono',
@@ -99,6 +114,8 @@ export const SKINS: Skin[] = [
     border:     '#2a2a2a',
     text:       '#f0f0f0',
     textMuted:  '#888888',
+    ink:        '#E8E8E8',
+    paper:      '#0a0a0a',
   },
   {
     id: 'rose',
@@ -112,6 +129,8 @@ export const SKINS: Skin[] = [
     border:     '#2a1535',
     text:       '#f0e0ea',
     textMuted:  '#7a5a70',
+    ink:        '#F472B6',
+    paper:      '#0a0515',
   },
 ];
 
