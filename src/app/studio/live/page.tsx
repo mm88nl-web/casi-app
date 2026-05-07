@@ -101,7 +101,7 @@ export default function StudioLivePage() {
       error={errorMsg}
       onDismissError={() => setErrorMsg(null)}
     >
-      <StudioLiveEditor supabase={supabase} profileId={profile.id} />
+      <StudioLiveEditor supabase={supabase} profileId={profile.id} username={profile.username} />
     </StudioFrame>
   );
 }

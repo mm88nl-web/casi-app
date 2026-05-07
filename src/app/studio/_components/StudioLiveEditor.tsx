@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { Rnd } from 'react-rnd';
 import SlotMedia from '@/components/SlotMedia';
 import BeamCtrlPanel from '../../admin/_components/BeamCtrlPanel';
+import StudioLayersPanel, { type LayerItem } from './StudioLayersPanel';
 
 // Smart placement: find the first 4x4 grid cell with no nearby beam. Ported
 // verbatim from admin/page.tsx so setup-surface inserts don't clash with
@@ -32,13 +33,16 @@ function findFreePosition(elements: any[]): { pos_x: number; pos_y: number } {
 type Props = {
   supabase: SupabaseClient;
   profileId: string;
+  /** Streamer handle, used to render the OBS-source URL bar at the top of
+   *  the editor. Falls back to a placeholder when missing. */
+  username?: string | null;
   /** Called from the add-beam toolbar button (external header) so the parent
    *  can render the button in its own layout. Optional — if not provided,
    *  an internal button renders above the canvas. */
   onAddHandler?: (handler: () => void) => void;
 };
 
-export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: Props) {
+export default function StudioLiveEditor({ supabase, profileId, username, onAddHandler }: Props) {
   const [elements, setElements] = useState<any[]>([]);
   // Map element_id → booking state: 'active' means a beam is currently
   // playing (glow + "Live" pill), 'queued' means approved and waiting.
@@ -49,6 +53,8 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [saveStatus, setSaveStatus] = useState<'Ready' | 'Saving…' | 'Saved'>('Ready');
   const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
+  const [editorMode, setEditorMode] = useState<'edit' | 'preview'>('edit');
+  const [obsUrlCopied, setObsUrlCopied] = useState(false);
 
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
   const isDragging = useRef(false);
@@ -237,6 +243,64 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
     setElements((prev) => prev.filter((el) => el.id !== id));
   }, [supabase]);
 
+  // Layers panel data — derived from elements + slotState.
+  const layers: LayerItem[] = useMemo(() => {
+    return elements.map((el) => {
+      const live = slotState[el.id] === 'active';
+      const queued = slotState[el.id] === 'queued';
+      const status = live ? 'LIVE' : queued ? 'queued' : 'idle';
+      const price =
+        el.price_value != null
+          ? `$${el.price_value}/${el.price_unit || 'min'}`
+          : '—';
+      return {
+        id: el.id,
+        shape: (el.shape as LayerItem['shape']) ?? 'rect',
+        label: el.is_background
+          ? 'Backdrop'
+          : el.shape
+          ? el.shape.charAt(0).toUpperCase() + el.shape.slice(1)
+          : 'Beam',
+        meta: `${price} · ${status}`,
+        isLive: live,
+        isLocked: !!el.locked,
+        isBackground: !!el.is_background,
+      };
+    });
+  }, [elements, slotState]);
+
+  // Build the OBS source URL the streamer drops into OBS browser source.
+  // We don't have access to the per-streamer overlay key here (it's stored
+  // server-side and surfaced in /studio/settings) — link to the canonical
+  // shape so the streamer at least sees what the URL looks like.
+  const obsUrl = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const origin = window.location.origin;
+    return username ? `${origin}/overlay?s=${username}` : `${origin}/overlay`;
+  }, [username]);
+
+  const copyObsUrl = useCallback(async () => {
+    if (!obsUrl) return;
+    try {
+      await navigator.clipboard.writeText(obsUrl);
+      setObsUrlCopied(true);
+      setTimeout(() => setObsUrlCopied(false), 1800);
+    } catch {
+      showToast('Could not copy — check clipboard permissions', 'err');
+    }
+  }, [obsUrl]);
+
+  // Lock toggle from the Layers panel — same path as the lock chip on the
+  // selected slot but without requiring the canvas selection round-trip.
+  const setLayerLocked = useCallback(
+    async (id: string, currentlyLocked: boolean) => {
+      const next = !currentlyLocked;
+      setElements((prev) => prev.map((el) => (el.id === id ? { ...el, locked: next } : el)));
+      await supabase.from('overlay_elements').update({ locked: next }).eq('id', id);
+    },
+    [supabase],
+  );
+
   return (
     <>
       {toast ? (
@@ -250,21 +314,70 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
         }}>{toast.msg}</div>
       ) : null}
 
-      {/* Status + + Beam toolbar inline above canvas when no external add handler hook is used */}
+      {/* v9 OBS-source URL bar */}
       {!onAddHandler ? (
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <span className="font-mono" style={{ fontSize: 10, letterSpacing: 1, color: 'var(--casi-text-dim)' }}>
-            {saveStatus}
+        <div className="casi-v9-le-url">
+          <span className="casi-v9-le-url-lbl">OBS Source</span>
+          <span className="casi-v9-le-url-val">
+            {obsUrl ? (
+              <>
+                {obsUrl.split('?s=')[0]}?s=
+                <em>{username || 'streamer'}</em>
+              </>
+            ) : (
+              '—'
+            )}
           </span>
-          <button onClick={addBeam} style={{
-            background: 'var(--casi-accent)', color: 'var(--casi-bg)', border: 'none',
-            borderRadius: 8, padding: '10px 18px',
-            fontFamily: 'var(--font-casi-sans), sans-serif', fontWeight: 800, fontSize: 12,
-            textTransform: 'uppercase', letterSpacing: '0.3px', cursor: 'pointer',
-          }}>+ Beam</button>
+          <button type="button" className="casi-v9-le-url-cpy" onClick={copyObsUrl}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="9" y="9" width="13" height="13" rx="1" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <span>{obsUrlCopied ? 'Copied' : 'Copy'}</span>
+          </button>
         </div>
       ) : null}
 
+      {/* v9 toolbar — status / Edit-Preview / +Beam */}
+      {!onAddHandler ? (
+        <div className="casi-v9-le-toolbar">
+          <span className="casi-v9-le-save">{saveStatus} · auto-saved</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="casi-v9-le-mode-tog">
+              <button
+                type="button"
+                className={editorMode === 'edit' ? 'casi-v9-on' : ''}
+                onClick={() => setEditorMode('edit')}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className={editorMode === 'preview' ? 'casi-v9-on' : ''}
+                onClick={() => setEditorMode('preview')}
+              >
+                Preview
+              </button>
+            </div>
+            <button type="button" className="casi-v9-le-add" onClick={addBeam}>
+              + Beam
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* v9 3-col layout — Layers · Canvas · Properties */}
+      <div className="casi-v9-le-grid3">
+
+      <StudioLayersPanel
+        layers={layers}
+        selectedId={selectedSlotId}
+        onSelect={(id) => setSelectedSlotId(id)}
+        onAdd={addBeam}
+        onToggleLock={setLayerLocked}
+      />
+
+      <div>
       <div
         className="canvas-wrap"
         ref={setCanvasRef}
@@ -274,6 +387,9 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
           }
         }}
       >
+        {editorMode === 'edit' ? (
+          <div className="casi-v9-canvas-grid-overlay" aria-hidden />
+        ) : null}
         {dimensions.width > 0 && elements.map((el) => {
           const isSelected = selectedSlotId === el.id;
           const state = slotState[el.id]; // 'active' | 'queued' | undefined
@@ -510,30 +626,67 @@ export default function StudioLiveEditor({ supabase, profileId, onAddHandler }: 
         })}
       </div>
 
-      {selectedEl ? (
-        <BeamCtrlPanel
-          el={selectedEl}
-          activeBooking={null}
-          updateSlider={updateSlider}
-          updateLayer={updateLayer}
-          toggleLock={toggleLock}
-          deleteLayer={deleteLayer}
-          kickBeam={() => showToast('Use Dashboard to end a running beam', 'err')}
-          onDone={() => setSelectedSlotId(null)}
-          onUpdateShape={handleUpdateShape}
-          onUpdateGlow={handleUpdateGlow}
-        />
-      ) : null}
-
-      <div className="canvas-hint">
-        {elements.length === 0
-          ? 'No slots yet — hit + Beam above to let viewers tip to display an image or video here'
-          : selectedEl && selectedEl.is_background
-          ? 'Backdrop selected · change shape to convert back to a beam'
-          : selectedEl
-          ? 'Drag to move · Resize from corners · Edit inline'
-          : 'Tap a beam to select · Drag to move · Resize from corners'}
+      {/* v9 editor footer — keyboard hints + helper text */}
+      <div className="casi-v9-le-foot">
+        <div className="casi-v9-le-kbd-row">
+          <span><kbd>V</kbd>Select</span>
+          <span><kbd>R</kbd>Rect</span>
+          <span><kbd>C</kbd>Circle</span>
+          <span><kbd>⌘D</kbd>Duplicate</span>
+          <span><kbd>Del</kbd>Remove</span>
+        </div>
+        <span className="casi-v9-le-save" style={{ textTransform: 'none', letterSpacing: '0.04em' }}>
+          {elements.length === 0
+            ? 'No slots yet — hit + Beam above to let viewers tip for a slot'
+            : selectedEl && selectedEl.is_background
+            ? 'Backdrop selected · change shape to convert back to a beam'
+            : selectedEl
+            ? 'Drag · resize from corners · snap to grid'
+            : 'Tap a beam to select · drag to move'}
+        </span>
       </div>
+      </div>
+
+      {/* v9 Properties column — wraps the existing BeamCtrlPanel */}
+      <div className="casi-v9-cp-wrap">
+        {selectedEl ? (
+          <>
+            <div className="casi-v9-cp-head">
+              {selectedEl.is_background
+                ? 'Backdrop'
+                : `${(selectedEl.shape || 'beam').charAt(0).toUpperCase() + (selectedEl.shape || 'beam').slice(1)} slot`}
+            </div>
+            <BeamCtrlPanel
+              el={selectedEl}
+              activeBooking={null}
+              updateSlider={updateSlider}
+              updateLayer={updateLayer}
+              toggleLock={toggleLock}
+              deleteLayer={deleteLayer}
+              kickBeam={() => showToast('Use Dashboard to end a running beam', 'err')}
+              onDone={() => setSelectedSlotId(null)}
+              onUpdateShape={handleUpdateShape}
+              onUpdateGlow={handleUpdateGlow}
+            />
+          </>
+        ) : (
+          <div
+            style={{
+              padding: '32px 12px',
+              textAlign: 'center',
+              fontFamily: 'var(--M)',
+              fontSize: 11,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: 'var(--text-4)',
+            }}
+          >
+            Select a slot
+          </div>
+        )}
+      </div>
+
+      </div>{/* /casi-v9-le-grid3 */}
     </>
   );
 }
