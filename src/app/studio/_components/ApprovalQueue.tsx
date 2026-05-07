@@ -95,7 +95,7 @@ export default function ApprovalQueue({
             minWidth: '18px',
             height: '18px',
             padding: '0 5px',
-            borderRadius: '5px',
+            borderRadius: 0,
             background: 'rgba(var(--casi-accent-rgb), 0.12)',
             color: 'var(--casi-accent)',
             fontFamily: 'var(--font-casi-mono), monospace',
@@ -208,7 +208,7 @@ export default function ApprovalQueue({
                     className="font-mono uppercase"
                     style={{
                       padding: '7px 11px',
-                      borderRadius: '7px',
+                      borderRadius: 0,
                       background: 'transparent',
                       border: '1px solid var(--casi-border-2)',
                       color: 'var(--casi-text-dim)',
@@ -228,7 +228,7 @@ export default function ApprovalQueue({
                       title={paid ? 'Approve' : 'Awaiting viewer payment — refresh in a moment'}
                       style={{
                         padding: '7px 13px',
-                        borderRadius: '7px',
+                        borderRadius: 0,
                         fontSize: '12px',
                         fontWeight: 600,
                         background: paid ? 'rgba(var(--casi-accent-rgb), 0.07)' : 'transparent',
@@ -250,7 +250,7 @@ export default function ApprovalQueue({
                       className="casi-q-no"
                       style={{
                         padding: '7px 11px',
-                        borderRadius: '7px',
+                        borderRadius: 0,
                         fontSize: '12px',
                         fontWeight: 500,
                         background: 'transparent',
@@ -297,7 +297,7 @@ function QueueThumb({
   const baseTile: React.CSSProperties = {
     width: '40px',
     height: '40px',
-    borderRadius: '7px',
+    borderRadius: 0,
     background: 'var(--casi-surface-2)',
     border: '1px solid var(--casi-border)',
     display: 'flex',

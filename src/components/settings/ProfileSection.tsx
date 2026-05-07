@@ -274,7 +274,7 @@ export default function ProfileSection({ supabase, profile }: Props) {
                   className="font-mono uppercase"
                   style={{
                     padding: '8px 14px',
-                    borderRadius: '7px',
+                    borderRadius: 0,
                     fontSize: '11px',
                     letterSpacing: '0.1em',
                     fontWeight: 600,

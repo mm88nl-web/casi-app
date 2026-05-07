@@ -12,7 +12,7 @@ function SourceNum({ n }: { n: number }) {
         width: '18px',
         height: '18px',
         lineHeight: '18px',
-        borderRadius: '5px',
+        borderRadius: 0,
         background: 'rgba(var(--casi-accent-rgb), 0.14)',
         color: 'var(--casi-accent)',
         fontSize: '10px',

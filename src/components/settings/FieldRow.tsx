@@ -41,7 +41,7 @@ export const settingsInputStyle: React.CSSProperties = {
   width: '100%',
   background: 'var(--casi-bg)',
   border: '1px solid var(--casi-border-2)',
-  borderRadius: '9px',
+  borderRadius: 0,
   padding: '11px 14px',
   fontFamily: 'var(--font-casi-mono)',
   fontSize: '13px',

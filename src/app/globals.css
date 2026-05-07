@@ -1013,11 +1013,24 @@
   letter-spacing: 0;
 }
 
-/* Properties panel chrome — wraps existing BeamCtrlPanel */
+/* Properties panel chrome — wraps existing BeamCtrlPanel. The inner
+   .beam-ctrl has its own v7 rounded-card chrome that we suppress here
+   so cp-wrap is the only border / background. */
 .casi-v9-cp-wrap {
   background: var(--surf);
   border: 1px solid var(--line);
   padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.casi-v9-cp-wrap .beam-ctrl {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  animation: none;
 }
 .casi-v9-cp-head {
   font-family: var(--H);
@@ -1025,10 +1038,127 @@
   font-size: 16px;
   color: var(--text);
   letter-spacing: -0.02em;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
 }
+
+/* Tabs inside the properties panel — Properties / Pricing / Behavior */
+.casi-v9-cp-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  margin: -2px -2px 0;
+}
+.casi-v9-cp-tab {
+  flex: 1;
+  padding: 9px 4px;
+  font-family: var(--M);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: all 0.13s;
+}
+.casi-v9-cp-tab:hover { color: var(--text-3); }
+.casi-v9-cp-tab.casi-v9-on {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+  font-weight: 700;
+}
+
+/* Tab panes — visible only when active */
+.casi-v9-cp-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.casi-v9-cp-lbl {
+  font-family: var(--M);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.casi-v9-cp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.casi-v9-cp-input {
+  background: var(--paper);
+  border: 1px solid var(--line-2);
+  border-radius: 0;
+  padding: 9px 11px;
+  font-family: var(--M);
+  font-size: 12px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.14s;
+}
+.casi-v9-cp-input:focus { border-color: var(--ink); }
+.casi-v9-cp-sep {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 0;
+}
+
+/* Shape selector pills (also reused by Behavior > Entrance animation). */
+.casi-v9-shape-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.casi-v9-shape-b {
+  padding: 6px 11px;
+  font-family: var(--M);
+  font-size: 11px;
+  font-weight: 500;
+  background: transparent;
+  border: 1px solid var(--line-2);
+  border-radius: 0;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.13s;
+}
+.casi-v9-shape-b:hover { border-color: var(--ink-40); color: var(--ink); }
+.casi-v9-shape-b.casi-v9-on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
+  font-weight: 700;
+}
+
+/* Bottom action buttons — Done (ghost) + Delete (red ghost). */
+.casi-v9-cp-done,
+.casi-v9-cp-del {
+  width: 100%;
+  padding: 11px;
+  font-family: var(--M);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: transparent;
+  border-radius: 0;
+  cursor: pointer;
+  transition: all 0.13s;
+}
+.casi-v9-cp-done {
+  border: 1px solid var(--line-2);
+  color: var(--text-3);
+}
+.casi-v9-cp-done:hover { border-color: var(--ink); color: var(--ink); }
+.casi-v9-cp-del {
+  border: 1px solid color-mix(in oklab, #ef4444 30%, var(--paper));
+  color: #ef4444;
+}
+.casi-v9-cp-del:hover { background: color-mix(in oklab, #ef4444 8%, var(--surf)); }
 
 /* Light-paper variant: text scale inverts. Opt-in via [data-paper="light"]
    on a wrapper element; lets v9 surfaces support a light theme without

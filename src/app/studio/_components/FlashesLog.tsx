@@ -139,7 +139,7 @@ export default function FlashesLog({ items, total, onRefund, refunding }: Props)
                     fontSize: '11.5px',
                     flexShrink: 0,
                     padding: '2px 8px',
-                    borderRadius: '4px',
+                    borderRadius: 0,
                   }}
                 >
                   {flash.refunded ? 'refunded' : flash.chip.label}
@@ -153,7 +153,7 @@ export default function FlashesLog({ items, total, onRefund, refunding }: Props)
                     title="Deny and refund"
                     style={{
                       padding: '4px 9px',
-                      borderRadius: '5px',
+                      borderRadius: 0,
                       fontSize: '10.5px',
                       border: '1px solid var(--casi-border)',
                       color: 'var(--casi-text-faint)',
