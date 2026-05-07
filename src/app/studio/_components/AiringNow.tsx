@@ -91,10 +91,10 @@ export default function AiringNow({ items }: Props) {
 
       <div
         style={{
-          border: '1px solid var(--casi-border)',
-          borderRadius: '10px',
+          border: '1px solid var(--line)',
+          borderRadius: 0,
+          background: 'var(--surf)',
           overflow: 'hidden',
-          background: 'var(--casi-surface)',
           maxHeight: '600px',
           overflowY: 'auto',
         }}
