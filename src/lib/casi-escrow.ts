@@ -407,20 +407,35 @@ export class CasiEscrowClient {
     const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer,   false, tokenProgram);
     const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true, tokenProgram);
 
-    const sig = await (this.program.methods as any)
-      .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(durationSecs), 1)
-      .accounts({
-        viewer,
-        streamer,
-        escrowState:          escrowPda,
-        vault,
-        viewerAta,
-        usdcMint,
-        tokenProgram,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram:          SystemProgram.programId,
-      })
-      .rpc();
+    // Same recovery pattern as initializeFlash — Phantom in-app browser on
+    // mobile (and devnet RPC generally) regularly times out the confirmation
+    // even when the tx lands. Without this the viewer's modal hangs on
+    // "Signing…" forever despite a successful on-chain debit.
+    let sig: string;
+    try {
+      sig = await (this.program.methods as any)
+        .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(durationSecs), 1)
+        .accounts({
+          viewer,
+          streamer,
+          escrowState:          escrowPda,
+          vault,
+          viewerAta,
+          usdcMint,
+          tokenProgram,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram:          SystemProgram.programId,
+        })
+        .rpc();
+    } catch (err: unknown) {
+      const maybeSig = (err as { signature?: unknown })?.signature;
+      if (typeof maybeSig === 'string' && maybeSig.length >= 64) {
+        console.warn('[initializeBeam] confirmation timed out but sig recovered:', maybeSig);
+        sig = maybeSig;
+      } else {
+        throw err;
+      }
+    }
 
     return {
       sig,

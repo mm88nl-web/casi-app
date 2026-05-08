@@ -303,6 +303,7 @@ function StudioPageInner() {
   const [supabase] = useState<SupabaseClient>(() => createClient());
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
 
+  const [todayBookings, setTodayBookings] = useState<BookingRow[]>([]);
   const [pendingBookings, setPendingBookings] = useState<BookingRow[]>([]);
   const [pendingFlashes, setPendingFlashes] = useState<FlashRow[]>([]);
   const [activeBookings, setActiveBookings] = useState<BookingRow[]>([]);
@@ -329,7 +330,7 @@ function StudioPageInner() {
     const startOfDayIso = new Date();
     startOfDayIso.setHours(0, 0, 0, 0);
 
-    const [pendingBookingsRes, pendingFlashesRes, activeBookingsRes, queuedBookingsRes, elementsRes, logFlashesRes] =
+    const [pendingBookingsRes, pendingFlashesRes, activeBookingsRes, queuedBookingsRes, elementsRes, logFlashesRes, todayBookingsRes] =
       await Promise.all([
         supabase.from('bookings').select(BOOKING_COLS)
           .eq('profile_id', profileId).eq('status', 'pending')
@@ -351,12 +352,20 @@ function StudioPageInner() {
           .in('status', ['approved', 'denied'])
           .gte('created_at', startOfDayIso.toISOString())
           .order('created_at', { ascending: false }).limit(LOG_LIMIT),
+        // Settled beams that were on stream today — used for the Today tile.
+        // Filter on started_at (when revenue actually started accruing) so a
+        // beam booked yesterday and aired today shows up under today.
+        supabase.from('bookings').select(BOOKING_COLS)
+          .eq('profile_id', profileId).eq('status', 'expired')
+          .gte('started_at', startOfDayIso.toISOString())
+          .order('started_at', { ascending: false }).limit(LOG_LIMIT),
       ]);
 
     setPendingBookings((pendingBookingsRes.data ?? []) as BookingRow[]);
     setPendingFlashes((pendingFlashesRes.data ?? []) as FlashRow[]);
     setActiveBookings((activeBookingsRes.data ?? []) as BookingRow[]);
     setQueuedBookings((queuedBookingsRes.data ?? []) as BookingRow[]);
+    setTodayBookings((todayBookingsRes.data ?? []) as BookingRow[]);
 
     const elementsMap: Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }> = {};
     for (const el of (elementsRes.data ?? []) as Array<{ id: string; shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }>) {
@@ -724,24 +733,30 @@ function StudioPageInner() {
   const slug = profile.username ?? 'streamer';
   const displayCurrency: DisplayCurrency = profile.display_currency ?? 'eur';
 
-  // Sum today's approved flashes in the streamer's chosen currency only —
-  // ignore the other rail to keep the tile honest. Free flashes never count
-  // (no money moved). v1 is no FX: a streamer set to EUR who took a USDC
-  // tip sees their EUR total tick up by 0 and the USDC row in the log makes
-  // it obvious where it went.
+  // Sum today's approved flashes + settled beams in the streamer's chosen
+  // currency only — ignore the other rail to keep the tile honest. Free
+  // flashes never count (no money moved). v1 is no FX: a streamer set to
+  // EUR who took a USDC tip sees their EUR total tick up by 0 and the
+  // USDC row in the log makes it obvious where it went. Beam totals use
+  // the booking's full price_value × duration; prorated kicks are not
+  // discounted yet (no settled_amount column on bookings).
   const isUsdcRow = (m: string | null) => m === 'usdc' || m === 'solana';
+  const matchesCurrency = (m: string | null) =>
+    displayCurrency === 'usdc' ? isUsdcRow(m) : !isUsdcRow(m);
   let todayCents = 0;
   for (const row of flashLogRaw) {
     if (row.status === 'denied' || row.payment_method === 'free') continue;
-    const cents = row.amount_cents ?? 0;
-    if (displayCurrency === 'usdc') {
-      if (isUsdcRow(row.payment_method)) todayCents += cents;
-    } else {
-      // 'eur' or 'usd' — sum non-USDC rows. Stripe Connect already settles
-      // in the streamer's payout currency, so the cents are already in that
-      // currency; we don't FX-convert.
-      if (!isUsdcRow(row.payment_method)) todayCents += cents;
-    }
+    if (!matchesCurrency(row.payment_method)) continue;
+    todayCents += row.amount_cents ?? 0;
+  }
+  for (const row of todayBookings) {
+    if (row.payment_method === 'free') continue;
+    if (!matchesCurrency(row.payment_method)) continue;
+    const rate = Number(row.price_value) || 0;
+    const duration = Number(row.duration_minutes) || 0;
+    const unitMinutes = row.price_unit === 'hr' ? 60 : 1;
+    const total = rate * (duration / unitMinutes);
+    todayCents += Math.round(total * 100);
   }
   const todayTotal = formatTotal(displayCurrency, todayCents / 100);
 
