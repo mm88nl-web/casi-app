@@ -44,6 +44,15 @@ function formatAmount(row: FlashRow): { label: string; rail: 'u' | 'e' } {
 export default function ViewerFlashesFeed({ supabase, profileId, limit = 6 }: Props) {
   const [flashes, setFlashes] = useState<FlashRow[] | null>(null);
 
+  // Today-only window so yesterday's flashes don't loiter in the live
+  // panel. Browser-local midnight, recomputed on each fetch so a tab
+  // left open across midnight rolls over cleanly.
+  const startOfDayIso = () => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  };
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -52,6 +61,7 @@ export default function ViewerFlashesFeed({ supabase, profileId, limit = 6 }: Pr
         .select('id, viewer_name, message, payment_method, price_value, price_unit, created_at')
         .eq('profile_id', profileId)
         .eq('status', 'approved')
+        .gte('created_at', startOfDayIso())
         .order('created_at', { ascending: false })
         .limit(limit);
       if (!cancelled) setFlashes((data ?? []) as FlashRow[]);
@@ -74,6 +84,7 @@ export default function ViewerFlashesFeed({ supabase, profileId, limit = 6 }: Pr
             .select('id, viewer_name, message, payment_method, price_value, price_unit, created_at')
             .eq('profile_id', profileId)
             .eq('status', 'approved')
+            .gte('created_at', startOfDayIso())
             .order('created_at', { ascending: false })
             .limit(limit);
           setFlashes((data ?? []) as FlashRow[]);

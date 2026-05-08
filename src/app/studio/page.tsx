@@ -773,11 +773,30 @@ function StudioPageInner() {
   for (const row of todayBookings) {
     if (row.payment_method === 'free') continue;
     if (!matchesCurrency(row.payment_method)) continue;
-    const rate = Number(row.price_value) || 0;
-    const duration = Number(row.duration_minutes) || 0;
-    const unitMinutes = row.price_unit === 'hr' ? 60 : 1;
-    const total = rate * (duration / unitMinutes);
+    const { total } = bookingTotal(row);
     todayCents += Math.round(total * 100);
+  }
+  // Live-vested portion of any beam that's airing right now, scoped to
+  // beams that started today so the tile doesn't double-count vesting
+  // that already accrued yesterday. Re-renders every second via setTick
+  // so the streamer sees the count tick up while a beam is on stream.
+  const startOfDayMs = (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  })();
+  for (const row of activeBookings) {
+    if (row.payment_method === 'free') continue;
+    if (!matchesCurrency(row.payment_method)) continue;
+    const startMs = row.started_at ? new Date(row.started_at).getTime() : Date.now();
+    if (startMs < startOfDayMs) continue;
+    const durationSecs = (Number(row.duration_minutes) || 0) * 60;
+    if (durationSecs <= 0) continue;
+    const { total } = bookingTotal(row);
+    if (total <= 0) continue;
+    const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+    const vested = total * Math.min(elapsed, durationSecs) / durationSecs;
+    todayCents += Math.round(vested * 100);
   }
   const todayTotal = formatTotal(displayCurrency, todayCents / 100);
 
