@@ -130,10 +130,9 @@ export default function ApprovalQueue({
           items.map(item => {
             const ro = item.readOnly ?? readOnly;
             const isPending = pendingIds?.has(item.id) ?? false;
-            // Gate Approve on real payment. `paymentConfirmed === undefined`
-            // means the caller didn't pass it (flashes today) — treat as
-            // confirmed so we don't accidentally lock the existing flash
-            // moderation flow which already gates server-side.
+            // Gate Approve on real payment. Both bookings and flashes pass
+            // paymentConfirmed; undefined still falls through to "confirmed"
+            // for any future caller that omits it.
             const paid = item.paymentConfirmed !== false;
             const previewable = !!onPreview && !ro;
             return (

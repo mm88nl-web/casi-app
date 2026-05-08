@@ -108,6 +108,20 @@ function isPaymentConfirmed(b: BookingRow): boolean {
   );
 }
 
+// Same idea for flashes: a USDC flash row exists in the DB before the viewer
+// finishes the on-chain funding step, so Approve has to stay disabled until
+// escrow_pda + viewer_wallet are stamped (otherwise moderateFlash trips the
+// "Flash hasn't been paid yet" guard server-side and the streamer sees a
+// useless red banner). Free flashes and zero-amount flashes are always
+// confirmed; non-Solana rails defer to the server gate.
+function isFlashPaymentConfirmed(f: FlashRow): boolean {
+  if (f.payment_method === 'free') return true;
+  if ((f.amount_cents ?? 0) === 0) return true;
+  const isUsdc = f.payment_method === 'usdc' || f.payment_method === 'solana';
+  if (isUsdc) return !!(f.viewer_wallet && f.escrow_pda);
+  return true;
+}
+
 type FlashRow = {
   id: string;
   created_at: string;
@@ -166,6 +180,7 @@ function flashToQueueItem(f: FlashRow): QueueItem {
     name: `${who} · "${snippet}${overflow ? '…' : ''}"`,
     subtitle: `${logTime(f.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · text`,
     priceLabel,
+    paymentConfirmed: isFlashPaymentConfirmed(f),
   };
 }
 
@@ -533,6 +548,12 @@ function StudioPageInner() {
       const raw = queueId.slice('flash-'.length);
       const flash = pendingFlashes.find((f) => f.id === raw);
       if (!flash) return;
+      // Mirror the booking branch's defensive gate. UI already greys Approve
+      // for unfunded USDC flashes; this catches realtime-race clicks.
+      if (!isFlashPaymentConfirmed(flash)) {
+        setErrorMsg('Viewer hasn’t paid yet — give it a moment, then try again.');
+        return;
+      }
       markModerating(queueId, true);
       const result = await moderateFlash(moderationCtx, flash, 'approve');
       markModerating(queueId, false);
