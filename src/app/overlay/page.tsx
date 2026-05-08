@@ -1088,20 +1088,48 @@ function OverlayContent() {
   const reclaimSolanaEscrow = async (booking: any) => {
     if (!booking.escrow_pda) return;
     const clearPdaInDb = async (): Promise<boolean> => {
+      // Token path first — the original browser that booked has the
+      // cancel_token in localStorage and viewer-deny accepts it.
+      const token = readBookingTokens()[booking.id];
+      if (token) {
+        try {
+          const denyRes = await fetch('/api/bookings/viewer-deny', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              booking_id: booking.id,
+              cancel_token: token,
+              null_escrow: true,
+            }),
+          });
+          if (denyRes.ok) {
+            if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+            return true;
+          }
+        } catch (err) {
+          console.error('[reclaim] viewer-deny failed:', err);
+        }
+      }
+      // Fallback: viewer recovered from a different browser than they
+      // booked on (cancel_token lives in localStorage). Use the wallet-
+      // scoped bulk cleaner — it re-probes each PDA on the server and
+      // only nulls escrow_pda on rows where the on-chain PDA is actually
+      // gone, so this is safe to call even if some chips still hold
+      // funds. Side benefit: it'll clear other ghost chips for the same
+      // wallet in the same call.
+      const wallet = viewerWalletRef.current;
+      if (!wallet) return false;
       try {
-        const denyRes = await fetch('/api/bookings/viewer-deny', {
+        const res = await fetch('/api/bookings/cleanup-stale-solana', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            booking_id: booking.id,
-            cancel_token: readBookingTokens()[booking.id],
-            null_escrow: true,
-          }),
+          body: JSON.stringify({ viewer_wallet: wallet, profile_id: profile?.id }),
         });
+        if (!res.ok) return false;
         if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
-        return denyRes.ok;
+        return true;
       } catch (err) {
-        console.error('[reclaim] clearPdaInDb failed:', err);
+        console.error('[reclaim] cleanup-stale-solana failed:', err);
         return false;
       }
     };
