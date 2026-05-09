@@ -335,18 +335,27 @@ function OverlayContent() {
           : Promise.resolve({ data: [] as any[] }),
       ]);
       const histById = new Map<string, TxRow>();
-      // price_value on bookings is total-for-the-booking, NOT a per-minute
-      // rate, so amount_cents is the FULL booked amount even when the beam
-      // ended early. MyTransactionsSection prorates on display using
-      // started_at + ended_at — keep the raw total here.
+      // price_value on bookings is the per-unit RATE (USDC/hr or USDC/min
+      // depending on price_unit), NOT the total. The booked total is
+      // rate × (duration_minutes / unitMinutes) where unitMinutes is 60
+      // when price_unit='hr', else 1. Stripe rows additionally have
+      // original_amount_cents (set when the PaymentIntent was created with
+      // the chosen duration) which is already the total in cents — prefer
+      // that when present. MyTransactionsSection prorates this raw total
+      // on display using started_at + ended_at.
+      const computeBeamCents = (b: any): number => {
+        if (b.payment_method === 'stripe' && b.original_amount_cents != null) {
+          return Number(b.original_amount_cents);
+        }
+        const rate = Number(b.price_value || 0);
+        const dur = Number(b.duration_minutes || 0);
+        const unitMin = b.price_unit === 'hr' ? 60 : 1;
+        return Math.round(rate * (dur / unitMin) * 100);
+      };
       const toBeamRow = (b: any): TxRow => ({
         kind: 'beam', id: String(b.id), status: b.status,
         payment_method: b.payment_method,
-        // Stripe stores the EUR/USD amount on `original_amount_cents`,
-        // Solana stores USDC * 100 in `price_value`. Normalize to cents.
-        amount_cents: b.payment_method === 'stripe'
-          ? (b.original_amount_cents ?? Math.round(Number(b.price_value || 0) * 100))
-          : Math.round(Number(b.price_value || 0) * 100),
+        amount_cents: computeBeamCents(b),
         message: b.message,
         duration_minutes: b.duration_minutes,
         tx_signature: b.tx_signature,
