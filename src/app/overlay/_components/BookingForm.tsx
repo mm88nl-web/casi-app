@@ -4,6 +4,7 @@ import { BANNER_MAX_MESSAGE } from '@/lib/banner';
 import TurnstileWidget from '@/components/TurnstileWidget';
 import UsdcIcon from '@/components/icons/UsdcIcon';
 import StripeIcon from '@/components/icons/StripeIcon';
+import { formatSlotPrice } from '@/lib/slot-pricing';
 import CustomizePanel from './CustomizePanel';
 import { formatTime, getSecondsRemaining } from './time';
 
@@ -11,6 +12,9 @@ type Slot = {
   id: string | number;
   price_value: number | string;
   price_unit: string;
+  /** Per-rail JSONB. formatSlotPrice picks USDC / EUR / USD from here in
+   *  preference order; falls back to price_value for legacy slots. */
+  prices?: Record<string, number | string | null | undefined> | null;
   max_duration_minutes?: number | null;
   shape?: string | null;
 };
@@ -144,7 +148,7 @@ export default function BookingForm(props: Props) {
             {isExtend ? '⏱ Extend slot' : isQueue ? '⏳ Join queue' : '🎯 Tip for slot'}
           </div>
           <div className="bf-price" style={{ color: isFreeSlot ? '#4ade80' : accentColor }}>
-            {isFreeSlot ? '★ Free' : `$${slot.price_value}/${slot.price_unit}`}
+            {isFreeSlot ? '★ Free' : formatSlotPrice(slot).label}
           </div>
         </div>
         <button className="bf-x" onClick={onClose}>✕</button>
@@ -400,7 +404,7 @@ export default function BookingForm(props: Props) {
       {/* USDC cost preview (paid slots only) */}
       {!isFreeSlot && (
         <div style={{ background: 'rgba(153,69,255,0.05)', border: '1px solid rgba(153,69,255,0.2)', borderRadius: 10, padding: '12px 14px', margin: '12px 0', fontFamily: "var(--font-casi-mono),monospace", fontSize: 11 }}>
-          {[['Duration', formatTime(durationSeconds)], ['Rate', `$${slot.price_value}/${slot.price_unit}`]].map(([l, v]) => (
+          {[['Duration', formatTime(durationSeconds)], ['Rate', formatSlotPrice(slot).label]].map(([l, v]) => (
             <div key={l} style={{ display: 'flex', justifyContent: 'space-between', color: '#555', marginBottom: 5 }}>
               <span>{l}</span><span>{v}</span>
             </div>

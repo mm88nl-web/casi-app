@@ -2,12 +2,17 @@
 
 import { EXPLORER_CLUSTER_QUERY, IS_MAINNET } from '@/lib/solana-network';
 import UsdcIcon from '@/components/icons/UsdcIcon';
+import { formatSlotPrice } from '@/lib/slot-pricing';
 import { formatTime } from './time';
 
 export type TxStatus = 'idle' | 'booking' | 'streaming' | 'waiting' | 'error';
 
 type Props = {
-  slot: { price_value: number | string; price_unit: string };
+  slot: {
+    price_value: number | string;
+    price_unit: string;
+    prices?: Record<string, number | string | null | undefined> | null;
+  };
   duration: number;
   estimatedCost: string;
   username: string;
@@ -42,7 +47,7 @@ export default function SolanaConfirmModal({
 
         {/* Details receipt */}
         <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:10, padding:'14px 16px', marginBottom:16 }}>
-          {[['Slot on', `@${username}${IS_MAINNET ? '' : ' (devnet)'}`], ['Duration', formatTime(Math.round(duration * 60))], ['Rate', `$${slot.price_value}/${slot.price_unit}`]].map(([l, v]) => (
+          {[['Slot on', `@${username}${IS_MAINNET ? '' : ' (devnet)'}`], ['Duration', formatTime(Math.round(duration * 60))], ['Rate', formatSlotPrice(slot, { prefer: 'usdc' }).label]].map(([l, v]) => (
             <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666', marginBottom:6 }}>
               <span>{l}</span><span style={{ color:'#e8e8e8' }}>{v}</span>
             </div>

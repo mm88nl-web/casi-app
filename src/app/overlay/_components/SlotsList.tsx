@@ -1,11 +1,15 @@
 'use client';
 
 import SlotMedia from '@/components/SlotMedia';
+import { formatSlotPrice } from '@/lib/slot-pricing';
 
 type SlotElement = {
   id: string;
   price_value: number | string;
   price_unit: string;
+  /** Per-rail JSONB. formatSlotPrice picks USDC / EUR / USD from here in
+   *  preference order; falls back to price_value for legacy slots. */
+  prices?: Record<string, number | string | null | undefined> | null;
   image_url?: string | null;
   is_background?: boolean | null;
   locked?: boolean | null;
@@ -82,7 +86,7 @@ export default function SlotsList({
                     : 'Beam'}
                 </div>
                 <div className="s-price" style={{ color: priceColor }}>
-                  {isFree ? 'Free' : `$${el.price_value}/${el.price_unit}`}
+                  {isFree ? 'Free' : formatSlotPrice(el).label}
                   {el.max_duration_minutes ? ` · max ${el.max_duration_minutes}m` : ''}
                 </div>
               </div>
