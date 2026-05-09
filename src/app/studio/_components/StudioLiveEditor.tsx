@@ -6,6 +6,7 @@ import { Rnd } from 'react-rnd';
 import SlotMedia from '@/components/SlotMedia';
 import BeamCtrlPanel from '../../admin/_components/BeamCtrlPanel';
 import StudioLayersPanel, { type LayerItem } from './StudioLayersPanel';
+import { formatSlotPrice } from '@/lib/slot-pricing';
 
 // Smart placement: find the first 4x4 grid cell with no nearby beam. Ported
 // verbatim from admin/page.tsx so setup-surface inserts don't clash with
@@ -254,10 +255,11 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
       const live = slotState[el.id] === 'active';
       const queued = slotState[el.id] === 'queued';
       const status = live ? 'LIVE' : queued ? 'queued' : 'idle';
-      const price =
-        el.price_value != null
-          ? `$${el.price_value}/${el.price_unit || 'min'}`
-          : '—';
+      // Pick the right rail to display from el.prices JSONB — the legacy
+      // price_value column mirrors only the USD rate, which mis-labels
+      // USDC-only and EUR-only slots as "$0/min" or hides them. The
+      // helper falls back to price_value for slots predating the JSONB.
+      const price = formatSlotPrice(el).label;
       return {
         id: el.id,
         shape: (el.shape as LayerItem['shape']) ?? 'rect',
@@ -511,12 +513,17 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
                         }}>
                           {el.locked ? 'No requests' : el.is_background ? 'Backdrop' : el.shape === 'banner' ? 'Banner' : 'Beam'}
                         </span>
-                        {el.price_value > 0 && !el.locked ? (
-                          <span style={{
-                            fontFamily: 'var(--font-casi-mono),monospace', fontSize: 11, fontWeight: 600, marginTop: 4,
-                            color: el.is_background ? 'rgba(153,69,255,0.95)' : 'var(--casi-accent)',
-                          }}>${el.price_value}/{el.price_unit}</span>
-                        ) : null}
+                        {(() => {
+                          if (el.locked) return null;
+                          const p = formatSlotPrice(el);
+                          if (p.rail === 'free') return null;
+                          return (
+                            <span style={{
+                              fontFamily: 'var(--font-casi-mono),monospace', fontSize: 11, fontWeight: 600, marginTop: 4,
+                              color: el.is_background ? 'rgba(153,69,255,0.95)' : 'var(--casi-accent)',
+                            }}>{p.label}</span>
+                          );
+                        })()}
                       </div>
                     )
                   ) : (

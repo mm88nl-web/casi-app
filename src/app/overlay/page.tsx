@@ -5,6 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
+import { formatSlotPrice } from '@/lib/slot-pricing';
 import WalletPill from '@/components/WalletPill';
 import { refreshWalletNav } from '@/components/WalletNav';
 import SlotMedia from '@/components/SlotMedia';
@@ -2030,7 +2031,9 @@ function OverlayContent() {
                       centre on backdrops, top-right on beams) so slots
                       pinned to the canvas edge don't have their price
                       label hanging off-screen like the old stack did. */}
-                  {el.price_value >= 0 && !isOBS && (
+                  {!isOBS && (() => {
+                    const p = formatSlotPrice(el);
+                    return (
                     <div
                       style={{
                         position: 'absolute',
@@ -2045,14 +2048,15 @@ function OverlayContent() {
                         zIndex: 20,
                         fontFamily: "var(--font-casi-mono),monospace",
                         fontSize: 10,
-                        color: Number(el.price_value)===0 ? '#4ade80' : tc,
+                        color: p.rail === 'free' ? '#4ade80' : tc,
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {Number(el.price_value)===0 ? '★ Free' : `$${el.price_value}/${el.price_unit}`}
+                      {p.rail === 'free' ? '★ Free' : p.label}
                       {el.max_duration_minutes && <span style={{ color:'#555', marginLeft: 6, fontSize: 9 }}>· max {el.max_duration_minutes}m</span>}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Status badge — locked / my booking state, top-left so
                       it doesn't collide with the price on the right. */}
