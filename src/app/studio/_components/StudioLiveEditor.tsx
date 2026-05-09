@@ -36,17 +36,19 @@ type Props = {
   /** Streamer handle, used to render the OBS-source URL bar at the top of
    *  the editor. Falls back to a placeholder when missing. */
   username?: string | null;
-  /** Streamer's chosen display currency from /studio/settings. Drives which
-   *  Stripe currency row renders in the per-rail pricing tab so we don't
-   *  show all four (USD/EUR/USDC/SOL) regardless of what they actually use. */
-  displayCurrency?: 'eur' | 'usd' | 'usdc';
+  /** Stripe Connect's default currency for this streamer's account. Drives
+   *  which Stripe currency row renders on the slot Pricing tab — we show
+   *  the rate input in whatever currency Stripe will actually charge in,
+   *  not in a free-form picker. null means Stripe isn't connected yet;
+   *  the Stripe row is hidden and the streamer prices in USDC only. */
+  stripeCurrency?: 'eur' | 'usd' | null;
   /** Called from the add-beam toolbar button (external header) so the parent
    *  can render the button in its own layout. Optional — if not provided,
    *  an internal button renders above the canvas. */
   onAddHandler?: (handler: () => void) => void;
 };
 
-export default function StudioLiveEditor({ supabase, profileId, username, displayCurrency, onAddHandler }: Props) {
+export default function StudioLiveEditor({ supabase, profileId, username, stripeCurrency, onAddHandler }: Props) {
   const [elements, setElements] = useState<any[]>([]);
   // Map element_id → booking state: 'active' means a beam is currently
   // playing (glow + "Live" pill), 'queued' means approved and waiting.
@@ -648,7 +650,7 @@ export default function StudioLiveEditor({ supabase, profileId, username, displa
               onDone={() => setSelectedSlotId(null)}
               onUpdateShape={handleUpdateShape}
               onUpdateGlow={handleUpdateGlow}
-              displayCurrency={displayCurrency}
+              stripeCurrency={stripeCurrency}
             />
           </>
         ) : (

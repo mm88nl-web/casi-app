@@ -7,13 +7,12 @@ import { createClient } from '@/utils/supabase/client';
 import StudioFrame from '../_components/StudioFrame';
 import StudioLiveEditor from '../_components/StudioLiveEditor';
 
-const PROFILE_COLS = 'id, username, is_live, display_currency';
+const PROFILE_COLS = 'id, username, is_live';
 
 type Profile = {
   id: string;
   username: string | null;
   is_live: boolean | null;
-  display_currency: 'eur' | 'usd' | 'usdc' | null;
 };
 
 type LoadState =
@@ -35,6 +34,30 @@ export default function StudioLivePage() {
   const [togglingLive, setTogglingLive] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  // Stripe Connect's default currency drives the slot pricing UI's Stripe
+  // row — we render the rate input in whatever currency Stripe will
+  // actually charge in, not in a free-form picker. null means Stripe isn't
+  // connected (or the fetch hasn't returned yet); the slot UI hides its
+  // Stripe row in that case so the streamer can't set a rate that nothing
+  // will charge against.
+  const [stripeCurrency, setStripeCurrency] = useState<'usd' | 'eur' | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/stripe/connect/status', { cache: 'no-store' });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        const cur = (json?.defaultCurrency ?? null) as string | null;
+        if (cur === 'eur' || cur === 'usd') setStripeCurrency(cur);
+      } catch {
+        /* leave null — slot UI degrades to USDC-only */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,7 +172,7 @@ export default function StudioLivePage() {
       error={errorMsg}
       onDismissError={() => setErrorMsg(null)}
     >
-      <StudioLiveEditor supabase={supabase} profileId={profile.id} username={profile.username} displayCurrency={profile.display_currency ?? 'usd'} />
+      <StudioLiveEditor supabase={supabase} profileId={profile.id} username={profile.username} stripeCurrency={stripeCurrency} />
     </StudioFrame>
   );
 }
