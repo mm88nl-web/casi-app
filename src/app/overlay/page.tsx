@@ -1046,8 +1046,26 @@ function OverlayContent() {
       closeSlot();
       if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
     } catch (err: unknown) {
-      const { formatEscrowError, isUserRejection } = await import('@/lib/casi-errors');
+      const { formatEscrowError, isUserRejection, isWalletSignatureMissing } = await import('@/lib/casi-errors');
+      const { reportClientError } = await import('@/lib/report-client-error');
       console.error('[solana beam] initializeBeam failed:', err);
+
+      // Fan out to Discord/Slack via /api/log → ERROR_WEBHOOK_URL. Skip
+      // silent for plain user-rejection (those aren't bugs); EVERYTHING
+      // else goes — including the mobile signature-missing path so we can
+      // see how often that platform combination breaks.
+      if (!isUserRejection(err)) {
+        reportClientError('overlay/booking/solana/initializeBeam', err, {
+          booking_id:    String(newBooking.id),
+          profile_id:    profile?.id,
+          duration_secs: Math.round(durationSeconds),
+          amount_usdc:   totalUsdc,
+          viewer_wallet: publicKey?.toBase58() ?? null,
+          // ua tag so the webhook can split mobile vs desktop at a glance.
+          mobile:        typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent),
+          signature_missing: isWalletSignatureMissing(err),
+        });
+      }
 
       // User rejected in wallet — nothing on-chain, safe to deny.
       if (isUserRejection(err)) {
