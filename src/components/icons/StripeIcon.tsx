@@ -2,57 +2,74 @@
 
 type Props = {
   size?: number;
-  /** Force a flat fill instead of the brand violet (#635BFF) — for cases
+  /** Force a flat fill instead of Stripe's "Blurple" (#533AFD) — for cases
    *  where the icon needs to inherit the surrounding ink color. */
   mono?: string;
-  /** When true, render the "stripe" wordmark instead of the S badge. The
-   *  wordmark is wider and looks better in payout / branding surfaces. */
+  /** Kept for API compatibility with the prior hand-implemented icon —
+   *  Stripe's brand kit only ships the wordmark form, so this prop is a
+   *  no-op now. The full wordmark is the canonical mark. */
   wordmark?: boolean;
   className?: string;
   title?: string;
 };
 
 /**
- * Stripe mark. Default: the rounded "S" badge in violet (#635BFF). With
- * `wordmark`, renders the "stripe" lockup. Swap paths from
- * stripe.com/newsroom/brand-assets for the pixel-canonical SVGs.
+ * Stripe wordmark. Sourced from the official Stripe brand kit
+ * (Logo.zip → Stripe_logo_kit/asset-wordmark/Stripe wordmark - Blurple.svg).
+ * The kit ships a wordmark only — there is no separate icon-only "S" mark
+ * in the asset pack, so the wordmark IS the canonical inline rail badge.
+ *
+ * Aspect ratio is 360:150 = 2.4 — at `size=14` height the wordmark is
+ * ~34px wide, which still reads cleanly inline next to a price.
  */
-export default function StripeIcon({ size = 14, mono, wordmark, className, title = 'Stripe' }: Props) {
-  const fill = mono ?? '#635BFF';
-
-  if (wordmark) {
-    return (
-      <svg
-        width={size * (60 / 14)}
-        height={size}
-        viewBox="0 0 60 25"
-        xmlns="http://www.w3.org/2000/svg"
-        role="img"
-        aria-label={title}
-        className={className}
-      >
-        <path
-          d="M59.5 12.4c0-4.3-2.1-7.6-6-7.6-4 0-6.4 3.4-6.4 7.6 0 5 2.8 7.5 6.9 7.5 2 0 3.5-.5 4.7-1.1v-3.3c-1.2.6-2.5 1-4.2 1-1.7 0-3.1-.6-3.3-2.6h8.4l-.1-1.5zm-8.5-1.6c0-1.9 1.2-2.7 2.2-2.7 1.1 0 2.1.8 2.1 2.7h-4.3zm-10.9-6c-1.6 0-2.7.8-3.3 1.3l-.2-1H33v19.7l4.1-.9V19c.6.4 1.5 1 3 1 3 0 5.7-2.4 5.7-7.6 0-4.8-2.7-7.6-5.7-7.6zm-1 11.7c-1 0-1.6-.4-2-.8V9.3c.5-.5 1.1-.9 2-.9 1.6 0 2.7 1.8 2.7 4.5 0 2.7-1.1 4.6-2.7 4.6zm-12.2-12.3l4.1-.9V0l-4.1.9v3.3zM27 5.1h4.1v14.6H27V5.1zm-4.4 1.2L22.4 5.1h-3.5v14.6H23v-9.9c1-1.3 2.6-1 3.1-.9V5.1c-.5-.2-2.4-.5-3.5 1.2zm-8.2-4.8L10.4 2.4v13.8c0 2.5 1.9 4.4 4.4 4.4 1.4 0 2.4-.3 3-.6v-3.3c-.5.2-3.1 1-3.1-1.5V8.6h3.1V5.1h-3.1l-.3-3.6zM4.1 9.3c0-.6.5-.8 1.4-.8 1.2 0 2.7.4 4 1V5.7c-1.4-.5-2.7-.8-4-.8-3.3 0-5.5 1.7-5.5 4.6 0 4.5 6.2 3.8 6.2 5.7 0 .7-.6.9-1.6.9-1.4 0-3.1-.5-4.5-1.2v3.9c1.5.7 3.1 1 4.5 1 3.4 0 5.8-1.7 5.8-4.6-.1-4.9-6.3-4.1-6.3-5.9z"
-          fill={fill}
-        />
-      </svg>
-    );
-  }
-
+export default function StripeIcon({ size = 14, mono, className, title = 'Stripe' }: Props) {
+  const fill = mono ?? '#533AFD';
   return (
     <svg
-      width={size}
+      width={size * (360 / 150)}
       height={size}
-      viewBox="0 0 32 32"
+      viewBox="0 0 360 150"
       xmlns="http://www.w3.org/2000/svg"
       role="img"
       aria-label={title}
       className={className}
     >
-      <rect width="32" height="32" rx="6" fill={fill} />
       <path
-        d="M14.7 12.4c0-.6.5-.8 1.4-.8 1.2 0 2.8.4 4 1.1v-3.8c-1.3-.5-2.7-.8-4-.8-3.3 0-5.5 1.7-5.5 4.6 0 4.5 6.2 3.8 6.2 5.7 0 .7-.6.9-1.6.9-1.4 0-3.1-.6-4.5-1.4v3.9c1.5.7 3.1 1 4.5 1 3.4 0 5.7-1.7 5.7-4.6.1-4.9-6.2-4.1-6.2-5.8z"
-        fill="#FFFFFF"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M360 77.4001C360 51.8001 347.6 31.6001 323.9 31.6001C300.1 31.6001 285.7 51.8001 285.7 77.2001C285.7 107.3 302.7 122.5 327.1 122.5C339 122.5 348 119.8 354.8 116V96.0001C348 99.4001 340.2 101.5 330.3 101.5C320.6 101.5 312 98.1001 310.9 86.3001H359.8C359.8 85.0001 360 79.8001 360 77.4001ZM310.6 67.9001C310.6 56.6001 317.5 51.9001 323.8 51.9001C329.9 51.9001 336.4 56.6001 336.4 67.9001H310.6Z"
+        fill={fill}
+      />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M247.1 31.6001C237.3 31.6001 231 36.2001 227.5 39.4001L226.2 33.2001H204.2V149.8L229.2 144.5L229.3 116.2C232.9 118.8 238.2 122.5 247 122.5C264.9 122.5 281.2 108.1 281.2 76.4001C281.1 47.4001 264.6 31.6001 247.1 31.6001ZM241.1 100.5C235.2 100.5 231.7 98.4001 229.3 95.8001L229.2 58.7001C231.8 55.8001 235.4 53.8001 241.1 53.8001C250.2 53.8001 256.5 64.0001 256.5 77.1001C256.5 90.5001 250.3 100.5 241.1 100.5Z"
+        fill={fill}
+      />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M169.8 25.7L194.9 20.3V0L169.8 5.3V25.7Z"
+        fill={fill}
+      />
+      <path d="M194.9 33.3H169.8V120.8H194.9V33.3Z" fill={fill} />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M142.9 40.7L141.3 33.3H119.7V120.8H144.7V61.5C150.6 53.8 160.6 55.2 163.7 56.3V33.3C160.5 32.1 148.8 29.9 142.9 40.7Z"
+        fill={fill}
+      />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M92.8999 11.6001L68.4999 16.8001L68.3999 96.9001C68.3999 111.7 79.4999 122.6 94.2999 122.6C102.5 122.6 108.5 121.1 111.8 119.3V99.0001C108.6 100.3 92.7999 104.9 92.7999 90.1001V54.6001H111.8V33.3001H92.7999L92.8999 11.6001Z"
+        fill={fill}
+      />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M25.3 58.7001C25.3 54.8001 28.5 53.3001 33.8 53.3001C41.4 53.3001 51 55.6001 58.6 59.7001V36.2001C50.3 32.9001 42.1 31.6001 33.8 31.6001C13.5 31.6001 0 42.2001 0 59.9001C0 87.5001 38 83.1001 38 95.0001C38 99.6001 34 101.1 28.4 101.1C20.1 101.1 9.5 97.7001 1.1 93.1001V116.9C10.4 120.9 19.8 122.6 28.4 122.6C49.2 122.6 63.5 112.3 63.5 94.4001C63.4 64.6001 25.3 69.9001 25.3 58.7001Z"
+        fill={fill}
       />
     </svg>
   );
