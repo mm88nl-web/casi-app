@@ -73,7 +73,7 @@ export default function BeamCtrlPanel({
   onDone,
   onUpdateShape,
   onUpdateGlow,
-  displayCurrency = 'usd',
+  stripeCurrency = 'usd',
 }: {
   el: any;
   activeBooking: any | null;
@@ -85,11 +85,13 @@ export default function BeamCtrlPanel({
   onDone: () => void;
   onUpdateShape?: (id: string, shape: string) => void;
   onUpdateGlow?: (id: string, glow: boolean) => void;
-  /** Streamer's chosen display currency. Picks which Stripe rate row
-   *  renders (USD or EUR) so we don't show all four currencies at once.
-   *  USDC is always shown since it's the on-chain rail. SOL is never
-   *  shown — CASI prices in USDC, SOL is fee-only. */
-  displayCurrency?: 'eur' | 'usd' | 'usdc';
+  /** Stripe Connect's default currency for this streamer. Drives which
+   *  Stripe row renders on the slot Pricing tab — the rate input is in
+   *  whatever Stripe will actually charge in, eliminating the "rate in
+   *  EUR but PI in USD" mismatch the free-form display_currency picker
+   *  used to allow. null means Stripe isn't connected; the Stripe row
+   *  hides entirely and the streamer prices in USDC only. */
+  stripeCurrency?: 'eur' | 'usd' | null;
 }) {
   const [tab, setTab] = useState<Tab>('properties');
   // Per-rail rates — fall back to price_value when a rail isn't set on the row.
@@ -235,11 +237,12 @@ export default function BeamCtrlPanel({
         <div className="casi-v9-cp-pane">
           <div className="casi-v9-cp-lbl">Per-rail rates</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {/* Stripe rail — single row in the streamer's chosen display
-                currency. EUR-based streamer gets one EUR row; everyone else
-                gets a USD row. (display_currency='usdc' falls back to USD
-                for fiat tipping; the on-chain rail below covers crypto.) */}
-            {displayCurrency === 'eur' ? (
+            {/* Stripe rail — rendered in the streamer's Stripe Connect
+                default currency. Hidden entirely when Stripe isn't
+                connected (stripeCurrency === null) so the streamer can't
+                set a rate that nothing will charge against — they price
+                in USDC only until Stripe is hooked up via Settings. */}
+            {stripeCurrency === 'eur' ? (
               <RailRow
                 glyph={<span style={{ color: 'var(--ink)' }}>€</span>}
                 name="EUR"
@@ -249,7 +252,7 @@ export default function BeamCtrlPanel({
                 unit={editUnit}
                 step={1}
               />
-            ) : (
+            ) : stripeCurrency === 'usd' ? (
               <RailRow
                 glyph={<span style={{ color: 'var(--ink)' }}>$</span>}
                 name="USD"
@@ -259,7 +262,7 @@ export default function BeamCtrlPanel({
                 unit={editUnit}
                 step={1}
               />
-            )}
+            ) : null}
             <RailRow
               glyph={<UsdcIcon size={14} />}
               name="USDC"
