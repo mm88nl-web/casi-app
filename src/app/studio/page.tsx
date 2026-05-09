@@ -20,7 +20,7 @@ import StudioFrame from './_components/StudioFrame';
 // escrow_pda / viewer_wallet (Solana settle on deny), image_url (overlay copy
 // on approve).
 const BOOKING_COLS =
-  'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, payment_intent_id, tx_signature, started_at, escrow_pda, viewer_wallet, is_queued';
+  'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, payment_intent_id, tx_signature, started_at, ended_at, escrow_pda, viewer_wallet, is_queued';
 const FLASH_COLS =
   'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, escrow_pda, viewer_wallet';
 const PROFILE_COLS = 'id, username, solana_wallet, is_live';
@@ -82,6 +82,7 @@ type BookingRow = {
   payment_intent_id: string | null;
   tx_signature: string | null;
   started_at: string | null;
+  ended_at: string | null;
   escrow_pda: string | null;
   viewer_wallet: string | null;
   is_queued: boolean | null;
@@ -837,9 +838,9 @@ function StudioPageInner() {
   // Sum today's approved flashes + settled beams per rail. Two independent
   // totals (fiat / USDC) feed two separate lines on the Today tile, so a
   // streamer who took €25 of card tips + 12 USDC sees both numbers, not
-  // one rail filtered. Free flashes never count (no money moved). Beam
-  // totals use price_value × duration; prorated kicks are not discounted
-  // yet (no settled_amount column on bookings).
+  // one rail filtered. Free flashes never count (no money moved). Beams
+  // that were ended early prorate by (ended_at − started_at) / duration so
+  // the tile matches what the viewer was actually charged on the rail.
   const isUsdcRow = (m: string | null) => m === 'usdc' || m === 'solana';
   let todayFiatCents = 0;
   let todayUsdcCents = 0;
@@ -851,8 +852,21 @@ function StudioPageInner() {
   for (const row of todayBookings) {
     if (row.payment_method === 'free') continue;
     const { total } = bookingTotal(row);
-    if (isUsdcRow(row.payment_method)) todayUsdcCents += Math.round(total * 100);
-    else todayFiatCents += Math.round(total * 100);
+    let actual = total;
+    // ended_at is set by endBeamEarly. If it's older than started_at +
+    // duration the streamer kicked early; prorate. Naturally-expired rows
+    // leave ended_at NULL and count the full total.
+    if (row.ended_at && row.started_at) {
+      const startMs = new Date(row.started_at).getTime();
+      const endMs = new Date(row.ended_at).getTime();
+      const durationSecs = (Number(row.duration_minutes) || 0) * 60;
+      if (durationSecs > 0 && endMs > startMs) {
+        const elapsedSecs = Math.min((endMs - startMs) / 1000, durationSecs);
+        actual = total * elapsedSecs / durationSecs;
+      }
+    }
+    if (isUsdcRow(row.payment_method)) todayUsdcCents += Math.round(actual * 100);
+    else todayFiatCents += Math.round(actual * 100);
   }
   // Live-vested portion of any beam that's airing right now, scoped to
   // beams that started today so the tile doesn't double-count vesting
