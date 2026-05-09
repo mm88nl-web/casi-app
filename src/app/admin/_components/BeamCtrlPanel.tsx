@@ -175,21 +175,38 @@ export default function BeamCtrlPanel({
     };
     const minN = num(minMin);
     const maxN = num(maxMin);
+    // Only persist the Stripe rail the streamer can actually charge in.
+    // The other Stripe state values (e.g. rateUsd loaded from a stale
+    // legacy price_value when Stripe isn't connected) would otherwise
+    // round-trip back to prices.usd and resurface in formatSlotPrice as
+    // "$1/min" on a slot the streamer only set in USDC. USDC is always
+    // persisted; the on-chain rail doesn't depend on Stripe.
+    const usdN = stripeCurrency === 'usd' ? num(rateUsd) : null;
+    const eurN = stripeCurrency === 'eur' ? num(rateEur) : null;
+    const usdcN = num(rateUsdc);
     const prices = {
-      usd: num(rateUsd),
-      eur: num(rateEur),
-      usdc: num(rateUsdc),
+      usd: usdN,
+      eur: eurN,
+      usdc: usdcN,
       min_min: minN,
       max_min: maxN,
     };
-    // Strip null keys so the JSONB stays compact and `?? fallback` reads
-    // cleanly on the load side.
+    // Strip null keys so the JSONB stays compact AND so disconnecting
+    // Stripe (or switching its currency) cleanly removes the old rail
+    // from the slot — Supabase replaces the whole JSONB column on update.
     const compact = Object.fromEntries(
       Object.entries(prices).filter(([, v]) => v !== null && v !== undefined),
     );
+    // Legacy `price_value` column drives free-detection (=0 means free)
+    // in callers that haven't migrated to formatSlotPrice yet. Track the
+    // streamer's primary rail so a USDC-only streamer setting USDC=5
+    // doesn't end up with price_value=0 marking the slot as free.
+    const legacyPriceValue =
+      stripeCurrency === 'usd' ? num(rateUsd) ?? 0
+      : stripeCurrency === 'eur' ? num(rateEur) ?? 0
+      : usdcN ?? 0;
     updateLayer(el.id, {
-      // Legacy column the booking flow still reads — track the USD rail.
-      price_value: num(rateUsd) ?? 0,
+      price_value: legacyPriceValue,
       price_unit: editUnit,
       prices: compact,
       min_duration_minutes: minN,
