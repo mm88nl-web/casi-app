@@ -293,32 +293,42 @@ function OverlayContent() {
       for (const f of (walletFlashRes.data || [])) if (!stuckById.has(f.id)) stuckById.set(f.id, f);
       setMyStuckFlashes(Array.from(stuckById.values()));
 
-      // Historical activity — every beam + flash this viewer has sent to
-      // this streamer, dual-keyed (viewer_name OR viewer_wallet) the same
-      // way the active-row query is so a viewer who reconnects from a
-      // different browser still sees their full spend history. Capped at
-      // 50 rows per kind; sorted client-side after merge.
+      // Historical activity for today — every beam + flash this viewer has
+      // sent to this streamer in the last 24h (since browser-local midnight),
+      // dual-keyed (viewer_name OR viewer_wallet) the same way the active-row
+      // query is so a viewer who reconnects from a different browser still
+      // sees their full spend log for the current stream day. Capped at 50
+      // rows per kind; sorted client-side after merge. Anything older than
+      // today is hidden — same scoping as studio's FLASHES · TODAY tile so
+      // both surfaces agree on what "this session" means.
+      const histStart = new Date();
+      histStart.setHours(0, 0, 0, 0);
+      const histStartIso = histStart.toISOString();
       const HIST_BOOK_COLS = 'id, status, payment_method, price_value, price_unit, original_amount_cents, message, duration_minutes, tx_signature, created_at';
       const HIST_FLASH_COLS = 'id, status, payment_method, amount_cents, message, tx_signature, created_at';
       const [histBookName, histBookWallet, histFlashName, histFlashWallet] = await Promise.all([
         name
           ? supabase.from('bookings').select(HIST_BOOK_COLS)
               .eq('profile_id', profId).eq('viewer_name', name)
+              .gte('created_at', histStartIso)
               .order('created_at', { ascending: false }).limit(50)
           : Promise.resolve({ data: [] as any[] }),
         wallet
           ? supabase.from('bookings').select(HIST_BOOK_COLS)
               .eq('profile_id', profId).eq('viewer_wallet', wallet)
+              .gte('created_at', histStartIso)
               .order('created_at', { ascending: false }).limit(50)
           : Promise.resolve({ data: [] as any[] }),
         name
           ? supabase.from('flashes').select(HIST_FLASH_COLS)
               .eq('profile_id', profId).eq('viewer_name', name)
+              .gte('created_at', histStartIso)
               .order('created_at', { ascending: false }).limit(50)
           : Promise.resolve({ data: [] as any[] }),
         wallet
           ? supabase.from('flashes').select(HIST_FLASH_COLS)
               .eq('profile_id', profId).eq('viewer_wallet', wallet)
+              .gte('created_at', histStartIso)
               .order('created_at', { ascending: false }).limit(50)
           : Promise.resolve({ data: [] as any[] }),
       ]);
@@ -2234,17 +2244,6 @@ function OverlayContent() {
             </div>
           )}
 
-          {/* Viewer's full activity log on this streamer — beams + flashes
-              merged, persistent Solscan link per row, running spend total
-              at the bottom. Hidden on OBS browser-source mode (this is
-              viewer chrome, not stream content) and when no rows exist
-              (the component itself early-returns). */}
-          {!isOBS && !selectedSlot && username && (
-            <div className="ov-full-row" style={{ marginTop:24 }}>
-              <MyTransactionsSection rows={myHistory} username={username} />
-            </div>
-          )}
-
           {!isOBS && profile?.id && !selectedSlot && (
             <div className="ov-full-row" style={{ marginTop:24 }}>
               <FlashPanel
@@ -2254,6 +2253,19 @@ function OverlayContent() {
                 username={username}
                 showNotif={showNotif}
               />
+            </div>
+          )}
+
+          {/* Viewer's today-scoped activity log on this streamer — beams +
+              flashes merged, persistent Solscan link per row, running spend
+              total at the bottom. Sits under everything else so the viewer
+              has the in-progress / send-a-flash surfaces above the fold and
+              the receipts at the bottom. Hidden on OBS browser-source mode
+              (this is viewer chrome, not stream content) and when no rows
+              exist (the component itself early-returns). */}
+          {!isOBS && !selectedSlot && username && (
+            <div className="ov-full-row" style={{ marginTop:24 }}>
+              <MyTransactionsSection rows={myHistory} username={username} />
             </div>
           )}
 

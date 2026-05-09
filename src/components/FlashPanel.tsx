@@ -191,9 +191,13 @@ export default function FlashPanel({
 
   const compact = variant === 'compact';
   // No hard `height` cap — when the composer expands it needs room and
-  // overflow:hidden was clipping the Pay button off the bottom. Frame
-  // has a minHeight for visual presence; feed caps its own scroll area
-  // so it doesn't push the composer out of view.
+  // overflow:hidden was clipping the Pay button off the bottom. The earlier
+  // 420px floor was sized for the composer-expanded state but left dead
+  // space under the panel when the composer was collapsed (the default) —
+  // visible as a tall empty box on the viewer overlay below the feed. Drop
+  // the floor to a value that fits ~3 rows + the collapsed composer bar
+  // without dominating, and let the panel grow naturally when the composer
+  // opens.
   const frame: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
@@ -201,7 +205,7 @@ export default function FlashPanel({
     border: '1px solid var(--casi-border)',
     borderRadius: 12,
     overflow: 'visible',
-    minHeight: compact ? 320 : 420,
+    minHeight: compact ? 220 : 180,
     fontFamily: "var(--font-casi-sans), sans-serif",
   };
   const header: React.CSSProperties = {
