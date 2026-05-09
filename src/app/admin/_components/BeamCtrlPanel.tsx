@@ -14,6 +14,7 @@ function RailRow({
   onChange,
   unit,
   placeholder,
+  step = 0.01,
 }: {
   glyph: React.ReactNode;
   name: string;
@@ -22,6 +23,11 @@ function RailRow({
   onChange: (v: string) => void;
   unit: string;
   placeholder?: string;
+  /** +/− arrow increment. Defaults to 0.01 for backward compat; callers
+   *  pass 1 for whole-dollar fiat ticks and 0.5 for half-USDC ticks.
+   *  Free typing is unaffected — the streamer can still enter $5.50,
+   *  $0.99, etc. step only governs spinner-button increments. */
+  step?: number;
 }) {
   return (
     <div className="casi-v9-rail-row">
@@ -33,7 +39,7 @@ function RailRow({
       <input
         type="number"
         min={0}
-        step={0.01}
+        step={step}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
@@ -241,6 +247,7 @@ export default function BeamCtrlPanel({
                 value={rateEur}
                 onChange={setRateEur}
                 unit={editUnit}
+                step={1}
               />
             ) : (
               <RailRow
@@ -250,6 +257,7 @@ export default function BeamCtrlPanel({
                 value={rateUsd}
                 onChange={setRateUsd}
                 unit={editUnit}
+                step={1}
               />
             )}
             <RailRow
@@ -259,6 +267,7 @@ export default function BeamCtrlPanel({
               value={rateUsdc}
               onChange={setRateUsdc}
               unit={editUnit}
+              step={0.5}
             />
           </div>
           <div className="casi-v9-cp-row">
