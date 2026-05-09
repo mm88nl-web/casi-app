@@ -119,7 +119,10 @@ pub mod casi_escrow {
     }
 
     /// Streamer approves a Flash: full amount → streamer ATA.
-    /// Vault + EscrowState are closed; rent returned to streamer.
+    /// Vault + EscrowState are closed; rent returned to viewer (the original
+    /// rent payer at `initialize_escrow`). This keeps the SOL cost of using
+    /// the protocol denominated in lamports rather than SOL price, so a
+    /// SOL appreciation doesn't make small-payment escrows unaffordable.
     pub fn approve_flash(
         ctx: Context<ApproveFlash>,
         escrow_id: [u8; 32],
@@ -155,10 +158,10 @@ pub mod casi_escrow {
             signer,
         )?;
 
-        // Close vault ATA → SOL rent to streamer
+        // Close vault ATA → SOL rent back to viewer (rent payer at init)
         pda_close_account(
             &ctx.accounts.vault,
-            ctx.accounts.streamer.to_account_info(),
+            ctx.accounts.viewer.to_account_info(),
             &ctx.accounts.escrow_state.to_account_info(),
             &ctx.accounts.token_program,
             signer,
@@ -356,7 +359,7 @@ pub mod casi_escrow {
     ///
     /// Integer proration: vested = total × min(elapsed, duration) / duration.
     /// Streamer receives the full vested portion; remainder refunded to viewer.
-    /// Vault + EscrowState closed; rent returned to streamer.
+    /// Vault + EscrowState closed; rent returned to viewer (rent payer at init).
     pub fn settle_beam(
         ctx: Context<SettleBeam>,
         escrow_id: [u8; 32],
@@ -427,10 +430,10 @@ pub mod casi_escrow {
             )?;
         }
 
-        // Close vault ATA → SOL rent to streamer
+        // Close vault ATA → SOL rent back to viewer (rent payer at init)
         pda_close_account(
             &ctx.accounts.vault,
-            ctx.accounts.streamer.to_account_info(),
+            ctx.accounts.viewer.to_account_info(),
             &ctx.accounts.escrow_state.to_account_info(),
             &ctx.accounts.token_program,
             signer,
@@ -446,7 +449,7 @@ pub mod casi_escrow {
     }
 
     /// Session-key path for early-ending a Beam. Identical effect to
-    /// `settle_beam` (pro-rata vest, vault closes, rent to streamer) except
+    /// `settle_beam` (pro-rata vest, vault closes, rent to viewer) except
     /// the authorization comes from a pre-registered session key instead of
     /// the streamer's own wallet. Extends the scoped-delegation trust model
     /// to the high-frequency "end early / play next" action.
@@ -531,9 +534,10 @@ pub mod casi_escrow {
             )?;
         }
 
+        // Close vault ATA → SOL rent back to viewer (rent payer at init)
         pda_close_account(
             &ctx.accounts.vault,
-            ctx.accounts.streamer.to_account_info(),
+            ctx.accounts.viewer.to_account_info(),
             &ctx.accounts.escrow_state.to_account_info(),
             &ctx.accounts.token_program,
             signer,
@@ -549,7 +553,7 @@ pub mod casi_escrow {
     }
 
     /// Delegated Flash approval. Same effect as `approve_flash` (full amount →
-    /// streamer ATA, vault + EscrowState closed, rent to streamer), but signed
+    /// streamer ATA, vault + EscrowState closed, rent to viewer), but signed
     /// by the session key instead of the streamer wallet. Cranker pays fees
     /// and any ATA-init rent. Vesting math isn't involved — approval moves
     /// the full balance, so the only attack surface on a compromised session
@@ -601,9 +605,10 @@ pub mod casi_escrow {
             signer,
         )?;
 
+        // Close vault ATA → SOL rent back to viewer (rent payer at init)
         pda_close_account(
             &ctx.accounts.vault,
-            ctx.accounts.streamer.to_account_info(),
+            ctx.accounts.viewer.to_account_info(),
             &ctx.accounts.escrow_state.to_account_info(),
             &ctx.accounts.token_program,
             signer,
@@ -940,8 +945,9 @@ pub struct ApproveFlash<'info> {
     #[account(mut)]
     pub streamer: Signer<'info>,
 
-    /// CHECK: Viewer wallet — kept in the account list so clients can pass
-    /// the full party set for indexing/event-matching; not read on-chain.
+    /// CHECK: Receives the vault ATA + EscrowState rent on close. Bound to
+    /// the escrow's `viewer` field via `has_one` below so a malicious
+    /// streamer can't redirect rent to an attacker pubkey.
     #[account(mut)]
     pub viewer: UncheckedAccount<'info>,
 
@@ -950,7 +956,8 @@ pub struct ApproveFlash<'info> {
         seeds    = [ESCROW_SEED, escrow_id.as_ref()],
         bump     = escrow_state.bump,
         has_one  = streamer @ CasiError::Unauthorized,
-        close    = streamer,
+        has_one  = viewer   @ CasiError::Unauthorized,
+        close    = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
 
@@ -1095,7 +1102,7 @@ pub struct SettleBeam<'info> {
         bump    = escrow_state.bump,
         has_one = streamer @ CasiError::Unauthorized,
         has_one = viewer   @ CasiError::Unauthorized,
-        close   = streamer,
+        close   = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
 
@@ -1204,15 +1211,15 @@ pub struct SettleBeamDelegated<'info> {
     #[account(mut)]
     pub cranker: Signer<'info>,
 
-    /// CHECK: Receives streamer_amt, the vault ATA rent (via close = streamer)
-    /// and the EscrowState rent. Not a signer; bound to the escrow's
-    /// `streamer` field via `has_one` below so the delegate cannot redirect
-    /// funds. Must match the streamer stored on the delegate PDA.
+    /// CHECK: Receives streamer_amt only. Bound to the escrow's `streamer`
+    /// field via `has_one` below so the delegate cannot redirect funds.
+    /// Must match the streamer stored on the delegate PDA.
     #[account(mut)]
     pub streamer: SystemAccount<'info>,
 
-    /// CHECK: Refund destination. Bound to the escrow's `viewer` field via
-    /// `has_one` below; cannot be redirected.
+    /// CHECK: Receives the vault ATA + EscrowState rent (close = viewer)
+    /// alongside any unvested USDC refund. Bound to the escrow's `viewer`
+    /// field via `has_one` below; cannot be redirected.
     #[account(mut)]
     pub viewer: SystemAccount<'info>,
 
@@ -1230,7 +1237,7 @@ pub struct SettleBeamDelegated<'info> {
         bump    = escrow_state.bump,
         has_one = streamer @ CasiError::Unauthorized,
         has_one = viewer   @ CasiError::Unauthorized,
-        close   = streamer,
+        close   = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
 
@@ -1278,16 +1285,16 @@ pub struct ApproveFlashDelegated<'info> {
     #[account(mut)]
     pub cranker: Signer<'info>,
 
-    /// CHECK: Receives the EscrowState rent (via close = streamer) and the
-    /// vault ATA rent (via pda_close_account). Bound to the escrow's
-    /// `streamer` field via `has_one` and to the delegate PDA's seed via
-    /// the `delegate` constraint, so a compromised session key cannot
-    /// redirect funds to an attacker-controlled address.
+    /// CHECK: Receives the full escrowed USDC into `streamer_ata`. Bound to
+    /// the escrow's `streamer` field via `has_one` and to the delegate PDA's
+    /// seed via the `delegate` constraint, so a compromised session key
+    /// cannot redirect funds to an attacker-controlled address.
     #[account(mut)]
     pub streamer: SystemAccount<'info>,
 
-    /// CHECK: Kept in the account list for event-indexing parity with
-    /// `approve_flash`; not read on-chain.
+    /// CHECK: Receives the vault ATA + EscrowState rent (close = viewer).
+    /// Bound to the escrow's `viewer` field via `has_one` below so a
+    /// compromised session key can't redirect rent to an attacker pubkey.
     #[account(mut)]
     pub viewer: UncheckedAccount<'info>,
 
@@ -1304,7 +1311,8 @@ pub struct ApproveFlashDelegated<'info> {
         seeds    = [ESCROW_SEED, escrow_id.as_ref()],
         bump     = escrow_state.bump,
         has_one  = streamer @ CasiError::Unauthorized,
-        close    = streamer,
+        has_one  = viewer   @ CasiError::Unauthorized,
+        close    = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
 
