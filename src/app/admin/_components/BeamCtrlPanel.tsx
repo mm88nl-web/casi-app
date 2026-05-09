@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import SlotMedia from '@/components/SlotMedia';
 import UsdcIcon from '@/components/icons/UsdcIcon';
 import { SHAPE_OPTIONS } from '@/lib/banner';
@@ -15,6 +15,7 @@ function RailRow({
   unit,
   placeholder,
   step = 0.01,
+  disabled = false,
 }: {
   glyph: React.ReactNode;
   name: string;
@@ -28,9 +29,13 @@ function RailRow({
    *  Free typing is unaffected — the streamer can still enter $5.50,
    *  $0.99, etc. step only governs spinner-button increments. */
   step?: number;
+  /** When true the input is disabled and dimmed — used while the slot is
+   *  flagged "free", since editing a rate that's about to be overridden
+   *  to zero is misleading. */
+  disabled?: boolean;
 }) {
   return (
-    <div className="casi-v9-rail-row">
+    <div className="casi-v9-rail-row" style={disabled ? { opacity: 0.45 } : undefined}>
       <span className="casi-v9-rail-glyph">{glyph}</span>
       <span className="casi-v9-rail-name">
         {name}
@@ -42,8 +47,10 @@ function RailRow({
         step={step}
         value={value}
         placeholder={placeholder}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         className="casi-v9-rail-input"
+        style={disabled ? { cursor: 'not-allowed' } : undefined}
       />
       <span className="casi-v9-rail-unit">/{unit}</span>
     </div>
@@ -109,12 +116,14 @@ export default function BeamCtrlPanel({
   const [maxMin, setMaxMin] = useState<string>(
     String(el.prices?.max_min ?? el.max_duration_minutes ?? ''),
   );
-  const [cooldown, setCooldown] = useState<string>(
-    String(el.prices?.cooldown_secs ?? el.cooldown_secs ?? 0),
-  );
   const [liveSeconds, setLiveSeconds] = useState(
     activeBooking ? getSecondsRemaining(activeBooking) : 0,
   );
+  // Snapshot of pre-free rates so toggling Free → not-free restores
+  // whatever the streamer last had instead of jumping to a hardcoded
+  // default. Cleared whenever a different element is selected (the
+  // useEffect below) so a stale snapshot from another slot can't leak in.
+  const preFreeRatesRef = useRef<{ usd: string; eur: string; usdc: string } | null>(null);
 
   // Sync editor state + reset to Properties when a different element is selected
   useEffect(() => {
@@ -125,7 +134,7 @@ export default function BeamCtrlPanel({
     setEditUnit(el.price_unit || 'min');
     setMinMin(String(el.prices?.min_min ?? el.min_duration_minutes ?? ''));
     setMaxMin(String(el.prices?.max_min ?? el.max_duration_minutes ?? ''));
-    setCooldown(String(el.prices?.cooldown_secs ?? el.cooldown_secs ?? 0));
+    preFreeRatesRef.current = null;
     setTab('properties');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [el.id]);
@@ -146,9 +155,17 @@ export default function BeamCtrlPanel({
       : ((elapsed / 3600) * activeBooking.price_value).toFixed(2)
     : null;
 
-  // "Free" mode = the USD rail is 0 (the legacy price_value mirrors the USD
-  // rail since most production streamers configure in dollars).
-  const beamFree = parseFloat(rateUsd) === 0;
+  // "Free" mode = every visible rail is 0. The earlier definition keyed on
+  // rateUsd alone, which mis-detected USDC-only slots (where rateUsd is
+  // just the loaded fallback of '0' even when rateUsdc is a real price)
+  // as free. Now requires zeros across the board so a slot priced at 23.5
+  // USDC isn't flagged free just because its USD rail is empty.
+  const numOr0 = (s: string) => {
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const beamFree =
+    numOr0(rateUsd) === 0 && numOr0(rateEur) === 0 && numOr0(rateUsdc) === 0;
   const glowOn = el.glow_on_start ?? true;
 
   const saveRates = () => {
@@ -158,14 +175,12 @@ export default function BeamCtrlPanel({
     };
     const minN = num(minMin);
     const maxN = num(maxMin);
-    const cdN = parseInt(cooldown, 10);
     const prices = {
       usd: num(rateUsd),
       eur: num(rateEur),
       usdc: num(rateUsdc),
       min_min: minN,
       max_min: maxN,
-      cooldown_secs: Number.isFinite(cdN) ? cdN : 0,
     };
     // Strip null keys so the JSONB stays compact and `?? fallback` reads
     // cleanly on the load side.
@@ -179,7 +194,6 @@ export default function BeamCtrlPanel({
       prices: compact,
       min_duration_minutes: minN,
       max_duration_minutes: maxN,
-      cooldown_secs: Number.isFinite(cdN) ? cdN : 0,
     });
   };
 
@@ -232,7 +246,7 @@ export default function BeamCtrlPanel({
         </div>
       )}
 
-      {/* Pricing — per-rail rates + min/max duration + cooldown */}
+      {/* Pricing — per-rail rates + min/max duration */}
       {tab === 'pricing' && (
         <div className="casi-v9-cp-pane">
           <div className="casi-v9-cp-lbl">Per-rail rates</div>
@@ -251,6 +265,7 @@ export default function BeamCtrlPanel({
                 onChange={setRateEur}
                 unit={editUnit}
                 step={1}
+                disabled={beamFree}
               />
             ) : stripeCurrency === 'usd' ? (
               <RailRow
@@ -261,6 +276,7 @@ export default function BeamCtrlPanel({
                 onChange={setRateUsd}
                 unit={editUnit}
                 step={1}
+                disabled={beamFree}
               />
             ) : null}
             <RailRow
@@ -271,6 +287,7 @@ export default function BeamCtrlPanel({
               onChange={setRateUsdc}
               unit={editUnit}
               step={0.5}
+              disabled={beamFree}
             />
           </div>
           <div className="casi-v9-cp-row">
@@ -312,27 +329,24 @@ export default function BeamCtrlPanel({
             />
           </div>
           <div className="casi-v9-cp-row">
-            <span className="casi-v9-cp-lbl">Cooldown</span>
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={cooldown}
-              onChange={(e) => setCooldown(e.target.value)}
-              className="casi-v9-cp-input"
-              style={{ width: 80, textAlign: 'right' }}
-            />
-          </div>
-          <div className="casi-v9-cp-row">
             <span className="casi-v9-cp-lbl">Free tier</span>
             <button
               type="button"
               onClick={() => {
                 if (beamFree) {
-                  setRateUsd('1');
-                  setRateEur('1');
-                  setRateUsdc('1');
+                  // Coming back from free → restore whatever the streamer
+                  // last had pre-free. Falls back to '1' across the board
+                  // only when no snapshot exists (e.g. the slot was
+                  // already free in the DB at load time).
+                  const prev = preFreeRatesRef.current;
+                  setRateUsd(prev?.usd ?? '1');
+                  setRateEur(prev?.eur ?? '1');
+                  setRateUsdc(prev?.usdc ?? '1');
+                  preFreeRatesRef.current = null;
                 } else {
+                  // Going free → snapshot current rates so un-toggling
+                  // restores them, then zero everything.
+                  preFreeRatesRef.current = { usd: rateUsd, eur: rateEur, usdc: rateUsdc };
                   setRateUsd('0');
                   setRateEur('0');
                   setRateUsdc('0');
