@@ -191,13 +191,10 @@ export default function FlashPanel({
 
   const compact = variant === 'compact';
   // No hard `height` cap — when the composer expands it needs room and
-  // overflow:hidden was clipping the Pay button off the bottom. The earlier
-  // 420px floor was sized for the composer-expanded state but left dead
-  // space under the panel when the composer was collapsed (the default) —
-  // visible as a tall empty box on the viewer overlay below the feed. Drop
-  // the floor to a value that fits ~3 rows + the collapsed composer bar
-  // without dominating, and let the panel grow naturally when the composer
-  // opens.
+  // overflow:hidden was clipping the Pay button off the bottom. minHeight
+  // applies only when the feed list is shown (admin / compact mode),
+  // since viewer mode renders just the composer and a forced floor would
+  // bring back the empty-box-under-the-textbox issue.
   const frame: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
@@ -205,7 +202,7 @@ export default function FlashPanel({
     border: '1px solid var(--casi-border)',
     borderRadius: 12,
     overflow: 'visible',
-    minHeight: compact ? 220 : 180,
+    ...(isAdmin ? { minHeight: compact ? 220 : 180 } : {}),
     fontFamily: "var(--font-casi-sans), sans-serif",
   };
   const header: React.CSSProperties = {
@@ -235,12 +232,23 @@ export default function FlashPanel({
     background: 'rgba(255,255,255,0.02)',
   };
 
+  // Viewer mode: the chat-style feed used to render here was redundant with
+  // ViewerFlashesFeed (the public "FLASHES · LIVE" panel above) and the
+  // viewer's own MyTransactionsSection (their personal activity log below),
+  // so a single send produced three identical rows on one page. In viewer
+  // mode we now render only the composer; the feed + delete-row affordance
+  // is admin-only chrome.
+  const showFeed = isAdmin;
+
   return (
     <div style={frame}>
-      <div style={header}>
-        <span>⚡ flashes</span>
-        <span>{flashes.length}/{MAX_HISTORY}</span>
-      </div>
+      {showFeed && (
+        <div style={header}>
+          <span>⚡ flashes</span>
+          <span>{flashes.length}/{MAX_HISTORY}</span>
+        </div>
+      )}
+      {showFeed && (
       <div ref={listRef} style={list}>
         {flashes.length === 0 ? (
           <div style={{ color: 'var(--casi-text-muted)', fontSize: 12, textAlign: 'center', padding: 24, lineHeight: 1.5 }}>
@@ -320,8 +328,9 @@ export default function FlashPanel({
           })
         )}
       </div>
+      )}
       {canCompose && (
-        <div style={composerFrame}>
+        <div style={showFeed ? composerFrame : { padding: 10 }}>
           <SendFlashSection
             embedded
             profileId={profileId}
