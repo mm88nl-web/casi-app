@@ -441,6 +441,23 @@ function StudioPageInner() {
         () => { bump(); reload(profileId); })
       .subscribe();
 
+    // Profile changes (e.g. display_currency picked in /studio/settings) need
+    // to flow back into the dashboard or the Today tile keeps filtering on
+    // a stale currency until the page is hard-reloaded.
+    const profileChannel = supabase
+      .channel(`studio_profile_${profileId}`)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${profileId}` },
+        async () => {
+          const { data } = await supabase
+            .from('profiles')
+            .select(PROFILE_COLS)
+            .eq('id', profileId)
+            .maybeSingle();
+          if (data) setState({ kind: 'ready', profile: data as Profile });
+        })
+      .subscribe();
+
     const watchdog = setInterval(() => {
       if (Date.now() - lastEventRef.current > 30_000) {
         bump();
@@ -451,6 +468,7 @@ function StudioPageInner() {
     return () => {
       supabase.removeChannel(bookingsChannel);
       supabase.removeChannel(flashesChannel);
+      supabase.removeChannel(profileChannel);
       clearInterval(watchdog);
     };
   }, [profileId, supabase, reload]);
