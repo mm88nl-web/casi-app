@@ -33,6 +33,7 @@ export default function StudioLivePage() {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [togglingLive, setTogglingLive] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +60,51 @@ export default function StudioLivePage() {
     load();
     return () => { cancelled = true; };
   }, [supabase, router]);
+
+  // Pending-count badge on the Dashboard tab. Mirrors /studio's combined
+  // queue (bookings + flashes) so a request landing while the streamer is
+  // mid-edit on /studio/live still flags the badge. Realtime watcher uses
+  // the same pattern as /studio (postgres_changes + 30s watchdog).
+  const profileId = state.kind === 'ready' ? state.profile.id : null;
+  useEffect(() => {
+    if (!profileId) return;
+    let cancelled = false;
+    const reload = async () => {
+      const [bookingsRes, flashesRes] = await Promise.all([
+        supabase.from('bookings').select('id')
+          .eq('profile_id', profileId).eq('status', 'pending'),
+        supabase.from('flashes').select('id')
+          .eq('profile_id', profileId).eq('status', 'pending'),
+      ]);
+      if (cancelled) return;
+      const total = (bookingsRes.data?.length ?? 0) + (flashesRes.data?.length ?? 0);
+      setPendingCount(total);
+    };
+    reload();
+
+    const bookingsChannel = supabase
+      .channel(`studio_live_pending_bookings_${profileId}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'bookings', filter: `profile_id=eq.${profileId}` },
+        () => { reload(); })
+      .subscribe();
+
+    const flashesChannel = supabase
+      .channel(`studio_live_pending_flashes_${profileId}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profileId}` },
+        () => { reload(); })
+      .subscribe();
+
+    const watchdog = setInterval(reload, 30_000);
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(bookingsChannel);
+      supabase.removeChannel(flashesChannel);
+      clearInterval(watchdog);
+    };
+  }, [profileId, supabase]);
 
   const toggleLive = useCallback(async () => {
     if (state.kind !== 'ready' || togglingLive) return;
@@ -98,6 +144,7 @@ export default function StudioLivePage() {
       togglingLive={togglingLive}
       onToggleLive={toggleLive}
       activeMode="live"
+      pendingCount={pendingCount}
       error={errorMsg}
       onDismissError={() => setErrorMsg(null)}
     >
