@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import SlotMedia from '@/components/SlotMedia';
+import RailIcon from '@/components/icons/RailIcon';
 
 export type QueuedRowItem = {
   /** Stable React key + id for the playNow callback. The raw booking id. */
@@ -12,6 +13,9 @@ export type QueuedRowItem = {
   /** Full price for the booking (rate × duration), pre-formatted in the
    *  rail's currency — e.g. "€10", "5 USDC". */
   total: string;
+  /** Which rail this row settles on — drives the inline rail icon next
+   *  to the price. */
+  rail?: 'usdc' | 'stripe' | null;
   /** Duration in minutes — shown next to the price as context. */
   durationMin: number;
   fileType?: string | null;
@@ -26,6 +30,9 @@ export type AiringItem = {
   subtitle: string;
   /** Countdown for timed items (beams). */
   remaining?: string;
+  /** Which rail this beam settles on — drives the inline rail icon next
+   *  to the earned/total label. Null for free beams. */
+  rail?: 'usdc' | 'stripe' | null;
   /** Live earned / total label, e.g. "€4 / €10" or "8 / 20 USDC". Computed
    *  by the parent each tick using the same vesting math the on-chain
    *  program runs at settle, so the number reads as "what the streamer
@@ -170,15 +177,20 @@ export default function AiringNow({ items }: Props) {
                     {item.earnedLabel ? (
                       <div
                         style={{
-                          fontFamily: 'var(--font-casi-mono), monospace',
+                          fontFamily: 'var(--M), var(--font-casi-mono), monospace',
                           fontSize: '10.5px',
-                          color: 'var(--casi-text-mid)',
+                          color: 'var(--text-3, var(--casi-text-mid))',
                           marginTop: '3px',
                           fontVariantNumeric: 'tabular-nums',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'flex-end',
+                          gap: 5,
                         }}
                         title="Earned so far / total — vests with the timer"
                       >
-                        {item.earnedLabel}
+                        {item.rail ? <RailIcon method={item.rail} size={11} /> : null}
+                        <span>{item.earnedLabel}</span>
                       </div>
                     ) : null}
                   </div>
@@ -259,13 +271,17 @@ export default function AiringNow({ items }: Props) {
                         </div>
                         <span
                           style={{
-                            fontFamily: 'var(--font-casi-mono), monospace',
+                            fontFamily: 'var(--M), var(--font-casi-mono), monospace',
                             fontSize: '12px',
-                            color: 'var(--casi-accent)',
+                            color: 'var(--ink)',
                             whiteSpace: 'nowrap',
                             marginRight: '4px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
                           }}
                         >
+                          {q.rail ? <RailIcon method={q.rail} size={11} /> : null}
                           {q.total}
                         </span>
                         {item.onPlayNow ? (

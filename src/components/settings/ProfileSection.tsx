@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import SettingsSection from './SettingsSection';
 import FieldRow, { settingsInputStyle, settingsTextareaStyle } from './FieldRow';
 import GhostButton from './GhostButton';
+import UsdcIcon from '@/components/icons/UsdcIcon';
 
 export type ProfileRow = {
   id: string;
@@ -278,15 +279,22 @@ export default function ProfileSection({ supabase, profile }: Props) {
                     fontSize: '11px',
                     letterSpacing: '0.1em',
                     fontWeight: 600,
-                    background: active ? 'rgba(var(--casi-accent-rgb), 0.08)' : 'transparent',
-                    border: `1px solid ${active ? 'rgba(var(--casi-accent-rgb), 0.35)' : 'var(--casi-border-2)'}`,
-                    color: active ? 'var(--casi-accent)' : 'var(--casi-text-dim)',
+                    background: active ? 'var(--ink-08)' : 'transparent',
+                    border: `1px solid ${active ? 'var(--ink-22)' : 'var(--line-2, var(--casi-border-2))'}`,
+                    color: active ? 'var(--ink)' : 'var(--text-3, var(--casi-text-dim))',
                     cursor: 'pointer',
                     transition: 'border-color .14s, color .14s, background .14s',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
                   }}
                   aria-pressed={active}
                 >
-                  <span style={{ marginRight: '6px' }}>{opt.symbol}</span>
+                  {opt.id === 'usdc' ? (
+                    <UsdcIcon size={12} />
+                  ) : (
+                    <span>{opt.symbol}</span>
+                  )}
                   {opt.label}
                 </button>
               );

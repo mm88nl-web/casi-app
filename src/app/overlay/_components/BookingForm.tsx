@@ -2,6 +2,8 @@
 
 import { BANNER_MAX_MESSAGE } from '@/lib/banner';
 import TurnstileWidget from '@/components/TurnstileWidget';
+import UsdcIcon from '@/components/icons/UsdcIcon';
+import StripeIcon from '@/components/icons/StripeIcon';
 import CustomizePanel from './CustomizePanel';
 import { formatTime, getSecondsRemaining } from './time';
 
@@ -404,13 +406,18 @@ export default function BookingForm(props: Props) {
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #1c1c1c', paddingTop: 8, marginTop: 4, fontSize: 13, fontWeight: 700, color: '#9945FF' }}>
-            <span>Total</span><span>{estimatedCost} USDC</span>
+            <span>Total</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <UsdcIcon size={12} />
+              {estimatedCost} USDC
+            </span>
           </div>
           {walletConnected && usdcBalance !== null ? (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, color: '#555' }}>
                 <span>Your balance</span>
-                <span style={{ color: usdcBalance < parseFloat(estimatedCost) ? '#f87171' : '#6ee7b7' }}>
+                <span style={{ color: usdcBalance < parseFloat(estimatedCost) ? '#f87171' : '#6ee7b7', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <UsdcIcon size={10} />
                   {usdcBalance.toFixed(2)} USDC
                 </span>
               </div>
@@ -464,11 +471,7 @@ export default function BookingForm(props: Props) {
                 <path d="M6.5 1l1.545 3.13L11.5 4.635 9 7.073l.59 3.442L6.5 8.89 3.41 10.515 4 7.073 1.5 4.635l3.455-.505L6.5 1z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" />
               </svg>
             ) : (
-              <svg width="14" height="11" viewBox="0 0 14 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="0.5" y="0.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeOpacity="0.6" />
-                <rect x="0" y="3" width="14" height="2.5" fill="currentColor" fillOpacity="0.5" />
-                <rect x="2" y="7" width="4" height="1.5" rx="0.5" fill="currentColor" />
-              </svg>
+              <StripeIcon size={11} mono="currentColor" />
             )}
             {submitting ? 'Sending…' : isExtend ? 'Extend' : isFreeSlot ? (isQueue ? 'Join Free Queue' : 'Send Free Request') : isQueue ? 'Join Queue' : 'Send Request'}
           </button>
@@ -481,10 +484,8 @@ export default function BookingForm(props: Props) {
               style={{ background: walletConnected ? '#9945FF' : 'rgba(153,69,255,0.12)', color: walletConnected ? '#fff' : '#9945FF', border: walletConnected ? 'none' : '1px solid rgba(153,69,255,0.35)', display: 'flex', alignItems: 'center', gap: 7, opacity: (connecting || submitting || (walletConnected && !canSubmit)) ? 0.5 : 1 }}
               onClick={onSolanaPay}
             >
-              <svg width="13" height="11" viewBox="0 0 13 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M1.5 8.5h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33 8.87c-.14-.14-.04-.37.17-.37ZM1.5 0h8.8c.15 0 .28.06.38.16l1.1 1.1c.14.14.04.37-.17.37H2.8c-.15 0-.28-.06-.38-.16L1.33.37C1.19.23 1.29 0 1.5 0ZM11.67 4.37 10.58 5.5H1.82c-.21 0-.31-.23-.17-.37l1.1-1.1c.1-.1.23-.16.38-.16h8.37c.21 0 .31.23.17.37Z" fill="currentColor" />
-              </svg>
-              {connecting ? 'Connecting…' : walletConnected ? 'Pay with SOL' : 'Connect & Pay SOL'}
+              <UsdcIcon size={12} mono={walletConnected ? '#fff' : '#9945FF'} />
+              {connecting ? 'Connecting…' : walletConnected ? 'Pay with USDC' : 'Connect & Pay USDC'}
             </button>
           )}
         </div>

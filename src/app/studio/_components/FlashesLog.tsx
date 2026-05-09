@@ -1,5 +1,7 @@
 'use client';
 
+import RailIcon from '@/components/icons/RailIcon';
+
 export type FlashLogItem = {
   id: string;
   time: string;
@@ -135,13 +137,22 @@ export default function FlashesLog({ items, total, onRefund, refunding }: Props)
                 <span
                   className={`casi-fl-amt ${chipClass}`}
                   style={{
-                    fontFamily: 'var(--font-casi-mono), monospace',
+                    fontFamily: 'var(--M), var(--font-casi-mono), monospace',
                     fontSize: '11.5px',
                     flexShrink: 0,
                     padding: '2px 8px',
                     borderRadius: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
                   }}
                 >
+                  {!flash.refunded && flash.chip.kind !== 'free' ? (
+                    <RailIcon
+                      method={flash.chip.kind === 'usdc' ? 'usdc' : 'stripe'}
+                      size={11}
+                    />
+                  ) : null}
                   {flash.refunded ? 'refunded' : flash.chip.label}
                 </span>
                 {!flash.refunded && onRefund ? (
@@ -182,7 +193,7 @@ export default function FlashesLog({ items, total, onRefund, refunding }: Props)
             background: 'rgba(255,255,255,0.01)',
           }}
         >
-          Today: <strong style={{ color: 'var(--casi-accent)', fontWeight: 500, marginLeft: '4px', fontFamily: 'var(--font-casi-mono), monospace' }}>{total}</strong>
+          Today: <strong style={{ color: 'var(--ink)', fontWeight: 500, marginLeft: '4px', fontFamily: 'var(--M), var(--font-casi-mono), monospace' }}>{total}</strong>
         </div>
       </div>
     </section>

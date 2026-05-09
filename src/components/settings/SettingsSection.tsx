@@ -10,9 +10,11 @@ type Props = {
 };
 
 /**
- * v7 flat section. Vertical-only border-top divider between sections,
- * no card wrapper. First section drops the divider. 16px title (smaller
- * than v3's 18px), 12.5px description capped at 440px.
+ * v9 flat section. Vertical-only border-top divider between sections, no
+ * card wrapper. First section drops the divider. The h2 picks up the
+ * dashboard's Bricolage display token (`var(--H)`) so streamers don't
+ * see a font-family flip when bouncing between /studio and
+ * /studio/settings.
  */
 export default function SettingsSection({ id, title, desc, actions, danger, children }: Props) {
   return (
@@ -21,7 +23,7 @@ export default function SettingsSection({ id, title, desc, actions, danger, chil
       className="casi-st-sec"
       style={{
         padding: '32px 0 36px',
-        borderTop: `1px solid ${danger ? 'rgba(239, 68, 68, 0.2)' : 'var(--casi-border)'}`,
+        borderTop: `1px solid ${danger ? 'rgba(239, 68, 68, 0.2)' : 'var(--line, var(--casi-border))'}`,
       }}
     >
       <style>{`
@@ -39,12 +41,13 @@ export default function SettingsSection({ id, title, desc, actions, danger, chil
         <div>
           <h2
             style={{
-              fontFamily: 'var(--font-casi-display), var(--font-casi-sans), sans-serif',
-              fontWeight: 700,
-              fontSize: '16px',
-              letterSpacing: '-0.3px',
-              marginBottom: '4px',
-              color: danger ? '#f87171' : 'var(--casi-text)',
+              fontFamily: 'var(--H), var(--font-casi-display), var(--font-casi-sans), sans-serif',
+              fontWeight: 800,
+              fontSize: '22px',
+              letterSpacing: '-0.025em',
+              lineHeight: 1.1,
+              marginBottom: '6px',
+              color: danger ? '#f87171' : 'var(--text, var(--casi-text))',
             }}
           >
             {title}
@@ -52,9 +55,10 @@ export default function SettingsSection({ id, title, desc, actions, danger, chil
           {desc ? (
             <p
               style={{
-                fontSize: '12.5px',
-                color: 'var(--casi-text-mid)',
-                lineHeight: 1.65,
+                fontFamily: 'var(--B), var(--font-casi-sans), sans-serif',
+                fontSize: '13px',
+                color: 'var(--text-3, var(--casi-text-mid))',
+                lineHeight: 1.6,
                 maxWidth: '440px',
               }}
             >

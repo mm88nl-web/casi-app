@@ -6,6 +6,8 @@ import { PublicKey } from '@solana/web3.js';
 import { NETWORK_LABEL } from '@/lib/solana-network';
 import { useWalletBalances, refreshWalletBalances } from '@/lib/wallet-balances';
 import { needsMobileHandoff, phantomBrowseUrl, solflareBrowseUrl } from '@/lib/mobile-wallet';
+import SolanaIcon from './icons/SolanaIcon';
+import UsdcIcon from './icons/UsdcIcon';
 
 // Back-compat export: every existing `refreshWalletNav()` call site now
 // routes through the shared balance store. Kept as a named export so the
@@ -84,12 +86,13 @@ const CSS = `
     border-right: 1px solid #1a1a1a;
   }
   .wn-sol {
+    display: inline-flex; align-items: center; gap: 5px;
     font-size: 12px; color: #e8e8e8; letter-spacing: 0.5px;
     padding-right: 10px; border-right: 1px solid #1a1a1a; margin-right: 10px;
   }
-  .wn-sol-sym { color: #9945FF; margin-right: 2px; }
-  .wn-usdc { font-size: 12px; color: #14F195; letter-spacing: 0.5px; }
-  .wn-usdc-sym { color: #14F195; opacity: 0.6; margin-right: 2px; font-size: 10px; }
+  .wn-sol-sym { display: inline-flex; align-items: center; }
+  .wn-usdc { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #14F195; letter-spacing: 0.5px; }
+  .wn-usdc-sym { display: inline-flex; align-items: center; opacity: 0.85; }
   .wn-loading { color: #333; }
 
   .wn-key-btn {
@@ -244,7 +247,7 @@ export default function WalletNav() {
               href={phantomBrowseUrl(here)}
               style={{ textDecoration: 'none' }}
             >
-              <span className="wn-connect-icon" />
+              <SolanaIcon size={12} />
               Open in Phantom
             </a>
             <a
@@ -273,7 +276,7 @@ export default function WalletNav() {
           disabled={connecting}
           style={{ opacity: connecting ? 0.6 : 1, cursor: connecting ? 'not-allowed' : 'pointer' }}
         >
-          <span className="wn-connect-icon" />
+          <SolanaIcon size={12} />
           {connecting ? 'Connecting…' : 'Connect Wallet'}
         </button>
       </>
@@ -298,11 +301,11 @@ export default function WalletNav() {
         {/* Balances */}
         <div className="wn-bals">
           <span className="wn-sol">
-            <span className="wn-sol-sym">◎</span>
+            <span className="wn-sol-sym"><SolanaIcon size={10} /></span>
             {solStr ?? <span className="wn-loading">…</span>}
           </span>
           <span className="wn-usdc">
-            <span className="wn-usdc-sym">$</span>
+            <span className="wn-usdc-sym"><UsdcIcon size={11} /></span>
             {usdcStr ?? <span className="wn-loading">…</span>}
             <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 3 }}>USDC</span>
           </span>
@@ -327,11 +330,15 @@ export default function WalletNav() {
             </div>
             <div className="wn-drop-row">
               <span className="wn-drop-row-label">SOL</span>
-              <span className="wn-drop-row-val">◎ {solStr ?? '…'}</span>
+              <span className="wn-drop-row-val" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <SolanaIcon size={10} /> {solStr ?? '…'}
+              </span>
             </div>
             <div className="wn-drop-row">
               <span className="wn-drop-row-label">USDC</span>
-              <span className="wn-drop-row-val" style={{ color: '#14F195' }}>${usdcStr ?? '…'}</span>
+              <span className="wn-drop-row-val" style={{ color: '#14F195', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <UsdcIcon size={11} mono="currentColor" /> {usdcStr ?? '…'}
+              </span>
             </div>
             <button className="wn-disconnect" onClick={handleDisconnect}>
               ✕ Disconnect
