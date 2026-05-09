@@ -42,7 +42,7 @@ type LoadState =
   | { kind: 'missing-profile' }
   | { kind: 'ready'; profile: ProfileRow };
 
-const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color';
+const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color, ink_color, paper_color';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -169,7 +169,8 @@ export default function SettingsPage() {
           profileId={state.profile.id}
           username={state.profile.username ?? null}
           initialSkinId={state.profile.skin}
-          initialThemeColor={state.profile.theme_color ?? null}
+          initialInkColor={state.profile.ink_color ?? state.profile.theme_color ?? null}
+          initialPaperColor={state.profile.paper_color ?? null}
         />
         <SessionKeySection
           supabase={supabase}

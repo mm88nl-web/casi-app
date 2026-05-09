@@ -3,99 +3,130 @@
 import { SKINS } from '@/lib/skins';
 import { useUserSkin } from '@/components/UserSkinProvider';
 
+// Pre-grouped so the picker can render section headers without re-walking
+// the array on every render. Order here drives display order.
+const GROUPS: { id: string; label: string }[] = [
+  { id: 'casi',     label: 'Casi' },
+  { id: 'fresh',    label: 'New' },
+  { id: 'platform', label: 'Platforms' },
+  { id: 'custom',   label: 'Yours' },
+];
+
 export default function SkinPicker() {
   const { skinId, setSkinId } = useUserSkin();
 
   return (
-    <div
-      className="grid gap-2.5"
-      style={{
-        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-      }}
-    >
-      {SKINS.map((skin) => {
-        const active = skin.id === skinId;
+    <div className="flex flex-col gap-4">
+      {GROUPS.map((group) => {
+        const items = SKINS.filter((s) => (s.category ?? 'casi') === group.id);
+        if (items.length === 0) return null;
         return (
-          <button
-            key={skin.id}
-            type="button"
-            onClick={() => setSkinId(skin.id)}
-            className="flex items-center gap-3 transition-colors"
-            style={{
-              padding: '12px 14px',
-              background: active
-                ? 'rgba(var(--casi-accent-rgb), 0.06)'
-                : 'var(--casi-bg)',
-              border: `1px solid ${active ? 'var(--casi-accent)' : 'var(--casi-border-2)'}`,
-              borderRadius: '10px',
-              cursor: 'pointer',
-              textAlign: 'left',
-            }}
-            aria-pressed={active}
-          >
-            {/* Swatch: a two-colour preview of the skin's palette */}
-            <span
-              aria-hidden
-              className="relative flex shrink-0 overflow-hidden"
+          <div key={group.id} className="flex flex-col gap-2">
+            <div
+              className="font-mono uppercase"
               style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                background: skin.bg,
-                border: `1px solid ${skin.border}`,
+                fontSize: 9,
+                letterSpacing: '0.18em',
+                color: 'var(--casi-text-faint)',
+                marginLeft: 2,
               }}
             >
-              <span
-                style={{
-                  flex: 1,
-                  background: skin.accent,
-                }}
-              />
-              <span
-                style={{
-                  flex: 1,
-                  background: skin.accent2,
-                }}
-              />
-              {active ? (
-                <span
-                  className="absolute inset-0 flex items-center justify-center font-bold"
-                  style={{
-                    background: 'rgba(0, 0, 0, 0.55)',
-                    color: '#fff',
-                    fontSize: '14px',
-                  }}
-                >
-                  ✓
-                </span>
-              ) : null}
-            </span>
-
-            <div className="flex flex-col min-w-0">
-              <span
-                className="font-bold truncate"
-                style={{
-                  fontFamily: 'var(--font-casi-sans)',
-                  fontSize: '13px',
-                  color: active ? 'var(--casi-accent)' : 'var(--casi-text)',
-                  letterSpacing: '-0.2px',
-                }}
-              >
-                {skin.name}
-              </span>
-              <span
-                className="font-mono uppercase truncate"
-                style={{
-                  fontSize: '9px',
-                  letterSpacing: '0.15em',
-                  color: 'var(--casi-text-faint)',
-                  marginTop: '2px',
-                }}
-              >
-                {skin.accent} · {skin.accent2}
-              </span>
+              {group.label}
             </div>
-          </button>
+            <div
+              className="grid gap-2"
+              style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}
+            >
+              {items.map((skin) => {
+                const active = skin.id === skinId;
+                const isCustom = skin.id === 'custom';
+                return (
+                  <button
+                    key={skin.id}
+                    type="button"
+                    onClick={() => setSkinId(skin.id)}
+                    className="flex items-center gap-3 transition-colors"
+                    style={{
+                      padding: '10px 12px',
+                      background: active
+                        ? 'rgba(var(--casi-accent-rgb), 0.06)'
+                        : 'var(--casi-bg)',
+                      border: `1px solid ${active ? 'var(--casi-accent)' : 'var(--casi-border-2)'}`,
+                      borderRadius: 0,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                    aria-pressed={active}
+                  >
+                    {/* Two-tone swatch — ink on the left, paper on the right.
+                        For Custom we show a little dotted box because the
+                        actual colours come from the streamer's overrides. */}
+                    <span
+                      aria-hidden
+                      className="relative flex shrink-0 overflow-hidden"
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 0,
+                        background: skin.paper,
+                        border: `1px solid ${skin.border}`,
+                        outline: isCustom ? '1px dashed var(--casi-text-faint)' : 'none',
+                        outlineOffset: -3,
+                      }}
+                    >
+                      {!isCustom && (
+                        <>
+                          <span style={{ flex: 1, background: skin.ink }} />
+                          <span style={{ flex: 1, background: skin.paper }} />
+                        </>
+                      )}
+                      {isCustom && (
+                        <span
+                          className="flex items-center justify-center w-full"
+                          style={{ color: 'var(--casi-text-muted)', fontSize: 14 }}
+                        >
+                          ＋
+                        </span>
+                      )}
+                      {active && !isCustom && (
+                        <span
+                          className="absolute inset-0 flex items-center justify-center font-bold"
+                          style={{ background: 'rgba(0, 0, 0, 0.55)', color: '#fff', fontSize: 14 }}
+                        >
+                          ✓
+                        </span>
+                      )}
+                    </span>
+
+                    <div className="flex flex-col min-w-0">
+                      <span
+                        className="font-bold truncate"
+                        style={{
+                          fontFamily: 'var(--font-casi-sans)',
+                          fontSize: 13,
+                          color: active ? 'var(--casi-accent)' : 'var(--casi-text)',
+                          letterSpacing: '-0.2px',
+                        }}
+                      >
+                        {skin.name}
+                      </span>
+                      <span
+                        className="font-mono uppercase truncate"
+                        style={{
+                          fontSize: 9,
+                          letterSpacing: '0.15em',
+                          color: 'var(--casi-text-faint)',
+                          marginTop: 2,
+                        }}
+                      >
+                        {isCustom ? 'pick your own' : skin.isLight ? 'light' : skin.ink}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         );
       })}
     </div>

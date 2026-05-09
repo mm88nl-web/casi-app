@@ -24,6 +24,11 @@ export type Skin = {
   ink: string;
   /** v9 root: page background. Equal to `bg` — wired into `--paper`. */
   paper: string;
+  /** Light-mode paper. The provider toggles [data-paper="light"] on the wrapper
+   *  for these so derived tokens swap to the bright variant. */
+  isLight?: boolean;
+  /** Tags shown on the picker tile — purely cosmetic. */
+  category?: 'platform' | 'casi' | 'fresh' | 'custom';
 };
 
 export const SKINS: Skin[] = [
@@ -41,6 +46,7 @@ export const SKINS: Skin[] = [
     textMuted:  '#5E6278',
     ink:        '#0DCFB0',
     paper:      '#0C0D11',
+    category:   'casi',
   },
   {
     id: 'twitch',
@@ -56,6 +62,7 @@ export const SKINS: Skin[] = [
     textMuted:  '#adadb8',
     ink:        '#9146FF',
     paper:      '#0e0e1a',
+    category:   'platform',
   },
   {
     id: 'kick',
@@ -71,6 +78,7 @@ export const SKINS: Skin[] = [
     textMuted:  '#5a705a',
     ink:        '#53FC18',
     paper:      '#0a1a0a',
+    category:   'platform',
   },
   {
     id: 'youtube',
@@ -86,6 +94,7 @@ export const SKINS: Skin[] = [
     textMuted:  '#806060',
     ink:        '#FF0000',
     paper:      '#0d0606',
+    category:   'platform',
   },
   {
     id: 'cyber',
@@ -101,6 +110,7 @@ export const SKINS: Skin[] = [
     textMuted:  '#506075',
     ink:        '#06B6D4',
     paper:      '#050a12',
+    category:   'casi',
   },
   {
     id: 'mono',
@@ -116,6 +126,7 @@ export const SKINS: Skin[] = [
     textMuted:  '#888888',
     ink:        '#E8E8E8',
     paper:      '#0a0a0a',
+    category:   'casi',
   },
   {
     id: 'rose',
@@ -131,6 +142,83 @@ export const SKINS: Skin[] = [
     textMuted:  '#7a5a70',
     ink:        '#F472B6',
     paper:      '#0a0515',
+    category:   'casi',
+  },
+  // ── New (May 2026) ────────────────────────────────────────────────────
+  // Three additions that fill gaps in the old grid — Sunset gives streamers
+  // a warm option, Aurora gives a high-saturation gradient feel, Paper is
+  // the only light-mode preset (flips data-paper="light" on the wrapper).
+  {
+    id: 'sunset',
+    name: 'Sunset',
+    accent:     '#FF6B35',
+    accentRgb:  '255, 107, 53',
+    accent2:    '#FFA94D',
+    accent2Rgb: '255, 169, 77',
+    bg:         '#140906',
+    surface:    '#1f120c',
+    border:     '#3a1f15',
+    text:       '#fff0e6',
+    textMuted:  '#a87a65',
+    ink:        '#FF6B35',
+    paper:      '#140906',
+    category:   'fresh',
+  },
+  {
+    id: 'aurora',
+    name: 'Aurora',
+    accent:     '#7C3AED',
+    accentRgb:  '124, 58, 237',
+    accent2:    '#06B6D4',
+    accent2Rgb: '6, 182, 212',
+    bg:         '#070414',
+    surface:    '#100a25',
+    border:     '#251940',
+    text:       '#ece4ff',
+    textMuted:  '#8278a0',
+    ink:        '#7C3AED',
+    paper:      '#070414',
+    category:   'fresh',
+  },
+  {
+    id: 'paper',
+    name: 'Paper (Light)',
+    accent:     '#0F766E',
+    accentRgb:  '15, 118, 110',
+    accent2:    '#9333EA',
+    accent2Rgb: '147, 51, 234',
+    bg:         '#F5F1E8',
+    surface:    '#EAE3D2',
+    border:     '#D6CCB4',
+    text:       '#1A1A1A',
+    textMuted:  '#5A5648',
+    ink:        '#0F766E',
+    paper:      '#F5F1E8',
+    isLight:    true,
+    category:   'fresh',
+  },
+  // ── Custom ────────────────────────────────────────────────────────────
+  // Sentinel skin: ink/paper here are seed defaults the picker uses on
+  // first selection. The actual visible ink/paper come from
+  // profiles.ink_color + profiles.paper_color overrides, which the
+  // Appearance section lets the streamer dial in freely. Selecting any
+  // other skin clears the implicit "this is custom" state — overrides can
+  // still be set on top of any preset.
+  {
+    id: 'custom',
+    name: 'Custom',
+    accent:     '#FFFFFF',
+    accentRgb:  '255, 255, 255',
+    accent2:    '#888888',
+    accent2Rgb: '136, 136, 136',
+    bg:         '#0A0A0A',
+    surface:    '#141414',
+    border:     '#2A2A2A',
+    text:       '#F0F0F0',
+    textMuted:  '#888888',
+    ink:        '#FFFFFF',
+    paper:      '#0A0A0A',
+    category:   'custom',
   },
 ];
 

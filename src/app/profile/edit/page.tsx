@@ -110,7 +110,7 @@ export default function ProfileEditPage() {
         setBio(prof.bio || '');
         setAvatarUrl(prof.avatar_url || '');
         if (prof.avatar_url) setAvatarValid(true);
-        if (prof.theme_color) setThemeColor(prof.theme_color);
+        if (prof.ink_color || prof.theme_color) setThemeColor(prof.ink_color || prof.theme_color);
         if (prof?.stripe_account_id) setStripeConnected(true);
         if (prof?.solana_wallet) setSolanaWallet(prof.solana_wallet);
         setAllowFreeFlashes(!!prof.allow_free_flashes);
@@ -128,7 +128,7 @@ export default function ProfileEditPage() {
       display_name: displayName || profile.username,
       bio: bio || null,
       avatar_url: avatarValid ? avatarUrl : null,
-      theme_color: themeColor,
+      ink_color: themeColor,
       allow_free_flashes: allowFreeFlashes,
     }).eq('id', profile.id);
     setSaving(false);
