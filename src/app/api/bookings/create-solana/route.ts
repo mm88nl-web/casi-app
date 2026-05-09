@@ -70,7 +70,7 @@ async function claimSlot(streamerId: string, viewerKey: string): Promise<boolean
       { onConflict: 'streamer_id,viewer_key' },
     );
   if (error) {
-    logError('bookings/create-solana/rate-limit', error, { profile_id, viewerKey });
+    logError('bookings/create-solana/rate-limit', error, { streamerId, viewerKey });
     return false;
   }
   return true;
