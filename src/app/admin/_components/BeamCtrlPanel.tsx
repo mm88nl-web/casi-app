@@ -88,9 +88,9 @@ export default function BeamCtrlPanel({
   /** Stripe Connect's default currency for this streamer. Drives which
    *  Stripe row renders on the slot Pricing tab — the rate input is in
    *  whatever Stripe will actually charge in, eliminating the "rate in
-   *  EUR but PI in USD" mismatch the free-form display_currency picker
-   *  used to allow. null means Stripe isn't connected; the Stripe row
-   *  hides entirely and the streamer prices in USDC only. */
+   *  EUR but PI in USD" mismatch the prior free-form picker allowed.
+   *  null means Stripe isn't connected; the Stripe row hides entirely
+   *  and the streamer prices in USDC only. */
   stripeCurrency?: 'eur' | 'usd' | null;
 }) {
   const [tab, setTab] = useState<Tab>('properties');

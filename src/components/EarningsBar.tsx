@@ -3,15 +3,20 @@
 import { useEffect, useRef, useState } from 'react';
 import RailIcon from './icons/RailIcon';
 
+export type TodayLine = {
+  /** Drives the inline rail icon. */
+  rail: 'stripe' | 'usdc';
+  /** Pre-formatted amount, e.g. "€48.00" or "5 USDC". */
+  label: string;
+};
+
 type EarningsBarProps = {
   /** Public viewer-facing URL the streamer shares (e.g. casi.gg/overlay?s=foo). */
   viewerLink: string;
-  /** Today's earnings in the streamer's chosen display currency, pre-formatted
-   *  (e.g. "€48", "$12", "5 USDC", or "—" when zero). */
-  today: string;
-  /** Which rail the Today number represents — drives the inline rail icon
-   *  next to the value. Pass undefined when the value is empty/zero. */
-  todayRail?: 'usdc' | 'stripe' | null;
+  /** One line per rail that has non-zero earnings today. Empty array → tile
+   *  shows "—". Lines stack vertically inside the tile so a streamer who
+   *  took both card and USDC tips today sees both numbers, no picker. */
+  todayLines: TodayLine[];
   /** Pending count — bookings + flashes awaiting approval. */
   pending: number | string;
 };
@@ -22,7 +27,7 @@ type EarningsBarProps = {
  * eyebrow labels with letter-spacing, Bricolage 800 numerics, ink slab
  * Copy button. Matches v9's `.earn-line` lattice.
  */
-export default function EarningsBar({ viewerLink, today, todayRail, pending }: EarningsBarProps) {
+export default function EarningsBar({ viewerLink, todayLines, pending }: EarningsBarProps) {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -153,12 +158,30 @@ export default function EarningsBar({ viewerLink, today, todayRail, pending }: E
 
       <div className="earn-seg">
         <div className="earn-seg-lbl">Today</div>
-        <div className="earn-seg-val ink" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {todayRail && today !== '—' ? (
-            <RailIcon method={todayRail === 'stripe' ? 'stripe' : 'usdc'} size={22} />
-          ) : null}
-          <span>{today}</span>
-        </div>
+        {todayLines.length === 0 ? (
+          <div className="earn-seg-val ink"><span>—</span></div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {todayLines.map((line) => (
+              <div
+                key={line.rail}
+                className="earn-seg-val ink"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  // Slightly smaller when stacking two rails so both fit
+                  // without resizing the tile vertically. Single-line keeps
+                  // the original 32px display feel.
+                  fontSize: todayLines.length > 1 ? 24 : 32,
+                }}
+              >
+                <RailIcon method={line.rail} size={todayLines.length > 1 ? 18 : 22} />
+                <span>{line.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div className="earn-seg">
         <div className="earn-seg-lbl">Pending</div>

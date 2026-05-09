@@ -23,22 +23,16 @@ const BOOKING_COLS =
   'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, payment_intent_id, tx_signature, started_at, escrow_pda, viewer_wallet, is_queued';
 const FLASH_COLS =
   'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, escrow_pda, viewer_wallet';
-const PROFILE_COLS = 'id, username, solana_wallet, is_live, display_currency';
+const PROFILE_COLS = 'id, username, solana_wallet, is_live';
 
-type DisplayCurrency = 'eur' | 'usd' | 'usdc';
+const FIAT_SYMBOL: Record<'eur' | 'usd', string> = { eur: '€', usd: '$' };
 
-const CURRENCY_SYMBOL: Record<DisplayCurrency, string> = {
-  eur: '€',
-  usd: '$',
-  usdc: '',
-};
+function formatFiat(currency: 'eur' | 'usd', amount: number): string {
+  return `${FIAT_SYMBOL[currency]}${amount.toFixed(2)}`;
+}
 
-function formatTotal(currency: DisplayCurrency, amount: number): string {
-  if (amount === 0) return '—';
-  if (currency === 'usdc') {
-    return `${amount.toFixed(amount % 1 === 0 ? 0 : 2)} USDC`;
-  }
-  return `${CURRENCY_SYMBOL[currency]}${amount.toFixed(0)}`;
+function formatUsdc(amount: number): string {
+  return `${amount.toFixed(amount % 1 === 0 ? 0 : 2)} USDC`;
 }
 
 const LOG_LIMIT = 50;
@@ -292,7 +286,6 @@ type Profile = {
   username: string | null;
   solana_wallet: string | null;
   is_live: boolean | null;
-  display_currency: DisplayCurrency | null;
 };
 
 type LoadState =
@@ -334,6 +327,10 @@ function StudioPageInner() {
   const [playingNowId, setPlayingNowId] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [endStreamOpen, setEndStreamOpen] = useState(false);
+  // Stripe Connect default currency for this streamer's account. Drives the
+  // fiat label on the Today tile (€ vs $). null when Stripe isn't connected
+  // — the Today tile then only shows the USDC line if there were USDC tips.
+  const [stripeCurrency, setStripeCurrency] = useState<'usd' | 'eur' | null>(null);
   const [endStreamProgress, setEndStreamProgress] = useState<EndStreamProgress | null>(null);
   const [delegateHealth, setDelegateHealth] = useState<DelegateHealth>('unknown');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -423,6 +420,28 @@ function StudioPageInner() {
   const profileId = state.kind === 'ready' ? state.profile.id : null;
   const lastEventRef = useRef(Date.now());
 
+  // Pull Stripe Connect's default currency once the streamer is loaded.
+  // Used to format fiat amounts on the Today tile (€ vs $). Soft-fails to
+  // null on any error — the tile then just hides the fiat line, which is
+  // correct: a streamer who can't charge fiat shouldn't see a fiat total.
+  useEffect(() => {
+    if (!profileId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/stripe/connect/status', { cache: 'no-store' });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        const cur = (json?.defaultCurrency ?? null) as string | null;
+        setStripeCurrency(cur === 'eur' || cur === 'usd' ? cur : null);
+      } catch {
+        /* leave null */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [profileId]);
+
   useEffect(() => {
     if (!profileId) return;
     lastEventRef.current = Date.now();
@@ -444,9 +463,9 @@ function StudioPageInner() {
         () => { bump(); reload(profileId); })
       .subscribe();
 
-    // Profile changes (e.g. display_currency picked in /studio/settings) need
-    // to flow back into the dashboard or the Today tile keeps filtering on
-    // a stale currency until the page is hard-reloaded.
+    // Profile updates from /studio/settings (username, solana_wallet,
+    // is_live toggles, etc.) need to flow back into the dashboard so the
+    // tile/header values stay in sync without a hard reload.
     const profileChannel = supabase
       .channel(`studio_profile_${profileId}`)
       .on('postgres_changes',
@@ -814,29 +833,26 @@ function StudioPageInner() {
 
   const { profile } = state;
   const slug = profile.username ?? 'streamer';
-  const displayCurrency: DisplayCurrency = profile.display_currency ?? 'eur';
 
-  // Sum today's approved flashes + settled beams in the streamer's chosen
-  // currency only — ignore the other rail to keep the tile honest. Free
-  // flashes never count (no money moved). v1 is no FX: a streamer set to
-  // EUR who took a USDC tip sees their EUR total tick up by 0 and the
-  // USDC row in the log makes it obvious where it went. Beam totals use
-  // the booking's full price_value × duration; prorated kicks are not
-  // discounted yet (no settled_amount column on bookings).
+  // Sum today's approved flashes + settled beams per rail. Two independent
+  // totals (fiat / USDC) feed two separate lines on the Today tile, so a
+  // streamer who took €25 of card tips + 12 USDC sees both numbers, not
+  // one rail filtered. Free flashes never count (no money moved). Beam
+  // totals use price_value × duration; prorated kicks are not discounted
+  // yet (no settled_amount column on bookings).
   const isUsdcRow = (m: string | null) => m === 'usdc' || m === 'solana';
-  const matchesCurrency = (m: string | null) =>
-    displayCurrency === 'usdc' ? isUsdcRow(m) : !isUsdcRow(m);
-  let todayCents = 0;
+  let todayFiatCents = 0;
+  let todayUsdcCents = 0;
   for (const row of flashLogRaw) {
     if (row.status === 'denied' || row.payment_method === 'free') continue;
-    if (!matchesCurrency(row.payment_method)) continue;
-    todayCents += row.amount_cents ?? 0;
+    if (isUsdcRow(row.payment_method)) todayUsdcCents += row.amount_cents ?? 0;
+    else todayFiatCents += row.amount_cents ?? 0;
   }
   for (const row of todayBookings) {
     if (row.payment_method === 'free') continue;
-    if (!matchesCurrency(row.payment_method)) continue;
     const { total } = bookingTotal(row);
-    todayCents += Math.round(total * 100);
+    if (isUsdcRow(row.payment_method)) todayUsdcCents += Math.round(total * 100);
+    else todayFiatCents += Math.round(total * 100);
   }
   // Live-vested portion of any beam that's airing right now, scoped to
   // beams that started today so the tile doesn't double-count vesting
@@ -849,7 +865,6 @@ function StudioPageInner() {
   })();
   for (const row of activeBookings) {
     if (row.payment_method === 'free') continue;
-    if (!matchesCurrency(row.payment_method)) continue;
     const startMs = row.started_at ? new Date(row.started_at).getTime() : Date.now();
     if (startMs < startOfDayMs) continue;
     const durationSecs = (Number(row.duration_minutes) || 0) * 60;
@@ -858,9 +873,25 @@ function StudioPageInner() {
     if (total <= 0) continue;
     const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
     const vested = total * Math.min(elapsed, durationSecs) / durationSecs;
-    todayCents += Math.round(vested * 100);
+    if (isUsdcRow(row.payment_method)) todayUsdcCents += Math.round(vested * 100);
+    else todayFiatCents += Math.round(vested * 100);
   }
-  const todayTotal = formatTotal(displayCurrency, todayCents / 100);
+  // Build per-rail Today lines for EarningsBar. Skip rails with zero
+  // earnings — the tile auto-derives what to show. If both are zero the
+  // tile renders "—". Fiat line only appears when Stripe is connected
+  // (stripeCurrency non-null) AND there are fiat earnings.
+  const todayLines: Array<{ rail: 'stripe' | 'usdc'; label: string }> = [];
+  if (stripeCurrency && todayFiatCents > 0) {
+    todayLines.push({ rail: 'stripe', label: formatFiat(stripeCurrency, todayFiatCents / 100) });
+  }
+  if (todayUsdcCents > 0) {
+    todayLines.push({ rail: 'usdc', label: formatUsdc(todayUsdcCents / 100) });
+  }
+  // FlashesLog footer reads a single string. Use whichever rail had more
+  // earnings as its primary, or "—" if both zero.
+  const todayTotal = todayLines.length === 0
+    ? '—'
+    : todayLines[0].label;
 
   const queue: QueueItem[] = [
     ...pendingBookings.map((b) => ({
@@ -930,8 +961,7 @@ function StudioPageInner() {
     >
       <EarningsBar
         viewerLink={`casi.gg/overlay?s=${slug}`}
-        today={todayTotal}
-        todayRail={displayCurrency === 'usdc' ? 'usdc' : 'stripe'}
+        todayLines={todayLines}
         pending={queue.length}
       />
 
