@@ -34,6 +34,7 @@ import SolanaConfirmModal, { type TxStatus } from './_components/SolanaConfirmMo
 import FlashFeed from './_components/FlashFeed';
 import ViewerFlashesFeed from './_components/ViewerFlashesFeed';
 import MyBeamsSection from './_components/MyBeamsSection';
+import MyTransactionsSection, { type TxRow } from './_components/MyTransactionsSection';
 import SlotsList from './_components/SlotsList';
 import StuckFlashesPanel from './_components/StuckFlashesPanel';
 import BrandFooter from './_components/BrandFooter';
@@ -72,6 +73,10 @@ function OverlayContent() {
   // viewer-driven recovery card on the overlay so users aren't waiting
   // on the streamer to unstick something.
   const [myStuckFlashes, setMyStuckFlashes] = useState<any[]>([]);
+  // Historical activity for this viewer on this streamer — feeds the
+  // MyTransactionsSection panel under the composer. Populated by loadData
+  // alongside the active-row + stuck-flash queries.
+  const [myHistory, setMyHistory] = useState<TxRow[]>([]);
   const [reclaimingFlash, setReclaimingFlash] = useState<string | null>(null);
   const [expiringSoon, setExpiringSoon] = useState<Set<string>>(new Set());
   const [savedViewerName, setSavedViewerName] = useState<string|null>(null);
@@ -287,6 +292,95 @@ function OverlayContent() {
       for (const f of (nameFlashRes.data || [])) stuckById.set(f.id, f);
       for (const f of (walletFlashRes.data || [])) if (!stuckById.has(f.id)) stuckById.set(f.id, f);
       setMyStuckFlashes(Array.from(stuckById.values()));
+
+      // Historical activity — every beam + flash this viewer has sent to
+      // this streamer, dual-keyed (viewer_name OR viewer_wallet) the same
+      // way the active-row query is so a viewer who reconnects from a
+      // different browser still sees their full spend history. Capped at
+      // 50 rows per kind; sorted client-side after merge.
+      const HIST_BOOK_COLS = 'id, status, payment_method, price_value, price_unit, original_amount_cents, message, duration_minutes, tx_signature, created_at';
+      const HIST_FLASH_COLS = 'id, status, payment_method, amount_cents, message, tx_signature, created_at';
+      const [histBookName, histBookWallet, histFlashName, histFlashWallet] = await Promise.all([
+        name
+          ? supabase.from('bookings').select(HIST_BOOK_COLS)
+              .eq('profile_id', profId).eq('viewer_name', name)
+              .order('created_at', { ascending: false }).limit(50)
+          : Promise.resolve({ data: [] as any[] }),
+        wallet
+          ? supabase.from('bookings').select(HIST_BOOK_COLS)
+              .eq('profile_id', profId).eq('viewer_wallet', wallet)
+              .order('created_at', { ascending: false }).limit(50)
+          : Promise.resolve({ data: [] as any[] }),
+        name
+          ? supabase.from('flashes').select(HIST_FLASH_COLS)
+              .eq('profile_id', profId).eq('viewer_name', name)
+              .order('created_at', { ascending: false }).limit(50)
+          : Promise.resolve({ data: [] as any[] }),
+        wallet
+          ? supabase.from('flashes').select(HIST_FLASH_COLS)
+              .eq('profile_id', profId).eq('viewer_wallet', wallet)
+              .order('created_at', { ascending: false }).limit(50)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const histById = new Map<string, TxRow>();
+      for (const b of (histBookName.data || [])) {
+        histById.set(`beam-${b.id}`, {
+          kind: 'beam', id: String(b.id), status: b.status,
+          payment_method: b.payment_method,
+          // Stripe stores the EUR/USD amount on `original_amount_cents`,
+          // Solana stores USDC * 100 in `price_value`. Normalize to cents.
+          amount_cents: b.payment_method === 'stripe'
+            ? (b.original_amount_cents ?? Math.round(Number(b.price_value || 0) * 100))
+            : Math.round(Number(b.price_value || 0) * 100),
+          message: b.message,
+          duration_minutes: b.duration_minutes,
+          tx_signature: b.tx_signature,
+          created_at: b.created_at,
+        });
+      }
+      for (const b of (histBookWallet.data || [])) {
+        const k = `beam-${b.id}`;
+        if (histById.has(k)) continue;
+        histById.set(k, {
+          kind: 'beam', id: String(b.id), status: b.status,
+          payment_method: b.payment_method,
+          amount_cents: b.payment_method === 'stripe'
+            ? (b.original_amount_cents ?? Math.round(Number(b.price_value || 0) * 100))
+            : Math.round(Number(b.price_value || 0) * 100),
+          message: b.message,
+          duration_minutes: b.duration_minutes,
+          tx_signature: b.tx_signature,
+          created_at: b.created_at,
+        });
+      }
+      for (const f of (histFlashName.data || [])) {
+        histById.set(`flash-${f.id}`, {
+          kind: 'flash', id: f.id, status: f.status,
+          payment_method: f.payment_method,
+          amount_cents: f.amount_cents,
+          message: f.message,
+          duration_minutes: null,
+          tx_signature: f.tx_signature,
+          created_at: f.created_at,
+        });
+      }
+      for (const f of (histFlashWallet.data || [])) {
+        const k = `flash-${f.id}`;
+        if (histById.has(k)) continue;
+        histById.set(k, {
+          kind: 'flash', id: f.id, status: f.status,
+          payment_method: f.payment_method,
+          amount_cents: f.amount_cents,
+          message: f.message,
+          duration_minutes: null,
+          tx_signature: f.tx_signature,
+          created_at: f.created_at,
+        });
+      }
+      const merged = Array.from(histById.values())
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .slice(0, 50);
+      setMyHistory(merged);
     }
   }, [supabase]);
 
@@ -2137,6 +2231,17 @@ function OverlayContent() {
                 reclaimingId={reclaimingFlash}
                 onReclaim={reclaimFlashEscrow}
               />
+            </div>
+          )}
+
+          {/* Viewer's full activity log on this streamer — beams + flashes
+              merged, persistent Solscan link per row, running spend total
+              at the bottom. Hidden on OBS browser-source mode (this is
+              viewer chrome, not stream content) and when no rows exist
+              (the component itself early-returns). */}
+          {!isOBS && !selectedSlot && username && (
+            <div className="ov-full-row" style={{ marginTop:24 }}>
+              <MyTransactionsSection rows={myHistory} username={username} />
             </div>
           )}
 
