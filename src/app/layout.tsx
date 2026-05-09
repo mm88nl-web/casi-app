@@ -43,6 +43,14 @@ const serif = Instrument_Serif({
 export const metadata: Metadata = {
   title: "casi",
   description: "Rent a slot on your favourite streamer's screen.",
+  // Explicit icon metadata so wallet popups (Phantom/Solflare/etc.) reliably
+  // pick up the filled-square brand mark instead of falling back to a default
+  // glyph when the auto-detected SVG renders thin against their dark theme.
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

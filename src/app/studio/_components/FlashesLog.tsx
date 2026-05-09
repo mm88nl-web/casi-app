@@ -9,7 +9,6 @@ export type FlashLogItem = {
   message: string;
   chip: { kind: 'free' | 'usdc' | 'eur'; label: string };
   pinned?: boolean;
-  refunded?: boolean;
 };
 
 type Props = {
@@ -34,9 +33,10 @@ const CHIP_CLASS: Record<FlashLogItem['chip']['kind'], string> = {
 
 /**
  * v7 .fl-r flat-row list. Time / who / message / amount-chip / Refund.
- * Refunded rows dim to .38 opacity and the message strikes through.
- * Footer tile shows today's totals. Filter tabs from v3 dropped — v7
- * has none, the log is short enough to scan.
+ * Only approved flashes appear — denied rows refund on-chain immediately
+ * so there's nothing useful to surface here. Footer tile shows today's
+ * totals. Filter tabs from v3 dropped — v7 has none, the log is short
+ * enough to scan.
  */
 export default function FlashesLog({ items, total, onRefund, refunding }: Props) {
   return (
@@ -50,7 +50,6 @@ export default function FlashesLog({ items, total, onRefund, refunding }: Props)
         }
         .casi-fl-r:last-child { border-bottom: none; }
         .casi-fl-r:hover { background: rgba(255,255,255,0.01); }
-        .casi-fl-r.ref { opacity: 0.38; }
         .casi-fl-amt.u { color: var(--casi-accent); background: rgba(var(--casi-accent-rgb), 0.07); }
         .casi-fl-amt.e { color: var(--casi-accent); background: rgba(var(--casi-accent-rgb), 0.07); }
         .casi-fl-amt.f { color: var(--casi-text-dim); background: var(--casi-surface-2); }
@@ -99,7 +98,7 @@ export default function FlashesLog({ items, total, onRefund, refunding }: Props)
             const isRefunding = refunding?.has(flash.id) ?? false;
             const chipClass = CHIP_CLASS[flash.chip.kind];
             return (
-              <div key={flash.id} className={`casi-fl-r${flash.refunded ? ' ref' : ''}`}>
+              <div key={flash.id} className="casi-fl-r">
                 <span
                   style={{
                     fontFamily: 'var(--font-casi-mono), monospace',
@@ -129,7 +128,6 @@ export default function FlashesLog({ items, total, onRefund, refunding }: Props)
                     color: 'var(--casi-text-mid)',
                     flex: 1,
                     minWidth: 0,
-                    textDecoration: flash.refunded ? 'line-through' : 'none',
                   }}
                 >
                   {flash.message}
@@ -147,15 +145,15 @@ export default function FlashesLog({ items, total, onRefund, refunding }: Props)
                     gap: 5,
                   }}
                 >
-                  {!flash.refunded && flash.chip.kind !== 'free' ? (
+                  {flash.chip.kind !== 'free' ? (
                     <RailIcon
                       method={flash.chip.kind === 'usdc' ? 'usdc' : 'stripe'}
                       size={11}
                     />
                   ) : null}
-                  {flash.refunded ? 'refunded' : flash.chip.label}
+                  {flash.chip.label}
                 </span>
-                {!flash.refunded && onRefund ? (
+                {onRefund ? (
                   <button
                     type="button"
                     onClick={() => onRefund(flash.id)}

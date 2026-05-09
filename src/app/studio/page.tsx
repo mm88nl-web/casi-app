@@ -284,7 +284,6 @@ function flashToLogItem(f: FlashRow): FlashLogItem {
     who: f.viewer_name || 'anon',
     message: f.message || '',
     chip: { kind: chipKind, label: chipLabel },
-    refunded: f.status === 'denied',
   };
 }
 
@@ -368,7 +367,7 @@ function StudioPageInner() {
           .eq('profile_id', profileId),
         supabase.from('flashes').select(FLASH_COLS)
           .eq('profile_id', profileId)
-          .in('status', ['approved', 'denied'])
+          .eq('status', 'approved')
           .gte('created_at', startOfDayIso.toISOString())
           .order('created_at', { ascending: false }).limit(LOG_LIMIT),
         // Settled beams that were on stream today — used for the Today tile.
@@ -462,18 +461,58 @@ function StudioPageInner() {
         })
       .subscribe();
 
-    const watchdog = setInterval(() => {
-      if (Date.now() - lastEventRef.current > 30_000) {
+    // Watchdog — catches missed realtime events. Two cadences:
+    //   - Foreground (tab visible): 5s. Realtime should fire instantly, so
+    //     this is a backstop for dropped websockets / silently failed
+    //     subscriptions. Cheap: hits the same indexed query that already
+    //     drives the page.
+    //   - Background (tab hidden): 30s. Browsers throttle JS in hidden
+    //     tabs anyway and we don't need fresh data on a tab the streamer
+    //     isn't looking at.
+    let watchdogMs = typeof document !== 'undefined' && document.visibilityState === 'hidden' ? 30_000 : 5_000;
+    let watchdog = setInterval(() => {
+      if (Date.now() - lastEventRef.current > watchdogMs) {
         bump();
         reload(profileId);
       }
-    }, 30_000);
+    }, watchdogMs);
+
+    // Tab refocus — force-reload on every visibility change to "visible".
+    // This is the real fix for "I sent a flash and the streamer's dashboard
+    // didn't update": the wallet popup tab steals focus, the streamer tab
+    // suspends its websocket, the realtime event lands in the void. On
+    // refocus we both bump the watchdog and flip its cadence back to 5s.
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        bump();
+        reload(profileId);
+        clearInterval(watchdog);
+        watchdogMs = 5_000;
+        watchdog = setInterval(() => {
+          if (Date.now() - lastEventRef.current > watchdogMs) {
+            bump();
+            reload(profileId);
+          }
+        }, watchdogMs);
+      } else {
+        clearInterval(watchdog);
+        watchdogMs = 30_000;
+        watchdog = setInterval(() => {
+          if (Date.now() - lastEventRef.current > watchdogMs) {
+            bump();
+            reload(profileId);
+          }
+        }, watchdogMs);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       supabase.removeChannel(bookingsChannel);
       supabase.removeChannel(flashesChannel);
       supabase.removeChannel(profileChannel);
       clearInterval(watchdog);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [profileId, supabase, reload]);
 

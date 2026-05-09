@@ -107,11 +107,29 @@ export default function SendFlashSection({
           setMyFlash(row);
           if (row.status === 'approved') showNotif('⚡ Your flash is live on stream!', 'success');
           if (row.status === 'denied')   showNotif('Flash was not approved — no charge.', 'denied');
+          // Once the streamer has acted, the "Locking…" / "Locked on-chain
+          // — awaiting approval" banners are stale. Clear them so the
+          // approved/denied banner is the single source of truth.
+          if (row.status === 'approved' || row.status === 'denied') {
+            setOnChainStatus(null);
+            setOnChainTx(null);
+          }
         }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [profileId, viewerName, supabase, showNotif]);
+
+  // Auto-dismiss the "live on stream" banner after a beat. The streamer's
+  // approval is a moment in time — leaving the green chip up forever clutters
+  // the composer next time the viewer wants to send something. The Solscan
+  // link lives permanently in MyFlashesHistory below, so dismissing here
+  // doesn't lose the audit trail.
+  useEffect(() => {
+    if (myFlash?.status !== 'approved') return;
+    const t = setTimeout(() => setMyFlash(null), 10_000);
+    return () => clearTimeout(t);
+  }, [myFlash?.status, myFlash?.id]);
 
   const amountCents = Math.round(parseFloat(amount || '0') * 100);
   const amountUsdc  = Math.round(parseFloat(amount || '0') * 1_000_000);
