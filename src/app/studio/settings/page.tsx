@@ -91,7 +91,7 @@ export default function StudioSettingsPage() {
   }
 
   return (
-    <main className="min-h-screen" style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}>
+    <main className="min-h-screen" style={{ background: 'var(--paper, var(--casi-bg))', color: 'var(--text, var(--casi-text))' }}>
       <Nav
         right={
           <>
@@ -135,9 +135,9 @@ function navChipStyle({ active = false }: { active?: boolean } = {}): React.CSSP
   return {
     fontSize: '11px',
     fontWeight: 500,
-    color: active ? 'var(--casi-accent)' : 'var(--casi-text-dim)',
-    background: active ? 'rgba(var(--casi-accent-rgb), 0.06)' : 'transparent',
-    border: `1px solid ${active ? 'rgba(var(--casi-accent-rgb), 0.2)' : 'var(--casi-border)'}`,
+    color: active ? 'var(--ink, var(--casi-accent))' : 'var(--text-3, var(--casi-text-dim))',
+    background: active ? 'var(--ink-08)' : 'transparent',
+    border: `1px solid ${active ? 'var(--ink-22)' : 'var(--line, var(--casi-border))'}`,
     padding: '5px 11px',
     borderRadius: '6px',
     textDecoration: 'none',
@@ -150,7 +150,7 @@ function StatusScreen({ children }: { children: React.ReactNode }) {
   return (
     <main
       className="min-h-screen flex items-center justify-center"
-      style={{ background: 'var(--casi-bg)', color: 'var(--casi-text-dim)' }}
+      style={{ background: 'var(--paper, var(--casi-bg))', color: 'var(--text-3, var(--casi-text-dim))' }}
     >
       <div className="font-mono uppercase" style={{ fontSize: '11px', letterSpacing: '0.2em' }}>
         {children}

@@ -7,6 +7,8 @@ import { PublicKey } from '@solana/web3.js';
 import { NETWORK_LABEL } from '@/lib/solana-network';
 import { useWalletBalances } from '@/lib/wallet-balances';
 import { needsMobileHandoff, phantomBrowseUrl, solflareBrowseUrl } from '@/lib/mobile-wallet';
+import UsdcIcon from './icons/UsdcIcon';
+import SolanaIcon from './icons/SolanaIcon';
 
 /**
  * Official Solana mark — three diagonal parallel bars with the brand
@@ -108,12 +110,12 @@ const CSS = `
     padding: 0 13px; height: 38px;
     border-right: 1px solid var(--line);
   }
-  .wp-usdc { font-size: 11px; color: var(--text); font-weight: 500; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
-  .wp-usdc-sym { color: var(--ink); margin-right: 2px; font-weight: 700; }
+  .wp-usdc { font-size: 11px; color: var(--text); font-weight: 500; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 4px; }
+  .wp-usdc-sym { flex-shrink: 0; }
   .wp-usdc-unit { font-size: 9px; color: var(--text-4); letter-spacing: 0.12em; text-transform: uppercase; margin-left: 4px; }
   .wp-bal-sep { width: 1px; height: 14px; background: var(--line); align-self: center; flex-shrink: 0; }
-  .wp-sol { font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
-  .wp-sol-sym { color: #9945FF; margin-right: 2px; font-weight: 700; }
+  .wp-sol { font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 4px; }
+  .wp-sol-sym { flex-shrink: 0; }
   .wp-loading { color: var(--text-4); }
 
   .wp-identity {
@@ -340,13 +342,13 @@ export default function WalletPill() {
 
         <div className="wp-balance">
           <span className="wp-usdc">
-            <span className="wp-usdc-sym">$</span>
+            <UsdcIcon size={13} className="wp-usdc-sym" />
             {usdcStr ?? <span className="wp-loading">…</span>}
             <span className="wp-usdc-unit">USDC</span>
           </span>
           <span className="wp-bal-sep" />
           <span className="wp-sol">
-            <span className="wp-sol-sym">◎</span>
+            <SolanaIcon size={11} className="wp-sol-sym" />
             {solStr ?? <span className="wp-loading">…</span>}
           </span>
         </div>
@@ -385,13 +387,17 @@ export default function WalletPill() {
             </div>
             <div className="wp-drop-row">
               <span className="wp-drop-lbl">USDC</span>
-              <span className="wp-drop-val" style={{ color: 'var(--casi-accent)' }}>
-                ${usdcStr ?? '…'}
+              <span className="wp-drop-val" style={{ color: 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <UsdcIcon size={12} />
+                {usdcStr ?? '…'}
               </span>
             </div>
             <div className="wp-drop-row">
               <span className="wp-drop-lbl">SOL</span>
-              <span className="wp-drop-val">◎ {solStr ?? '…'}</span>
+              <span className="wp-drop-val" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <SolanaIcon size={10} />
+                {solStr ?? '…'}
+              </span>
             </div>
             <button className="wp-disconnect" onClick={handleDisconnect}>
               ✕ Disconnect

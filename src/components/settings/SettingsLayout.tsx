@@ -110,10 +110,11 @@ export default function SettingsLayout({ rail, children }: Props) {
             <div
               className="font-mono uppercase"
               style={{
+                fontFamily: 'var(--M), var(--font-casi-mono), monospace',
                 fontSize: '9.5px',
                 fontWeight: 600,
                 letterSpacing: '0.12em',
-                color: 'var(--casi-text-faint)',
+                color: 'var(--text-4, var(--casi-text-faint))',
                 padding: '0 8px 6px',
               }}
             >
@@ -135,7 +136,7 @@ export default function SettingsLayout({ rail, children }: Props) {
                     borderRadius: 0,
                     fontSize: '13px',
                     fontWeight: 500,
-                    color: isActive ? 'var(--casi-text)' : 'var(--casi-text-dim)',
+                    color: isActive ? 'var(--text, var(--casi-text))' : 'var(--text-3, var(--casi-text-dim))',
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
@@ -147,7 +148,7 @@ export default function SettingsLayout({ rail, children }: Props) {
                     <span
                       aria-hidden
                       style={{
-                        color: 'var(--casi-accent)',
+                        color: 'var(--ink, var(--casi-accent))',
                         fontSize: '18px',
                         marginRight: '4px',
                         lineHeight: 0,

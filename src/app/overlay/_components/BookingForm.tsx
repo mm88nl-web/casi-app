@@ -2,6 +2,7 @@
 
 import { BANNER_MAX_MESSAGE } from '@/lib/banner';
 import TurnstileWidget from '@/components/TurnstileWidget';
+import UsdcIcon from '@/components/icons/UsdcIcon';
 import CustomizePanel from './CustomizePanel';
 import { formatTime, getSecondsRemaining } from './time';
 
@@ -404,13 +405,18 @@ export default function BookingForm(props: Props) {
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #1c1c1c', paddingTop: 8, marginTop: 4, fontSize: 13, fontWeight: 700, color: '#9945FF' }}>
-            <span>Total</span><span>{estimatedCost} USDC</span>
+            <span>Total</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <UsdcIcon size={12} />
+              {estimatedCost} USDC
+            </span>
           </div>
           {walletConnected && usdcBalance !== null ? (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, color: '#555' }}>
                 <span>Your balance</span>
-                <span style={{ color: usdcBalance < parseFloat(estimatedCost) ? '#f87171' : '#6ee7b7' }}>
+                <span style={{ color: usdcBalance < parseFloat(estimatedCost) ? '#f87171' : '#6ee7b7', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <UsdcIcon size={10} />
                   {usdcBalance.toFixed(2)} USDC
                 </span>
               </div>

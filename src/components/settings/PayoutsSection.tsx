@@ -6,6 +6,8 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SettingsSection from './SettingsSection';
 import GhostButton from './GhostButton';
+import StripeIcon from '@/components/icons/StripeIcon';
+import SolanaIcon from '@/components/icons/SolanaIcon';
 
 type Props = {
   supabase: SupabaseClient;
@@ -40,8 +42,8 @@ function ConnectedCard({ logo, title, meta, action }: ConnectedCardProps) {
       className="flex items-center justify-between gap-4"
       style={{
         padding: '14px 16px',
-        background: 'var(--casi-bg)',
-        border: '1px solid var(--casi-border-2)',
+        background: 'var(--surf, var(--casi-bg))',
+        border: '1px solid var(--line-2, var(--casi-border-2))',
         borderRadius: 0,
       }}
     >
@@ -51,8 +53,9 @@ function ConnectedCard({ logo, title, meta, action }: ConnectedCardProps) {
           <div
             className="font-semibold"
             style={{
+              fontFamily: 'var(--B), var(--font-casi-sans), sans-serif',
               fontSize: '14px',
-              color: 'var(--casi-text)',
+              color: 'var(--text, var(--casi-text))',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -63,9 +66,10 @@ function ConnectedCard({ logo, title, meta, action }: ConnectedCardProps) {
           <div
             className="mt-0.5 font-mono uppercase"
             style={{
+              fontFamily: 'var(--M), var(--font-casi-mono), monospace',
               fontSize: '10px',
               letterSpacing: '0.1em',
-              color: 'var(--casi-text-dim)',
+              color: 'var(--text-3, var(--casi-text-dim))',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -82,9 +86,9 @@ function ConnectedCard({ logo, title, meta, action }: ConnectedCardProps) {
 
 function StatusDot({ kind }: { kind: 'ok' | 'warn' | 'off' }) {
   const colors: Record<typeof kind, string> = {
-    ok:   'var(--casi-accent2)',
+    ok:   'var(--ink, var(--casi-accent2))',
     warn: '#f59e0b',
-    off:  'rgba(255,255,255,0.18)',
+    off:  'var(--ink-22, rgba(255,255,255,0.18))',
   };
   return (
     <span
@@ -110,6 +114,10 @@ function shortAcct(id: string): string {
   return `acct_••••${id.slice(-4)}`;
 }
 
+// Tile-wrapped brand marks: 40×40 ink-tinted square holds the icon at a
+// readable size regardless of the surrounding palette. The light tint
+// (`var(--ink-04)`) avoids the icon clashing with `var(--paper)` on light
+// skins where a saturated brand color background would scream.
 const STRIPE_LOGO = (
   <div
     className="flex shrink-0 items-center justify-center"
@@ -117,31 +125,26 @@ const STRIPE_LOGO = (
       width: '40px',
       height: '40px',
       borderRadius: 0,
-      background: '#635BFF',
-      color: '#fff',
-      fontFamily: 'var(--font-casi-sans)',
-      fontWeight: 800,
-      fontSize: '10px',
-      letterSpacing: '-0.2px',
+      background: 'var(--surf-2, var(--ink-04))',
+      border: '1px solid var(--line)',
     }}
   >
-    stripe
+    <StripeIcon size={14} />
   </div>
 );
 
 const SOLANA_LOGO = (
   <div
-    className="flex shrink-0 items-center justify-center font-mono"
+    className="flex shrink-0 items-center justify-center"
     style={{
       width: '40px',
       height: '40px',
       borderRadius: 0,
-      background: 'linear-gradient(135deg, #9945FF, #14F195)',
-      color: '#0a0a0a',
-      fontSize: '18px',
+      background: 'var(--surf-2, var(--ink-04))',
+      border: '1px solid var(--line)',
     }}
   >
-    ◎
+    <SolanaIcon size={18} />
   </div>
 );
 
@@ -400,8 +403,8 @@ export default function PayoutsSection({
       <div
         className="mb-3.5 flex items-start gap-3"
         style={{
-          background: 'rgba(var(--casi-accent2-rgb), 0.04)',
-          border: '1px solid rgba(var(--casi-accent2-rgb), 0.2)',
+          background: 'var(--ink-04)',
+          border: '1px solid var(--ink-22)',
           borderRadius: 0,
           padding: '12px 14px',
         }}
@@ -412,16 +415,16 @@ export default function PayoutsSection({
             width: '22px',
             height: '22px',
             borderRadius: 0,
-            background: 'rgba(var(--casi-accent2-rgb), 0.15)',
-            color: 'var(--casi-accent2)',
+            background: 'var(--ink-14)',
+            color: 'var(--ink, var(--casi-accent2))',
             fontSize: '12px',
             marginTop: '1px',
           }}
         >
           ♦
         </div>
-        <div style={{ fontSize: '12.5px', lineHeight: 1.5, color: 'var(--casi-text-mid)' }}>
-          <strong style={{ color: 'var(--casi-text)', fontFamily: 'var(--font-casi-sans)' }}>
+        <div style={{ fontFamily: 'var(--B), var(--font-casi-sans), sans-serif', fontSize: '12.5px', lineHeight: 1.5, color: 'var(--text-3, var(--casi-text-mid))' }}>
+          <strong style={{ color: 'var(--text, var(--casi-text))' }}>
             Casi never holds your money.
           </strong>{' '}
           Card payments flow directly to your Stripe account. USDC sits in an on-chain escrow contract

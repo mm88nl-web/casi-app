@@ -1,6 +1,7 @@
 'use client';
 
 import { EXPLORER_CLUSTER_QUERY, IS_MAINNET } from '@/lib/solana-network';
+import UsdcIcon from '@/components/icons/UsdcIcon';
 import { formatTime } from './time';
 
 export type TxStatus = 'idle' | 'booking' | 'streaming' | 'waiting' | 'error';
@@ -55,17 +56,24 @@ export default function SolanaConfirmModal({
           <div style={{ borderTop:'1px solid #1c1c1c', margin:'10px 0' }} />
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#555', marginBottom:8 }}>
             <span>@{username} receives</span>
-            <span style={{ color:'#e8e8e8' }}>{parseFloat(estimatedCost).toFixed(2)} USDC <span style={{ color:'#6ee7b7' }}>(100%)</span></span>
+            <span style={{ color:'#e8e8e8', display:'inline-flex', alignItems:'center', gap:5 }}>
+              <UsdcIcon size={11} />
+              {parseFloat(estimatedCost).toFixed(2)} USDC <span style={{ color:'#6ee7b7' }}>(100%)</span>
+            </span>
           </div>
           <div style={{ borderTop:'1px solid #1a1a1a', margin:'6px 0 8px' }} />
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666' }}>
             <span>Total</span>
-            <span style={{ fontSize:18, fontWeight:800, color:'#9945FF' }}>{estimatedCost} USDC</span>
+            <span style={{ fontSize:18, fontWeight:800, color:'#9945FF', display:'inline-flex', alignItems:'center', gap:6 }}>
+              <UsdcIcon size={16} />
+              {estimatedCost} USDC
+            </span>
           </div>
           {usdcBalance !== null && (
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginTop:8 }}>
               <span style={{ color:'#555' }}>Your balance</span>
-              <span style={{ color: hasInsufficient ? '#f87171' : '#6ee7b7' }}>
+              <span style={{ color: hasInsufficient ? '#f87171' : '#6ee7b7', display:'inline-flex', alignItems:'center', gap:5 }}>
+                <UsdcIcon size={10} />
                 {usdcBalance.toFixed(2)} USDC{hasInsufficient ? ' — insufficient' : ''}
               </span>
             </div>
