@@ -596,13 +596,14 @@ function StudioPageInner() {
       });
       if (!res.ok) return 'unknown';
       const body = await res.json();
-      // /api/solana/delegates/status returns a state field per
-      // DelegateKeyCard's contract. Map to our local enum.
-      const s = String(body?.state ?? body?.status ?? '').toLowerCase();
-      if (s === 'installed' || s === 'healthy') return 'healthy';
-      if (s === 'expired') return 'expired';
-      if (s === 'revoked') return 'revoked';
-      return 'absent';
+      // /api/solana/delegates/status returns { installed: bool, expired:
+      // bool, revoked: bool, ... } — match DelegateKeyCard's parsing so
+      // the End Stream dialog doesn't falsely warn "session key not
+      // installed" when one is healthy.
+      if (!body?.installed) return 'absent';
+      if (body.revoked) return 'revoked';
+      if (body.expired) return 'expired';
+      return 'healthy';
     } catch {
       return 'unknown';
     }
@@ -845,7 +846,13 @@ function StudioPageInner() {
     return acc;
   }, {});
 
-  const flashLog: FlashLogItem[] = flashLogRaw.map(flashToLogItem);
+  // Belt-and-suspenders: the server query already filters on
+  // created_at >= local midnight, but if a stale row sneaks through
+  // (e.g. mid-deploy cache, realtime replay across midnight) re-filter
+  // on the client so the streamer never sees yesterday's flashes.
+  const flashLog: FlashLogItem[] = flashLogRaw
+    .filter((f) => new Date(f.created_at).getTime() >= startOfDayMs)
+    .map(flashToLogItem);
 
   const airing: AiringItem[] = activeBookings.map((b) => {
     const bookingId = String(b.id);

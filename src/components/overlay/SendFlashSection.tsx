@@ -18,6 +18,8 @@ import { createClient } from '@/utils/supabase/client';
 import { sendFlash, SOLANA_ENABLED, type PaymentMethod } from '@/lib/payment-manager';
 import { EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 import { TurnstileWidget } from '@/components/TurnstileWidget';
+import StripeIcon from '@/components/icons/StripeIcon';
+import UsdcIcon from '@/components/icons/UsdcIcon';
 
 // Minimal shape of the streamer profile we actually read.
 interface StreamerProfileLite {
@@ -310,16 +312,21 @@ export default function SendFlashSection({
               <div style={{ display: 'flex', gap: 6 }}>
                 {methods.map(pm => {
                   const active = paymentMethod === pm;
-                  const label = pm === 'stripe' ? '💳 Card' : pm === 'solana' ? '◎ Solana' : '★ Free';
+                  const labelText = pm === 'stripe' ? 'Card' : pm === 'solana' ? 'Solana' : 'Free';
+                  const icon =
+                    pm === 'stripe' ? <StripeIcon size={11} /> :
+                    pm === 'solana' ? <UsdcIcon size={12} /> :
+                    <span style={{ fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 12 }}>★</span>;
                   const activeStyle =
                     pm === 'solana' ? { background: 'rgba(153,69,255,0.12)', borderColor: 'rgba(153,69,255,0.45)', color: '#c4a0ff' } :
                     pm === 'free'   ? { background: 'rgba(74,222,128,0.12)',  borderColor: 'rgba(74,222,128,0.4)',  color: '#4ade80' } :
                                        { background: 'rgba(var(--casi-accent-rgb),0.12)', borderColor: 'rgba(var(--casi-accent-rgb),0.45)', color: 'var(--casi-accent)' };
                   return (
                     <button key={pm} type="button" onClick={() => setPaymentMethod(pm)}
-                      style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid', fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', cursor: 'pointer', transition: 'all .2s cubic-bezier(0.34,1.56,0.64,1)',
+                      style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid', fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', cursor: 'pointer', transition: 'all .2s cubic-bezier(0.34,1.56,0.64,1)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                         ...(active ? { ...activeStyle, transform: 'scale(1.02)' } : { background: 'none', borderColor: 'var(--casi-border)', color: 'var(--casi-text-muted)', transform: 'scale(1)' }) }}>
-                      {label}
+                      {icon}
+                      <span>{labelText}</span>
                     </button>
                   );
                 })}
@@ -365,12 +372,12 @@ export default function SendFlashSection({
                 ))}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '10px 14px' }}>
-                <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 13, color: 'var(--casi-text-muted)' }}>
-                  {paymentMethod === 'solana' ? '◎' : '$'}
+                <span style={{ display: 'inline-flex', alignItems: 'center', fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 13, color: 'var(--casi-text-muted)' }}>
+                  {paymentMethod === 'solana' ? <UsdcIcon size={14} /> : '$'}
                 </span>
                 <input type="number" value={amount} min="1" step="1" onChange={e => setAmount(e.target.value)}
-                  style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 17, fontWeight: 700, color: 'var(--casi-text)', fontFamily: "var(--font-casi-sans), sans-serif" }} />
-                <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#333', whiteSpace: 'nowrap' }}>
+                  style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 17, fontWeight: 700, color: 'var(--casi-text)', fontFamily: "var(--B), var(--font-casi-sans), sans-serif" }} />
+                <span style={{ fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 9, color: '#333', whiteSpace: 'nowrap' }}>
                   {paymentMethod === 'solana' ? 'min 1 USDC' : 'min $1'}
                 </span>
               </div>
