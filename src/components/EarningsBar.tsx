@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import RailIcon from './icons/RailIcon';
 
 type EarningsBarProps = {
   /** Public viewer-facing URL the streamer shares (e.g. casi.gg/overlay?s=foo). */
@@ -8,6 +9,9 @@ type EarningsBarProps = {
   /** Today's earnings in the streamer's chosen display currency, pre-formatted
    *  (e.g. "€48", "$12", "5 USDC", or "—" when zero). */
   today: string;
+  /** Which rail the Today number represents — drives the inline rail icon
+   *  next to the value. Pass undefined when the value is empty/zero. */
+  todayRail?: 'usdc' | 'stripe' | null;
   /** Pending count — bookings + flashes awaiting approval. */
   pending: number | string;
 };
@@ -18,7 +22,7 @@ type EarningsBarProps = {
  * eyebrow labels with letter-spacing, Bricolage 800 numerics, ink slab
  * Copy button. Matches v9's `.earn-line` lattice.
  */
-export default function EarningsBar({ viewerLink, today, pending }: EarningsBarProps) {
+export default function EarningsBar({ viewerLink, today, todayRail, pending }: EarningsBarProps) {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -149,7 +153,12 @@ export default function EarningsBar({ viewerLink, today, pending }: EarningsBarP
 
       <div className="earn-seg">
         <div className="earn-seg-lbl">Today</div>
-        <div className="earn-seg-val ink">{today}</div>
+        <div className="earn-seg-val ink" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {todayRail && today !== '—' ? (
+            <RailIcon method={todayRail === 'stripe' ? 'stripe' : 'usdc'} size={22} />
+          ) : null}
+          <span>{today}</span>
+        </div>
       </div>
       <div className="earn-seg">
         <div className="earn-seg-lbl">Pending</div>

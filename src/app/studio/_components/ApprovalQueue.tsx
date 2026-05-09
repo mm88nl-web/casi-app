@@ -2,12 +2,16 @@
 
 import Link from 'next/link';
 import SlotMedia from '@/components/SlotMedia';
+import RailIcon from '@/components/icons/RailIcon';
 
 export type QueueItem = {
   id: string;
   kind: 'beam' | 'flash';
   name: string;
   subtitle: string;
+  /** Which rail this row settles on — drives the inline rail icon next to
+   *  the price. 'usdc' covers both 'usdc' and 'solana' payment_methods. */
+  rail?: 'usdc' | 'stripe' | null;
   /** The final total paid — not the rate. For a 5m beam at 2 USDC/min this
    *  is "10 USDC", not "2 USDC". */
   priceLabel: string;
@@ -191,13 +195,17 @@ export default function ApprovalQueue({
                 </button>
                 <div
                   style={{
-                    fontFamily: 'var(--font-casi-mono), monospace',
+                    fontFamily: 'var(--M), var(--font-casi-mono), monospace',
                     fontSize: '14px',
-                    color: 'var(--casi-accent)',
+                    color: 'var(--ink)',
                     whiteSpace: 'nowrap',
                     marginRight: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
                   }}
                 >
+                  {item.rail ? <RailIcon method={item.rail} size={12} /> : null}
                   {item.priceLabel}
                 </div>
                 {ro ? (
