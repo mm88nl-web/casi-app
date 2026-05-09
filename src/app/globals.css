@@ -774,30 +774,6 @@
   border-radius: 50%;
   background: var(--ink);
 }
-.casi-v9-le-mode-tog {
-  display: inline-flex;
-  border: 1px solid var(--line-2);
-  background: var(--surf);
-  padding: 2px;
-}
-.casi-v9-le-mode-tog button {
-  padding: 6px 14px;
-  font-family: var(--M);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-3);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: all 0.13s;
-}
-.casi-v9-le-mode-tog button.casi-v9-on {
-  background: var(--ink);
-  color: var(--on-ink);
-  font-weight: 700;
-}
 .casi-v9-le-add {
   padding: 11px 20px;
   background: var(--ink);
@@ -966,14 +942,17 @@
   box-shadow: 0 0 8px var(--ink);
 }
 
-/* Canvas grid overlay (edit mode only) — 12-col vertical + 8-row horizontal lines */
+/* Canvas grid overlay — 12-col vertical + 8-row horizontal lines.
+   Lines use --line (the design system's neutral hairline) instead of
+   --ink-08, so a streamer changing their accent (theme_color / skin)
+   doesn't tint the editor grid. The grid is editor chrome, not brand. */
 .casi-v9-canvas-grid-overlay {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(to right, var(--ink-08) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--ink-08) 1px, transparent 1px);
+    linear-gradient(to right, var(--line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line) 1px, transparent 1px);
   background-size: calc(100% / 12) 100%, 100% calc(100% / 8);
 }
 
@@ -987,32 +966,6 @@
   padding-top: 14px;
   border-top: 1px solid var(--line);
 }
-.casi-v9-le-kbd-row {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  font-family: var(--M);
-  font-size: 10px;
-  color: var(--text-4);
-  letter-spacing: 0.04em;
-}
-.casi-v9-le-kbd-row span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.casi-v9-le-kbd-row kbd {
-  display: inline-block;
-  padding: 2px 6px;
-  background: var(--surf);
-  border: 1px solid var(--line);
-  font-family: var(--M);
-  font-size: 9.5px;
-  font-weight: 700;
-  color: var(--text-2);
-  letter-spacing: 0;
-}
-
 /* Properties panel chrome — wraps existing BeamCtrlPanel. The inner
    .beam-ctrl has its own v7 rounded-card chrome that we suppress here
    so cp-wrap is the only border / background. */

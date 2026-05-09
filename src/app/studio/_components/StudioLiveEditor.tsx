@@ -53,7 +53,6 @@ export default function StudioLiveEditor({ supabase, profileId, username, onAddH
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [saveStatus, setSaveStatus] = useState<'Ready' | 'Saving…' | 'Saved'>('Ready');
   const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
-  const [editorMode, setEditorMode] = useState<'edit' | 'preview'>('edit');
   const [obsUrlCopied, setObsUrlCopied] = useState(false);
 
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
@@ -338,31 +337,16 @@ export default function StudioLiveEditor({ supabase, profileId, username, onAddH
         </div>
       ) : null}
 
-      {/* v9 toolbar — status / Edit-Preview / +Beam */}
+      {/* v9 toolbar — status / +Beam. Edit/Preview toggle was removed —
+          the editor is always in edit mode (grid + dashed outlines + delete
+          handles). Streamers preview the live result via the OBS source URL
+          shown above, not via a fake in-app preview. */}
       {!onAddHandler ? (
         <div className="casi-v9-le-toolbar">
           <span className="casi-v9-le-save">{saveStatus} · auto-saved</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div className="casi-v9-le-mode-tog">
-              <button
-                type="button"
-                className={editorMode === 'edit' ? 'casi-v9-on' : ''}
-                onClick={() => setEditorMode('edit')}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                className={editorMode === 'preview' ? 'casi-v9-on' : ''}
-                onClick={() => setEditorMode('preview')}
-              >
-                Preview
-              </button>
-            </div>
-            <button type="button" className="casi-v9-le-add" onClick={addBeam}>
-              + Beam
-            </button>
-          </div>
+          <button type="button" className="casi-v9-le-add" onClick={addBeam}>
+            + Beam
+          </button>
         </div>
       ) : null}
 
@@ -387,9 +371,7 @@ export default function StudioLiveEditor({ supabase, profileId, username, onAddH
           }
         }}
       >
-        {editorMode === 'edit' ? (
-          <div className="casi-v9-canvas-grid-overlay" aria-hidden />
-        ) : null}
+        <div className="casi-v9-canvas-grid-overlay" aria-hidden />
         {dimensions.width > 0 && elements.map((el) => {
           const isSelected = selectedSlotId === el.id;
           const state = slotState[el.id]; // 'active' | 'queued' | undefined
@@ -626,15 +608,10 @@ export default function StudioLiveEditor({ supabase, profileId, username, onAddH
         })}
       </div>
 
-      {/* v9 editor footer — keyboard hints + helper text */}
+      {/* v9 editor footer — helper text only. Keyboard shortcut row was
+          removed; streamers use the +Beam button, drag, and the click-X
+          delete affordance, not keyboard chords. */}
       <div className="casi-v9-le-foot">
-        <div className="casi-v9-le-kbd-row">
-          <span><kbd>V</kbd>Select</span>
-          <span><kbd>R</kbd>Rect</span>
-          <span><kbd>C</kbd>Circle</span>
-          <span><kbd>⌘D</kbd>Duplicate</span>
-          <span><kbd>Del</kbd>Remove</span>
-        </div>
         <span className="casi-v9-le-save" style={{ textTransform: 'none', letterSpacing: '0.04em' }}>
           {elements.length === 0
             ? 'No slots yet — hit + Beam above to let viewers tip for a slot'
