@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import SlotMedia from '@/components/SlotMedia';
 import UsdcIcon from '@/components/icons/UsdcIcon';
-import SolanaIcon from '@/components/icons/SolanaIcon';
 import { SHAPE_OPTIONS } from '@/lib/banner';
 import { formatTime, getSecondsRemaining } from './time';
 
@@ -34,7 +33,7 @@ function RailRow({
       <input
         type="number"
         min={0}
-        step={0.001}
+        step={0.01}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
@@ -68,6 +67,7 @@ export default function BeamCtrlPanel({
   onDone,
   onUpdateShape,
   onUpdateGlow,
+  displayCurrency = 'usd',
 }: {
   el: any;
   activeBooking: any | null;
@@ -79,6 +79,11 @@ export default function BeamCtrlPanel({
   onDone: () => void;
   onUpdateShape?: (id: string, shape: string) => void;
   onUpdateGlow?: (id: string, glow: boolean) => void;
+  /** Streamer's chosen display currency. Picks which Stripe rate row
+   *  renders (USD or EUR) so we don't show all four currencies at once.
+   *  USDC is always shown since it's the on-chain rail. SOL is never
+   *  shown — CASI prices in USDC, SOL is fee-only. */
+  displayCurrency?: 'eur' | 'usd' | 'usdc';
 }) {
   const [tab, setTab] = useState<Tab>('properties');
   // Per-rail rates — fall back to price_value when a rail isn't set on the row.
@@ -89,7 +94,6 @@ export default function BeamCtrlPanel({
   const [rateUsd, setRateUsd] = useState<string>(String(el.prices?.usd ?? fallbackUsd));
   const [rateEur, setRateEur] = useState<string>(String(el.prices?.eur ?? fallbackUsd));
   const [rateUsdc, setRateUsdc] = useState<string>(String(el.prices?.usdc ?? fallbackUsd));
-  const [rateSol, setRateSol] = useState<string>(String(el.prices?.sol ?? ''));
   const [editUnit, setEditUnit] = useState(el.price_unit || 'min');
   const [minMin, setMinMin] = useState<string>(
     String(el.prices?.min_min ?? el.min_duration_minutes ?? ''),
@@ -110,7 +114,6 @@ export default function BeamCtrlPanel({
     setRateUsd(String(el.prices?.usd ?? fb));
     setRateEur(String(el.prices?.eur ?? fb));
     setRateUsdc(String(el.prices?.usdc ?? fb));
-    setRateSol(String(el.prices?.sol ?? ''));
     setEditUnit(el.price_unit || 'min');
     setMinMin(String(el.prices?.min_min ?? el.min_duration_minutes ?? ''));
     setMaxMin(String(el.prices?.max_min ?? el.max_duration_minutes ?? ''));
@@ -152,7 +155,6 @@ export default function BeamCtrlPanel({
       usd: num(rateUsd),
       eur: num(rateEur),
       usdc: num(rateUsdc),
-      sol: num(rateSol),
       min_min: minN,
       max_min: maxN,
       cooldown_secs: Number.isFinite(cdN) ? cdN : 0,
@@ -227,22 +229,29 @@ export default function BeamCtrlPanel({
         <div className="casi-v9-cp-pane">
           <div className="casi-v9-cp-lbl">Per-rail rates</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <RailRow
-              glyph={<span style={{ color: 'var(--ink)' }}>$</span>}
-              name="USD"
-              sub="via Stripe"
-              value={rateUsd}
-              onChange={setRateUsd}
-              unit={editUnit}
-            />
-            <RailRow
-              glyph={<span style={{ color: 'var(--ink)' }}>€</span>}
-              name="EUR"
-              sub="via Stripe"
-              value={rateEur}
-              onChange={setRateEur}
-              unit={editUnit}
-            />
+            {/* Stripe rail — single row in the streamer's chosen display
+                currency. EUR-based streamer gets one EUR row; everyone else
+                gets a USD row. (display_currency='usdc' falls back to USD
+                for fiat tipping; the on-chain rail below covers crypto.) */}
+            {displayCurrency === 'eur' ? (
+              <RailRow
+                glyph={<span style={{ color: 'var(--ink)' }}>€</span>}
+                name="EUR"
+                sub="via Stripe"
+                value={rateEur}
+                onChange={setRateEur}
+                unit={editUnit}
+              />
+            ) : (
+              <RailRow
+                glyph={<span style={{ color: 'var(--ink)' }}>$</span>}
+                name="USD"
+                sub="via Stripe"
+                value={rateUsd}
+                onChange={setRateUsd}
+                unit={editUnit}
+              />
+            )}
             <RailRow
               glyph={<UsdcIcon size={14} />}
               name="USDC"
@@ -250,15 +259,6 @@ export default function BeamCtrlPanel({
               value={rateUsdc}
               onChange={setRateUsdc}
               unit={editUnit}
-            />
-            <RailRow
-              glyph={<SolanaIcon size={14} />}
-              name="SOL"
-              sub="on-chain · Solana"
-              value={rateSol}
-              onChange={setRateSol}
-              unit={editUnit}
-              placeholder="—"
             />
           </div>
           <div className="casi-v9-cp-row">
@@ -324,7 +324,6 @@ export default function BeamCtrlPanel({
                   setRateUsd('0');
                   setRateEur('0');
                   setRateUsdc('0');
-                  setRateSol('0');
                 }
               }}
               className={`casi-v9-shape-b${beamFree ? ' casi-v9-on' : ''}`}
