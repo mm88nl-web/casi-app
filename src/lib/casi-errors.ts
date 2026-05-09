@@ -139,12 +139,30 @@ export function isAlreadyProcessed(err: unknown): boolean {
 }
 
 /**
+ * True if the wallet returned a transaction without the viewer's signature
+ * attached — the cluster rejects with "Signature verification failed" /
+ * "Missing signature for public key …". This happens with mobile deeplink
+ * wallets (Phantom Mobile via mobile Chrome/Brave) where the deeplink
+ * round-trip drops the partial signature on the way back. The wallet's
+ * own in-app browser doesn't have this issue.
+ */
+export function isWalletSignatureMissing(err: unknown): boolean {
+  const msg = errorMessage(err).toLowerCase();
+  return (
+    msg.includes('signature verification failed') ||
+    msg.includes('missing signature for public key') ||
+    msg.includes('missing signer')
+  );
+}
+
+/**
  * Produce a short toast-ready string for any error thrown during a CASI
  * escrow tx. Precedence:
  *   1. User rejected in wallet → "Transaction cancelled"
- *   2. Mapped CasiError        → friendly copy from FRIENDLY
- *   3. Transient RPC error     → "Network issue — please try again"
- *   4. Fallback                → trimmed err.message (max 140 chars)
+ *   2. Wallet signature missing (mobile deeplink) → mobile-aware copy
+ *   3. Mapped CasiError        → friendly copy from FRIENDLY
+ *   4. Transient RPC error     → "Network issue — please try again"
+ *   5. Fallback                → trimmed err.message (max 140 chars)
  *
  * Note: callers should check `isAlreadyProcessed(err)` BEFORE calling this —
  * that's a false alarm (the first submission landed), not a real error, so
@@ -152,6 +170,10 @@ export function isAlreadyProcessed(err: unknown): boolean {
  */
 export function formatEscrowError(err: unknown): string {
   if (isUserRejection(err)) return 'Transaction cancelled';
+
+  if (isWalletSignatureMissing(err)) {
+    return 'Wallet didn\'t return a signature. On mobile, open this page from your wallet\'s built-in browser (Phantom → Browser → paste casi.gg/...) and try again.';
+  }
 
   const code = parseCasiError(err);
   if (code) return FRIENDLY[code];
