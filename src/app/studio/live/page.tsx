@@ -7,12 +7,13 @@ import { createClient } from '@/utils/supabase/client';
 import StudioFrame from '../_components/StudioFrame';
 import StudioLiveEditor from '../_components/StudioLiveEditor';
 
-const PROFILE_COLS = 'id, username, is_live';
+const PROFILE_COLS = 'id, username, is_live, display_currency';
 
 type Profile = {
   id: string;
   username: string | null;
   is_live: boolean | null;
+  display_currency: 'eur' | 'usd' | 'usdc' | null;
 };
 
 type LoadState =
@@ -148,7 +149,7 @@ export default function StudioLivePage() {
       error={errorMsg}
       onDismissError={() => setErrorMsg(null)}
     >
-      <StudioLiveEditor supabase={supabase} profileId={profile.id} username={profile.username} />
+      <StudioLiveEditor supabase={supabase} profileId={profile.id} username={profile.username} displayCurrency={profile.display_currency ?? 'usd'} />
     </StudioFrame>
   );
 }
