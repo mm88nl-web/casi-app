@@ -30,7 +30,15 @@ export default function SolanaConfirmModal({
   slot, duration, estimatedCost, username, recipientWallet, usdcBalance,
   txStatus, txError, txId, submitting, onConfirm, onCancel,
 }: Props) {
-  const hasInsufficient = usdcBalance !== null && usdcBalance < parseFloat(estimatedCost);
+  // The insufficient flag is only meaningful when the user could still cancel
+  // and re-fund — i.e. before submission, or after an error. While the tx is
+  // in flight (`booking` / `streaming` / `waiting`) the live wallet balance
+  // is being drained by THIS booking, so re-reading it shows the leftover and
+  // (incorrectly) flips the row red right before the modal closes. Gate on
+  // tx state so mid-flow re-renders don't paint a phantom "insufficient".
+  const hasInsufficient = usdcBalance !== null
+    && usdcBalance < parseFloat(estimatedCost)
+    && (txStatus === 'idle' || txStatus === 'error');
   const inProgress = submitting && txStatus !== 'idle' && txStatus !== 'error';
   const stepIcon = (active: boolean, done: boolean) => (done ? '✓' : active ? '⟳' : '○');
   const shortWallet = recipientWallet

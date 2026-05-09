@@ -207,7 +207,7 @@ export default function AdminStudio() {
         setEditBio(prof.bio || '');
         setEditAvatar(prof.avatar_url || '');
         if (prof.avatar_url) setEditAvatarValid(true);
-        if (prof.theme_color) setEditThemeColor(prof.theme_color);
+        if (prof.ink_color || prof.theme_color) setEditThemeColor(prof.ink_color || prof.theme_color);
         setEditAllowFreeFlashes(!!prof.allow_free_flashes);
         if (prof.stripe_account_id) setStripeConnected(true);
         if (prof.solana_wallet) setSolanaWallet(prof.solana_wallet);
@@ -1274,7 +1274,11 @@ export default function AdminStudio() {
         }
       `}</style>
 
-      <SkinProvider skin={activeSkin} themeColor={editThemeColor || profile?.theme_color} />
+      <SkinProvider
+        skin={activeSkin}
+        inkColor={editThemeColor || profile?.ink_color || profile?.theme_color}
+        paperColor={profile?.paper_color}
+      />
       <div className="sw">
 
         {/* UTILITY BAR — wallet + save status, slim row above the main nav */}
@@ -1838,7 +1842,7 @@ export default function AdminStudio() {
                 setEditBio(profile.bio || '');
                 setEditAvatar(profile.avatar_url || '');
                 setEditAvatarValid(!!profile.avatar_url);
-                setEditThemeColor(profile.theme_color || '#F58220');
+                setEditThemeColor(profile.ink_color || profile.theme_color || '#F58220');
                 setEditCustomColor('');
                 setEditAllowFreeFlashes(!!profile.allow_free_flashes);
                 setEditOpen(false);
@@ -1850,14 +1854,14 @@ export default function AdminStudio() {
                   display_name: editName || profile.username,
                   bio: editBio || null,
                   avatar_url: editAvatarValid ? editAvatar : null,
-                  theme_color: editThemeColor,
+                  ink_color: editThemeColor,
                   allow_free_flashes: editAllowFreeFlashes,
                 }).eq('id', profile.id);
                 setProfile((p: any) => ({ ...p,
                   display_name: editName || profile.username,
                   bio: editBio || null,
                   avatar_url: editAvatarValid ? editAvatar : null,
-                  theme_color: editThemeColor,
+                  ink_color: editThemeColor,
                   allow_free_flashes: editAllowFreeFlashes,
                 }));
                 setEditSaving(false);

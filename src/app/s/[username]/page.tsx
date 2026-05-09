@@ -12,7 +12,7 @@ import StreamerBar from './_components/StreamerBar';
 import StreamPreview from './_components/StreamPreview';
 import FlashesFeed, { type Flash } from './_components/FlashesFeed';
 
-const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, is_live, skin, theme_color';
+const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, is_live, skin, theme_color, ink_color, paper_color';
 const FLASH_COLS = 'id, created_at, viewer_name, status, message, amount_cents, payment_method';
 
 type Profile = {
@@ -24,6 +24,8 @@ type Profile = {
   is_live: boolean | null;
   skin: string | null;
   theme_color: string | null;
+  ink_color: string | null;
+  paper_color: string | null;
 };
 
 type FlashRow = {
@@ -164,7 +166,11 @@ export default function ViewerBookingPage() {
   return (
     <main className="min-h-screen" style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}>
       {/* Inherit the streamer's skin + theme colour — this overrides the user-picked skin for this page. */}
-      <SkinProvider skin={profile.skin} themeColor={profile.theme_color} />
+      <SkinProvider
+        skin={profile.skin}
+        inkColor={profile.ink_color ?? profile.theme_color}
+        paperColor={profile.paper_color}
+      />
 
       {/* v7 nav. The live badge moved into StreamerBar (vb-head) since v7
           surfaces it there next to the streamer's avatar; keeping it in the

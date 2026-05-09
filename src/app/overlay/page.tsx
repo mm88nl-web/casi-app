@@ -39,6 +39,7 @@ import SlotsList from './_components/SlotsList';
 import StuckFlashesPanel from './_components/StuckFlashesPanel';
 import BrandFooter from './_components/BrandFooter';
 import BookingForm from './_components/BookingForm';
+import BrowseStreamersModal from './_components/BrowseStreamersModal';
 
 // Explicit column list for bookings reads. Belt + suspenders alongside the
 // column-level GRANT in 20260423 — if a new sensitive column lands on
@@ -82,6 +83,7 @@ function OverlayContent() {
   const [savedViewerName, setSavedViewerName] = useState<string|null>(null);
   const [nameConfirmed, setNameConfirmed]     = useState(false);
   const [showChangeName, setShowChangeName]   = useState(false);
+  const [showBrowseModal, setShowBrowseModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<any>(null);
   const [isQueue, setIsQueue]           = useState(false);
   const [isExtend, setIsExtend]         = useState(false);
@@ -304,7 +306,7 @@ function OverlayContent() {
       const histStart = new Date();
       histStart.setHours(0, 0, 0, 0);
       const histStartIso = histStart.toISOString();
-      const HIST_BOOK_COLS = 'id, status, payment_method, price_value, price_unit, original_amount_cents, message, duration_minutes, tx_signature, created_at';
+      const HIST_BOOK_COLS = 'id, status, payment_method, price_value, price_unit, original_amount_cents, message, duration_minutes, tx_signature, started_at, ended_at, created_at';
       const HIST_FLASH_COLS = 'id, status, payment_method, amount_cents, message, tx_signature, created_at';
       const [histBookName, histBookWallet, histFlashName, histFlashWallet] = await Promise.all([
         name
@@ -333,59 +335,51 @@ function OverlayContent() {
           : Promise.resolve({ data: [] as any[] }),
       ]);
       const histById = new Map<string, TxRow>();
+      // price_value on bookings is total-for-the-booking, NOT a per-minute
+      // rate, so amount_cents is the FULL booked amount even when the beam
+      // ended early. MyTransactionsSection prorates on display using
+      // started_at + ended_at — keep the raw total here.
+      const toBeamRow = (b: any): TxRow => ({
+        kind: 'beam', id: String(b.id), status: b.status,
+        payment_method: b.payment_method,
+        // Stripe stores the EUR/USD amount on `original_amount_cents`,
+        // Solana stores USDC * 100 in `price_value`. Normalize to cents.
+        amount_cents: b.payment_method === 'stripe'
+          ? (b.original_amount_cents ?? Math.round(Number(b.price_value || 0) * 100))
+          : Math.round(Number(b.price_value || 0) * 100),
+        message: b.message,
+        duration_minutes: b.duration_minutes,
+        tx_signature: b.tx_signature,
+        started_at: b.started_at ?? null,
+        ended_at: b.ended_at ?? null,
+        created_at: b.created_at,
+      });
       for (const b of (histBookName.data || [])) {
-        histById.set(`beam-${b.id}`, {
-          kind: 'beam', id: String(b.id), status: b.status,
-          payment_method: b.payment_method,
-          // Stripe stores the EUR/USD amount on `original_amount_cents`,
-          // Solana stores USDC * 100 in `price_value`. Normalize to cents.
-          amount_cents: b.payment_method === 'stripe'
-            ? (b.original_amount_cents ?? Math.round(Number(b.price_value || 0) * 100))
-            : Math.round(Number(b.price_value || 0) * 100),
-          message: b.message,
-          duration_minutes: b.duration_minutes,
-          tx_signature: b.tx_signature,
-          created_at: b.created_at,
-        });
+        histById.set(`beam-${b.id}`, toBeamRow(b));
       }
       for (const b of (histBookWallet.data || [])) {
         const k = `beam-${b.id}`;
         if (histById.has(k)) continue;
-        histById.set(k, {
-          kind: 'beam', id: String(b.id), status: b.status,
-          payment_method: b.payment_method,
-          amount_cents: b.payment_method === 'stripe'
-            ? (b.original_amount_cents ?? Math.round(Number(b.price_value || 0) * 100))
-            : Math.round(Number(b.price_value || 0) * 100),
-          message: b.message,
-          duration_minutes: b.duration_minutes,
-          tx_signature: b.tx_signature,
-          created_at: b.created_at,
-        });
+        histById.set(k, toBeamRow(b));
       }
+      const toFlashRow = (f: any): TxRow => ({
+        kind: 'flash', id: f.id, status: f.status,
+        payment_method: f.payment_method,
+        amount_cents: f.amount_cents,
+        message: f.message,
+        duration_minutes: null,
+        tx_signature: f.tx_signature,
+        started_at: null,
+        ended_at: null,
+        created_at: f.created_at,
+      });
       for (const f of (histFlashName.data || [])) {
-        histById.set(`flash-${f.id}`, {
-          kind: 'flash', id: f.id, status: f.status,
-          payment_method: f.payment_method,
-          amount_cents: f.amount_cents,
-          message: f.message,
-          duration_minutes: null,
-          tx_signature: f.tx_signature,
-          created_at: f.created_at,
-        });
+        histById.set(`flash-${f.id}`, toFlashRow(f));
       }
       for (const f of (histFlashWallet.data || [])) {
         const k = `flash-${f.id}`;
         if (histById.has(k)) continue;
-        histById.set(k, {
-          kind: 'flash', id: f.id, status: f.status,
-          payment_method: f.payment_method,
-          amount_cents: f.amount_cents,
-          message: f.message,
-          duration_minutes: null,
-          tx_signature: f.tx_signature,
-          created_at: f.created_at,
-        });
+        histById.set(k, toFlashRow(f));
       }
       const merged = Array.from(histById.values())
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -1540,14 +1534,14 @@ function OverlayContent() {
   if (loading) return null;
   if (!isOBS && !nameConfirmed) return (
     <>
-      <SkinProvider skin={profile?.skin} themeColor={profile?.theme_color} />
+      <SkinProvider skin={profile?.skin} inkColor={profile?.ink_color ?? profile?.theme_color} paperColor={profile?.paper_color} />
       <NameEntryScreen onConfirm={confirmName} tc={tc} />
     </>
   );
 
   return (
     <>
-      <SkinProvider skin={profile?.skin} themeColor={profile?.theme_color} />
+      <SkinProvider skin={profile?.skin} inkColor={profile?.ink_color ?? profile?.theme_color} paperColor={profile?.paper_color} />
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes blink     { 0%,100%{opacity:1} 50%{opacity:.2} }
@@ -1591,14 +1585,24 @@ function OverlayContent() {
         .ov-main.ov-v9 { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 24px 32px; align-items: start; max-width: 1280px; }
         .ov-main.ov-v9 > .ov-full-row { grid-column: 1 / -1; }
         .ov-main.ov-v9 > .stream-canvas { grid-column: 1; grid-row: 2; margin-bottom: 0; }
+        .ov-main.ov-v9 > .ov-browse-link { grid-column: 1; grid-row: 3; }
         .ov-main.ov-v9 > .slots-sec { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
         .ov-main.ov-v9 > .bf { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
         @media (max-width:900px) {
           .ov-main.ov-v9 { grid-template-columns: 1fr; }
           .ov-main.ov-v9 > .stream-canvas,
+          .ov-main.ov-v9 > .ov-browse-link,
           .ov-main.ov-v9 > .slots-sec,
           .ov-main.ov-v9 > .bf { grid-column: 1; grid-row: auto; }
         }
+        .ov-browse-link {
+          background: none; border: none; padding: 14px 0 0; cursor: pointer;
+          font-family: var(--M), var(--font-casi-mono), monospace;
+          font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+          color: var(--text-3, var(--casi-text-muted)); text-align: left;
+          transition: color 0.14s;
+        }
+        .ov-browse-link:hover { color: var(--ink, var(--casi-accent)); }
 
         .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
         .my-beams-lbl { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; }
@@ -2139,6 +2143,19 @@ function OverlayContent() {
             {isOBS && profile?.id && <FlashFeed profileId={profile.id} />}
           </div>
 
+          {/* "Browse other streams" link — sits directly under the canvas
+              in the v9 two-column grid (col 1, row 3). Opens the modal
+              search; not a navigation. Hidden in OBS mode. */}
+          {!isOBS && (
+            <button
+              type="button"
+              className="ov-browse-link"
+              onClick={() => setShowBrowseModal(true)}
+            >
+              Browse other streams →
+            </button>
+          )}
+
           {/* BOOKING FORM */}
           {!isOBS && selectedSlot && (
             <BookingForm
@@ -2264,6 +2281,8 @@ function OverlayContent() {
           {!isOBS && <BrandFooter />}
         </main>
       </div>
+
+      <BrowseStreamersModal open={showBrowseModal} onClose={() => setShowBrowseModal(false)} />
 
       {/* Solana confirmation modal */}
       {showConfirmModal && selectedSlot && (

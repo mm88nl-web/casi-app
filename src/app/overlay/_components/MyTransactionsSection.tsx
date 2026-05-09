@@ -12,8 +12,56 @@ export type TxRow = {
   message: string | null;
   duration_minutes: number | string | null;
   tx_signature: string | null;
+  /** Set by the streamer when start_beam fires. Used together with ended_at
+   *  to prorate "what you actually spent" — booked != aired when streamer
+   *  ends the beam early. Null for flashes (instant) and pending beams. */
+  started_at: string | null;
+  /** Set by endBeamEarly. NULL = the beam ran to completion (or hasn't ended
+   *  yet) — show the booked total. Non-null = ended early; prorate. */
+  ended_at: string | null;
   created_at: string;
 };
+
+/**
+ * Returns the actual aired seconds + cents the viewer was charged for a beam,
+ * based on (ended_at − started_at) ÷ duration. Mirrors the studio Today tile
+ * math so the streamer's daily total and the viewer's history line up.
+ *
+ * Falls back to the booked amount + duration when ended_at is missing
+ * (flashes, pending beams, beams that ran the full duration). Returns the
+ * raw amount when the row is denied/cancelled too — the caller still needs
+ * to know what was reserved before deciding to display "refunded".
+ */
+function effectiveBeam(row: TxRow): { airedSecs: number | null; cents: number } {
+  const bookedCents = row.amount_cents ?? 0;
+  const bookedMins = Number(row.duration_minutes ?? 0);
+  if (row.kind !== 'beam' || !row.started_at || !row.ended_at || bookedMins <= 0) {
+    return { airedSecs: bookedMins > 0 ? Math.round(bookedMins * 60) : null, cents: bookedCents };
+  }
+  const startMs = new Date(row.started_at).getTime();
+  const endMs = new Date(row.ended_at).getTime();
+  const durationSecs = bookedMins * 60;
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    return { airedSecs: durationSecs, cents: bookedCents };
+  }
+  const elapsedSecs = Math.min((endMs - startMs) / 1000, durationSecs);
+  const cents = Math.round(bookedCents * elapsedSecs / durationSecs);
+  return { airedSecs: elapsedSecs, cents };
+}
+
+/** "5m" / "32s" / "1h 12m" — matches the studio dashboard's airing timer. */
+function fmtAired(secs: number): string {
+  if (secs < 60) return `${Math.max(1, Math.round(secs))}s`;
+  const totalMins = secs / 60;
+  if (totalMins < 60) {
+    const whole = Math.floor(totalMins);
+    const remSecs = Math.round(secs - whole * 60);
+    return remSecs > 0 ? `${whole}m ${remSecs}s` : `${whole}m`;
+  }
+  const hours = Math.floor(totalMins / 60);
+  const mins = Math.round(totalMins - hours * 60);
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
 
 type Props = {
   rows: TxRow[];
@@ -57,8 +105,11 @@ function spendTotals(rows: TxRow[]): { usdc: number; card: number } {
     if (!r.amount_cents) continue;
     // Don't count refunded/cancelled/denied — viewer didn't actually spend.
     if (r.status === 'denied' || r.status === 'cancelled') continue;
-    if (r.payment_method === 'solana') usdc += r.amount_cents;
-    else if (r.payment_method === 'stripe') card += r.amount_cents;
+    // Beams use effective (prorated) cents so the footer total matches the
+    // per-row amounts. Flashes pass through booked == effective.
+    const cents = effectiveBeam(r).cents;
+    if (r.payment_method === 'solana') usdc += cents;
+    else if (r.payment_method === 'stripe') card += cents;
   }
   return { usdc: usdc / 100, card: card / 100 };
 }
@@ -155,18 +206,28 @@ export default function MyTransactionsSection({ rows, username }: Props) {
           const railClass = r.payment_method === 'solana' ? 'u'
             : r.payment_method === 'stripe' ? 'e'
             : 'f';
-          const amt = !r.amount_cents
+          const { airedSecs, cents } = effectiveBeam(r);
+          const wasKickedEarly = r.kind === 'beam' && !!r.started_at && !!r.ended_at;
+          const amt = !cents
             ? 'free'
             : r.payment_method === 'solana'
-              ? `${(r.amount_cents / 100).toFixed(2)}`
-              : `€${(r.amount_cents / 100).toFixed(2)}`;
+              ? `${(cents / 100).toFixed(2)}`
+              : `€${(cents / 100).toFixed(2)}`;
+          // Beam description: prefer aired duration when we know it (started)
+          // — falls back to the booked duration for pending/cancelled rows.
+          const beamLabel = r.kind === 'beam'
+            ? (airedSecs !== null ? fmtAired(airedSecs) : `${r.duration_minutes}m`)
+            : null;
           return (
             <div key={`${r.kind}-${r.id}`} className="my-tx-row">
               <span className="my-tx-time">{fmtTime(r.created_at)}</span>
               <span className="my-tx-kind">{r.kind === 'beam' ? '★ beam' : '⚡ flash'}</span>
-              <span className="my-tx-msg" title={r.message ?? ''}>
-                {r.kind === 'beam' && r.duration_minutes
-                  ? `${r.duration_minutes}m · ${r.message || '—'}`
+              <span
+                className="my-tx-msg"
+                title={wasKickedEarly ? `Ended early — aired ${fmtAired(airedSecs!)} of ${r.duration_minutes}m` : (r.message ?? '')}
+              >
+                {beamLabel
+                  ? `${beamLabel}${wasKickedEarly ? ' (early)' : ''} · ${r.message || '—'}`
                   : (r.message || '—')}
               </span>
               <span className={`my-tx-amt ${railClass}`}>

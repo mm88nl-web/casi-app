@@ -344,7 +344,13 @@ export async function endBeamEarly(
 
   // 3. Expire the row. Null escrow_pda when we confirmed closure on-chain so
   // the viewer's overlay stops surfacing a stale "Recover USDC" chip.
-  const expireUpdate: Record<string, unknown> = { status: 'expired', image_url: null };
+  // ended_at lets the studio Today tile prorate the streamer's daily total
+  // for kicks — without it, an early-ended 1hr beam counts the full hour.
+  const expireUpdate: Record<string, unknown> = {
+    status: 'expired',
+    image_url: null,
+    ended_at: new Date().toISOString(),
+  };
   if (escrowClosed) expireUpdate.escrow_pda = null;
   const { error: expireErr } = await ctx.supabase
     .from('bookings')

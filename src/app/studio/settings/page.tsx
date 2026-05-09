@@ -33,7 +33,7 @@ const RAIL: RailGroup[] = [
 ];
 
 const PROFILE_COLS =
-  'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color';
+  'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color, ink_color, paper_color';
 
 type LoadState =
   | { kind: 'loading' }
@@ -119,7 +119,8 @@ export default function StudioSettingsPage() {
           profileId={state.profile.id}
           username={state.profile.username ?? null}
           initialSkinId={state.profile.skin}
-          initialThemeColor={state.profile.theme_color ?? null}
+          initialInkColor={state.profile.ink_color ?? state.profile.theme_color ?? null}
+          initialPaperColor={state.profile.paper_color ?? null}
         />
         <ObsSourcesSection username={state.profile.username ?? 'your-handle'} />
         <SessionKeySection
