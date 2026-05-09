@@ -408,11 +408,13 @@ export default function SendFlashSection({
                 : '#444',
               cursor: canSend ? 'pointer' : 'not-allowed',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: 'all .2s' }}>
-            <svg width="14" height="11" viewBox="0 0 14 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="0.5" y="0.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeOpacity="0.6"/>
-              <rect x="0" y="3" width="14" height="2.5" fill="currentColor" fillOpacity="0.5"/>
-              <rect x="2" y="7" width="4" height="1.5" rx="0.5" fill="currentColor"/>
-            </svg>
+            {paymentMethod === 'solana' ? (
+              <UsdcIcon size={14} mono="#fff" />
+            ) : paymentMethod === 'free' ? (
+              <span style={{ fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 14, lineHeight: 1 }}>★</span>
+            ) : (
+              <StripeIcon size={11} mono="#050505" />
+            )}
             {paymentMethod === 'solana'
               ? (submitting ? (onChainStatus === 'locking' ? 'Locking on-chain…' : 'Submitting…') : `Lock ${(amountCents / 100).toFixed(2)} USDC & Flash`)
               : paymentMethod === 'free'
