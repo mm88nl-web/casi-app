@@ -306,7 +306,7 @@ function OverlayContent() {
       const histStart = new Date();
       histStart.setHours(0, 0, 0, 0);
       const histStartIso = histStart.toISOString();
-      const HIST_BOOK_COLS = 'id, status, payment_method, price_value, price_unit, original_amount_cents, message, duration_minutes, tx_signature, created_at';
+      const HIST_BOOK_COLS = 'id, status, payment_method, price_value, price_unit, original_amount_cents, message, duration_minutes, tx_signature, started_at, ended_at, created_at';
       const HIST_FLASH_COLS = 'id, status, payment_method, amount_cents, message, tx_signature, created_at';
       const [histBookName, histBookWallet, histFlashName, histFlashWallet] = await Promise.all([
         name
@@ -335,59 +335,51 @@ function OverlayContent() {
           : Promise.resolve({ data: [] as any[] }),
       ]);
       const histById = new Map<string, TxRow>();
+      // price_value on bookings is total-for-the-booking, NOT a per-minute
+      // rate, so amount_cents is the FULL booked amount even when the beam
+      // ended early. MyTransactionsSection prorates on display using
+      // started_at + ended_at — keep the raw total here.
+      const toBeamRow = (b: any): TxRow => ({
+        kind: 'beam', id: String(b.id), status: b.status,
+        payment_method: b.payment_method,
+        // Stripe stores the EUR/USD amount on `original_amount_cents`,
+        // Solana stores USDC * 100 in `price_value`. Normalize to cents.
+        amount_cents: b.payment_method === 'stripe'
+          ? (b.original_amount_cents ?? Math.round(Number(b.price_value || 0) * 100))
+          : Math.round(Number(b.price_value || 0) * 100),
+        message: b.message,
+        duration_minutes: b.duration_minutes,
+        tx_signature: b.tx_signature,
+        started_at: b.started_at ?? null,
+        ended_at: b.ended_at ?? null,
+        created_at: b.created_at,
+      });
       for (const b of (histBookName.data || [])) {
-        histById.set(`beam-${b.id}`, {
-          kind: 'beam', id: String(b.id), status: b.status,
-          payment_method: b.payment_method,
-          // Stripe stores the EUR/USD amount on `original_amount_cents`,
-          // Solana stores USDC * 100 in `price_value`. Normalize to cents.
-          amount_cents: b.payment_method === 'stripe'
-            ? (b.original_amount_cents ?? Math.round(Number(b.price_value || 0) * 100))
-            : Math.round(Number(b.price_value || 0) * 100),
-          message: b.message,
-          duration_minutes: b.duration_minutes,
-          tx_signature: b.tx_signature,
-          created_at: b.created_at,
-        });
+        histById.set(`beam-${b.id}`, toBeamRow(b));
       }
       for (const b of (histBookWallet.data || [])) {
         const k = `beam-${b.id}`;
         if (histById.has(k)) continue;
-        histById.set(k, {
-          kind: 'beam', id: String(b.id), status: b.status,
-          payment_method: b.payment_method,
-          amount_cents: b.payment_method === 'stripe'
-            ? (b.original_amount_cents ?? Math.round(Number(b.price_value || 0) * 100))
-            : Math.round(Number(b.price_value || 0) * 100),
-          message: b.message,
-          duration_minutes: b.duration_minutes,
-          tx_signature: b.tx_signature,
-          created_at: b.created_at,
-        });
+        histById.set(k, toBeamRow(b));
       }
+      const toFlashRow = (f: any): TxRow => ({
+        kind: 'flash', id: f.id, status: f.status,
+        payment_method: f.payment_method,
+        amount_cents: f.amount_cents,
+        message: f.message,
+        duration_minutes: null,
+        tx_signature: f.tx_signature,
+        started_at: null,
+        ended_at: null,
+        created_at: f.created_at,
+      });
       for (const f of (histFlashName.data || [])) {
-        histById.set(`flash-${f.id}`, {
-          kind: 'flash', id: f.id, status: f.status,
-          payment_method: f.payment_method,
-          amount_cents: f.amount_cents,
-          message: f.message,
-          duration_minutes: null,
-          tx_signature: f.tx_signature,
-          created_at: f.created_at,
-        });
+        histById.set(`flash-${f.id}`, toFlashRow(f));
       }
       for (const f of (histFlashWallet.data || [])) {
         const k = `flash-${f.id}`;
         if (histById.has(k)) continue;
-        histById.set(k, {
-          kind: 'flash', id: f.id, status: f.status,
-          payment_method: f.payment_method,
-          amount_cents: f.amount_cents,
-          message: f.message,
-          duration_minutes: null,
-          tx_signature: f.tx_signature,
-          created_at: f.created_at,
-        });
+        histById.set(k, toFlashRow(f));
       }
       const merged = Array.from(histById.values())
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
