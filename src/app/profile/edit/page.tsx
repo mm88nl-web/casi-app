@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import SolanaIcon from '@/components/icons/SolanaIcon';
 
 function Logo({ scale = 0.32, color = '#F58220', bg = '#050505' }: { scale?: number; color?: string; bg?: string }) {
   return (
@@ -404,10 +405,12 @@ export default function ProfileEditPage() {
               <label className="pe-label">Solana wallet <span style={{ color:'#333', textTransform:'none', fontSize:9 }}>— for USDC streaming payments</span></label>
               <div style={{ background:'#0a0a0a', border:'1px solid #1c1c1c', borderRadius:10, padding:'14px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
                 <div>
-                  <div style={{ fontSize:13, fontWeight:700, color: solanaWallet ? '#9945FF' : '#e8e8e8', marginBottom:3 }}>
-                    {solanaWallet
-                      ? `◎ ${solanaWallet.slice(0,6)}…${solanaWallet.slice(-4)}`
-                      : 'Connect a Solana wallet to accept SOL payments'}
+                  <div style={{ fontSize:13, fontWeight:700, color: solanaWallet ? '#9945FF' : '#e8e8e8', marginBottom:3, display:'inline-flex', alignItems:'center', gap:6 }}>
+                    {solanaWallet ? (
+                      <><SolanaIcon size={11} /> {solanaWallet.slice(0,6)}…{solanaWallet.slice(-4)}</>
+                    ) : (
+                      'Connect a Solana wallet to accept USDC payments'
+                    )}
                   </div>
                   <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#444' }}>
                     {solanaWallet ? 'Viewers can pay with USDC on-chain' : 'Optional — Stripe payments always work without this'}

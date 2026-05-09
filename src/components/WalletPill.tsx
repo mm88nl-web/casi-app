@@ -10,46 +10,6 @@ import { needsMobileHandoff, phantomBrowseUrl, solflareBrowseUrl } from '@/lib/m
 import UsdcIcon from './icons/UsdcIcon';
 import SolanaIcon from './icons/SolanaIcon';
 
-/**
- * Official Solana mark — three diagonal parallel bars with the brand
- * purple→cyan→green gradient. Used in both the disconnected "Connect
- * Wallet" CTA and the connected pill's network segment.
- */
-function SolanaMark({ size = 14 }: { size?: number }) {
-  const id = `solana-mark-grad-${size}`;
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={size}
-      height={size * (101 / 397)}
-      viewBox="0 0 397 101"
-      aria-hidden
-      style={{ flexShrink: 0 }}
-    >
-      <defs>
-        <linearGradient id={id} x1="0%" y1="50%" x2="100%" y2="50%">
-          <stop offset="0%" stopColor="#9945FF" />
-          <stop offset="50%" stopColor="#14F195" />
-          <stop offset="100%" stopColor="#9945FF" />
-        </linearGradient>
-      </defs>
-      <path
-        fill={`url(#${id})`}
-        d="M64.6 6.5h324.7c4.7 0 7.1 5.7 3.7 9.1L348.7 60.1c-1.6 1.6-3.7 2.5-6 2.5H18.1c-4.7 0-7.1-5.7-3.7-9.1L58.6 9c1.6-1.6 3.7-2.5 6-2.5z"
-        transform="translate(0 32)"
-      />
-      <path
-        fill={`url(#${id})`}
-        d="M64.6.5h324.7c4.7 0 7.1 5.7 3.7 9.1L348.7 54.1c-1.6 1.6-3.8 2.5-6 2.5H18.1c-4.7 0-7.1-5.7-3.7-9.1L58.6 3c1.6-1.6 3.7-2.5 6-2.5z"
-      />
-      <path
-        fill={`url(#${id})`}
-        d="M348.7 41.6c-1.6-1.6-3.8-2.5-6-2.5H18.1c-4.7 0-7.1 5.7-3.7 9.1l44.2 44.2c1.6 1.6 3.7 2.5 6 2.5h324.7c4.7 0 7.1-5.7 3.7-9.1l-44.3-44.2z"
-        transform="translate(0 5)"
-      />
-    </svg>
-  );
-}
 
 const CSS = `
   /* Disconnected CTA — v9 inverse-ink slab. Same palette as the v9
@@ -293,7 +253,7 @@ export default function WalletPill() {
           <style>{CSS}</style>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
             <a className="wp-connect" href={phantomBrowseUrl(here)} style={{ textDecoration: 'none' }}>
-              <SolanaMark size={12} />
+              <SolanaIcon size={12} />
               Open in Phantom
             </a>
             <a
@@ -317,7 +277,7 @@ export default function WalletPill() {
       <>
         <style>{CSS}</style>
         <button className="wp-connect" onClick={openWalletModal} disabled={connecting}>
-          <SolanaMark size={12} />
+          <SolanaIcon size={12} />
           {connecting ? 'Connecting…' : 'Connect Wallet'}
         </button>
       </>

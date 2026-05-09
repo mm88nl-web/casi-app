@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 import { NavBar, Marquee, Footer } from '@/components/v9';
 import WalletPill from '@/components/WalletPill';
+import UsdcIcon from '@/components/icons/UsdcIcon';
 
 export default function HomePage() {
   const [liveCount, setLiveCount] = useState<number | null>(null);
@@ -118,7 +119,7 @@ export default function HomePage() {
               <span className="l-rail-note">2.9%</span>
             </div>
             <div className="l-rail">
-              <span className="l-rail-ico">◎</span>
+              <span className="l-rail-ico"><UsdcIcon size={14} mono="currentColor" /></span>
               <span className="l-rail-name">USDC · Solana</span>
               <span className="l-rail-note">on-chain</span>
             </div>

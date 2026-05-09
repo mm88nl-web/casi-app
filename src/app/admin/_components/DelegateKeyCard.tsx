@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, type ReactNode } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import SolanaIcon from '@/components/icons/SolanaIcon';
 
 /**
  * Settings card for the server-held session-key delegate.
@@ -294,7 +295,15 @@ export default function DelegateKeyCard({
   );
 }
 
-function describe(s: Status): { headline: string; sub: string; accent: string } {
+function withIcon(label: string): ReactNode {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <SolanaIcon size={11} mono="currentColor" /> {label}
+    </span>
+  );
+}
+
+function describe(s: Status): { headline: ReactNode; sub: string; accent: string } {
   switch (s.kind) {
     case 'loading':
       return { headline: 'Loading…', sub: '', accent: 'var(--casi-text-muted)' };
@@ -306,25 +315,25 @@ function describe(s: Status): { headline: string; sub: string; accent: string } 
       };
     case 'needs-finalize':
       return {
-        headline: '◎ Finalize on-chain',
+        headline: withIcon('Finalize on-chain'),
         sub: `${shortPk(s.sessionPubkey)} · generated, not yet registered`,
         accent: '#eab308',
       };
     case 'expired':
       return {
-        headline: '◎ Expired',
+        headline: withIcon('Expired'),
         sub: `${shortPk(s.sessionPubkey)} · expired ${fmtRelative(s.expiresAt * 1000)}`,
         accent: '#eab308',
       };
     case 'revoked':
       return {
-        headline: '◎ Revoked',
+        headline: withIcon('Revoked'),
         sub: `${shortPk(s.sessionPubkey)} · revoked ${s.revokedAt ? fmtRelative(Date.parse(s.revokedAt)) : 'recently'}`,
         accent: '#eab308',
       };
     case 'healthy':
       return {
-        headline: `◎ ${shortPk(s.sessionPubkey)}`,
+        headline: withIcon(shortPk(s.sessionPubkey)),
         sub: `Active · expires ${fmtRelative(s.expiresAt * 1000)}`,
         accent: '#9945FF',
       };

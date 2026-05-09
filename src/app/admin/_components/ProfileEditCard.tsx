@@ -3,6 +3,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PublicKey } from '@solana/web3.js';
 import DelegateKeyCard from './DelegateKeyCard';
+import SolanaIcon from '@/components/icons/SolanaIcon';
 
 const THEME_PRESETS = [
   { name: 'Casi Orange',   color: '#F58220' },
@@ -234,8 +235,12 @@ export default function ProfileEditCard({
             <label className="pe-lbl">Solana wallet <span style={{ letterSpacing: 0, textTransform: 'none', opacity: 0.6 }}>— USDC streaming payments</span></label>
             <div style={{ background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: solanaWallet ? '#9945FF' : 'var(--casi-text)', marginBottom: 2 }}>
-                  {solanaWallet ? `◎ ${solanaWallet.slice(0,6)}…${solanaWallet.slice(-4)}` : 'No wallet linked'}
+                <div style={{ fontSize: 13, fontWeight: 700, color: solanaWallet ? '#9945FF' : 'var(--casi-text)', marginBottom: 2, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {solanaWallet ? (
+                    <><SolanaIcon size={11} /> {solanaWallet.slice(0,6)}…{solanaWallet.slice(-4)}</>
+                  ) : (
+                    'No wallet linked'
+                  )}
                 </div>
                 <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: 'var(--casi-text-muted)' }}>
                   {solanaWallet ? 'Viewers can pay with USDC on-chain' : 'Optional — Stripe works without this'}

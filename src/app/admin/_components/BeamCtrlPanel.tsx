@@ -1,39 +1,11 @@
 import { useEffect, useState } from 'react';
 import SlotMedia from '@/components/SlotMedia';
+import UsdcIcon from '@/components/icons/UsdcIcon';
+import SolanaIcon from '@/components/icons/SolanaIcon';
 import { SHAPE_OPTIONS } from '@/lib/banner';
 import { formatTime, getSecondsRemaining } from './time';
 
 type Tab = 'properties' | 'pricing' | 'behavior';
-
-// Per-rail glyphs — match v9's .rail-glyph SVGs (USDC blue circle,
-// Solana purple→cyan→green ribbon). USD / EUR use the dollar-sign /
-// euro-sign characters in the same chrome.
-function UsdcGlyph() {
-  return (
-    <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden style={{ width: 14, height: 14 }}>
-      <circle cx="16" cy="16" r="16" fill="#2775CA" />
-      <path
-        fill="#fff"
-        d="M20.5 18.4c0-2.4-1.4-3.2-4.3-3.5-2-.3-2.4-.8-2.4-1.7s.6-1.5 2-1.5c1.2 0 1.8.4 2.1 1.4.1.2.3.3.5.3h1c.3 0 .5-.2.5-.5v-.1c-.3-1.4-1.5-2.5-3-2.6V8.7c0-.3-.2-.5-.5-.6h-1c-.3 0-.5.2-.6.5v1.5c-2 .3-3.2 1.6-3.2 3.2 0 2.3 1.4 3.2 4.3 3.5 1.9.3 2.5.7 2.5 1.7s-.9 1.7-2.1 1.7c-1.6 0-2.2-.7-2.4-1.6-.1-.3-.3-.4-.5-.4h-1.1c-.3 0-.5.2-.5.5v.1c.3 1.6 1.3 2.7 3.4 3v1.6c0 .3.2.5.5.6h1c.3 0 .5-.2.6-.5v-1.6c2-.3 3.3-1.7 3.3-3.5z"
-      />
-    </svg>
-  );
-}
-function SolGlyph() {
-  return (
-    <svg viewBox="0 0 397 311" xmlns="http://www.w3.org/2000/svg" aria-hidden style={{ width: 14, height: 14 }}>
-      <defs>
-        <linearGradient id="bcp-sol" x1="360" y1="-15" x2="142" y2="475" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#00FFA3" />
-          <stop offset="1" stopColor="#DC1FFF" />
-        </linearGradient>
-      </defs>
-      <path fill="url(#bcp-sol)" d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1z" />
-      <path fill="url(#bcp-sol)" d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1z" />
-      <path fill="url(#bcp-sol)" d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1L64.6 190c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1z" />
-    </svg>
-  );
-}
 
 function RailRow({
   glyph,
@@ -272,7 +244,7 @@ export default function BeamCtrlPanel({
               unit={editUnit}
             />
             <RailRow
-              glyph={<UsdcGlyph />}
+              glyph={<UsdcIcon size={14} />}
               name="USDC"
               sub="on-chain · Solana"
               value={rateUsdc}
@@ -280,7 +252,7 @@ export default function BeamCtrlPanel({
               unit={editUnit}
             />
             <RailRow
-              glyph={<SolGlyph />}
+              glyph={<SolanaIcon size={14} />}
               name="SOL"
               sub="on-chain · Solana"
               value={rateSol}

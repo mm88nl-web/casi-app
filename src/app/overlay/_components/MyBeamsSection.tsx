@@ -1,6 +1,7 @@
 'use client';
 
 import SlotMedia from '@/components/SlotMedia';
+import UsdcIcon from '@/components/icons/UsdcIcon';
 import Countdown from './Countdown';
 
 type Booking = {
@@ -134,10 +135,10 @@ export default function MyBeamsSection({
               {needsRecover && (
                 <button
                   className="cancel-btn"
-                  style={{ color: '#c084fc', borderColor: 'rgba(192,132,252,0.3)' }}
+                  style={{ color: '#c084fc', borderColor: 'rgba(192,132,252,0.3)', display: 'inline-flex', alignItems: 'center', gap: 5 }}
                   onClick={() => onReclaim(booking)}
                 >
-                  ◎ recover USDC
+                  <UsdcIcon size={10} mono="currentColor" /> recover USDC
                 </button>
               )}
             </div>
