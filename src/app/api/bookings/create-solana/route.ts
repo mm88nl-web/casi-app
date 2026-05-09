@@ -28,6 +28,7 @@ import { SystemProgram } from '@solana/web3.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { deriveEscrowPda, PROGRAM_ID } from '@/lib/casi-escrow';
 import { validateBannerBooking, sanitizeBookingCustomization } from '@/lib/banner';
+import { logError, logWarn } from '@/lib/observability';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -69,7 +70,7 @@ async function claimSlot(streamerId: string, viewerKey: string): Promise<boolean
       { onConflict: 'streamer_id,viewer_key' },
     );
   if (error) {
-    console.error('[bookings/create-solana] rate-limit upsert failed:', error);
+    logError('bookings/create-solana/rate-limit', error, { profile_id, viewerKey });
     return false;
   }
   return true;
@@ -174,8 +175,19 @@ export async function POST(req: Request) {
     .single();
 
   if (insertErr || !booking) {
-    console.error('[bookings/create-solana] insert failed:', insertErr);
-    return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
+    // Fan out to the error webhook (Discord/Slack) so we see this without
+    // tailing Vercel logs, and include the Supabase error detail in the
+    // response so the failed-to-create-booking toast actually tells the
+    // viewer (and us) what went wrong instead of swallowing the cause.
+    logError('bookings/create-solana', insertErr ?? new Error('insert returned no booking'), {
+      profile_id, element_id, viewer_name, duration_minutes: dur,
+      price_value, price_unit,
+    });
+    const detail = insertErr?.message || insertErr?.code || 'no booking returned';
+    return NextResponse.json(
+      { error: `Failed to create booking — ${detail}` },
+      { status: 500 },
+    );
   }
 
   // Pre-compute and store the escrow PDA server-side. The derivation is
@@ -198,13 +210,13 @@ export async function POST(req: Request) {
         .eq('id', booking.id)
         .is('escrow_pda', null);
       if (pdaErr) {
-        console.error('[bookings/create-solana] escrow_pda write failed:', pdaErr);
+        logError('bookings/create-solana/escrow-pda', pdaErr, { booking_id: booking.id });
       }
     } catch (err) {
-      console.error('[bookings/create-solana] deriveEscrowPda threw:', err);
+      logError('bookings/create-solana/derive-pda', err, { booking_id: booking.id });
     }
   } else {
-    console.warn('[bookings/create-solana] NEXT_PUBLIC_CASI_PROGRAM_ID unset — skipping server-side escrow_pda');
+    logWarn('bookings/create-solana', 'NEXT_PUBLIC_CASI_PROGRAM_ID unset — skipping server-side escrow_pda');
   }
 
   return NextResponse.json({ booking_id: booking.id, cancel_token: cancelToken });
