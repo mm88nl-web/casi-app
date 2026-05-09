@@ -32,7 +32,6 @@ import {
 import NameEntryScreen from './_components/NameEntryScreen';
 import SolanaConfirmModal, { type TxStatus } from './_components/SolanaConfirmModal';
 import FlashFeed from './_components/FlashFeed';
-import ViewerFlashesFeed from './_components/ViewerFlashesFeed';
 import MyBeamsSection from './_components/MyBeamsSection';
 import MyTransactionsSection, { type TxRow } from './_components/MyTransactionsSection';
 import SlotsList from './_components/SlotsList';
@@ -1591,13 +1590,11 @@ function OverlayContent() {
         .ov-main.ov-v9 { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 24px 32px; align-items: start; max-width: 1280px; }
         .ov-main.ov-v9 > .ov-full-row { grid-column: 1 / -1; }
         .ov-main.ov-v9 > .stream-canvas { grid-column: 1; grid-row: 2; margin-bottom: 0; }
-        .ov-main.ov-v9 > .casi-v9-viewer-feed-wrap { grid-column: 1; grid-row: 3; }
         .ov-main.ov-v9 > .slots-sec { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
         .ov-main.ov-v9 > .bf { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
         @media (max-width:900px) {
           .ov-main.ov-v9 { grid-template-columns: 1fr; }
           .ov-main.ov-v9 > .stream-canvas,
-          .ov-main.ov-v9 > .casi-v9-viewer-feed-wrap,
           .ov-main.ov-v9 > .slots-sec,
           .ov-main.ov-v9 > .bf { grid-column: 1; grid-row: auto; }
         }
@@ -2137,15 +2134,6 @@ function OverlayContent() {
             {/* Flash Feed — overlaid on canvas in OBS mode */}
             {isOBS && profile?.id && <FlashFeed profileId={profile.id} />}
           </div>
-
-          {/* v9 viewer-side recent-flashes feed — read-only list under the
-              canvas in the left col of the 2-col body. Hidden in OBS source
-              mode (this is viewer chrome, not stream content). */}
-          {!isOBS && profile?.id && (
-            <div className="casi-v9-viewer-feed-wrap">
-              <ViewerFlashesFeed supabase={supabase} profileId={profile.id} />
-            </div>
-          )}
 
           {/* BOOKING FORM */}
           {!isOBS && selectedSlot && (
