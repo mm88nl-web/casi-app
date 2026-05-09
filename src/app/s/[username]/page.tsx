@@ -99,11 +99,17 @@ export default function ViewerBookingPage() {
   const profileId = state.kind === 'ready' ? state.profile.id : null;
 
   const loadFlashes = useCallback(async (id: string) => {
+    // Today-only window — yesterday's flashes shouldn't make a quiet stream
+    // look "active" on the public landing page. Browser-local midnight, same
+    // boundary studio's Today tile uses.
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
     const { data } = await supabase
       .from('flashes')
       .select(FLASH_COLS)
       .eq('profile_id', id)
       .eq('status', 'approved')
+      .gte('created_at', startOfDay.toISOString())
       .order('created_at', { ascending: false })
       .limit(30);
     setFlashes(((data ?? []) as FlashRow[]).map(flashRowToFlash));

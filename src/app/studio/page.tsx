@@ -108,6 +108,20 @@ function isPaymentConfirmed(b: BookingRow): boolean {
   );
 }
 
+// Same idea for flashes: a USDC flash row exists in the DB before the viewer
+// finishes the on-chain funding step, so Approve has to stay disabled until
+// escrow_pda + viewer_wallet are stamped (otherwise moderateFlash trips the
+// "Flash hasn't been paid yet" guard server-side and the streamer sees a
+// useless red banner). Free flashes and zero-amount flashes are always
+// confirmed; non-Solana rails defer to the server gate.
+function isFlashPaymentConfirmed(f: FlashRow): boolean {
+  if (f.payment_method === 'free') return true;
+  if ((f.amount_cents ?? 0) === 0) return true;
+  const isUsdc = f.payment_method === 'usdc' || f.payment_method === 'solana';
+  if (isUsdc) return !!(f.viewer_wallet && f.escrow_pda);
+  return true;
+}
+
 type FlashRow = {
   id: string;
   created_at: string;
@@ -166,6 +180,7 @@ function flashToQueueItem(f: FlashRow): QueueItem {
     name: `${who} · "${snippet}${overflow ? '…' : ''}"`,
     subtitle: `${logTime(f.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · text`,
     priceLabel,
+    paymentConfirmed: isFlashPaymentConfirmed(f),
   };
 }
 
@@ -303,6 +318,7 @@ function StudioPageInner() {
   const [supabase] = useState<SupabaseClient>(() => createClient());
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
 
+  const [todayBookings, setTodayBookings] = useState<BookingRow[]>([]);
   const [pendingBookings, setPendingBookings] = useState<BookingRow[]>([]);
   const [pendingFlashes, setPendingFlashes] = useState<FlashRow[]>([]);
   const [activeBookings, setActiveBookings] = useState<BookingRow[]>([]);
@@ -329,7 +345,7 @@ function StudioPageInner() {
     const startOfDayIso = new Date();
     startOfDayIso.setHours(0, 0, 0, 0);
 
-    const [pendingBookingsRes, pendingFlashesRes, activeBookingsRes, queuedBookingsRes, elementsRes, logFlashesRes] =
+    const [pendingBookingsRes, pendingFlashesRes, activeBookingsRes, queuedBookingsRes, elementsRes, logFlashesRes, todayBookingsRes] =
       await Promise.all([
         supabase.from('bookings').select(BOOKING_COLS)
           .eq('profile_id', profileId).eq('status', 'pending')
@@ -351,12 +367,20 @@ function StudioPageInner() {
           .in('status', ['approved', 'denied'])
           .gte('created_at', startOfDayIso.toISOString())
           .order('created_at', { ascending: false }).limit(LOG_LIMIT),
+        // Settled beams that were on stream today — used for the Today tile.
+        // Filter on started_at (when revenue actually started accruing) so a
+        // beam booked yesterday and aired today shows up under today.
+        supabase.from('bookings').select(BOOKING_COLS)
+          .eq('profile_id', profileId).eq('status', 'expired')
+          .gte('started_at', startOfDayIso.toISOString())
+          .order('started_at', { ascending: false }).limit(LOG_LIMIT),
       ]);
 
     setPendingBookings((pendingBookingsRes.data ?? []) as BookingRow[]);
     setPendingFlashes((pendingFlashesRes.data ?? []) as FlashRow[]);
     setActiveBookings((activeBookingsRes.data ?? []) as BookingRow[]);
     setQueuedBookings((queuedBookingsRes.data ?? []) as BookingRow[]);
+    setTodayBookings((todayBookingsRes.data ?? []) as BookingRow[]);
 
     const elementsMap: Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }> = {};
     for (const el of (elementsRes.data ?? []) as Array<{ id: string; shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }>) {
@@ -417,6 +441,23 @@ function StudioPageInner() {
         () => { bump(); reload(profileId); })
       .subscribe();
 
+    // Profile changes (e.g. display_currency picked in /studio/settings) need
+    // to flow back into the dashboard or the Today tile keeps filtering on
+    // a stale currency until the page is hard-reloaded.
+    const profileChannel = supabase
+      .channel(`studio_profile_${profileId}`)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${profileId}` },
+        async () => {
+          const { data } = await supabase
+            .from('profiles')
+            .select(PROFILE_COLS)
+            .eq('id', profileId)
+            .maybeSingle();
+          if (data) setState({ kind: 'ready', profile: data as Profile });
+        })
+      .subscribe();
+
     const watchdog = setInterval(() => {
       if (Date.now() - lastEventRef.current > 30_000) {
         bump();
@@ -427,6 +468,7 @@ function StudioPageInner() {
     return () => {
       supabase.removeChannel(bookingsChannel);
       supabase.removeChannel(flashesChannel);
+      supabase.removeChannel(profileChannel);
       clearInterval(watchdog);
     };
   }, [profileId, supabase, reload]);
@@ -524,6 +566,12 @@ function StudioPageInner() {
       const raw = queueId.slice('flash-'.length);
       const flash = pendingFlashes.find((f) => f.id === raw);
       if (!flash) return;
+      // Mirror the booking branch's defensive gate. UI already greys Approve
+      // for unfunded USDC flashes; this catches realtime-race clicks.
+      if (!isFlashPaymentConfirmed(flash)) {
+        setErrorMsg('Viewer hasn’t paid yet — give it a moment, then try again.');
+        return;
+      }
       markModerating(queueId, true);
       const result = await moderateFlash(moderationCtx, flash, 'approve');
       markModerating(queueId, false);
@@ -724,24 +772,49 @@ function StudioPageInner() {
   const slug = profile.username ?? 'streamer';
   const displayCurrency: DisplayCurrency = profile.display_currency ?? 'eur';
 
-  // Sum today's approved flashes in the streamer's chosen currency only —
-  // ignore the other rail to keep the tile honest. Free flashes never count
-  // (no money moved). v1 is no FX: a streamer set to EUR who took a USDC
-  // tip sees their EUR total tick up by 0 and the USDC row in the log makes
-  // it obvious where it went.
+  // Sum today's approved flashes + settled beams in the streamer's chosen
+  // currency only — ignore the other rail to keep the tile honest. Free
+  // flashes never count (no money moved). v1 is no FX: a streamer set to
+  // EUR who took a USDC tip sees their EUR total tick up by 0 and the
+  // USDC row in the log makes it obvious where it went. Beam totals use
+  // the booking's full price_value × duration; prorated kicks are not
+  // discounted yet (no settled_amount column on bookings).
   const isUsdcRow = (m: string | null) => m === 'usdc' || m === 'solana';
+  const matchesCurrency = (m: string | null) =>
+    displayCurrency === 'usdc' ? isUsdcRow(m) : !isUsdcRow(m);
   let todayCents = 0;
   for (const row of flashLogRaw) {
     if (row.status === 'denied' || row.payment_method === 'free') continue;
-    const cents = row.amount_cents ?? 0;
-    if (displayCurrency === 'usdc') {
-      if (isUsdcRow(row.payment_method)) todayCents += cents;
-    } else {
-      // 'eur' or 'usd' — sum non-USDC rows. Stripe Connect already settles
-      // in the streamer's payout currency, so the cents are already in that
-      // currency; we don't FX-convert.
-      if (!isUsdcRow(row.payment_method)) todayCents += cents;
-    }
+    if (!matchesCurrency(row.payment_method)) continue;
+    todayCents += row.amount_cents ?? 0;
+  }
+  for (const row of todayBookings) {
+    if (row.payment_method === 'free') continue;
+    if (!matchesCurrency(row.payment_method)) continue;
+    const { total } = bookingTotal(row);
+    todayCents += Math.round(total * 100);
+  }
+  // Live-vested portion of any beam that's airing right now, scoped to
+  // beams that started today so the tile doesn't double-count vesting
+  // that already accrued yesterday. Re-renders every second via setTick
+  // so the streamer sees the count tick up while a beam is on stream.
+  const startOfDayMs = (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  })();
+  for (const row of activeBookings) {
+    if (row.payment_method === 'free') continue;
+    if (!matchesCurrency(row.payment_method)) continue;
+    const startMs = row.started_at ? new Date(row.started_at).getTime() : Date.now();
+    if (startMs < startOfDayMs) continue;
+    const durationSecs = (Number(row.duration_minutes) || 0) * 60;
+    if (durationSecs <= 0) continue;
+    const { total } = bookingTotal(row);
+    if (total <= 0) continue;
+    const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+    const vested = total * Math.min(elapsed, durationSecs) / durationSecs;
+    todayCents += Math.round(vested * 100);
   }
   const todayTotal = formatTotal(displayCurrency, todayCents / 100);
 
