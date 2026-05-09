@@ -490,42 +490,72 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
                       <div className="banner-preview">
                         <span className="banner-preview-track">▰ Banner · viewer messages scroll here · tip to try</span>
                       </div>
-                    ) : (
-                      <div style={{
-                        width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
-                        alignItems: 'center', justifyContent: 'center',
-                        // Bumped from 1.5px / .35 alpha to 2px / .55 alpha so empty
-                        // slots pop on the canvas — they read as the streamer's
-                        // accent color instead of disappearing into the bg.
-                        border: `2px dashed ${el.locked ? 'rgba(248,113,113,0.4)' : el.is_background ? 'rgba(153,69,255,0.5)' : 'rgba(var(--casi-accent-rgb),0.55)'}`,
-                        borderRadius: el.is_background ? 12 : 6,
-                        background: el.locked ? 'rgba(248,113,113,0.05)' : el.is_background ? 'rgba(153,69,255,0.06)' : 'rgba(var(--casi-accent-rgb),0.07)',
-                      }}>
-                        {el.locked ? (
-                          <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, color: 'rgba(248,113,113,0.6)', textTransform: 'uppercase', letterSpacing: 1 }}>🔒 Locked</span>
-                        ) : null}
-                        <span style={{ fontSize: el.is_background ? 24 : 18, marginBottom: 4, opacity: 0.9 }}>
-                          {el.is_background ? '🖼️' : el.shape === 'banner' ? '▰' : '✦'}
-                        </span>
-                        <span style={{
-                          fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1.5,
-                          color: el.locked ? 'rgba(248,113,113,0.65)' : el.is_background ? 'rgba(153,69,255,0.85)' : 'var(--casi-accent)',
+                    ) : (() => {
+                      // Two-layer outline so the slot boundary survives a bright
+                      // backdrop image: a thin dark stroke on the outside via
+                      // box-shadow, then the accent dashed border. Without the
+                      // dark stroke the dashed accent line vanishes against
+                      // sky/sand/snow backdrops.
+                      const accentRgb = el.locked
+                        ? '248,113,113'
+                        : el.is_background ? '153,69,255' : 'var(--casi-accent-rgb)';
+                      const labelText = el.locked
+                        ? 'No requests'
+                        : el.is_background ? 'Backdrop' : el.shape === 'banner' ? 'Banner' : 'Beam';
+                      const priceLabel = (() => {
+                        if (el.locked) return null;
+                        const p = formatSlotPrice(el);
+                        return p.rail === 'free' ? null : p.label;
+                      })();
+                      return (
+                        <div style={{
+                          width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
+                          alignItems: 'center', justifyContent: 'center',
+                          border: `2px dashed rgba(${accentRgb}, 0.85)`,
+                          borderRadius: el.is_background ? 12 : 6,
+                          background: el.locked ? 'rgba(248,113,113,0.05)' : el.is_background ? 'rgba(153,69,255,0.06)' : `rgba(${accentRgb}, 0.07)`,
+                          // Outer dark stroke so the dashed accent line stays
+                          // visible on bright backdrops (beach / sky / snow).
+                          boxShadow: '0 0 0 1px rgba(0,0,0,0.55)',
                         }}>
-                          {el.locked ? 'No requests' : el.is_background ? 'Backdrop' : el.shape === 'banner' ? 'Banner' : 'Beam'}
-                        </span>
-                        {(() => {
-                          if (el.locked) return null;
-                          const p = formatSlotPrice(el);
-                          if (p.rail === 'free') return null;
-                          return (
+                          <div style={{
+                            display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
+                            // Dark scrim chip behind the icon + name + price so
+                            // they're always legible against any backdrop. Single
+                            // chip rather than per-line text-shadow to keep the
+                            // visual quieter.
+                            padding: el.is_background ? '10px 16px' : '6px 12px',
+                            borderRadius: 6,
+                            background: 'rgba(0,0,0,0.55)',
+                            backdropFilter: 'blur(4px)',
+                            WebkitBackdropFilter: 'blur(4px)',
+                            border: `1px solid rgba(${accentRgb}, 0.35)`,
+                            maxWidth: '90%',
+                          }}>
+                            {el.locked ? (
+                              <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, color: 'rgba(248,113,113,0.85)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>🔒 Locked</span>
+                            ) : null}
+                            <span style={{ fontSize: el.is_background ? 22 : 16, marginBottom: 2, opacity: 0.95 }}>
+                              {el.is_background ? '🖼️' : el.shape === 'banner' ? '▰' : '✦'}
+                            </span>
                             <span style={{
-                              fontFamily: 'var(--font-casi-mono),monospace', fontSize: 11, fontWeight: 600, marginTop: 4,
-                              color: el.is_background ? 'rgba(153,69,255,0.95)' : 'var(--casi-accent)',
-                            }}>{p.label}</span>
-                          );
-                        })()}
-                      </div>
-                    )
+                              fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.5,
+                              color: el.locked
+                                ? '#fda4a4'
+                                : el.is_background ? '#d2b8ff' : 'var(--casi-accent)',
+                            }}>
+                              {labelText}
+                            </span>
+                            {priceLabel && (
+                              <span style={{
+                                fontFamily: 'var(--font-casi-mono),monospace', fontSize: 11, fontWeight: 700, marginTop: 4,
+                                color: el.is_background ? '#d2b8ff' : 'var(--casi-accent)',
+                              }}>{priceLabel}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()
                   ) : (
                     // 'cover' for shaped slots (circle, hex) so the image fills
                     // the shape — 'contain' would letterbox a portrait photo
