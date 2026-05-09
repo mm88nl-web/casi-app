@@ -39,6 +39,7 @@ import SlotsList from './_components/SlotsList';
 import StuckFlashesPanel from './_components/StuckFlashesPanel';
 import BrandFooter from './_components/BrandFooter';
 import BookingForm from './_components/BookingForm';
+import BrowseStreamersModal from './_components/BrowseStreamersModal';
 
 // Explicit column list for bookings reads. Belt + suspenders alongside the
 // column-level GRANT in 20260423 — if a new sensitive column lands on
@@ -82,6 +83,7 @@ function OverlayContent() {
   const [savedViewerName, setSavedViewerName] = useState<string|null>(null);
   const [nameConfirmed, setNameConfirmed]     = useState(false);
   const [showChangeName, setShowChangeName]   = useState(false);
+  const [showBrowseModal, setShowBrowseModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<any>(null);
   const [isQueue, setIsQueue]           = useState(false);
   const [isExtend, setIsExtend]         = useState(false);
@@ -1591,14 +1593,24 @@ function OverlayContent() {
         .ov-main.ov-v9 { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 24px 32px; align-items: start; max-width: 1280px; }
         .ov-main.ov-v9 > .ov-full-row { grid-column: 1 / -1; }
         .ov-main.ov-v9 > .stream-canvas { grid-column: 1; grid-row: 2; margin-bottom: 0; }
+        .ov-main.ov-v9 > .ov-browse-link { grid-column: 1; grid-row: 3; }
         .ov-main.ov-v9 > .slots-sec { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
         .ov-main.ov-v9 > .bf { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
         @media (max-width:900px) {
           .ov-main.ov-v9 { grid-template-columns: 1fr; }
           .ov-main.ov-v9 > .stream-canvas,
+          .ov-main.ov-v9 > .ov-browse-link,
           .ov-main.ov-v9 > .slots-sec,
           .ov-main.ov-v9 > .bf { grid-column: 1; grid-row: auto; }
         }
+        .ov-browse-link {
+          background: none; border: none; padding: 14px 0 0; cursor: pointer;
+          font-family: var(--M), var(--font-casi-mono), monospace;
+          font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+          color: var(--text-3, var(--casi-text-muted)); text-align: left;
+          transition: color 0.14s;
+        }
+        .ov-browse-link:hover { color: var(--ink, var(--casi-accent)); }
 
         .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
         .my-beams-lbl { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; }
@@ -2139,6 +2151,19 @@ function OverlayContent() {
             {isOBS && profile?.id && <FlashFeed profileId={profile.id} />}
           </div>
 
+          {/* "Browse other streams" link — sits directly under the canvas
+              in the v9 two-column grid (col 1, row 3). Opens the modal
+              search; not a navigation. Hidden in OBS mode. */}
+          {!isOBS && (
+            <button
+              type="button"
+              className="ov-browse-link"
+              onClick={() => setShowBrowseModal(true)}
+            >
+              Browse other streams →
+            </button>
+          )}
+
           {/* BOOKING FORM */}
           {!isOBS && selectedSlot && (
             <BookingForm
@@ -2264,6 +2289,8 @@ function OverlayContent() {
           {!isOBS && <BrandFooter />}
         </main>
       </div>
+
+      <BrowseStreamersModal open={showBrowseModal} onClose={() => setShowBrowseModal(false)} />
 
       {/* Solana confirmation modal */}
       {showConfirmModal && selectedSlot && (
