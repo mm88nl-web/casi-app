@@ -1055,11 +1055,13 @@ function OverlayContent() {
       // else goes — including the mobile signature-missing path so we can
       // see how often that platform combination breaks.
       if (!isUserRejection(err)) {
+        // booking_id alone is enough to look up the row + its price/duration
+        // in the DB; intentionally not capturing totalUsdc here because that
+        // var is scoped inside the try block above.
         reportClientError('overlay/booking/solana/initializeBeam', err, {
           booking_id:    String(newBooking.id),
           profile_id:    profile?.id,
           duration_secs: Math.round(durationSeconds),
-          amount_usdc:   totalUsdc,
           viewer_wallet: publicKey?.toBase58() ?? null,
           // ua tag so the webhook can split mobile vs desktop at a glance.
           mobile:        typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent),
