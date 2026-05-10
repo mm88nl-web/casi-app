@@ -985,6 +985,12 @@ function OverlayContent() {
 
     setTxStatus('streaming');
 
+    // Hoisted out of the try block so the catch's reportClientError can
+    // include them — closure-scoped vars declared inside try aren't
+    // visible in catch.
+    let pathTaken: 'unknown' | 'phantom_native' | 'wallet_adapter' = 'unknown';
+    let phantomProviderDetected = false;
+
     try {
       const { Connection, PublicKey } = await import('@solana/web3.js');
 
@@ -1090,13 +1096,8 @@ function OverlayContent() {
       // the sig immediately. We skip the wallet-adapter layer entirely
       // for that single call. Falls through to wallet-adapter's send for
       // any other context.
-      // Track which submit path was taken so the timeout report tells us
-      // whether the Phantom-native call stalled or whether we fell through
-      // to wallet-adapter's send. Without this we only know "something
-      // hung 30s" — useless for further debugging.
-      let pathTaken: 'unknown' | 'phantom_native' | 'wallet_adapter' = 'unknown';
-      let phantomProviderDetected = false;
-
+      // pathTaken / phantomProviderDetected are declared above the try
+      // so the catch's reportClientError can read them.
       const sendOverride = async (tx: import('@solana/web3.js').Transaction, conn: import('@solana/web3.js').Connection, opts?: unknown): Promise<string> => {
         if (typeof window !== 'undefined') {
           const phantom = (window as unknown as { phantom?: { solana?: { signAndSendTransaction?: (t: unknown) => Promise<{ signature: string }> } } }).phantom?.solana;
