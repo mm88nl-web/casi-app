@@ -133,10 +133,11 @@ export function useStoredPhantomConnectSession(): ConnectSession | null {
 export type PendingBooking = {
   /** What the signed tx is for. Drives the return handler's dispatch:
    *  - 'book'   → POST /api/bookings/attach-solana-tx
+   *  - 'flash'  → POST /api/flashes/attach-escrow
    *  - 'settle' → tx already submitted on-chain by us; refresh data
    *  - 'cancel' → tx already submitted on-chain by us; refresh data
    *  Default 'book' for backwards-compatibility with older stashes. */
-  kind?:         'book' | 'settle' | 'cancel';
+  kind?:         'book' | 'flash' | 'settle' | 'cancel';
   booking_id:    string;
   cancel_token:  string;
   escrow_pda:    string;
