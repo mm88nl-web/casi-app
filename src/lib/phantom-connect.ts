@@ -251,9 +251,66 @@ export function parseConnectResponse(search: URLSearchParams): ConnectSession {
 
 // ── signAndSendTransaction flow ──────────────────────────────────────────
 
-/** Builds the URL to redirect the user to in order to sign + send a
- *  Transaction. The tx must already have its blockhash + feePayer set.
- *  Returns the deeplink URL the dapp should navigate to. */
+/** Builds the URL to redirect the user to in order to sign a Transaction
+ *  (without submitting). The dapp submits the returned signed tx via its
+ *  own RPC. Phantom Mobile in some versions returns
+ *  errorCode=-32601 ("This method is not supported") for the
+ *  signAndSendTransaction variant — signTransaction is more universally
+ *  supported. */
+export function buildSignTransactionUrl(opts: {
+  session:         ConnectSession;
+  /** A serialized legacy Transaction the wallet will sign. Must already
+   *  have feePayer + recentBlockhash set; the wallet will not edit either. */
+  transactionB58:  string;
+  redirectTo:      string;
+}): string {
+  const kp = getOrCreateDappKeypair();
+  const shared = sharedSecret(bs58.decode(opts.session.phantomEncryptionPublicKey), kp.secretKey);
+  const { nonce, payload } = encryptPayload(
+    {
+      transaction: opts.transactionB58,
+      session:     opts.session.session,
+    },
+    shared,
+  );
+  const params = new URLSearchParams({
+    dapp_encryption_public_key: bs58.encode(kp.publicKey),
+    nonce,
+    redirect_link:              opts.redirectTo,
+    payload,
+  });
+  const url = `https://phantom.app/ul/v1/signTransaction?${params.toString()}`;
+  if (typeof window !== 'undefined') {
+    console.log('[phantom-connect] sign redirect →', url);
+    try { window.localStorage.setItem('casi-phantom-last-url', url); } catch { /* ignore */ }
+  }
+  return url;
+}
+
+/** Parses the response from a signTransaction deeplink. Returns the signed
+ *  serialized tx as base58; the caller is responsible for submitting it
+ *  via their own connection. */
+export function parseSignTransactionResponse(search: URLSearchParams, session: ConnectSession): { signedTransactionB58: string } {
+  const errorCode    = search.get('errorCode');
+  const errorMessage = search.get('errorMessage');
+  if (errorCode) {
+    throw new Error(`Phantom sign error ${errorCode}: ${errorMessage ?? '(no message)'}`);
+  }
+  const data  = search.get('data');
+  const nonce = search.get('nonce');
+  if (!data || !nonce) {
+    throw new Error('phantom-connect: incomplete sign response');
+  }
+  const kp = getOrCreateDappKeypair();
+  const shared = sharedSecret(bs58.decode(session.phantomEncryptionPublicKey), kp.secretKey);
+  const decrypted = decryptPayload(data, nonce, shared) as { transaction: string };
+  if (!decrypted.transaction) throw new Error('phantom-connect: response missing signed transaction');
+  return { signedTransactionB58: decrypted.transaction };
+}
+
+/** @deprecated Phantom Mobile may return -32601 "method not supported" for
+ *  this variant. Prefer buildSignTransactionUrl + dapp-side submit. Kept
+ *  for completeness in case a future Phantom version re-enables it. */
 export function buildSignAndSendUrl(opts: {
   session:         ConnectSession;
   /** A serialized v0 / legacy Transaction the wallet will sign + submit. */

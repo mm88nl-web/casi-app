@@ -269,7 +269,7 @@ function OverlayContent() {
           if (pending?.pending_tx) {
             const sep = window.location.search ? '&' : '?';
             const here = window.location.origin + window.location.pathname + window.location.search + `${sep}phantom_action=sign-resume`;
-            window.location.href = pc.buildSignAndSendUrl({
+            window.location.href = pc.buildSignTransactionUrl({
               session,
               transactionB58: pending.pending_tx,
               redirectTo: here,
@@ -285,13 +285,24 @@ function OverlayContent() {
           cleanUrl();
           return;
         }
-        const { signature } = pc.parseSignAndSendResponse(params, session);
+        // Phantom returns the SIGNED tx; we submit it ourselves via our
+        // own RPC. Avoids Phantom's signAndSendTransaction returning
+        // -32601 "method not supported" on certain Phantom Mobile builds.
+        const { signedTransactionB58 } = pc.parseSignTransactionResponse(params, session);
         const pending = pc.readPendingBooking();
         cleanUrl();
         if (!pending) {
           showNotif('Lost track of which booking — please retry', 'denied');
           return;
         }
+        const { Connection } = await import('@solana/web3.js');
+        const { SOLANA_RPC } = await import('@/lib/solana-network');
+        const bs58Mod = await import('bs58');
+        const bs58Local = bs58Mod.default;
+        const conn = new Connection(SOLANA_RPC, 'confirmed');
+        const rawTx = bs58Local.decode(signedTransactionB58);
+        const signature = await conn.sendRawTransaction(rawTx, { skipPreflight: false });
+
         const res = await fetch('/api/bookings/attach-solana-tx', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1336,7 +1347,7 @@ function OverlayContent() {
           escrow_pda:    escrowPda,
           viewer_wallet: effectivePublicKey.toBase58(),
         });
-        window.location.href = pc.buildSignAndSendUrl({
+        window.location.href = pc.buildSignTransactionUrl({
           session,
           transactionB58: txB58,
           redirectTo: `${baseHere}${sep}phantom_action=sign-resume`,
