@@ -435,6 +435,83 @@ export class CasiEscrowClient {
     return { tx, escrowPda };
   }
 
+  /**
+   * Build a `settle_beam` Transaction without signing or submitting it. Used
+   * by mobile callers that route signing through Phantom Connect deeplinks
+   * (see overlay/page.tsx). Mirror of `settleBeam` minus the .rpc() call.
+   */
+  async buildSettleBeamTx(params: {
+    escrowId:    string | number | bigint;
+    viewer:      PublicKey;
+    streamer:    PublicKey;
+    usdcMint?:   PublicKey;
+    tokenProgram?: PublicKey;
+  }): Promise<{ tx: Transaction }> {
+    const { escrowId, viewer, streamer } = params;
+    const usdcMint     = params.usdcMint     ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
+    const escrowIdBytes = uuidToBytes(escrowId);
+    const [escrowPda]   = deriveEscrowPda(escrowId);
+    const caller        = this.wallet.publicKey;
+    const vault         = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
+    const streamerAta   = getAssociatedTokenAddressSync(usdcMint, streamer,  false, tokenProgram);
+    const viewerAta     = getAssociatedTokenAddressSync(usdcMint, viewer,    false, tokenProgram);
+
+    const tx: Transaction = await (this.program.methods as any)
+      .settleBeam(escrowIdBytes)
+      .accounts({
+        caller, streamer, viewer,
+        escrowState: escrowPda,
+        vault, streamerAta, viewerAta,
+        usdcMint, tokenProgram,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram:          SystemProgram.programId,
+      })
+      .transaction();
+    const conn = (this.program.provider as { connection: Connection }).connection;
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = caller;
+    return { tx };
+  }
+
+  /**
+   * Build a `cancel_escrow` Transaction without signing or submitting it.
+   * Mirror of `cancelEscrow` minus the .rpc() call. Mobile-callers route
+   * signing through Phantom Connect deeplinks.
+   */
+  async buildCancelEscrowTx(params: {
+    escrowId:    string | number | bigint;
+    usdcMint?:   PublicKey;
+    tokenProgram?: PublicKey;
+  }): Promise<{ tx: Transaction }> {
+    const { escrowId } = params;
+    const usdcMint     = params.usdcMint     ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
+    const escrowIdBytes = uuidToBytes(escrowId);
+    const [escrowPda]   = deriveEscrowPda(escrowId);
+    const viewer        = this.wallet.publicKey;
+    const vault         = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
+    const viewerAta     = getAssociatedTokenAddressSync(usdcMint, viewer,    false, tokenProgram);
+
+    const tx: Transaction = await (this.program.methods as any)
+      .cancelEscrow(escrowIdBytes)
+      .accounts({
+        viewer,
+        escrowState: escrowPda,
+        vault, viewerAta,
+        usdcMint, tokenProgram,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram:          SystemProgram.programId,
+      })
+      .transaction();
+    const conn = (this.program.provider as { connection: Connection }).connection;
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = viewer;
+    return { tx };
+  }
+
   async initializeBeam(
     params: InitBeamParams,
     /**

@@ -256,23 +256,42 @@ function OverlayContent() {
         const rawTx = bs58Local.decode(signedTransactionB58);
         const signature = await conn.sendRawTransaction(rawTx, { skipPreflight: false });
 
-        const res = await fetch('/api/bookings/attach-solana-tx', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            booking_id:    pending.booking_id,
-            cancel_token:  pending.cancel_token,
-            tx_signature:  signature,
-            escrow_pda:    pending.escrow_pda,
-            viewer_wallet: pending.viewer_wallet,
-          }),
-        });
-        if (res.ok) {
-          showNotif('◎ Payment locked — awaiting streamer approval!', 'success');
-          pc.clearPendingBooking();
-          if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+        // Dispatch on the stash's `kind`. Default 'book' for stashes from
+        // older code paths that didn't set it explicitly.
+        const kind = pending.kind ?? 'book';
+        if (kind === 'book') {
+          const res = await fetch('/api/bookings/attach-solana-tx', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              booking_id:    pending.booking_id,
+              cancel_token:  pending.cancel_token,
+              tx_signature:  signature,
+              escrow_pda:    pending.escrow_pda,
+              viewer_wallet: pending.viewer_wallet,
+            }),
+          });
+          if (res.ok) {
+            showNotif('◎ Payment locked — awaiting streamer approval!', 'success');
+            pc.clearPendingBooking();
+            if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+          } else {
+            showNotif('Booking attach failed — your funds may be locked. Reload to recover.', 'error');
+          }
         } else {
-          showNotif('Booking attach failed — your funds may be locked. Reload to recover.', 'error');
+          // settle / cancel: tx already submitted on-chain — webhook will
+          // catch up the booking row, we just refresh the viewer's data and
+          // surface the right toast. No attach-solana-tx call needed since
+          // the booking row already exists with its escrow_pda.
+          pc.clearPendingBooking();
+          refreshWalletNav();
+          showNotif(
+            kind === 'settle'
+              ? '◎ Beam ended — refund returned to your wallet'
+              : '◎ USDC returned to your wallet',
+            'warning',
+          );
+          if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
         }
       } catch (err) {
         const { reportClientError } = await import('@/lib/report-client-error');
@@ -1518,27 +1537,81 @@ function OverlayContent() {
   };
 
   /**
-   * Build the CasiEscrowClient once — used by both the live-beam "end early"
-   * (settle_beam) and the denied-beam "recover USDC" (cancel_escrow) flows.
-   * Returns null if the wallet isn't ready to sign.
+   * Build the CasiEscrowClient. Used by viewer-side settle_beam / cancel_escrow.
+   * On desktop and inside a wallet's in-app browser the wallet adapter has a
+   * real signTransaction so the returned client can call .rpc() directly. On
+   * mobile-Phantom-Connect we have a session pubkey but no adapter signer —
+   * the helper returns a build-only client (signTransaction stub) and the
+   * caller routes signing through the Phantom Connect deeplink helper below.
    */
   const buildViewerCasiClient = async () => {
-    if (!publicKey || !signTransaction) return null;
+    const pcSession = await import('@/lib/phantom-connect').then(m => m.getStoredSession());
+    const sessionPk = pcSession ? new PublicKey(pcSession.walletPublicKey) : null;
+    const pk = publicKey ?? sessionPk;
+    if (!pk) return null;
     const { Connection } = await import('@solana/web3.js');
     const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const stub = async () => { throw new Error('Sign via Phantom Connect deeplink, not adapter'); };
     const anchorWallet = {
-      publicKey,
-      signTransaction,
+      publicKey: pk,
+      signTransaction: signTransaction ?? stub,
       signAllTransactions:
         signAllTransactions ||
         (async <T,>(txs: T[]) => {
           const out: T[] = [];
-          for (const tx of txs) out.push((await signTransaction(tx as never)) as T);
+          for (const tx of txs) out.push((signTransaction ? await signTransaction(tx as never) : await stub()) as T);
           return out;
         }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
     return new CasiEscrowClient(new Connection(SOLANA_RPC), anchorWallet, WALLET_ADAPTER_CLUSTER);
+  };
+
+  /**
+   * Returns true when the viewer is on a mobile browser that's NOT inside a
+   * wallet's in-app browser AND has a Phantom Connect session. In that case
+   * any Solana tx must be signed via the Phantom Connect deeplink — the
+   * wallet adapter has no working signTransaction in this environment.
+   */
+  const isPhantomConnectMobile = async (): Promise<boolean> => {
+    const { needsMobileHandoff, isInWalletBrowser } = await import('@/lib/mobile-wallet');
+    if (!needsMobileHandoff() || isInWalletBrowser()) return false;
+    const pc = await import('@/lib/phantom-connect');
+    return !!pc.getStoredSession();
+  };
+
+  /**
+   * Hand off a built-but-unsigned Transaction to Phantom Connect for signing.
+   * Stashes booking context so the mount-time return handler can finalize on
+   * return (the `kind` field tells it whether to attach-solana-tx or just
+   * refresh data after the on-chain submit). Page navigates away.
+   */
+  const phantomConnectSignAndSubmit = async (
+    tx: import('@solana/web3.js').Transaction,
+    kind: 'settle' | 'cancel',
+    booking: { id: string | number; escrow_pda: string; viewer_wallet: string },
+  ): Promise<void> => {
+    const pc = await import('@/lib/phantom-connect');
+    const bs58Mod = await import('bs58');
+    const bs58 = bs58Mod.default;
+    const session = pc.getStoredSession();
+    if (!session) throw new Error('No Phantom Connect session');
+    const txB58 = bs58.encode(tx.serialize({ requireAllSignatures: false, verifySignatures: false }));
+    const cancelToken = readBookingTokens()[booking.id] ?? '';
+    pc.stashPendingBooking({
+      kind,
+      booking_id:    String(booking.id),
+      cancel_token:  cancelToken,
+      escrow_pda:    booking.escrow_pda,
+      viewer_wallet: booking.viewer_wallet,
+    });
+    const baseHere = window.location.origin + window.location.pathname + window.location.search;
+    const sep = window.location.search ? '&' : '?';
+    window.location.href = pc.buildSignTransactionUrl({
+      session,
+      transactionB58: txB58,
+      redirectTo: `${baseHere}${sep}phantom_action=sign-resume`,
+    });
   };
 
   /**
@@ -1552,6 +1625,18 @@ function OverlayContent() {
       const client = await buildViewerCasiClient();
       if (!client) throw new Error('Wallet not ready to sign');
       const { PublicKey: PK } = await import('@solana/web3.js');
+      // Mobile Phantom Connect: build the tx, redirect to Phantom for signing.
+      // Page navigates away; the mount-time return handler refreshes data
+      // once the signed tx submits successfully.
+      if (await isPhantomConnectMobile()) {
+        const { tx } = await client.buildSettleBeamTx({
+          escrowId: booking.id,
+          viewer:   new PK(booking.viewer_wallet),
+          streamer: new PK(profile.solana_wallet),
+        });
+        await phantomConnectSignAndSubmit(tx, 'settle', booking);
+        return;
+      }
       await client.settleBeam({
         escrowId: booking.id,
         viewer:   new PK(booking.viewer_wallet),
@@ -1681,6 +1766,15 @@ function OverlayContent() {
         const client = await buildViewerCasiClient();
         if (!client) throw new Error('Wallet not ready to sign');
         const { PublicKey: PK } = await import('@solana/web3.js');
+        if (await isPhantomConnectMobile()) {
+          const { tx } = await client.buildSettleBeamTx({
+            escrowId: booking.id,
+            viewer:   new PK(booking.viewer_wallet),
+            streamer: new PK(profile.solana_wallet),
+          });
+          await phantomConnectSignAndSubmit(tx, 'settle', booking);
+          return;
+        }
         await client.settleBeam({
           escrowId: booking.id,
           viewer:   new PK(booking.viewer_wallet),
@@ -1721,6 +1815,11 @@ function OverlayContent() {
     try {
       const client = await buildViewerCasiClient();
       if (!client) throw new Error('Wallet not ready to sign');
+      if (await isPhantomConnectMobile()) {
+        const { tx } = await client.buildCancelEscrowTx({ escrowId: booking.id });
+        await phantomConnectSignAndSubmit(tx, 'cancel', booking);
+        return;
+      }
       await client.cancelEscrow({ escrowId: booking.id });
     } catch (err) {
       cancelThrew = true;
@@ -1825,6 +1924,15 @@ function OverlayContent() {
         return;
       }
       try {
+        if (await isPhantomConnectMobile()) {
+          const { tx } = await client.buildCancelEscrowTx({ escrowId: flash.id });
+          await phantomConnectSignAndSubmit(tx, 'cancel', {
+            id: flash.id,
+            escrow_pda: flash.escrow_pda,
+            viewer_wallet: flash.viewer_wallet ?? '',
+          });
+          return;
+        }
         await client.cancelEscrow({ escrowId: flash.id });
       } catch (err) {
         const { isAlreadyProcessed, formatEscrowError } = await import('@/lib/casi-errors');
