@@ -66,5 +66,5 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${origin}/login?finish=true`);
   }
 
-  return NextResponse.redirect(`${origin}${next && next.startsWith('/') ? next : '/admin'}`);
+  return NextResponse.redirect(`${origin}${next && next.startsWith('/') ? next : '/studio'}`);
 }

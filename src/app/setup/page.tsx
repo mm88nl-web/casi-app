@@ -37,7 +37,7 @@ export default function SetupPage() {
         .eq('id', user.id);
 
       alert("Ghost Template Saved!");
-      router.push('/admin'); // Move to the dashboard
+      router.push('/studio'); // Move to the dashboard
     }
     setUploading(false);
   };

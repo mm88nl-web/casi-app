@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import SlotMedia from '@/components/SlotMedia';
 import RailIcon from '@/components/icons/RailIcon';
 
@@ -209,23 +208,9 @@ export default function ApprovalQueue({
                   {item.priceLabel}
                 </div>
                 {ro ? (
-                  <Link
-                    href="/admin"
-                    title="Manage in classic studio"
-                    className="font-mono uppercase"
-                    style={{
-                      padding: '7px 11px',
-                      borderRadius: 0,
-                      background: 'transparent',
-                      border: '1px solid var(--casi-border-2)',
-                      color: 'var(--casi-text-dim)',
-                      fontSize: '10px',
-                      letterSpacing: '0.1em',
-                      textDecoration: 'none',
-                    }}
-                  >
-                    Manage →
-                  </Link>
+                  // Read-only mode: no inline action button. Streamer needs
+                  // full studio controls (different tab / refresh) to act.
+                  null
                 ) : (
                   <>
                     <button
