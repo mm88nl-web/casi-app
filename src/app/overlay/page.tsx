@@ -278,6 +278,27 @@ function OverlayContent() {
           } else {
             showNotif('Booking attach failed — your funds may be locked. Reload to recover.', 'error');
           }
+        } else if (kind === 'flash') {
+          // Flash booking_id is the flash row id. Different attach endpoint
+          // — flashes don't carry a cancel_token in the same way.
+          const res = await fetch('/api/flashes/attach-escrow', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              flash_id:      pending.booking_id,
+              tx_signature:  signature,
+              escrow_pda:    pending.escrow_pda,
+              viewer_wallet: pending.viewer_wallet,
+            }),
+          });
+          if (res.ok) {
+            showNotif('⚡ Flash locked — awaiting streamer approval!', 'success');
+            pc.clearPendingBooking();
+            refreshWalletNav();
+            if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+          } else {
+            showNotif('Flash attach failed — your funds may be locked. Reload to recover.', 'error');
+          }
         } else {
           // settle / cancel: tx already submitted on-chain — webhook will
           // catch up the booking row, we just refresh the viewer's data and

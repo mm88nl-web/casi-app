@@ -389,6 +389,39 @@ export class CasiEscrowClient {
     };
   }
 
+  /**
+   * Build an unsigned `initialize_escrow` (Flash variant: duration_secs=0,
+   * escrow_type=0) Transaction. Mobile callers sign via Phantom Connect
+   * deeplink and submit through their own RPC.
+   */
+  async buildInitializeFlashTx(params: InitFlashParams): Promise<{ tx: Transaction; escrowPda: PublicKey }> {
+    const { escrowId, streamer, amountUsdc } = params;
+    const usdcMint     = params.usdcMint     ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
+    const escrowIdBytes = uuidToBytes(escrowId);
+    const [escrowPda]   = deriveEscrowPda(escrowId);
+    const viewer        = this.wallet.publicKey;
+    const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer,    false, tokenProgram);
+    const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
+
+    const tx: Transaction = await (this.program.methods as any)
+      .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(0), 0)
+      .accounts({
+        viewer, streamer,
+        escrowState: escrowPda,
+        vault, viewerAta,
+        usdcMint, tokenProgram,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram:          SystemProgram.programId,
+      })
+      .transaction();
+    const conn = (this.program.provider as { connection: Connection }).connection;
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = viewer;
+    return { tx, escrowPda };
+  }
+
   // -------------------------------------------------------------------------
   // initialize_escrow  (Beam variant: duration_secs > 0, escrow_type_val = 1)
   // -------------------------------------------------------------------------
