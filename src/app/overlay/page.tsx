@@ -2690,7 +2690,7 @@ function OverlayContent() {
               connecting={connecting}
               onStripeSubmit={submitBooking}
               onSolanaPay={() => {
-                if (!connected) {
+                if (!connected && !hasPhantomConnectSession) {
                   openWalletModal();
                 } else {
                   setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
