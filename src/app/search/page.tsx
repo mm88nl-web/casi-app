@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 import { NavBar, Footer } from '@/components/v9';
-import WalletPill from '@/components/WalletPill';
-
 type LiveProfile = {
   username: string;
   display_name: string | null;
@@ -36,7 +34,6 @@ export default function BrowsePage() {
     <main className="casi-v9-browse">
       <NavBar
         liveLabel={live === null ? '— LIVE NOW' : `${live.length} LIVE NOW`}
-        right={<WalletPill />}
       />
 
       <section className="b-head">

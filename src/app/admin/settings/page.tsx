@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { CasiMark, Wordmark } from '@/components/v9';
-import WalletNav from '@/components/WalletNav';
 import SettingsLayout, { type RailGroup } from '@/components/settings/SettingsLayout';
 import ProfileSection, { type ProfileRow } from '@/components/settings/ProfileSection';
 import PayoutsSection from '@/components/settings/PayoutsSection';
@@ -137,7 +136,6 @@ export default function SettingsPage() {
           >
             New settings →
           </Link>
-          <WalletNav />
         </div>
       </nav>
 

@@ -88,6 +88,20 @@
   top: 0;
   z-index: 300;
 }
+/* Centered-logo variant — used on every surface that doesn't render the
+   wallet pill (landing, search, /s/[username], …). Logo sits in the
+   middle; any secondary right-block content (live indicator) floats on
+   the right edge without offsetting the logo. */
+.casi-v9-nav.casi-v9-nav-centered {
+  justify-content: center;
+  position: relative;
+}
+.casi-v9-nav.casi-v9-nav-centered .casi-v9-nav-r {
+  position: absolute;
+  right: var(--pad);
+  top: 50%;
+  transform: translateY(-50%);
+}
 .casi-v9-nav-logo {
   display: flex;
   align-items: center;
