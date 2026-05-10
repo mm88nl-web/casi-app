@@ -393,6 +393,48 @@ export class CasiEscrowClient {
   // initialize_escrow  (Beam variant: duration_secs > 0, escrow_type_val = 1)
   // -------------------------------------------------------------------------
 
+  /**
+   * Build the unsigned initializeEscrow (Beam) tx + return its escrow PDA.
+   * Caller submits + waits as it sees fit. Used by mobile callers that
+   * want to race the wallet response against an on-chain PDA poll —
+   * Phantom Android's WebView occasionally drops the wallet's response
+   * back to the page even when the user tapped Approve, so trusting the
+   * chain is more reliable than trusting the wallet's promise.
+   */
+  async buildInitializeBeamTx(params: InitBeamParams): Promise<{ tx: Transaction; escrowPda: PublicKey }> {
+    const { escrowId, streamer, amountUsdc, durationSecs } = params;
+    if (!(durationSecs > 0)) {
+      throw new Error('durationSecs must be > 0 for Beam escrows');
+    }
+    const usdcMint     = params.usdcMint     ?? this.defaultMint();
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
+    const escrowIdBytes = uuidToBytes(escrowId);
+    const [escrowPda]   = deriveEscrowPda(escrowId);
+    const viewer        = this.wallet.publicKey;
+    const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer,   false, tokenProgram);
+    const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true, tokenProgram);
+
+    const builder = (this.program.methods as any)
+      .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(durationSecs), 1)
+      .accounts({
+        viewer,
+        streamer,
+        escrowState:          escrowPda,
+        vault,
+        viewerAta,
+        usdcMint,
+        tokenProgram,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram:          SystemProgram.programId,
+      });
+    const tx: Transaction = await builder.transaction();
+    const conn = (this.program.provider as { connection: Connection }).connection;
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = viewer;
+    return { tx, escrowPda };
+  }
+
   async initializeBeam(
     params: InitBeamParams,
     /**

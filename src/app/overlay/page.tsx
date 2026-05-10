@@ -990,6 +990,7 @@ function OverlayContent() {
     // visible in catch.
     let pathTaken: 'unknown' | 'phantom_native' | 'wallet_adapter' = 'unknown';
     let phantomProviderDetected = false;
+    let inferredFromPoll = false;
 
     try {
       const { Connection, PublicKey } = await import('@solana/web3.js');
@@ -1096,11 +1097,38 @@ function OverlayContent() {
       // the sig immediately. We skip the wallet-adapter layer entirely
       // for that single call. Falls through to wallet-adapter's send for
       // any other context.
-      // pathTaken / phantomProviderDetected are declared above the try
-      // so the catch's reportClientError can read them.
-      const sendOverride = async (tx: import('@solana/web3.js').Transaction, conn: import('@solana/web3.js').Connection, opts?: unknown): Promise<string> => {
-        if (typeof window !== 'undefined') {
-          const phantom = (window as unknown as {
+      // ────────────────────────────────────────────────────────────────
+      // Mobile-first booking flow: race wallet-send against PDA-poll.
+      //
+      // User reported the Phantom Android in-app browser shows the
+      // approval sheet, the user taps Approve, the tx hits the chain —
+      // but the wallet's response NEVER reaches the page. Diagnostics
+      // confirmed both phantom_native (signAndSendTransaction) and
+      // wallet_adapter (sendTransaction) hung indefinitely with the
+      // wallet sitting in the approved state. The WebView bridge is
+      // dropping the response.
+      //
+      // Fix: stop trusting the wallet's promise. Build the unsigned tx,
+      // fire the wallet send (no await, just kick it), and start polling
+      // the escrow PDA on our connection. Whichever resolves first wins:
+      //   - wallet returns sig → use it
+      //   - PDA appears on-chain → infer success, attach without sig
+      //   - 90s elapses → genuine failure, deny
+      //
+      // attach-solana-tx accepts tx_signature as optional, so the
+      // PDA-only path completes the booking just fine.
+      // ────────────────────────────────────────────────────────────────
+      const { tx, escrowPda: escrowPdaPubkey } = await client.buildInitializeBeamTx({
+        escrowId:     newBooking.id,
+        streamer:     new PublicKey(profile.solana_wallet),
+        amountUsdc:   amountUsdcMicro,
+        durationSecs: durationSecsInt,
+      });
+      const escrowPda = escrowPdaPubkey.toBase58();
+
+      // Best-effort wallet wake-up for Phantom Android (no-op elsewhere).
+      const phantomProvider = typeof window !== 'undefined'
+        ? (window as unknown as {
             phantom?: {
               solana?: {
                 isConnected?: boolean;
@@ -1108,74 +1136,59 @@ function OverlayContent() {
                 signAndSendTransaction?: (t: unknown) => Promise<{ signature: string }>;
               };
             };
-          }).phantom?.solana;
-          phantomProviderDetected = !!phantom;
-          if (phantom?.signAndSendTransaction) {
-            // Re-establish the wallet session. Phantom Android's mobile
-            // session has a habit of going dormant — the in-app browser
-            // keeps window.phantom.solana mounted but the underlying RPC
-            // bridge to the wallet binary is asleep. signAndSendTransaction
-            // hangs forever waiting for a response that never comes. A
-            // fresh connect() wakes the bridge before we send.
-            try {
-              if (phantom.connect && !phantom.isConnected) {
-                await Promise.race([
-                  phantom.connect({ onlyIfTrusted: true }),
-                  new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('phantom_connect_timeout')), 5_000),
-                  ),
-                ]);
-              }
-            } catch {
-              /* connect failures are non-fatal; the send call below will
-                 throw with the real reason if needed */
-            }
-            // Inner 45s timeout. Phantom Android sometimes shows an
-            // approval sheet that the user has to tap; that takes 5-30s
-            // realistic. We were timing out at 12s before, falling through
-            // to wallet-adapter (which also stalls because the underlying
-            // wallet provider is the same). Better to wait longer here
-            // than fall through to a path that won't help.
-            const PHANTOM_INNER_TIMEOUT_MS = 45_000;
-            try {
-              pathTaken = 'phantom_native';
-              const result = await Promise.race([
-                phantom.signAndSendTransaction(tx),
-                new Promise<never>((_, reject) =>
-                  setTimeout(() => reject(new Error('phantom_native_inner_timeout')), PHANTOM_INNER_TIMEOUT_MS),
-                ),
-              ]);
-              return (result as { signature: string }).signature;
-            } catch (innerErr) {
-              console.warn('[bookSlot] phantom native send failed, falling through:', innerErr);
-              // Fall through to wallet-adapter path.
-            }
-          }
+          }).phantom?.solana
+        : null;
+      phantomProviderDetected = !!phantomProvider;
+      if (phantomProvider?.connect && !phantomProvider.isConnected) {
+        try {
+          await Promise.race([
+            phantomProvider.connect({ onlyIfTrusted: true }),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('phantom_connect_timeout')), 5_000)),
+          ]);
+        } catch { /* non-fatal */ }
+      }
+
+      // Fire-and-forget the wallet send. The promise either resolves
+      // with a sig or hangs forever — we don't care because the PDA
+      // poll below is the source of truth.
+      type SendOutcome = { kind: 'wallet'; sig: string } | { kind: 'inferred'; sig: string };
+      const walletSendPromise: Promise<SendOutcome> = (async () => {
+        if (phantomProvider?.signAndSendTransaction) {
+          pathTaken = 'phantom_native';
+          const r = await phantomProvider.signAndSendTransaction(tx);
+          return { kind: 'wallet', sig: r.signature };
         }
         if (sendTransaction) {
           pathTaken = 'wallet_adapter';
-          return sendTransaction(tx, conn, opts as never);
+          const sig = await sendTransaction(tx, connection);
+          return { kind: 'wallet', sig };
         }
-        throw new Error('No sendTransaction available');
-      };
+        throw new Error('No wallet send method available');
+      })();
+      // Swallow rejections so the unawaited promise doesn't crash the
+      // app — the poll path will still resolve via the chain if the
+      // wallet actually submitted.
+      walletSendPromise.catch((err) => {
+        console.warn('[bookSlot] wallet send promise rejected (poll continues):', err);
+      });
 
-      // Bumped 30s → 90s. Mobile users tapping an approval sheet need
-      // more breathing room than desktop popup flows.
-      const BEAM_RPC_TIMEOUT_MS = 90_000;
-      const { sig, escrowPda } = await Promise.race([
-        client.initializeBeam(
-          {
-            escrowId:     newBooking.id,
-            streamer:     new PublicKey(profile.solana_wallet),
-            amountUsdc:   amountUsdcMicro,
-            durationSecs: durationSecsInt,
-          },
-          sendOverride,
-        ),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('rpc_confirmation_timeout')), BEAM_RPC_TIMEOUT_MS),
-        ),
-      ]);
+      const POLL_INTERVAL_MS = 2_000;
+      const POLL_TIMEOUT_MS  = 90_000;
+      const pollPromise: Promise<SendOutcome> = (async () => {
+        const start = Date.now();
+        while (Date.now() - start < POLL_TIMEOUT_MS) {
+          await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+          const info = await connection.getAccountInfo(escrowPdaPubkey).catch(() => null);
+          if (info) {
+            inferredFromPoll = true;
+            return { kind: 'inferred', sig: '' };
+          }
+        }
+        throw new Error('rpc_confirmation_timeout');
+      })();
+
+      const result = await Promise.race([walletSendPromise, pollPromise]);
+      const sig = result.sig;
 
       // Persist on-chain state so the admin settle/cancel flows can rebuild
       // the CPI accounts without re-fetching from chain. cancel_token-authed
@@ -1311,6 +1324,7 @@ function OverlayContent() {
         // failed earlier — blockhash fetch, tx build, etc).
         path_taken: pathTaken,
         phantom_provider_detected: phantomProviderDetected,
+        inferred_from_poll: inferredFromPoll,
         wallet_adapter_name: wallet?.adapter?.name ?? null,
       });
       await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
