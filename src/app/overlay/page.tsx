@@ -132,7 +132,7 @@ function OverlayContent() {
   // ─────────────────────────────────────────────────────────────────────────
 
   // ── Wallet state ──────────────────────────────────────────────────────────
-  const { wallet, connected, connecting, connect, publicKey, signTransaction, signAllTransactions } = useWallet();
+  const { wallet, connected, connecting, connect, publicKey, signTransaction, signAllTransactions, sendTransaction } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
 
   // Only connect when the user explicitly clicked a Connect button.
@@ -1071,14 +1071,25 @@ function OverlayContent() {
       // already landed. After 30s we throw and let the catch's PDA-probe
       // recovery path resolve the booking from on-chain state. Desktop and
       // happy-path mobile finish in <10s so the timeout never triggers.
+      // Pass the wallet-adapter's sendTransaction so initializeBeam routes
+      // through it instead of Anchor's .rpc(). On Phantom mobile the wallet
+      // adapter calls signAndSendTransaction internally — the wallet signs
+      // AND submits via Phantom's own RPC, returning the sig directly. This
+      // sidesteps the Helius/Phantom-RPC desync that causes confirmation
+      // timeouts on the in-app browser. Desktop wallets behave equivalently.
       const BEAM_RPC_TIMEOUT_MS = 30_000;
       const { sig, escrowPda } = await Promise.race([
-        client.initializeBeam({
-          escrowId:     newBooking.id,
-          streamer:     new PublicKey(profile.solana_wallet),
-          amountUsdc:   amountUsdcMicro,
-          durationSecs: durationSecsInt,
-        }),
+        client.initializeBeam(
+          {
+            escrowId:     newBooking.id,
+            streamer:     new PublicKey(profile.solana_wallet),
+            amountUsdc:   amountUsdcMicro,
+            durationSecs: durationSecsInt,
+          },
+          sendTransaction
+            ? (tx, conn, opts) => sendTransaction(tx, conn, opts as never)
+            : undefined,
+        ),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('rpc_confirmation_timeout')), BEAM_RPC_TIMEOUT_MS),
         ),

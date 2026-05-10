@@ -28,6 +28,7 @@ import {
   Connection,
   PublicKey,
   SystemProgram,
+  Transaction,
   TransactionInstruction,
   type ConfirmOptions,
 } from '@solana/web3.js';
@@ -392,7 +393,21 @@ export class CasiEscrowClient {
   // initialize_escrow  (Beam variant: duration_secs > 0, escrow_type_val = 1)
   // -------------------------------------------------------------------------
 
-  async initializeBeam(params: InitBeamParams): Promise<InitFlashResult> {
+  async initializeBeam(
+    params: InitBeamParams,
+    /**
+     * Optional wallet-adapter-style sendTransaction. When provided we build
+     * the tx with .transaction() and submit via this function instead of
+     * Anchor's .rpc() (which signs locally and sendRawTransactions through
+     * our connection). This matters on Phantom mobile where the wallet's
+     * signAndSendTransaction submits via Phantom's own RPC — bypassing the
+     * Helius/Phantom-RPC desync that causes confirmation timeouts.
+     *
+     * On desktop Phantom + extension wallets, behaviour is equivalent to
+     * .rpc() but happens to be the wallet-adapter's recommended path.
+     */
+    sendOverride?: (tx: Transaction, connection: Connection, options?: unknown) => Promise<string>,
+  ): Promise<InitFlashResult> {
     const { escrowId, streamer, amountUsdc, durationSecs } = params;
     if (!(durationSecs > 0)) {
       throw new Error('durationSecs must be > 0 for Beam escrows');
@@ -407,33 +422,48 @@ export class CasiEscrowClient {
     const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer,   false, tokenProgram);
     const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true, tokenProgram);
 
-    // Same recovery pattern as initializeFlash — Phantom in-app browser on
-    // mobile (and devnet RPC generally) regularly times out the confirmation
-    // even when the tx lands. Without this the viewer's modal hangs on
-    // "Signing…" forever despite a successful on-chain debit.
+    const builder = (this.program.methods as any)
+      .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(durationSecs), 1)
+      .accounts({
+        viewer,
+        streamer,
+        escrowState:          escrowPda,
+        vault,
+        viewerAta,
+        usdcMint,
+        tokenProgram,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram:          SystemProgram.programId,
+      });
+
     let sig: string;
-    try {
-      sig = await (this.program.methods as any)
-        .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(durationSecs), 1)
-        .accounts({
-          viewer,
-          streamer,
-          escrowState:          escrowPda,
-          vault,
-          viewerAta,
-          usdcMint,
-          tokenProgram,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram:          SystemProgram.programId,
-        })
-        .rpc();
-    } catch (err: unknown) {
-      const maybeSig = (err as { signature?: unknown })?.signature;
-      if (typeof maybeSig === 'string' && maybeSig.length >= 64) {
-        console.warn('[initializeBeam] confirmation timed out but sig recovered:', maybeSig);
-        sig = maybeSig;
-      } else {
-        throw err;
+    if (sendOverride) {
+      const conn = (this.program.provider as { connection: Connection }).connection;
+      const tx: Transaction = await builder.transaction();
+      // Anchor's .transaction() doesn't always set blockhash + feePayer
+      // reliably across versions; set them explicitly so the wallet
+      // adapter's sendTransaction has everything it needs.
+      const { blockhash } = await conn.getLatestBlockhash('confirmed');
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = viewer;
+      sig = await sendOverride(tx, conn);
+    } else {
+      // Same recovery pattern as initializeFlash — Phantom in-app browser
+      // on mobile (and devnet RPC generally) regularly times out the
+      // confirmation even when the tx lands. Without this the viewer's
+      // modal hangs on "Signing…" forever despite a successful on-chain
+      // debit. Mobile callers should pass sendOverride above to avoid
+      // hitting this path entirely.
+      try {
+        sig = await builder.rpc();
+      } catch (err: unknown) {
+        const maybeSig = (err as { signature?: unknown })?.signature;
+        if (typeof maybeSig === 'string' && maybeSig.length >= 64) {
+          console.warn('[initializeBeam] confirmation timed out but sig recovered:', maybeSig);
+          sig = maybeSig;
+        } else {
+          throw err;
+        }
       }
     }
 
