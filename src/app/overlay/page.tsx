@@ -58,6 +58,35 @@ const STRIPE_DENIED_WINDOW_MS = 10 * 60 * 1000;
 
 
 
+/** Always-visible debug footer (mobile only) showing the most recent
+ *  Phantom Connect deeplink we generated. Lets us verify the URL we send
+ *  to Phantom whether the user is connected or not — the debug panel that
+ *  used to live in WalletPill only rendered while disconnected. */
+function PhantomConnectDebug() {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    if (!isMobile) return;
+    const refresh = () => setUrl(window.localStorage.getItem('casi-phantom-last-url'));
+    refresh();
+    const id = setInterval(refresh, 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (!url) return null;
+  return (
+    <details style={{ margin: '20px 12px 60px', fontSize: 9, color: '#666', fontFamily: 'monospace' }}>
+      <summary style={{ cursor: 'pointer' }}>debug: last phantom URL</summary>
+      <div style={{
+        wordBreak: 'break-all', userSelect: 'all', padding: 6,
+        background: '#111', border: '1px solid #222', borderRadius: 4, marginTop: 4,
+      }}>
+        {url}
+      </div>
+    </details>
+  );
+}
+
 function OverlayContent() {
   const searchParams = useSearchParams();
   const username = searchParams.get('s') || '';
@@ -2732,6 +2761,7 @@ function OverlayContent() {
           )}
 
           {!isOBS && <BrandFooter />}
+          {!isOBS && <PhantomConnectDebug />}
         </main>
       </div>
 
