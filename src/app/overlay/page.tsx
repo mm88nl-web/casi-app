@@ -180,34 +180,34 @@ function OverlayContent() {
     if (!isOBS && !username) window.location.href = '/search';
   }, [username, isOBS]);
 
-  // Phantom Connect return handler. When the page loads with one of our
-  // resume hashes set, Phantom has bounced the user back from a connect
-  // or sign deeplink — parse the encrypted response, finalize the booking,
-  // and clean up the URL. Idempotent: runs once per hash, then strips the
-  // hash so a reload won't re-process.
+  // Phantom Connect return handler. When the page loads with our
+  // phantom_action query param set, Phantom has bounced the user back from
+  // a connect or sign deeplink — parse the encrypted response, finalize
+  // the booking, and clean up the URL. We use a query param (NOT a hash
+  // fragment) because Phantom appends its response params as a query
+  // string, which would mangle a URL that already has a hash.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const hash = window.location.hash;
-    if (hash !== '#phantom-connect-resume' && hash !== '#phantom-sign-resume') return;
     const params = new URLSearchParams(window.location.search);
+    const action = params.get('phantom_action');
+    if (action !== 'connect-resume' && action !== 'sign-resume') return;
 
     (async () => {
       const pc = await import('@/lib/phantom-connect');
       try {
-        if (hash === '#phantom-connect-resume') {
+        if (action === 'connect-resume') {
           const session = pc.parseConnectResponse(params);
           pc.saveSession(session);
-          // Strip query+hash so a reload doesn't re-process the response.
           history.replaceState(null, '', window.location.origin + window.location.pathname);
           // If a tx was stashed (we redirected to connect mid-booking),
           // chain straight into sign with the freshly minted session.
           const pending = pc.readPendingBooking();
           if (pending?.pending_tx) {
-            const here = window.location.origin + window.location.pathname;
+            const here = window.location.origin + window.location.pathname + '?phantom_action=sign-resume';
             window.location.href = pc.buildSignAndSendUrl({
               session,
               transactionB58: pending.pending_tx,
-              redirectTo: `${here}#phantom-sign-resume`,
+              redirectTo: here,
             });
           }
           return;
@@ -247,7 +247,7 @@ function OverlayContent() {
         }
       } catch (err) {
         const { reportClientError } = await import('@/lib/report-client-error');
-        reportClientError('overlay/phantom-connect-return', err, { hash });
+        reportClientError('overlay/phantom-connect-return', err, { action });
         showNotif(err instanceof Error ? err.message : 'Phantom return failed', 'denied');
         history.replaceState(null, '', window.location.origin + window.location.pathname);
       }
@@ -1242,7 +1242,10 @@ function OverlayContent() {
         const txB58 = bs58.encode(tx.serialize({ requireAllSignatures: false, verifySignatures: false }));
         const cancelToken = readBookingTokens()[newBooking.id] ?? '';
         const session = pc.getStoredSession();
-        const here = window.location.origin + window.location.pathname + window.location.search;
+        // Build the return URL with a query-param marker (NOT a hash) so
+        // Phantom can safely append its encrypted response params on top.
+        const baseHere = window.location.origin + window.location.pathname + window.location.search;
+        const sep = window.location.search ? '&' : '?';
 
         if (!session) {
           // First time on this device — connect handshake. Stash the tx so
@@ -1254,11 +1257,10 @@ function OverlayContent() {
             viewer_wallet: effectivePublicKey.toBase58(),
             pending_tx:    txB58,
           });
-          // Cluster intentionally omitted — see phantom-connect.ts comment.
           window.location.href = pc.buildConnectUrl({
-            redirectTo: `${here}#phantom-connect-resume`,
+            cluster: WALLET_ADAPTER_CLUSTER,
+            redirectTo: `${baseHere}${sep}phantom_action=connect-resume`,
           });
-          // Page navigates away. Don't continue.
           return;
         }
 
@@ -1272,7 +1274,7 @@ function OverlayContent() {
         window.location.href = pc.buildSignAndSendUrl({
           session,
           transactionB58: txB58,
-          redirectTo: `${here}#phantom-sign-resume`,
+          redirectTo: `${baseHere}${sep}phantom_action=sign-resume`,
         });
         return;
       }
