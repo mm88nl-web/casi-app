@@ -275,7 +275,12 @@ export function buildSignAndSendUrl(opts: {
     redirect_link:              opts.redirectTo,
     payload,
   });
-  return `https://phantom.app/ul/v1/signAndSendTransaction?${params.toString()}`;
+  const url = `https://phantom.app/ul/v1/signAndSendTransaction?${params.toString()}`;
+  if (typeof window !== 'undefined') {
+    console.log('[phantom-connect] sign redirect →', url);
+    try { window.localStorage.setItem('casi-phantom-last-url', url); } catch { /* ignore */ }
+  }
+  return url;
 }
 
 /** Parses a redirect-URL response from Phantom's signAndSendTransaction. */
