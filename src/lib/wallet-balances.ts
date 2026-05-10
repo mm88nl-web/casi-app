@@ -22,6 +22,7 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { USDC_MINT } from '@/lib/solana-network';
+import { useStoredPhantomConnectSession } from '@/lib/phantom-connect';
 
 export type WalletBalances = { sol: number | null; usdc: number | null };
 
@@ -135,13 +136,18 @@ export function refreshWalletBalances() {
 export function useWalletBalances(): WalletBalances {
   const { connection } = useConnection();
   const { publicKey, connected } = useWallet();
+  // Phantom Connect deeplink session counts as connected — viewer signed in
+  // on mobile but has no wallet-adapter publicKey. Without this, balances
+  // stay null on mobile even though the pubkey is known.
+  const pcSession = useStoredPhantomConnectSession();
+  const sessionPubkey = pcSession ? new PublicKey(pcSession.walletPublicKey) : null;
+  const effectivePublicKey = publicKey ?? sessionPubkey;
+  const isConnected = connected || !!pcSession;
   const [state, setState] = useState<WalletBalances>(currentState);
 
   // (Re)wire the store only when the connected wallet / connection changes.
-  // Subsequent mounts for the SAME wallet are no-ops — the store keeps
-  // running so numbers stay in sync across route changes and remounts.
   useEffect(() => {
-    if (!connected || !publicKey) {
+    if (!isConnected || !effectivePublicKey) {
       if (currentWallet !== null) {
         teardown();
         publish({ sol: null, usdc: null });
@@ -149,13 +155,13 @@ export function useWalletBalances(): WalletBalances {
       return;
     }
     const alreadyConfigured =
-      currentWallet?.toBase58() === publicKey.toBase58() && currentConn === connection;
+      currentWallet?.toBase58() === effectivePublicKey.toBase58() && currentConn === connection;
     if (alreadyConfigured) return;
 
     teardown();
     publish({ sol: null, usdc: null });
-    setup(connection, publicKey);
-  }, [connection, connected, publicKey]);
+    setup(connection, effectivePublicKey);
+  }, [connection, isConnected, effectivePublicKey]);
 
   // Register this component's setter with the store.
   useEffect(() => {
