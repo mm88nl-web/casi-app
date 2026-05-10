@@ -4,7 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
-import { NETWORK_LABEL } from '@/lib/solana-network';
+import { NETWORK_LABEL, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
+import { buildConnectUrl } from '@/lib/phantom-connect';
+
+function buildClientPhantomConnectUrl(): string {
+  const sep = window.location.search ? '&' : '?';
+  const here = window.location.origin + window.location.pathname + window.location.search + `${sep}phantom_action=connect-resume`;
+  return buildConnectUrl({ cluster: WALLET_ADAPTER_CLUSTER, redirectTo: here });
+}
 import { useWalletBalances } from '@/lib/wallet-balances';
 // (mobile-wallet handoff helpers removed — Phantom Connect deeplink path now handles mobile signing)
 import UsdcIcon from './icons/UsdcIcon';
@@ -245,13 +252,42 @@ export default function WalletPill() {
     // now handles signing inside the user's mobile browser. See
     // src/lib/phantom-connect.ts.)
 
+    const isMobileUA = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    const phantomConnectUrl = isMobileUA && typeof window !== 'undefined'
+      ? buildClientPhantomConnectUrl()
+      : null;
+    const lastUrlForDebug = typeof window !== 'undefined'
+      ? window.localStorage.getItem('casi-phantom-last-url')
+      : null;
+
     return (
       <>
         <style>{CSS}</style>
-        <button className="wp-connect" onClick={openWalletModal} disabled={connecting}>
-          <SolanaIcon size={12} />
-          {connecting ? 'Connecting…' : 'Connect Wallet'}
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <button className="wp-connect" onClick={openWalletModal} disabled={connecting}>
+            <SolanaIcon size={12} />
+            {connecting ? 'Connecting…' : 'Connect Wallet'}
+          </button>
+          {isMobileUA && phantomConnectUrl && (
+            <a
+              href={phantomConnectUrl}
+              style={{
+                fontFamily: 'var(--font-casi-mono), monospace',
+                fontSize: 9, letterSpacing: 1, color: '#9945FF', textDecoration: 'underline',
+              }}
+            >
+              Mobile? Connect via Phantom →
+            </a>
+          )}
+          {isMobileUA && lastUrlForDebug && (
+            <details style={{ maxWidth: 280, fontSize: 8, color: '#666', fontFamily: 'monospace' }}>
+              <summary style={{ cursor: 'pointer' }}>debug: last URL</summary>
+              <div style={{ wordBreak: 'break-all', userSelect: 'all', padding: 4, background: '#111', border: '1px solid #222', borderRadius: 4, marginTop: 4 }}>
+                {lastUrlForDebug}
+              </div>
+            </details>
+          )}
+        </div>
       </>
     );
   }
