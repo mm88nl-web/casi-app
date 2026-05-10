@@ -1077,6 +1077,31 @@ function OverlayContent() {
       // AND submits via Phantom's own RPC, returning the sig directly. This
       // sidesteps the Helius/Phantom-RPC desync that causes confirmation
       // timeouts on the in-app browser. Desktop wallets behave equivalently.
+      // Build a sendOverride that prefers Phantom's native provider API
+      // when available. PhantomWalletAdapter (npm) does NOT override the
+      // base sendTransaction — it just provides signTransaction, so
+      // wallet-adapter's sendTransaction still does sign + sendRaw via OUR
+      // connection (Helius), which on mobile in-app browser desyncs with
+      // Phantom's submit-RPC and the confirmation hangs.
+      //
+      // The actual fix: when window.phantom.solana is present (Phantom
+      // in-app browser exposes this), call signAndSendTransaction
+      // directly — Phantom signs AND submits via its OWN RPC and returns
+      // the sig immediately. We skip the wallet-adapter layer entirely
+      // for that single call. Falls through to wallet-adapter's send for
+      // any other context.
+      const sendOverride = async (tx: import('@solana/web3.js').Transaction, conn: import('@solana/web3.js').Connection, opts?: unknown): Promise<string> => {
+        if (typeof window !== 'undefined') {
+          const phantom = (window as unknown as { phantom?: { solana?: { signAndSendTransaction?: (t: unknown) => Promise<{ signature: string }> } } }).phantom?.solana;
+          if (phantom?.signAndSendTransaction) {
+            const result = await phantom.signAndSendTransaction(tx);
+            return result.signature;
+          }
+        }
+        if (sendTransaction) return sendTransaction(tx, conn, opts as never);
+        throw new Error('No sendTransaction available');
+      };
+
       const BEAM_RPC_TIMEOUT_MS = 30_000;
       const { sig, escrowPda } = await Promise.race([
         client.initializeBeam(
@@ -1086,9 +1111,7 @@ function OverlayContent() {
             amountUsdc:   amountUsdcMicro,
             durationSecs: durationSecsInt,
           },
-          sendTransaction
-            ? (tx, conn, opts) => sendTransaction(tx, conn, opts as never)
-            : undefined,
+          sendOverride,
         ),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('rpc_confirmation_timeout')), BEAM_RPC_TIMEOUT_MS),
