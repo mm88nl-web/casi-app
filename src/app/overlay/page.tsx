@@ -409,6 +409,67 @@ function OverlayContent() {
     if (profile?.id) loadData(profile.id);
   }, [publicKey, profile?.id, loadData]);
 
+  // Passive PDA backfill for pending Solana bookings whose original
+  // initializeBeam flow timed out before the row could be attached. On
+  // mobile (Phantom in-app browser) the wallet may submit via its own RPC
+  // and the tx can land on-chain 30+s later than our 60s confirmation
+  // window. The viewer ends up with a "Pending" chip that's actually
+  // funded — but the streamer can't approve because escrow_pda is NULL.
+  // Probe every render for any of OUR pending Solana rows (i.e. one we
+  // hold a cancel_token for) and POST attach-solana-tx if the PDA exists.
+  // Idempotent: once probed, skipped for the rest of the session via ref.
+  const probedPendingRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const tokens = readBookingTokens();
+    const candidates = myBookings.filter((b: any) =>
+      b.status === 'pending' &&
+      b.payment_method === 'solana' &&
+      !b.escrow_pda &&
+      tokens[String(b.id)] &&
+      !probedPendingRef.current.has(String(b.id))
+    );
+    if (candidates.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const { Connection } = await import('@solana/web3.js');
+      const { deriveEscrowPda } = await import('@/lib/casi-escrow');
+      const conn = new Connection(SOLANA_RPC, 'confirmed');
+      let backfilled = 0;
+      for (const b of candidates) {
+        if (cancelled) break;
+        const id = String(b.id);
+        probedPendingRef.current.add(id);
+        try {
+          const [pda] = deriveEscrowPda(b.id);
+          const info = await conn.getAccountInfo(pda).catch(() => null);
+          if (!info) continue;
+          const res = await fetch('/api/bookings/attach-solana-tx', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              booking_id:    b.id,
+              cancel_token:  tokens[id],
+              escrow_pda:    pda.toBase58(),
+              viewer_wallet: viewerWalletRef.current,
+            }),
+          });
+          if (res.ok) backfilled++;
+        } catch {
+          /* swallow — best-effort */
+        }
+      }
+      if (!cancelled && backfilled > 0 && profile?.id) {
+        showNotif(
+          `✓ Found ${backfilled} stuck booking${backfilled === 1 ? '' : 's'} on-chain — streamer can approve now`,
+          'success',
+        );
+        await loadData(profile.id, savedViewerName ?? undefined);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myBookings, profile?.id]);
+
   useEffect(() => {
     if (!username) return;
     let cleanup: (()=>void)|undefined;
