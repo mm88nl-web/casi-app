@@ -6,6 +6,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
 import { NETWORK_LABEL, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 import { buildConnectUrl, useStoredPhantomConnectSession, clearSession as clearPhantomConnectSession } from '@/lib/phantom-connect';
+import { needsMobileHandoff } from '@/lib/mobile-wallet';
 
 function buildClientPhantomConnectUrl(): string {
   const sep = window.location.search ? '&' : '?';
@@ -37,19 +38,6 @@ const CSS = `
   }
   .wp-connect:hover { filter: brightness(1.1); }
   .wp-connect:disabled { opacity: 0.6; cursor: not-allowed; }
-  .wp-phantom-mobile {
-    display: inline-flex; align-items: center;
-    background: rgba(153,69,255,0.08);
-    border: 1px solid rgba(153,69,255,0.25);
-    border-radius: 8px;
-    padding: 5px 10px;
-    font-family: var(--M);
-    font-size: 9px; letter-spacing: 0.06em;
-    color: #b56eff;
-    text-decoration: none;
-    text-transform: uppercase;
-  }
-  .wp-phantom-mobile:hover { border-color: rgba(153,69,255,0.5); color: #c79aff; }
 
   /* Connected pill — three segments separated by --line dividers,
      ink-04 wash on the network segment, sharp corners. Mirrors v9
@@ -224,6 +212,9 @@ export default function WalletPill() {
 
   const [dropOpen, setDropOpen] = useState(false);
   const [dropPos, setDropPos] = useState<{ top: number; right: number }>({ top: 56, right: 12 });
+  // Defer needsMobileHandoff() check to after mount — see WalletNav.
+  const [useDeeplink, setUseDeeplink] = useState(false);
+  useEffect(() => { setUseDeeplink(needsMobileHandoff()); }, []);
   const rowRef = useRef<HTMLDivElement>(null);
 
   // Wallet Standard auto-registers Phantom into `wallet` on page load. Only
@@ -271,25 +262,32 @@ export default function WalletPill() {
 
   /* ── Disconnected ── */
   if (!isConnected || !effectivePublicKey) {
-    const isMobileUA = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    const phantomConnectUrl = isMobileUA && typeof window !== 'undefined'
+    // Single Connect Wallet CTA — see WalletNav for rationale. Mobile-not-
+    // in-wallet-browser users get the same .wp-connect element rendered as
+    // an anchor to Phantom Connect's deeplink protocol.
+    const phantomConnectUrl = useDeeplink && typeof window !== 'undefined'
       ? buildClientPhantomConnectUrl()
       : null;
+
+    if (useDeeplink && phantomConnectUrl) {
+      return (
+        <>
+          <style>{CSS}</style>
+          <a href={phantomConnectUrl} className="wp-connect" style={{ textDecoration: 'none' }}>
+            <SolanaIcon size={12} />
+            Connect Wallet
+          </a>
+        </>
+      );
+    }
 
     return (
       <>
         <style>{CSS}</style>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-          <button className="wp-connect" onClick={openWalletModal} disabled={connecting}>
-            <SolanaIcon size={12} />
-            {connecting ? 'Connecting…' : 'Connect Wallet'}
-          </button>
-          {isMobileUA && phantomConnectUrl && (
-            <a href={phantomConnectUrl} className="wp-phantom-mobile">
-              Use Phantom Mobile
-            </a>
-          )}
-        </div>
+        <button className="wp-connect" onClick={openWalletModal} disabled={connecting}>
+          <SolanaIcon size={12} />
+          {connecting ? 'Connecting…' : 'Connect Wallet'}
+        </button>
       </>
     );
   }
