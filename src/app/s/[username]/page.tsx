@@ -7,7 +7,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/utils/supabase/client';
 import SkinProvider from '@/components/SkinProvider';
 import Nav from '@/components/Nav';
-import WalletPill from '@/components/WalletPill';
 import StreamerBar from './_components/StreamerBar';
 import StreamPreview from './_components/StreamPreview';
 import FlashesFeed, { type Flash } from './_components/FlashesFeed';
@@ -175,7 +174,7 @@ export default function ViewerBookingPage() {
       {/* v7 nav. The live badge moved into StreamerBar (vb-head) since v7
           surfaces it there next to the streamer's avatar; keeping it in the
           nav too would be redundant. */}
-      <Nav right={<WalletPill />} />
+      <Nav />
 
       <div
         className="mx-auto casi-grid-viewer casi-page-pad"

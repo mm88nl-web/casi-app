@@ -20,14 +20,19 @@ type NavProps = {
  * only renders the bits that differ.
  */
 export default function Nav({ brandHref = '/', left, right }: NavProps) {
+  // Center the logo when there's no right-side action (wallet pill, etc.) —
+  // mirrors NavBar's centered variant. With wallet present, fall back to
+  // the original space-between layout.
+  const centered = !right;
   return (
     <nav
-      className="flex items-center justify-between"
+      className={centered ? 'flex items-center justify-center' : 'flex items-center justify-between'}
       style={{
         padding: '0 36px',
         height: '54px',
         borderBottom: '1px solid var(--casi-border)',
         background: 'var(--casi-bg)',
+        position: centered ? 'relative' : undefined,
       }}
     >
       <div className="flex items-center" style={{ gap: '14px' }}>
