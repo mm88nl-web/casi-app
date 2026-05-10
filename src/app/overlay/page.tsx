@@ -1243,12 +1243,16 @@ function OverlayContent() {
       // funds. Side benefit: it'll clear other ghost chips for the same
       // wallet in the same call.
       const wallet = viewerWalletRef.current;
-      if (!wallet) return false;
+      if (!wallet && !savedViewerName) return false;
       try {
         const res = await fetch('/api/bookings/cleanup-stale-solana', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ viewer_wallet: wallet, profile_id: profile?.id }),
+          body: JSON.stringify({
+            viewer_wallet: wallet ?? undefined,
+            viewer_name:   savedViewerName ?? undefined,
+            profile_id:    profile?.id,
+          }),
         });
         if (!res.ok) return false;
         if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
@@ -1481,13 +1485,17 @@ function OverlayContent() {
   const [cleanupBusy, setCleanupBusy] = useState(false);
   const runStaleSolanaCleanup = async () => {
     const wallet = viewerWalletRef.current;
-    if (!wallet || cleanupBusy) return;
+    if ((!wallet && !savedViewerName) || cleanupBusy) return;
     setCleanupBusy(true);
     try {
       const res = await fetch('/api/bookings/cleanup-stale-solana', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ viewer_wallet: wallet, profile_id: profile?.id }),
+        body: JSON.stringify({
+          viewer_wallet: wallet ?? undefined,
+          viewer_name:   savedViewerName ?? undefined,
+          profile_id:    profile?.id,
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {

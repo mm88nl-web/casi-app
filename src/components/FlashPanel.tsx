@@ -92,12 +92,20 @@ export default function FlashPanel({
   // Load the approved flash history + subscribe for new ones. Denied /
   // pending rows are deliberately excluded from the feed — the feed is a
   // "what has been on stream" log, and pending/denied never aired.
+  //
+  // 24-hour rolling window so the feed feels like a live-stream chat
+  // instead of the streamer's all-time activity log. Without this, a
+  // streamer with low flash volume sees yesterday's tests permanently
+  // pinned at the top — even after they've gone offline and come back.
+  // The cap auto-trims over time without an abrupt midnight purge.
   const load = useCallback(async () => {
+    const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { data } = await supabase
       .from('flashes')
       .select('id, profile_id, viewer_name, message, amount_cents, tx_signature, payment_method, status, created_at')
       .eq('profile_id', profileId)
       .eq('status', 'approved')
+      .gte('created_at', sinceIso)
       .order('created_at', { ascending: false })
       .limit(MAX_HISTORY);
     setFlashes((data || []).slice().reverse());

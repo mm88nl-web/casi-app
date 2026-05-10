@@ -10,15 +10,22 @@
  * `cancel_escrow` / `settle_beam` from the overlay chip to recover those.
  *
  * Auth model: none. The only write this route performs is `escrow_pda = null`
- * on rows scoped to the supplied `viewer_wallet`, and only after confirming
- * on-chain that the PDA has closed (funds already distributed by the program).
- * No funds move, no status changes, and the blast radius is "an attacker can
- * clear the escrow_pda column on rows belonging to a wallet they specify,
- * which only breaks the viewer's own recovery chip". We accept that tradeoff
- * to keep the flow usable across browsers without bearer tokens or signed
- * challenges.
+ * on rows scoped to the supplied `viewer_wallet` and/or `viewer_name`, and
+ * only after confirming on-chain that the PDA has closed (funds already
+ * distributed by the program). No funds move, no status changes, and the
+ * blast radius is "an attacker can clear the escrow_pda column on rows
+ * matching a wallet/name they specify, which only breaks that viewer's own
+ * recovery chip". We accept that tradeoff to keep the flow usable across
+ * browsers without bearer tokens or signed challenges.
  *
- * Request:  { viewer_wallet, profile_id? }
+ * Both scopes get OR-matched because the overlay's myBookings query already
+ * surfaces rows by viewer_name OR viewer_wallet (see overlay/page.tsx:227)
+ * — without OR-matching here, ghost pills on rows tagged with the viewer's
+ * NAME but a different wallet (a wallet swap during testing) stay
+ * permanently uncleanable from the new wallet.
+ *
+ * Request:  { viewer_wallet?, viewer_name?, profile_id? }
+ *           At least one of viewer_wallet / viewer_name required.
  * Response: {
  *             cleaned: number,       // PDAs gone, DB cleared
  *             stillOpen: number,     // PDAs still alive, viewer must sign
@@ -43,16 +50,26 @@ const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const viewer_wallet: string | undefined = body?.viewer_wallet;
-  const profile_id: string | undefined = body?.profile_id;
+  const viewer_name:   string | undefined = body?.viewer_name;
+  const profile_id:    string | undefined = body?.profile_id;
 
-  if (!viewer_wallet || typeof viewer_wallet !== 'string' || !BASE58_RE.test(viewer_wallet)) {
-    return NextResponse.json({ error: 'viewer_wallet required' }, { status: 400 });
+  const walletOk = typeof viewer_wallet === 'string' && BASE58_RE.test(viewer_wallet);
+  const nameOk   = typeof viewer_name === 'string' && viewer_name.length > 0 && viewer_name.length < 100;
+  if (!walletOk && !nameOk) {
+    return NextResponse.json({ error: 'viewer_wallet or viewer_name required' }, { status: 400 });
   }
+
+  // OR across the supplied identifiers. PostgREST `.or()` takes a comma list
+  // of `col.op.val` clauses — quote viewer_name to handle spaces/punctuation
+  // in stored handles.
+  const orClauses: string[] = [];
+  if (walletOk) orClauses.push(`viewer_wallet.eq.${viewer_wallet}`);
+  if (nameOk)   orClauses.push(`viewer_name.eq."${viewer_name!.replace(/"/g, '\\"')}"`);
 
   let query = supabase
     .from('bookings')
     .select('id, escrow_pda')
-    .eq('viewer_wallet', viewer_wallet)
+    .or(orClauses.join(','))
     .eq('payment_method', 'solana')
     .not('escrow_pda', 'is', null)
     .in('status', ['denied', 'expired', 'cancelled'])
@@ -61,7 +78,7 @@ export async function POST(req: Request) {
 
   const { data: rows, error: selectErr } = await query;
   if (selectErr) {
-    logError('cleanup-stale-solana', selectErr, { viewer_wallet });
+    logError('cleanup-stale-solana', selectErr, { viewer_wallet, viewer_name });
     return NextResponse.json({ error: 'Lookup failed' }, { status: 500 });
   }
   if (!rows || rows.length === 0) {
