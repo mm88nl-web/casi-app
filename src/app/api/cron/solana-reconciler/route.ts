@@ -167,16 +167,19 @@ export async function GET(req: Request) {
   }
 
   // ── Stale Solana flashes ─────────────────────────────────────────────
-  // Mirror of the stripe-janitor flash sweep: any flash that's been
-  // pending longer than FLASH_PENDING_MAX_AGE_HOURS gets flipped to
-  // denied so the streamer's queue stays clean. The on-chain escrow
-  // is left alone — the viewer's overlay surfaces a "Recover USDC"
-  // chip on denied rows, and after 7 days the program's
-  // cancel_stale_pending crank refunds the viewer permissionlessly.
-  // Without this sweep nothing ever denied old Solana flashes (the
-  // reconciler previously only touched bookings).
-  const FLASH_PENDING_MAX_AGE_HOURS = 48;
-  const flashCutoff = new Date(Date.now() - FLASH_PENDING_MAX_AGE_HOURS * 3600 * 1000).toISOString();
+  // Streamers expect their queue to be clean every morning, so we deny
+  // any pending Solana flash created BEFORE the current UTC day. A flash
+  // sent yesterday that the streamer never moderated gets auto-denied at
+  // 03:30 UTC; same-day flashes stay pending until the next nightly run.
+  //
+  // We don't auto-cancel the on-chain escrow — the viewer's overlay
+  // surfaces a "Recover USDC" chip on denied rows, and after 7 days the
+  // program's cancel_stale_pending crank refunds the viewer
+  // permissionlessly. Without this sweep nothing ever denied old Solana
+  // flashes (the reconciler previously only touched bookings).
+  const todayStartUtc = new Date();
+  todayStartUtc.setUTCHours(0, 0, 0, 0);
+  const flashCutoff = todayStartUtc.toISOString();
   const { data: staleFlashes } = await supabase
     .from('flashes')
     .select('id')
