@@ -6,7 +6,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
 import { NETWORK_LABEL } from '@/lib/solana-network';
 import { useWalletBalances } from '@/lib/wallet-balances';
-import { needsMobileHandoff, phantomBrowseUrl, solflareBrowseUrl } from '@/lib/mobile-wallet';
+// (mobile-wallet handoff helpers removed — Phantom Connect deeplink path now handles mobile signing)
 import UsdcIcon from './icons/UsdcIcon';
 import SolanaIcon from './icons/SolanaIcon';
 
@@ -198,12 +198,7 @@ export default function WalletPill() {
 
   const [dropOpen, setDropOpen] = useState(false);
   const [dropPos, setDropPos] = useState<{ top: number; right: number }>({ top: 56, right: 12 });
-  const [mobileHandoff, setMobileHandoff] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
-
-  // mobileHandoff() touches navigator + window.phantom — defer to client to
-  // avoid hydration mismatch.
-  useEffect(() => { setMobileHandoff(needsMobileHandoff()); }, []);
 
   // Wallet Standard auto-registers Phantom into `wallet` on page load. Only
   // call connect() in response to a user click — never silently.
@@ -246,32 +241,9 @@ export default function WalletPill() {
 
   /* ── Disconnected ── */
   if (!connected || !publicKey) {
-    if (mobileHandoff) {
-      const here = typeof window !== 'undefined' ? window.location.href : '';
-      return (
-        <>
-          <style>{CSS}</style>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-            <a className="wp-connect" href={phantomBrowseUrl(here)} style={{ textDecoration: 'none' }}>
-              <SolanaIcon size={12} />
-              Open in Phantom
-            </a>
-            <a
-              href={solflareBrowseUrl(here)}
-              style={{
-                fontFamily: 'var(--font-casi-mono), monospace',
-                fontSize: 9,
-                letterSpacing: 1,
-                color: 'var(--casi-text-dim)',
-                textDecoration: 'none',
-              }}
-            >
-              or open in Solflare →
-            </a>
-          </div>
-        </>
-      );
-    }
+    // (Mobile "Open in Phantom" handoff dropped — Phantom Connect deeplink
+    // now handles signing inside the user's mobile browser. See
+    // src/lib/phantom-connect.ts.)
 
     return (
       <>

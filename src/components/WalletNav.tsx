@@ -5,7 +5,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
 import { NETWORK_LABEL } from '@/lib/solana-network';
 import { useWalletBalances, refreshWalletBalances } from '@/lib/wallet-balances';
-import { needsMobileHandoff, phantomBrowseUrl, solflareBrowseUrl } from '@/lib/mobile-wallet';
+// (mobile-wallet handoff helpers removed — Phantom Connect handles mobile signing directly now)
 import SolanaIcon from './icons/SolanaIcon';
 import UsdcIcon from './icons/UsdcIcon';
 
@@ -170,15 +170,6 @@ export default function WalletNav() {
 
   const [dropOpen, setDropOpen]  = useState(false);
   const [dropPos, setDropPos]    = useState<{ top: number; right: number }>({ top: 56, right: 12 });
-  // needsMobileHandoff() reads navigator.userAgent / window.phantom which
-  // exist only on the client. Calling it during render produces a different
-  // tree on SSR (always false) vs first client render (true on a phone)
-  // → hydration mismatch warning and a janky paint. Defer the check to
-  // after mount; the standard Connect Wallet button shows for the SSR
-  // pass and one frame on the client, then swaps to the mobile handoff
-  // button if appropriate.
-  const [mobileHandoff, setMobileHandoff] = useState(false);
-  useEffect(() => { setMobileHandoff(needsMobileHandoff()); }, []);
   const dropRef = useRef<HTMLDivElement>(null);
 
   // Only connect() after an explicit user click — Wallet Standard auto-registers
@@ -231,41 +222,14 @@ export default function WalletNav() {
 
   /* ── Disconnected / connecting ── */
   if (!connected || !publicKey) {
-    // On a phone outside a wallet's in-app browser the deeplink flow
-    // for signing is broken (see src/lib/mobile-wallet.ts for the why).
-    // Swap the "Connect Wallet" button for a one-tap handoff that loads
-    // this same URL inside Phantom's in-app browser, where every
-    // subsequent connect/sign call is synchronous and reliable.
-    if (mobileHandoff) {
-      const here = typeof window !== 'undefined' ? window.location.href : '';
-      return (
-        <>
-          <style>{CSS}</style>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-            <a
-              className="wn-connect"
-              href={phantomBrowseUrl(here)}
-              style={{ textDecoration: 'none' }}
-            >
-              <SolanaIcon size={12} />
-              Open in Phantom
-            </a>
-            <a
-              href={solflareBrowseUrl(here)}
-              style={{
-                fontFamily: "var(--font-casi-mono), monospace",
-                fontSize: 9,
-                letterSpacing: 1,
-                color: '#666',
-                textDecoration: 'none',
-              }}
-            >
-              or open in Solflare →
-            </a>
-          </div>
-        </>
-      );
-    }
+    // (Mobile users used to see an "Open in Phantom" handoff that sent
+    // them to Phantom's in-app browser. That browser's WebView bridge
+    // turned out to silently drop signing taps, and the mobile-Chrome →
+    // Phantom-deeplink path returns txs missing the partial signature.
+    // Both made bookings impossible. Now mobile signing is handled via
+    // the official Phantom Connect deeplink protocol — wallet-adapter
+    // does the connect handshake fine on mobile and Phantom Connect
+    // picks up at sign time. See src/lib/phantom-connect.ts.)
 
     return (
       <>
