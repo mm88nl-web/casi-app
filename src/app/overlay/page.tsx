@@ -173,6 +173,81 @@ function OverlayContent() {
     if (!isOBS && !username) window.location.href = '/search';
   }, [username, isOBS]);
 
+  // Phantom Connect return handler. When the page loads with one of our
+  // resume hashes set, Phantom has bounced the user back from a connect
+  // or sign deeplink — parse the encrypted response, finalize the booking,
+  // and clean up the URL. Idempotent: runs once per hash, then strips the
+  // hash so a reload won't re-process.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash;
+    if (hash !== '#phantom-connect-resume' && hash !== '#phantom-sign-resume') return;
+    const params = new URLSearchParams(window.location.search);
+
+    (async () => {
+      const pc = await import('@/lib/phantom-connect');
+      try {
+        if (hash === '#phantom-connect-resume') {
+          const session = pc.parseConnectResponse(params);
+          pc.saveSession(session);
+          // Strip query+hash so a reload doesn't re-process the response.
+          history.replaceState(null, '', window.location.origin + window.location.pathname);
+          // If a tx was stashed (we redirected to connect mid-booking),
+          // chain straight into sign with the freshly minted session.
+          const pending = pc.readPendingBooking();
+          if (pending?.pending_tx) {
+            const here = window.location.origin + window.location.pathname;
+            window.location.href = pc.buildSignAndSendUrl({
+              session,
+              transactionB58: pending.pending_tx,
+              redirectTo: `${here}#phantom-sign-resume`,
+            });
+          }
+          return;
+        }
+
+        // Sign return: parse signature, attach to booking.
+        const session = pc.getStoredSession();
+        if (!session) {
+          showNotif('Phantom session expired — please retry the booking', 'denied');
+          history.replaceState(null, '', window.location.origin + window.location.pathname);
+          return;
+        }
+        const { signature } = pc.parseSignAndSendResponse(params, session);
+        const pending = pc.readPendingBooking();
+        history.replaceState(null, '', window.location.origin + window.location.pathname);
+        if (!pending) {
+          showNotif('Lost track of which booking — please retry', 'denied');
+          return;
+        }
+        const res = await fetch('/api/bookings/attach-solana-tx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            booking_id:    pending.booking_id,
+            cancel_token:  pending.cancel_token,
+            tx_signature:  signature,
+            escrow_pda:    pending.escrow_pda,
+            viewer_wallet: pending.viewer_wallet,
+          }),
+        });
+        if (res.ok) {
+          showNotif('◎ Payment locked — awaiting streamer approval!', 'success');
+          pc.clearPendingBooking();
+          if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+        } else {
+          showNotif('Booking attach failed — your funds may be locked. Reload to recover.', 'error');
+        }
+      } catch (err) {
+        const { reportClientError } = await import('@/lib/report-client-error');
+        reportClientError('overlay/phantom-connect-return', err, { hash });
+        showNotif(err instanceof Error ? err.message : 'Phantom return failed', 'denied');
+        history.replaceState(null, '', window.location.origin + window.location.pathname);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(VIEWER_NAME_KEY);
@@ -1125,6 +1200,61 @@ function OverlayContent() {
         durationSecs: durationSecsInt,
       });
       const escrowPda = escrowPdaPubkey.toBase58();
+
+      // ── Mobile (non-in-app) Phantom Connect deeplink path ──────────────
+      // Mobile Chrome's Phantom-deeplink-via-wallet-adapter returns txs with
+      // missing partial sigs; the in-app browser's WebView bridge silently
+      // drops approval taps. Both have been observed live. The official
+      // workaround is Phantom Connect — encrypt the tx, deeplink into
+      // Phantom natively, sign+submit there, return via redirect URL with
+      // sig. We persist the booking info in localStorage so the redirect
+      // back can finalize attach-solana-tx without rebuilding state.
+      const { needsMobileHandoff, isInWalletBrowser } = await import('@/lib/mobile-wallet');
+      if (needsMobileHandoff() && !isInWalletBrowser()) {
+        const pc = await import('@/lib/phantom-connect');
+        const bs58Mod = await import('bs58');
+        const bs58 = bs58Mod.default;
+        // Serialize the unsigned tx for Phantom (Phantom signs + submits).
+        // requireAllSignatures: false because the viewer will sign inside
+        // Phantom; verifySignatures: false because the tx isn't signed yet.
+        const txB58 = bs58.encode(tx.serialize({ requireAllSignatures: false, verifySignatures: false }));
+        const cancelToken = readBookingTokens()[newBooking.id] ?? '';
+        const session = pc.getStoredSession();
+        const cluster: 'devnet' | 'mainnet-beta' = WALLET_ADAPTER_CLUSTER === 'devnet' ? 'devnet' : 'mainnet-beta';
+        const here = window.location.origin + window.location.pathname + window.location.search;
+
+        if (!session) {
+          // First time on this device — connect handshake. Stash the tx so
+          // the connect-return handler can chain straight into sign.
+          pc.stashPendingBooking({
+            booking_id:    String(newBooking.id),
+            cancel_token:  cancelToken,
+            escrow_pda:    escrowPda,
+            viewer_wallet: publicKey.toBase58(),
+            pending_tx:    txB58,
+          });
+          window.location.href = pc.buildConnectUrl({
+            cluster,
+            redirectTo: `${here}#phantom-connect-resume`,
+          });
+          // Page navigates away. Don't continue.
+          return;
+        }
+
+        // Have session — sign deeplink directly.
+        pc.stashPendingBooking({
+          booking_id:    String(newBooking.id),
+          cancel_token:  cancelToken,
+          escrow_pda:    escrowPda,
+          viewer_wallet: publicKey.toBase58(),
+        });
+        window.location.href = pc.buildSignAndSendUrl({
+          session,
+          transactionB58: txB58,
+          redirectTo: `${here}#phantom-sign-resume`,
+        });
+        return;
+      }
 
       // Best-effort wallet wake-up for Phantom Android (no-op elsewhere).
       const phantomProvider = typeof window !== 'undefined'
