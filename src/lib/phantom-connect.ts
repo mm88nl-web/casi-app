@@ -127,7 +127,16 @@ export function useStoredPhantomConnectSession(): ConnectSession | null {
 
 // ── Pending booking stash ────────────────────────────────────────────────
 
+/** A viewer-side Solana action that's mid-flight via the Phantom Connect
+ *  sign deeplink. Persisted across the redirect so the return handler
+ *  knows what to do with the signed tx. */
 export type PendingBooking = {
+  /** What the signed tx is for. Drives the return handler's dispatch:
+   *  - 'book'   → POST /api/bookings/attach-solana-tx
+   *  - 'settle' → tx already submitted on-chain by us; refresh data
+   *  - 'cancel' → tx already submitted on-chain by us; refresh data
+   *  Default 'book' for backwards-compatibility with older stashes. */
+  kind?:         'book' | 'settle' | 'cancel';
   booking_id:    string;
   cancel_token:  string;
   escrow_pda:    string;
