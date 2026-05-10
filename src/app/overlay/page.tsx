@@ -1004,12 +1004,24 @@ function OverlayContent() {
       const amountUsdcMicro = Math.round(totalUsdc * 10 ** usdcDecimals);
       const durationSecsInt = Math.round(durationSeconds);
 
-      const { sig, escrowPda } = await client.initializeBeam({
-        escrowId:     newBooking.id,
-        streamer:     new PublicKey(profile.solana_wallet),
-        amountUsdc:   amountUsdcMicro,
-        durationSecs: durationSecsInt,
-      });
+      // Bound the on-chain call. Anchor's .rpc() polls for confirmation on
+      // OUR RPC (Helius), but Phantom mobile submits via its own RPC — the
+      // two RPCs can desync and the poll hangs indefinitely while the tx is
+      // already landed. After 30s we throw and let the catch's PDA-probe
+      // recovery path resolve the booking from on-chain state. Desktop and
+      // happy-path mobile finish in <10s so the timeout never triggers.
+      const BEAM_RPC_TIMEOUT_MS = 30_000;
+      const { sig, escrowPda } = await Promise.race([
+        client.initializeBeam({
+          escrowId:     newBooking.id,
+          streamer:     new PublicKey(profile.solana_wallet),
+          amountUsdc:   amountUsdcMicro,
+          durationSecs: durationSecsInt,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('rpc_confirmation_timeout')), BEAM_RPC_TIMEOUT_MS),
+        ),
+      ]);
 
       // Persist on-chain state so the admin settle/cancel flows can rebuild
       // the CPI accounts without re-fetching from chain. cancel_token-authed
@@ -1050,24 +1062,10 @@ function OverlayContent() {
       const { reportClientError } = await import('@/lib/report-client-error');
       console.error('[solana beam] initializeBeam failed:', err);
 
-      // Fan out to Discord/Slack via /api/log → ERROR_WEBHOOK_URL. Skip
-      // silent for plain user-rejection (those aren't bugs); EVERYTHING
-      // else goes — including the mobile signature-missing path so we can
-      // see how often that platform combination breaks.
-      if (!isUserRejection(err)) {
-        // booking_id alone is enough to look up the row + its price/duration
-        // in the DB; intentionally not capturing totalUsdc here because that
-        // var is scoped inside the try block above.
-        reportClientError('overlay/booking/solana/initializeBeam', err, {
-          booking_id:    String(newBooking.id),
-          profile_id:    profile?.id,
-          duration_secs: Math.round(durationSeconds),
-          viewer_wallet: publicKey?.toBase58() ?? null,
-          // ua tag so the webhook can split mobile vs desktop at a glance.
-          mobile:        typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent),
-          signature_missing: isWalletSignatureMissing(err),
-        });
-      }
+      // Discord report deferred to the "nothing on-chain" branch below —
+      // confirmation timeouts on mobile (Phantom RPC ≠ Helius poll RPC)
+      // recover via PDA probe and shouldn't ping. Only actual failures
+      // (wallet missing sig, balance race, etc.) make it past the probe.
 
       // User rejected in wallet — nothing on-chain, safe to deny.
       if (isUserRejection(err)) {
@@ -1132,8 +1130,21 @@ function OverlayContent() {
         console.error('[solana beam] PDA probe failed:', probeErr);
       }
 
-      // Nothing on-chain — safe to deny.
+      // Nothing on-chain — safe to deny. This is the actual-failure
+      // branch, so fan out to Discord here (skips user rejection + the
+      // timeout-recovered path above which already early-returned).
       const userMsg = formatEscrowError(err);
+      reportClientError('overlay/booking/solana/initializeBeam', err, {
+        booking_id:    String(newBooking.id),
+        profile_id:    profile?.id,
+        duration_secs: Math.round(durationSeconds),
+        viewer_wallet: publicKey?.toBase58() ?? null,
+        mobile:        typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent),
+        signature_missing: isWalletSignatureMissing(err),
+        // True when our own 30s race timed out AND the PDA probe found
+        // nothing — i.e. the tx was probably never submitted by the wallet.
+        rpc_timeout: err instanceof Error && err.message === 'rpc_confirmation_timeout',
+      });
       await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
       setTxStatus('error'); setTxError(userMsg);
       showNotif(userMsg, 'denied');
