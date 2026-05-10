@@ -218,6 +218,8 @@ export function buildConnectUrl(opts: {
   const url = `https://phantom.app/ul/v1/connect?${params.toString()}`;
   if (typeof window !== 'undefined') {
     console.log('[phantom-connect] redirect →', url);
+    // Cache the most recent URL so the on-page debug panel can render it.
+    try { window.localStorage.setItem('casi-phantom-last-url', url); } catch { /* ignore */ }
   }
   return url;
 }
