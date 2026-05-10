@@ -216,11 +216,6 @@ export function buildConnectUrl(opts: {
     redirect_link:              opts.redirectTo,
   });
   const url = `https://phantom.app/ul/v1/connect?${params.toString()}`;
-  if (typeof window !== 'undefined') {
-    console.log('[phantom-connect] redirect →', url);
-    // Cache the most recent URL so the on-page debug panel can render it.
-    try { window.localStorage.setItem('casi-phantom-last-url', url); } catch { /* ignore */ }
-  }
   return url;
 }
 
@@ -251,12 +246,12 @@ export function parseConnectResponse(search: URLSearchParams): ConnectSession {
 
 // ── signAndSendTransaction flow ──────────────────────────────────────────
 
-/** Builds the URL to redirect the user to in order to sign a Transaction
- *  (without submitting). The dapp submits the returned signed tx via its
- *  own RPC. Phantom Mobile in some versions returns
- *  errorCode=-32601 ("This method is not supported") for the
- *  signAndSendTransaction variant — signTransaction is more universally
- *  supported. */
+/** Builds the URL to redirect the user to in order to sign a Transaction.
+ *  Phantom signs the tx and returns it base58-encoded; the dapp is
+ *  responsible for submitting via its own RPC. We use this rather than the
+ *  signAndSendTransaction variant because some Phantom Mobile builds
+ *  return errorCode=-32601 ("This method is not supported") for the
+ *  *AndSend form. signTransaction is universally supported. */
 export function buildSignTransactionUrl(opts: {
   session:         ConnectSession;
   /** A serialized legacy Transaction the wallet will sign. Must already
@@ -279,12 +274,7 @@ export function buildSignTransactionUrl(opts: {
     redirect_link:              opts.redirectTo,
     payload,
   });
-  const url = `https://phantom.app/ul/v1/signTransaction?${params.toString()}`;
-  if (typeof window !== 'undefined') {
-    console.log('[phantom-connect] sign redirect →', url);
-    try { window.localStorage.setItem('casi-phantom-last-url', url); } catch { /* ignore */ }
-  }
-  return url;
+  return `https://phantom.app/ul/v1/signTransaction?${params.toString()}`;
 }
 
 /** Parses the response from a signTransaction deeplink. Returns the signed
@@ -306,55 +296,4 @@ export function parseSignTransactionResponse(search: URLSearchParams, session: C
   const decrypted = decryptPayload(data, nonce, shared) as { transaction: string };
   if (!decrypted.transaction) throw new Error('phantom-connect: response missing signed transaction');
   return { signedTransactionB58: decrypted.transaction };
-}
-
-/** @deprecated Phantom Mobile may return -32601 "method not supported" for
- *  this variant. Prefer buildSignTransactionUrl + dapp-side submit. Kept
- *  for completeness in case a future Phantom version re-enables it. */
-export function buildSignAndSendUrl(opts: {
-  session:         ConnectSession;
-  /** A serialized v0 / legacy Transaction the wallet will sign + submit. */
-  transactionB58:  string;
-  redirectTo:      string;
-}): string {
-  const kp = getOrCreateDappKeypair();
-  const shared = sharedSecret(bs58.decode(opts.session.phantomEncryptionPublicKey), kp.secretKey);
-  const { nonce, payload } = encryptPayload(
-    {
-      transaction: opts.transactionB58,
-      session:     opts.session.session,
-    },
-    shared,
-  );
-  const params = new URLSearchParams({
-    dapp_encryption_public_key: bs58.encode(kp.publicKey),
-    nonce,
-    redirect_link:              opts.redirectTo,
-    payload,
-  });
-  const url = `https://phantom.app/ul/v1/signAndSendTransaction?${params.toString()}`;
-  if (typeof window !== 'undefined') {
-    console.log('[phantom-connect] sign redirect →', url);
-    try { window.localStorage.setItem('casi-phantom-last-url', url); } catch { /* ignore */ }
-  }
-  return url;
-}
-
-/** Parses a redirect-URL response from Phantom's signAndSendTransaction. */
-export function parseSignAndSendResponse(search: URLSearchParams, session: ConnectSession): { signature: string } {
-  const errorCode    = search.get('errorCode');
-  const errorMessage = search.get('errorMessage');
-  if (errorCode) {
-    throw new Error(`Phantom sign error ${errorCode}: ${errorMessage ?? '(no message)'}`);
-  }
-  const data  = search.get('data');
-  const nonce = search.get('nonce');
-  if (!data || !nonce) {
-    throw new Error('phantom-connect: incomplete sign response');
-  }
-  const kp = getOrCreateDappKeypair();
-  const shared = sharedSecret(bs58.decode(session.phantomEncryptionPublicKey), kp.secretKey);
-  const decrypted = decryptPayload(data, nonce, shared) as { signature: string };
-  if (!decrypted.signature) throw new Error('phantom-connect: response missing signature');
-  return { signature: decrypted.signature };
 }

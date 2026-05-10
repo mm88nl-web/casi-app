@@ -62,6 +62,19 @@ const CSS = `
     background: conic-gradient(from 180deg, #9945FF 0%, #14F195 50%, #9945FF 100%);
     flex-shrink: 0;
   }
+  .wn-phantom-mobile {
+    display: inline-flex; align-items: center;
+    background: rgba(153,69,255,0.08);
+    border: 1px solid rgba(153,69,255,0.25);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-family: var(--font-casi-mono), monospace;
+    font-size: 9px; letter-spacing: 0.6px;
+    color: #b56eff;
+    text-decoration: none;
+    text-transform: uppercase;
+  }
+  .wn-phantom-mobile:hover { border-color: rgba(153,69,255,0.5); color: #c79aff; }
 
   .wn-row {
     display: inline-flex; align-items: center; gap: 0;
@@ -262,9 +275,6 @@ export default function WalletNav() {
     const phantomConnectUrl = isMobileUA && typeof window !== 'undefined'
       ? buildClientPhantomConnectUrl()
       : null;
-    const lastUrlForDebug = typeof window !== 'undefined'
-      ? window.localStorage.getItem('casi-phantom-last-url')
-      : null;
 
     return (
       <>
@@ -280,23 +290,9 @@ export default function WalletNav() {
             {connecting ? 'Connecting…' : 'Connect Wallet'}
           </button>
           {isMobileUA && phantomConnectUrl && (
-            <a
-              href={phantomConnectUrl}
-              style={{
-                fontFamily: 'var(--font-casi-mono), monospace',
-                fontSize: 9, letterSpacing: 1, color: '#9945FF', textDecoration: 'underline',
-              }}
-            >
-              Mobile? Connect via Phantom →
+            <a href={phantomConnectUrl} className="wn-phantom-mobile">
+              Use Phantom Mobile
             </a>
-          )}
-          {isMobileUA && lastUrlForDebug && (
-            <details style={{ maxWidth: 280, fontSize: 8, color: '#666', fontFamily: 'monospace' }}>
-              <summary style={{ cursor: 'pointer' }}>debug: last URL</summary>
-              <div style={{ wordBreak: 'break-all', userSelect: 'all', padding: 4, background: '#111', border: '1px solid #222', borderRadius: 4, marginTop: 4 }}>
-                {lastUrlForDebug}
-              </div>
-            </details>
           )}
         </div>
       </>
