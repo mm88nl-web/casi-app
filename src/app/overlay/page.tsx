@@ -1100,14 +1100,43 @@ function OverlayContent() {
       // so the catch's reportClientError can read them.
       const sendOverride = async (tx: import('@solana/web3.js').Transaction, conn: import('@solana/web3.js').Connection, opts?: unknown): Promise<string> => {
         if (typeof window !== 'undefined') {
-          const phantom = (window as unknown as { phantom?: { solana?: { signAndSendTransaction?: (t: unknown) => Promise<{ signature: string }> } } }).phantom?.solana;
+          const phantom = (window as unknown as {
+            phantom?: {
+              solana?: {
+                isConnected?: boolean;
+                connect?: (opts?: { onlyIfTrusted?: boolean }) => Promise<unknown>;
+                signAndSendTransaction?: (t: unknown) => Promise<{ signature: string }>;
+              };
+            };
+          }).phantom?.solana;
           phantomProviderDetected = !!phantom;
           if (phantom?.signAndSendTransaction) {
-            // Inner 12s timeout. If Phantom Android's signAndSendTransaction
-            // hangs (sometimes it does — see Discord ping with mobile=true,
-            // signature_missing=false), fall through to wallet-adapter
-            // rather than burning the full 30s outer timeout for nothing.
-            const PHANTOM_INNER_TIMEOUT_MS = 12_000;
+            // Re-establish the wallet session. Phantom Android's mobile
+            // session has a habit of going dormant — the in-app browser
+            // keeps window.phantom.solana mounted but the underlying RPC
+            // bridge to the wallet binary is asleep. signAndSendTransaction
+            // hangs forever waiting for a response that never comes. A
+            // fresh connect() wakes the bridge before we send.
+            try {
+              if (phantom.connect && !phantom.isConnected) {
+                await Promise.race([
+                  phantom.connect({ onlyIfTrusted: true }),
+                  new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('phantom_connect_timeout')), 5_000),
+                  ),
+                ]);
+              }
+            } catch {
+              /* connect failures are non-fatal; the send call below will
+                 throw with the real reason if needed */
+            }
+            // Inner 45s timeout. Phantom Android sometimes shows an
+            // approval sheet that the user has to tap; that takes 5-30s
+            // realistic. We were timing out at 12s before, falling through
+            // to wallet-adapter (which also stalls because the underlying
+            // wallet provider is the same). Better to wait longer here
+            // than fall through to a path that won't help.
+            const PHANTOM_INNER_TIMEOUT_MS = 45_000;
             try {
               pathTaken = 'phantom_native';
               const result = await Promise.race([
@@ -1130,7 +1159,9 @@ function OverlayContent() {
         throw new Error('No sendTransaction available');
       };
 
-      const BEAM_RPC_TIMEOUT_MS = 30_000;
+      // Bumped 30s → 90s. Mobile users tapping an approval sheet need
+      // more breathing room than desktop popup flows.
+      const BEAM_RPC_TIMEOUT_MS = 90_000;
       const { sig, escrowPda } = await Promise.race([
         client.initializeBeam(
           {
