@@ -5,6 +5,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
 import { useStoredPhantomConnectSession, clearSession as clearPhantomConnectSession, buildConnectUrl } from '@/lib/phantom-connect';
 import { NETWORK_LABEL, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
+import { needsMobileHandoff } from '@/lib/mobile-wallet';
 
 /** Pre-compute the Phantom Connect deeplink for the current page. Render
  *  this inside an `<a href>` so the OS treats the tap as a real user
@@ -62,19 +63,6 @@ const CSS = `
     background: conic-gradient(from 180deg, #9945FF 0%, #14F195 50%, #9945FF 100%);
     flex-shrink: 0;
   }
-  .wn-phantom-mobile {
-    display: inline-flex; align-items: center;
-    background: rgba(153,69,255,0.08);
-    border: 1px solid rgba(153,69,255,0.25);
-    border-radius: 8px;
-    padding: 5px 10px;
-    font-family: var(--font-casi-mono), monospace;
-    font-size: 9px; letter-spacing: 0.6px;
-    color: #b56eff;
-    text-decoration: none;
-    text-transform: uppercase;
-  }
-  .wn-phantom-mobile:hover { border-color: rgba(153,69,255,0.5); color: #c79aff; }
 
   .wn-row {
     display: inline-flex; align-items: center; gap: 0;
@@ -204,6 +192,11 @@ export default function WalletNav() {
 
   const [dropOpen, setDropOpen]  = useState(false);
   const [dropPos, setDropPos]    = useState<{ top: number; right: number }>({ top: 56, right: 12 });
+  // needsMobileHandoff() reads navigator + window. Defer to after mount so
+  // SSR (always false) matches the first client render — avoids hydration
+  // mismatch + a flash of the wrong button on mobile.
+  const [useDeeplink, setUseDeeplink] = useState(false);
+  useEffect(() => { setUseDeeplink(needsMobileHandoff()); }, []);
   const dropRef = useRef<HTMLDivElement>(null);
 
   // Only connect() after an explicit user click — Wallet Standard auto-registers
@@ -259,42 +252,40 @@ export default function WalletNav() {
 
   /* ── Disconnected / connecting ── */
   if (!isConnected || !effectivePublicKey) {
-    // On mobile the wallet-adapter's deeplink-based connect frequently
-    // times out before the user is even back from Phantom. Give them a
-    // direct "Connect via Phantom Mobile" path that uses Phantom Connect
-    // — the encrypted deeplink protocol that's reliable regardless of
-    // what the WebView bridge does. The button handler lives in the
-    // page (it calls into phantom-connect.ts with a redirect URL we
-    // pick up on return).
-    const isMobileUA = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    // Pre-compute the Phantom Connect URL on render so we can render the
-    // CTA as an actual <a href> rather than a JS-driven window.location
-    // change. On Android Chrome, navigating from an anchor preserves the
-    // user-gesture context that the OS uses to decide whether to open
-    // the Phantom app vs falling back to the phantom.app website.
-    const phantomConnectUrl = isMobileUA && typeof window !== 'undefined'
+    // Single Connect Wallet CTA. On a mobile browser that's NOT inside a
+    // wallet's in-app browser (where window.phantom.solana isn't injected),
+    // the wallet-adapter's deeplink connect is unreliable, so we render the
+    // SAME button as an <a href> to Phantom Connect's encrypted deeplink
+    // protocol — same visual, reliable navigation. Desktop and in-app-
+    // browser users keep the wallet-adapter modal flow.
+    const phantomConnectUrl = useDeeplink && typeof window !== 'undefined'
       ? buildClientPhantomConnectUrl()
       : null;
+
+    if (useDeeplink && phantomConnectUrl) {
+      return (
+        <>
+          <style>{CSS}</style>
+          <a href={phantomConnectUrl} className="wn-connect" style={{ textDecoration: 'none' }}>
+            <SolanaIcon size={12} />
+            Connect Wallet
+          </a>
+        </>
+      );
+    }
 
     return (
       <>
         <style>{CSS}</style>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-          <button
-            className="wn-connect"
-            onClick={openWalletModal}
-            disabled={connecting}
-            style={{ opacity: connecting ? 0.6 : 1, cursor: connecting ? 'not-allowed' : 'pointer' }}
-          >
-            <SolanaIcon size={12} />
-            {connecting ? 'Connecting…' : 'Connect Wallet'}
-          </button>
-          {isMobileUA && phantomConnectUrl && (
-            <a href={phantomConnectUrl} className="wn-phantom-mobile">
-              Use Phantom Mobile
-            </a>
-          )}
-        </div>
+        <button
+          className="wn-connect"
+          onClick={openWalletModal}
+          disabled={connecting}
+          style={{ opacity: connecting ? 0.6 : 1, cursor: connecting ? 'not-allowed' : 'pointer' }}
+        >
+          <SolanaIcon size={12} />
+          {connecting ? 'Connecting…' : 'Connect Wallet'}
+        </button>
       </>
     );
   }
