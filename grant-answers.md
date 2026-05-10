@@ -1,11 +1,51 @@
 # Solana Foundation Grant — `casi-escrow` primitive
 
-Working draft for the grant application. Two `[TODO: ...]` markers remain
-in Section 4 — the audit firm name and the audit quote amount — both
-unblocked once Sec3 / OtterSec / Neodyme reply with written quotes. The
-grant funds the `casi-escrow` Anchor program (audit + SDK + public-good
-deliverables); CASI the consumer product is the reference integration
-that motivates and stress-tests it.
+Working draft for the grant application. The grant would fund the `casi-escrow`
+Anchor program (audit + SDK + public-good deliverables); CASI the consumer
+product is the reference integration that motivates and stress-tests it.
+
+---
+
+## Funding posture (May 2026, post-Sec3 reply)
+
+**Treat this grant as a shot, not the funding plan.** Jack Tsai at Sec3 (a
+multi-year Solana ecosystem participant who has worked with the Foundation
+in multiple capacities) responded to the audit-quote outreach with two
+substantive pieces of advice worth recording here so this doc isn't read
+as financial planning:
+
+1. **Solana Foundation grants are extremely difficult to land at this
+   stage.** His direct words: *"i really would not count on that as a source
+   of funding."* Coming from someone with insider visibility into the
+   foundation's pipeline, that's data, not pessimism.
+2. **Don't audit before product-market fit.** Sec3's rate is **~$18 per
+   line of code excluding comments and tests** — for `casi-escrow`'s
+   ~1.2k LOC that's roughly **$22k for the audit alone**, on top of the
+   ~$3k remediation contractor. His standard advice to early-stage builders
+   is "ship to mainnet with restrictions/limits to contain exposure, prove
+   PMF, then audit when there's traction (and ideally revenue) to pay for
+   it."
+
+**Adjusted plan, in order of probability:**
+
+| Path | Likelihood | Notes |
+|---|---|---|
+| **Pro-tier SaaS MRR funds the audit** | Highest | 100 streamers × $19/mo × 12mo ≈ $22.8k → covers Sec3 quote. Requires capped-mainnet launch first to acquire the streamers. See `capped-mainnet-plan.md` for the cap design and `pro-tier-plan.md` for the SaaS feature menu. |
+| **Colosseum hackathon prize** (Renaissance / Radar) | Medium | $50k+ top prizes, foundation/VC visibility; submission re-uses existing repo + write-ups. Worth doing regardless of grant outcome. |
+| **Superteam (NL / Europe) bounties + intros** | Medium | Local builder community, mentorship pipeline, sometimes pre-seed intros. Direct path Jack named. |
+| **This grant** | Lower than initially assumed | Still apply — application is mostly written, marginal cost is low — but don't restructure the runway around it landing. |
+| **Angel / pre-seed** | Lowest near-term | Pre-PMF, pre-audit, solo non-technical founder. Possible but slow. |
+
+**Implication for the grant application body**: keep the pitch strong (it's
+still a credible primitive worth public funding even if it's a long shot),
+but the founder-facing narrative is "we are designing for self-funded launch
+with deliberate caps; the grant accelerates the audit if it lands, but
+doesn't gate the product."
+
+**Sec3 written-quote status**: not formally requested yet. The $18/LOC rate
+is stated in Jack's reply — sufficient context to fill in the budget below.
+A formal quote PDF can be requested if/when the grant or revenue path
+indicates we're actually going to engage Sec3.
 
 ---
 
@@ -46,20 +86,20 @@ that motivates and stress-tests it.
 
 ## 3. Funding amount
 
-`$25,000 USD`
+`$32,000 USD`
 
-(Below the Foundation's stated $40k benchmark. Sized to cover the named audit
-firm's quote plus contractor work for remediation, SDK, and public-good
-deliverables. Update this number once the audit firm's quote is finalised.)
+(Below the Foundation's stated $40k benchmark. Sized to cover Sec3's stated
+audit rate against the program's actual LOC count, plus contractor work for
+remediation, SDK, and public-good deliverables.)
 
 ---
 
 ## 4. Budget proposal
 
-> **Total: $25,000.** All deliverables Apache-2.0 and public.
+> **Total: $32,000.** All deliverables Apache-2.0 and public.
 >
-> **Milestone 1 — $18,000 — External audit + remediation** *(est. 6 weeks)*
-> - Audit firm: `[TODO: name once a written quote is accepted — outreach is open with Sec3 (Jack Tsai), OtterSec, and Neodyme]` — quoted at `[TODO: $XX,XXX]` (written quote attached).
+> **Milestone 1 — $25,000 — External audit + remediation** *(est. 6 weeks)*
+> - Audit firm: **Sec3** (Jack Tsai), with **OtterSec** and **Neodyme** as alternates if Sec3's timeline doesn't fit the milestone window. Sec3 stated rate is **$18 per line of code excluding comments and tests**; against `casi-escrow`'s ~1,200 LOC of program code, that's approximately **$22,000** for the audit. Formal written quote available on request once funding is conditionally awarded.
 > - Remediation contractor (sourced via Superteam Earn or audit-firm referral): $3,000, applies firm's findings to the program.
 > - Audit report and remediation diff published in the repo.
 > - Tag `casi-escrow` v1.0.0 and deploy to mainnet-beta.
@@ -145,11 +185,12 @@ Before submitting:
 
 - [ ] Identity fields (name, country, email) filled in.
 - [ ] Funding category confirmed against the actual form's dropdown options.
-- [ ] At least one audit-firm quote received and named in Milestone 1.
+- [x] At least one audit-firm rate received and named in Milestone 1 (Sec3, $18/LOC, May 2026).
+- [ ] Optional: request a formal written quote from Sec3 if/when grant is awarded conditionally.
 - [ ] "Why You?" background paragraph filled in with 2–3 sentences of prior experience.
-- [ ] Repo is public (✅ as of 2026-04-29).
-- [ ] README has been polished (✅ as of 2026-04-29).
+- [x] Repo is public (✅ as of 2026-04-29).
+- [x] README has been polished (✅ as of 2026-04-29).
 - [ ] `programs/casi-escrow/README.md` is accessible and explains the design.
-- [ ] `LICENSE` file exists at root with Apache-2.0 (✅).
-- [ ] `SECURITY.md` exists with a vuln-report contact email (✅ as of 2026-04-29).
-- [ ] CI is green (✅ as of 2026-04-29).
+- [x] `LICENSE` file exists at root with Apache-2.0 (✅).
+- [x] `SECURITY.md` exists with a vuln-report contact email (✅ as of 2026-04-29).
+- [x] CI is green (✅ as of 2026-04-29).
