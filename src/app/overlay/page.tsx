@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { PublicKey } from '@solana/web3.js';
 import { useStoredPhantomConnectSession } from '@/lib/phantom-connect';
 import SkinProvider from '@/components/SkinProvider';
 import { formatSlotPrice } from '@/lib/slot-pricing';
