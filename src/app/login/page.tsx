@@ -94,7 +94,7 @@ export default function AuthPage() {
         .eq('id', session.user.id)
         .maybeSingle();
       if (profile && !finish) {
-        router.replace('/admin');
+        router.replace('/studio');
         return;
       }
       // Profile missing → finish setup. Pre-fill from Google metadata.
@@ -124,7 +124,7 @@ export default function AuthPage() {
     setError('');
     const { error: err } = await supabase.auth.signInWithPassword({ email, password });
     if (err) { setError(err.message); setLoading(false); }
-    else router.push('/admin');
+    else router.push('/studio');
   };
 
   /* ── Sign in or sign up with an OAuth provider ──
@@ -228,7 +228,7 @@ export default function AuthPage() {
       setLoading(false);
       return;
     }
-    router.push('/admin');
+    router.push('/studio');
   };
 
   const stepIndex = STEPS.indexOf(step);

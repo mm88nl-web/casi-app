@@ -271,7 +271,7 @@ export default function ProfileEditPage() {
       <div className="pe">
         <nav className="pe-nav">
           <div className="pe-nav-left">
-            <a href="/admin" className="pe-back">← Studio</a>
+            <a href="/studio" className="pe-back">← Studio</a>
             <span style={{ color: '#222' }}>|</span>
             <span className="pe-nav-title">Edit profile</span>
           </div>
@@ -451,7 +451,7 @@ export default function ProfileEditPage() {
             {error && <div className="pe-error">{error}</div>}
 
             <div className="pe-actions">
-              <button type="button" className="pe-btn cancel" onClick={() => router.push('/admin')}>Cancel</button>
+              <button type="button" className="pe-btn cancel" onClick={() => router.push('/studio')}>Cancel</button>
               <button type="submit" disabled={saving} className={`pe-btn save ${saved ? 'saved' : ''}`}
                 style={{ background: saved ? '#4ade80' : tc }}>
                 {saving ? 'Saving…' : saved ? '✓ Saved!' : 'Save changes'}

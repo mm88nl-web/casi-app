@@ -39,15 +39,9 @@ export default function StudioFrame({
     <main className="min-h-screen" style={{ background: 'var(--paper)', color: 'var(--text)' }}>
       <NavBar
         chips={
-          <>
-            <Link href="/admin" title="Classic studio (current production)" style={chipStyle()}>
-              ↩ Classic
-            </Link>
-            <span style={chipStyle({ active: true })}>Studio beta</span>
-            <Link href="/studio/settings" title="Profile, payouts, appearance" style={chipStyle()}>
-              ⚙ Settings
-            </Link>
-          </>
+          <Link href="/studio/settings" title="Profile, payouts, appearance" style={chipStyle()}>
+            ⚙ Settings
+          </Link>
         }
         right={<WalletPill />}
       />
