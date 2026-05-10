@@ -248,10 +248,23 @@ async function applyTransition({
       // session-key crank). Either way the escrow is Settled on-chain — flip
       // DB to expired. Only advance from active; a late settle on an
       // already-expired booking is a no-op.
+      //
+      // Set ended_at so the activity-list proration math knows this row
+      // didn't run its full duration. Streamer-driven end-early already
+      // writes ended_at directly in endBeamEarly (and short-circuits before
+      // this webhook fires), so this branch covers viewer-driven end-early
+      // and any cranker / cron settle paths. now() is close enough — webhook
+      // lag is single-digit seconds — and accurate to the rounding the
+      // proration formula already does.
       if (booking.status !== 'active') return;
       const { error } = await supabase
         .from('bookings')
-        .update({ status: 'expired', image_url: null, escrow_pda: null })
+        .update({
+          status:     'expired',
+          image_url:  null,
+          escrow_pda: null,
+          ended_at:   new Date().toISOString(),
+        })
         .eq('id', booking.id)
         .eq('status', 'active');
       if (error) {
