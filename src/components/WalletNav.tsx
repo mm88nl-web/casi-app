@@ -3,8 +3,21 @@ import { useState, useEffect, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
-import { useStoredPhantomConnectSession, clearSession as clearPhantomConnectSession } from '@/lib/phantom-connect';
-import { NETWORK_LABEL } from '@/lib/solana-network';
+import { useStoredPhantomConnectSession, clearSession as clearPhantomConnectSession, buildConnectUrl } from '@/lib/phantom-connect';
+import { NETWORK_LABEL, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
+
+/** Pre-compute the Phantom Connect deeplink for the current page. Render
+ *  this inside an `<a href>` so the OS treats the tap as a real user
+ *  gesture — Android Chrome won't open Phantom from a JS-driven
+ *  navigation that's lost the gesture context. */
+function buildClientPhantomConnectUrl(): string {
+  const sep = window.location.search ? '&' : '?';
+  const here = window.location.origin + window.location.pathname + window.location.search + `${sep}phantom_action=connect-resume`;
+  return buildConnectUrl({
+    cluster: WALLET_ADAPTER_CLUSTER,
+    redirectTo: here,
+  });
+}
 import { useWalletBalances, refreshWalletBalances } from '@/lib/wallet-balances';
 // (mobile-wallet handoff helpers removed — Phantom Connect handles mobile signing directly now)
 import SolanaIcon from './icons/SolanaIcon';
@@ -240,21 +253,18 @@ export default function WalletNav() {
     // what the WebView bridge does. The button handler lives in the
     // page (it calls into phantom-connect.ts with a redirect URL we
     // pick up on return).
-    const onPhantomMobileConnect = async () => {
-      const pc = await import('@/lib/phantom-connect');
-      const { WALLET_ADAPTER_CLUSTER } = await import('@/lib/solana-network');
-      // redirect_link uses a query-param marker (NOT a hash fragment) —
-      // Phantom appends its response params as a query string, and adding
-      // them onto a URL that already has a hash makes the result
-      // unparseable.
-      const sep = window.location.search ? '&' : '?';
-      const here = window.location.origin + window.location.pathname + window.location.search + `${sep}phantom_action=connect-resume`;
-      window.location.href = pc.buildConnectUrl({
-        cluster: WALLET_ADAPTER_CLUSTER,
-        redirectTo: here,
-      });
-    };
     const isMobileUA = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    // Pre-compute the Phantom Connect URL on render so we can render the
+    // CTA as an actual <a href> rather than a JS-driven window.location
+    // change. On Android Chrome, navigating from an anchor preserves the
+    // user-gesture context that the OS uses to decide whether to open
+    // the Phantom app vs falling back to the phantom.app website.
+    const phantomConnectUrl = isMobileUA && typeof window !== 'undefined'
+      ? buildClientPhantomConnectUrl()
+      : null;
+    const lastUrlForDebug = typeof window !== 'undefined'
+      ? window.localStorage.getItem('casi-phantom-last-url')
+      : null;
 
     return (
       <>
@@ -269,18 +279,24 @@ export default function WalletNav() {
             <SolanaIcon size={12} />
             {connecting ? 'Connecting…' : 'Connect Wallet'}
           </button>
-          {isMobileUA && (
-            <button
-              type="button"
-              onClick={onPhantomMobileConnect}
+          {isMobileUA && phantomConnectUrl && (
+            <a
+              href={phantomConnectUrl}
               style={{
-                background: 'none', border: 'none', padding: 0, cursor: 'pointer',
                 fontFamily: 'var(--font-casi-mono), monospace',
                 fontSize: 9, letterSpacing: 1, color: '#9945FF', textDecoration: 'underline',
               }}
             >
               Mobile? Connect via Phantom →
-            </button>
+            </a>
+          )}
+          {isMobileUA && lastUrlForDebug && (
+            <details style={{ maxWidth: 280, fontSize: 8, color: '#666', fontFamily: 'monospace' }}>
+              <summary style={{ cursor: 'pointer' }}>debug: last URL</summary>
+              <div style={{ wordBreak: 'break-all', userSelect: 'all', padding: 4, background: '#111', border: '1px solid #222', borderRadius: 4, marginTop: 4 }}>
+                {lastUrlForDebug}
+              </div>
+            </details>
           )}
         </div>
       </>
