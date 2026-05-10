@@ -242,11 +242,11 @@ export default function WalletNav() {
     // pick up on return).
     const onPhantomMobileConnect = async () => {
       const pc = await import('@/lib/phantom-connect');
-      const cluster = (process.env.NEXT_PUBLIC_SOLANA_CLUSTER === 'mainnet-beta'
-        ? 'mainnet-beta' : 'devnet') as 'devnet' | 'mainnet-beta';
       const here = window.location.origin + window.location.pathname + window.location.search;
+      // Deliberately omit `cluster` — Phantom will use whatever network the
+      // user has selected. Forcing cluster=devnet on a wallet without
+      // testnet mode enabled silently dismisses the deeplink.
       window.location.href = pc.buildConnectUrl({
-        cluster,
         redirectTo: `${here}#phantom-connect-resume`,
       });
     };

@@ -201,20 +201,30 @@ function decryptPayload(payloadB58: string, nonceB58: string, sharedKey: Uint8Ar
 
 /** Builds the URL to redirect the user to in order to start a connect
  *  handshake. App URL is the dapp domain (used in Phantom's connect prompt
- *  for branding); cluster picks devnet vs mainnet-beta. */
+ *  for branding); cluster is optional — when omitted Phantom uses whatever
+ *  network the user has selected in-app. We deliberately default to NOT
+ *  passing cluster, since requesting cluster=devnet on a user who hasn't
+ *  enabled Testnet Mode causes Phantom to silently dismiss the deeplink
+ *  (no error, no prompt — just nothing). The viewer's selected network
+ *  has to match the program's network for signing anyway, so picking it
+ *  in Phantom is the right place. */
 export function buildConnectUrl(opts: {
   redirectTo: string;
   appUrl?:    string;
-  cluster:    'devnet' | 'mainnet-beta';
+  cluster?:   'devnet' | 'mainnet-beta';
 }): string {
   const kp = getOrCreateDappKeypair();
   const params = new URLSearchParams({
     dapp_encryption_public_key: bs58.encode(kp.publicKey),
-    cluster:                    opts.cluster,
     app_url:                    opts.appUrl ?? (typeof window !== 'undefined' ? window.location.origin : 'https://casi.gg'),
     redirect_link:              opts.redirectTo,
   });
-  return `https://phantom.app/ul/v1/connect?${params.toString()}`;
+  if (opts.cluster) params.set('cluster', opts.cluster);
+  const url = `https://phantom.app/ul/v1/connect?${params.toString()}`;
+  if (typeof window !== 'undefined') {
+    console.log('[phantom-connect] redirect →', url);
+  }
+  return url;
 }
 
 /** Parses a redirect-URL response from Phantom's /connect call. Returns the

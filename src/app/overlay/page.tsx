@@ -1242,7 +1242,6 @@ function OverlayContent() {
         const txB58 = bs58.encode(tx.serialize({ requireAllSignatures: false, verifySignatures: false }));
         const cancelToken = readBookingTokens()[newBooking.id] ?? '';
         const session = pc.getStoredSession();
-        const cluster: 'devnet' | 'mainnet-beta' = WALLET_ADAPTER_CLUSTER === 'devnet' ? 'devnet' : 'mainnet-beta';
         const here = window.location.origin + window.location.pathname + window.location.search;
 
         if (!session) {
@@ -1255,8 +1254,8 @@ function OverlayContent() {
             viewer_wallet: effectivePublicKey.toBase58(),
             pending_tx:    txB58,
           });
+          // Cluster intentionally omitted — see phantom-connect.ts comment.
           window.location.href = pc.buildConnectUrl({
-            cluster,
             redirectTo: `${here}#phantom-connect-resume`,
           });
           // Page navigates away. Don't continue.
