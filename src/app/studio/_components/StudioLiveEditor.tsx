@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { Rnd } from 'react-rnd';
 import SlotMedia from '@/components/SlotMedia';
-import BeamCtrlPanel from '../../admin/_components/BeamCtrlPanel';
+import BeamCtrlPanel from './BeamCtrlPanel';
 import StudioLayersPanel, { type LayerItem } from './StudioLayersPanel';
 import { formatSlotPrice } from '@/lib/slot-pricing';
 
