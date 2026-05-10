@@ -13,7 +13,6 @@
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
 import { createClient } from '@/utils/supabase/client';
 import { sendFlash, SOLANA_ENABLED, type PaymentMethod } from '@/lib/payment-manager';
@@ -84,7 +83,6 @@ export default function SendFlashSection({
 
   const { connection } = useConnection();
   const { publicKey, signTransaction, signAllTransactions, connected } = useWallet();
-  const { setVisible: setWalletModalVisible } = useWalletModal();
   // Phantom Connect deeplink session — viewer connected via the encrypted
   // mobile path won't have a wallet-adapter publicKey/signTransaction but
   // they DO have a session pubkey. Treat that as connected.
@@ -365,12 +363,11 @@ export default function SendFlashSection({
                   @{username} hasn&apos;t linked a Solana wallet yet.
                 </div>
               )}
-              {paymentMethod === 'solana' && profile?.solana_wallet && !isWalletConnected && (
-                <button type="button" onClick={() => setWalletModalVisible(true)}
-                  style={{ width: '100%', marginTop: 8, background: 'rgba(153,69,255,0.1)', border: '1px solid rgba(153,69,255,0.35)', borderRadius: 8, padding: '8px 0', fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', color: '#c4a0ff', cursor: 'pointer' }}>
-                  Connect wallet to continue
-                </button>
-              )}
+              {/* No inline "Connect wallet" prompt — the top-of-page wallet
+                  pill is the single connect surface, mirroring how every
+                  other action in the app handles a not-yet-connected
+                  viewer. The submit button below renders disabled until
+                  the pill reports a session. */}
             </div>
           )}
 
@@ -445,10 +442,10 @@ export default function SendFlashSection({
               <StripeIcon size={11} mono="#050505" />
             )}
             {paymentMethod === 'solana'
-              ? (submitting ? (onChainStatus === 'locking' ? 'Locking on-chain…' : 'Submitting…') : `Lock ${(amountCents / 100).toFixed(2)} USDC & Flash`)
+              ? (submitting ? (onChainStatus === 'locking' ? 'Locking on-chain…' : 'Submitting…') : `${(amountCents / 100).toFixed(2)} USDC Flash`)
               : paymentMethod === 'free'
                 ? (submitting ? 'Sending…' : 'Send Free Flash')
-                : (submitting ? 'Redirecting…' : `Pay $${(amountCents / 100).toFixed(2)} & Flash`)}
+                : (submitting ? 'Redirecting…' : `$${(amountCents / 100).toFixed(2)} Flash`)}
           </button>
 
           <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#2a2a2a', textAlign: 'center', marginTop: 10, lineHeight: 1.9 }}>
