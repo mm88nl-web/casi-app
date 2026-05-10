@@ -295,10 +295,19 @@ async function reconcileActive(
 
   // Account closed → settle_beam has run. DB hasn't caught up. Null
   // escrow_pda in the same write so the viewer's overlay stops surfacing
-  // a stale "Recover USDC" chip on a row whose vault is empty.
+  // a stale "Recover USDC" chip on a row whose vault is empty. Also set
+  // ended_at so the activity-list proration math knows this row settled
+  // (best-effort — the cron may run hours after the actual on-chain
+  // settle, in which case proration will under-credit the streamer; the
+  // webhook hits this faster and is the primary writer).
   const { error } = await supabase
     .from('bookings')
-    .update({ status: 'expired', image_url: null, escrow_pda: null })
+    .update({
+      status:     'expired',
+      image_url:  null,
+      escrow_pda: null,
+      ended_at:   new Date().toISOString(),
+    })
     .eq('id', row.id)
     .eq('status', 'active');
   if (error) throw error;
