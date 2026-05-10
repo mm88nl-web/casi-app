@@ -242,12 +242,16 @@ export default function WalletNav() {
     // pick up on return).
     const onPhantomMobileConnect = async () => {
       const pc = await import('@/lib/phantom-connect');
-      const here = window.location.origin + window.location.pathname + window.location.search;
-      // Deliberately omit `cluster` — Phantom will use whatever network the
-      // user has selected. Forcing cluster=devnet on a wallet without
-      // testnet mode enabled silently dismisses the deeplink.
+      const { WALLET_ADAPTER_CLUSTER } = await import('@/lib/solana-network');
+      // redirect_link uses a query-param marker (NOT a hash fragment) —
+      // Phantom appends its response params as a query string, and adding
+      // them onto a URL that already has a hash makes the result
+      // unparseable.
+      const sep = window.location.search ? '&' : '?';
+      const here = window.location.origin + window.location.pathname + window.location.search + `${sep}phantom_action=connect-resume`;
       window.location.href = pc.buildConnectUrl({
-        redirectTo: `${here}#phantom-connect-resume`,
+        cluster: WALLET_ADAPTER_CLUSTER,
+        redirectTo: here,
       });
     };
     const isMobileUA = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
