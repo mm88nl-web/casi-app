@@ -5,7 +5,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
 import { NETWORK_LABEL, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
-import { buildConnectUrl } from '@/lib/phantom-connect';
+import { buildConnectUrl, useStoredPhantomConnectSession, clearSession as clearPhantomConnectSession } from '@/lib/phantom-connect';
 
 function buildClientPhantomConnectUrl(): string {
   const sep = window.location.search ? '&' : '?';
@@ -202,6 +202,12 @@ export default function WalletPill() {
   const { connected, publicKey, disconnect, wallet, connect, connecting } = useWallet();
   const { setVisible } = useWalletModal();
   const { sol: solBal, usdc: usdcBal } = useWalletBalances();
+  // Phantom Connect deeplink session — viewer connected via the encrypted
+  // mobile path won't have a wallet-adapter publicKey but they DO have a
+  // session pubkey. Treat that as connected.
+  const pcSession = useStoredPhantomConnectSession();
+  const effectivePublicKey = publicKey ?? (pcSession ? new PublicKey(pcSession.walletPublicKey) : null);
+  const isConnected = connected || !!pcSession;
 
   const [dropOpen, setDropOpen] = useState(false);
   const [dropPos, setDropPos] = useState<{ top: number; right: number }>({ top: 56, right: 12 });
@@ -243,11 +249,15 @@ export default function WalletPill() {
 
   const handleDisconnect = () => {
     disconnect().catch(() => {});
+    // Also clear any Phantom Connect deeplink session — without this the
+    // pill would re-render as "connected" via the session right after the
+    // user disconnected.
+    clearPhantomConnectSession();
     setDropOpen(false);
   };
 
   /* ── Disconnected ── */
-  if (!connected || !publicKey) {
+  if (!isConnected || !effectivePublicKey) {
     // (Mobile "Open in Phantom" handoff dropped — Phantom Connect deeplink
     // now handles signing inside the user's mobile browser. See
     // src/lib/phantom-connect.ts.)
@@ -335,7 +345,7 @@ export default function WalletPill() {
           ) : (
             <span className="wp-avatar-fallback" />
           )}
-          <span className="wp-addr">{truncate(publicKey)}</span>
+          <span className="wp-addr">{truncate(effectivePublicKey)}</span>
           <span className={`wp-caret${dropOpen ? ' open' : ''}`}>▾</span>
         </button>
 
@@ -351,7 +361,7 @@ export default function WalletPill() {
                 )}
                 <div className="wp-drop-name">{walletName}</div>
               </div>
-              <div className="wp-drop-addr">{publicKey.toBase58()}</div>
+              <div className="wp-drop-addr">{effectivePublicKey.toBase58()}</div>
             </div>
             <div className="wp-drop-row">
               <span className="wp-drop-lbl">USDC</span>
