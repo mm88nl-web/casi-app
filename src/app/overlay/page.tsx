@@ -1091,10 +1091,17 @@ function OverlayContent() {
         const { deriveEscrowPda } = await import('@/lib/casi-escrow');
         const [escrowPda] = deriveEscrowPda(newBooking.id);
         const conn = new Connection(SOLANA_RPC, 'confirmed');
-        const probeDelaysMs = [0, 800, 1600, 2400];
+        // Long-tail polling: Phantom mobile submits via its own RPC and the
+        // tx can take 30+ seconds to propagate to Helius on devnet. The old
+        // [0, 800, 1600, 2400]ms backoff (~5s total) gave up too early and
+        // we'd deny a booking that was about to land. Poll every 1.5s for
+        // up to 30s — combined with the 30s race timeout above this gives
+        // viewers a 60s window for the tx to surface before we deny.
+        const PROBE_INTERVAL_MS = 1500;
+        const PROBE_MAX_ATTEMPTS = 20;
         let info = null;
-        for (const delay of probeDelaysMs) {
-          if (delay) await new Promise(r => setTimeout(r, delay));
+        for (let i = 0; i < PROBE_MAX_ATTEMPTS; i++) {
+          if (i > 0) await new Promise(r => setTimeout(r, PROBE_INTERVAL_MS));
           info = await conn.getAccountInfo(escrowPda).catch(() => null);
           if (info) break;
         }
