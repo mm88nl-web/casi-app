@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import SkinProvider from '@/components/SkinProvider';
-import WalletNav from '@/components/WalletNav';
 import FlashPanel from '@/components/FlashPanel';
 import { WALLET_ADAPTER_CLUSTER, EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 import {
@@ -1281,10 +1280,10 @@ export default function AdminStudio() {
       />
       <div className="sw">
 
-        {/* UTILITY BAR — wallet + save status, slim row above the main nav */}
+        {/* UTILITY BAR — save status only; the wallet pill lives on /studio
+            and /overlay, not the legacy admin surface. */}
         <div className="util-bar">
           <span className="save-status-txt">{saveStatus}</span>
-          <WalletNav />
         </div>
 
         {/* NAV */}

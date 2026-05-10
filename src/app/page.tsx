@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 import { NavBar, Marquee, Footer } from '@/components/v9';
-import WalletPill from '@/components/WalletPill';
 import UsdcIcon from '@/components/icons/UsdcIcon';
 
 export default function HomePage() {
@@ -37,7 +36,7 @@ export default function HomePage() {
   return (
     <main className="casi-v9-landing">
       <Marquee text={marqueeText} />
-      <NavBar liveLabel={liveLabel} right={<WalletPill />} />
+      <NavBar liveLabel={liveLabel} />
 
       {/* HERO ────────────────────────────────────────────────────────── */}
       <section className="l-hero">
