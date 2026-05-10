@@ -1,0 +1,23 @@
+[package]
+name = "casi-escrow"
+version = "0.1.0"
+description = "CASI Escrow Program — Flash and Beam payment escrow for Solana"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "casi_escrow"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+# token_2022 pulls in the token_interface module, which is how Anchor
+# exposes Token-2022 + classic SPL via a single InterfaceAccount API.
+anchor-spl = { version = "0.31.1", features = ["associated_token", "token_2022"] }

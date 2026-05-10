@@ -1,0 +1,210 @@
+'use client';
+
+import { EXPLORER_CLUSTER_QUERY, IS_MAINNET } from '@/lib/solana-network';
+import UsdcIcon from '@/components/icons/UsdcIcon';
+import { formatSlotPrice } from '@/lib/slot-pricing';
+import { formatTime } from './time';
+
+export type TxStatus = 'idle' | 'booking' | 'streaming' | 'waiting' | 'error';
+
+/** Build the Phantom mobile deeplink that opens this page inside Phantom's
+ *  in-app browser. Strips the protocol per Phantom's `ul/browse/<url>` spec.
+ *  Falls back to the bare site if window isn't available (SSR — though this
+ *  component is client-only). */
+function buildPhantomBrowseUrl(): string {
+  if (typeof window === 'undefined') return 'https://phantom.app/ul/browse/casi.gg';
+  const here = window.location.href;
+  const stripped = here.replace(/^https?:\/\//, '');
+  return `https://phantom.app/ul/browse/${stripped}?ref=${encodeURIComponent(window.location.origin)}`;
+}
+
+/** Show the "Open in Phantom" deeplink only on mobile, and only when the
+ *  user is NOT already inside Phantom's in-app browser. Phantom mobile sets
+ *  a "Phantom" tag in the UA when its in-app browser is the host, so the
+ *  button hides for users who already followed the recommended path. */
+function shouldShowPhantomDeepLink(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
+  const isPhantom = /Phantom/i.test(ua);
+  return isMobile && !isPhantom;
+}
+
+type Props = {
+  slot: {
+    price_value: number | string;
+    price_unit: string;
+    prices?: Record<string, number | string | null | undefined> | null;
+  };
+  duration: number;
+  estimatedCost: string;
+  username: string;
+  recipientWallet: string | null;
+  usdcBalance: number | null;
+  txStatus: TxStatus;
+  txError: string | null;
+  txId: string | null;
+  submitting: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+};
+
+export default function SolanaConfirmModal({
+  slot, duration, estimatedCost, username, recipientWallet, usdcBalance,
+  txStatus, txError, txId, submitting, onConfirm, onCancel,
+}: Props) {
+  // The insufficient flag is only meaningful when the user could still cancel
+  // and re-fund — i.e. before submission, or after an error. While the tx is
+  // in flight (`booking` / `streaming` / `waiting`) the live wallet balance
+  // is being drained by THIS booking, so re-reading it shows the leftover and
+  // (incorrectly) flips the row red right before the modal closes. Gate on
+  // tx state so mid-flow re-renders don't paint a phantom "insufficient".
+  const hasInsufficient = usdcBalance !== null
+    && usdcBalance < parseFloat(estimatedCost)
+    && (txStatus === 'idle' || txStatus === 'error');
+  const inProgress = submitting && txStatus !== 'idle' && txStatus !== 'error';
+  const stepIcon = (active: boolean, done: boolean) => (done ? '✓' : active ? '⟳' : '○');
+  const shortWallet = recipientWallet
+    ? `${recipientWallet.slice(0, 4)}…${recipientWallet.slice(-4)}`
+    : null;
+  const solscanUrl = txId
+    ? `https://solscan.io/tx/${txId}${EXPLORER_CLUSTER_QUERY}`
+    : null;
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:"var(--font-casi-mono),monospace" }}>
+      <div style={{ background:'var(--casi-surface,#0d0d0d)', border:'1px solid rgba(153,69,255,0.35)', borderRadius:16, padding:28, width:'100%', maxWidth:380 }}>
+        <div style={{ fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'#9945FF', marginBottom:16 }}>Confirm your beam slot</div>
+
+        {/* Details receipt */}
+        <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:10, padding:'14px 16px', marginBottom:16 }}>
+          {[['Slot on', `@${username}${IS_MAINNET ? '' : ' (devnet)'}`], ['Duration', formatTime(Math.round(duration * 60))], ['Rate', formatSlotPrice(slot, { prefer: 'usdc' }).label]].map(([l, v]) => (
+            <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666', marginBottom:6 }}>
+              <span>{l}</span><span style={{ color:'#e8e8e8' }}>{v}</span>
+            </div>
+          ))}
+          {shortWallet && (
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666', marginBottom:6 }}>
+              <span>Recipient</span>
+              <span style={{ color:'#e8e8e8', fontFamily:"var(--font-casi-mono),monospace" }}>{shortWallet}</span>
+            </div>
+          )}
+          <div style={{ borderTop:'1px solid #1c1c1c', margin:'10px 0' }} />
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#555', marginBottom:8 }}>
+            <span>@{username} receives</span>
+            <span style={{ color:'#e8e8e8', display:'inline-flex', alignItems:'center', gap:5 }}>
+              <UsdcIcon size={11} />
+              {parseFloat(estimatedCost).toFixed(2)} USDC <span style={{ color:'#6ee7b7' }}>(100%)</span>
+            </span>
+          </div>
+          <div style={{ borderTop:'1px solid #1a1a1a', margin:'6px 0 8px' }} />
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666' }}>
+            <span>Total</span>
+            <span style={{ fontSize:18, fontWeight:800, color:'#9945FF', display:'inline-flex', alignItems:'center', gap:6 }}>
+              <UsdcIcon size={16} />
+              {estimatedCost} USDC
+            </span>
+          </div>
+          {usdcBalance !== null && (
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginTop:8 }}>
+              <span style={{ color:'#555' }}>Your balance</span>
+              <span style={{ color: hasInsufficient ? '#f87171' : '#6ee7b7', display:'inline-flex', alignItems:'center', gap:5 }}>
+                <UsdcIcon size={10} />
+                {usdcBalance.toFixed(2)} USDC{hasInsufficient ? ' — insufficient' : ''}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* CASI escrow note + anti-phishing warning */}
+        {!inProgress && txStatus !== 'waiting' && (
+          <div style={{ fontSize:10, color:'#444', lineHeight:1.8, marginBottom:16 }}>
+            Funds held in CASI on-chain escrow and vest over the beam duration.<br />
+            Unused USDC returns if ended early.
+            {shortWallet && (
+              <>
+                <br />
+                <span style={{ color:'#facc15' }}>⚠ Verify recipient </span>
+                <span style={{ color:'#666' }}>{shortWallet}</span>
+                <span style={{ color:'#facc15' }}> in your wallet popup.</span>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* TX status steps */}
+        {(inProgress || txStatus === 'waiting') && (
+          <div style={{ background:'rgba(255,255,255,0.02)', borderRadius:10, padding:'12px 14px', marginBottom:16 }}>
+            {[
+              { label: 'Booking created',             active: txStatus === 'booking',   done: txStatus !== 'booking' },
+              { label: 'Funding CASI escrow…',        active: txStatus === 'streaming', done: txStatus === 'waiting' },
+              { label: 'Waiting for admin approval',  active: txStatus === 'waiting',   done: false },
+            ].map((step, i) => (
+              <div key={i} style={{
+                display:'flex', alignItems:'center', gap:10, fontSize:11,
+                color: step.done ? '#6ee7b7' : step.active ? '#9945FF' : '#444',
+                marginBottom: i < 2 ? 8 : 0,
+              }}>
+                <span style={{ width:14, textAlign:'center', display:'inline-block', animation: step.active ? 'casi-blink 1.2s infinite' : 'none' }}>
+                  {stepIcon(step.active, step.done)}
+                </span>
+                {step.label}
+                {step.active && i === 2 && solscanUrl && (
+                  <a href={solscanUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft:'auto', fontSize:10, color:'#9945FF', textDecoration:'none', opacity:0.8 }}>
+                    ↗ verify tx
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Error */}
+        {txStatus === 'error' && txError && (
+          <div style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.2)', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:11, color:'#f87171' }}>
+            {txError}
+          </div>
+        )}
+
+        {/* "Open in Phantom" deeplink — surfaces on mobile after a tx
+            failure. Phantom Mobile's deeplink takes the user from a flaky
+            mobile-Chrome / Brave session into Phantom's in-app browser
+            pointed at this same URL, which sidesteps the deeplink-drops-
+            partial-signature class of failures. Hidden on desktop and
+            inside Phantom's own browser (UA contains "Phantom"). */}
+        {txStatus === 'error' && shouldShowPhantomDeepLink() && (
+          <a
+            href={buildPhantomBrowseUrl()}
+            style={{
+              display:'block', textAlign:'center',
+              background:'rgba(153,69,255,0.15)', border:'1px solid rgba(153,69,255,0.4)',
+              borderRadius:10, padding:'10px 14px', marginBottom:16,
+              fontFamily:"var(--font-casi-sans),sans-serif", fontWeight:700, fontSize:12,
+              color:'#c4a0ff', textDecoration:'none',
+            }}
+          >
+            📱 Open in Phantom →
+          </a>
+        )}
+
+        {/* Buttons */}
+        <div style={{ display:'flex', gap:10 }}>
+          <button
+            onClick={onCancel}
+            disabled={inProgress}
+            style={{ flex:1, background:'none', border:'1px solid #1c1c1c', borderRadius:10, padding:'12px 0', fontFamily:"var(--font-casi-sans),sans-serif", fontWeight:700, fontSize:13, color: inProgress ? '#333' : '#555', cursor: inProgress ? 'not-allowed' : 'pointer' }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={inProgress || hasInsufficient}
+            style={{ flex:2, background: inProgress || hasInsufficient ? '#1c1c1c' : '#9945FF', border:'none', borderRadius:10, padding:'12px 0', fontFamily:"var(--font-casi-sans),sans-serif", fontWeight:800, fontSize:13, color: inProgress || hasInsufficient ? '#444' : '#fff', cursor: inProgress || hasInsufficient ? 'not-allowed' : 'pointer' }}
+          >
+            {inProgress ? 'Signing…' : txStatus === 'error' ? 'Retry →' : 'Confirm & Sign →'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

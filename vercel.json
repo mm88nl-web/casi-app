@@ -1,0 +1,37 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/stripe-janitor",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/solana-reconciler",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/cranker-monitor",
+      "schedule": "0 4 * * *"
+    }
+  ],
+  "functions": {
+    "src/app/api/stripe/webhook/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/cron/stripe-janitor/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/solana-reconciler/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/cranker-monitor/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/webhooks/solana/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/bookings/attach-solana-tx/route.ts": {
+      "maxDuration": 30
+    }
+  }
+}

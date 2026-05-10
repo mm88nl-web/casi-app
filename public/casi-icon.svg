@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Casi brand identity is orange-on-dark — same as everywhere else
+       in the app (login page, headers, the OBS overlay backdrop). The
+       black field IS part of the look, not just padding. -->
+  <rect x="0" y="0" width="512" height="512" rx="96" ry="96" fill="#050505"/>
+
+  <!-- Casi mark, centred. Original 400×200 art translated by (56, 156)
+       to sit dead-centre of the 512×512 canvas. Slightly heavier strokes
+       (20 vs 16 in the on-page logo) so the bars hold up at small icon
+       sizes — Google often shrinks consent-screen logos to ~40 px. -->
+  <g transform="translate(56, 156)">
+    <g stroke="#F58220" fill="#F58220" stroke-width="20" stroke-linecap="round">
+      <line x1="50" y1="60"  x2="350" y2="60"/>
+      <line x1="20" y1="100" x2="380" y2="100"/>
+      <line x1="50" y1="140" x2="350" y2="140"/>
+    </g>
+    <path fill="#F58220" stroke="none"
+          d="M 90,100 C 130,30 270,30 310,100 C 270,170 130,170 90,100 Z"/>
+    <!-- Pupil = same dark as the canvas so the "eye" cutout effect
+         survives. This is the original brand treatment. -->
+    <circle fill="#050505" cx="200" cy="100" r="45"/>
+  </g>
+</svg>

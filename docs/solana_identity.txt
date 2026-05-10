@@ -1,0 +1,22 @@
+STANDARD: Sign-In-With-Solana (SIWS)
+
+FRONTEND COMPONENT LOGIC (@solana/wallet-adapter-react):
+import { useWallet } from '@solana/wallet-adapter-react';
+import bs58 from 'bs58';
+
+// Inside component:
+const { publicKey, signMessage } = useWallet();
+const message = new TextEncoder().encode(`casi.gg wants you to sign in with your Solana account:\n${publicKey.toBase58()}\n\nWelcome to Casi! Sign this message to prove ownership.`);
+const signature = await signMessage(message);
+// Send publicKey.toBase58() and bs58.encode(signature) to backend
+
+BACKEND VERIFICATION (Node.js Route):
+import nacl from "tweetnacl";
+import bs58 from "bs58";
+
+// Verify signature:
+const isVerified = nacl.sign.detached.verify(
+  new TextEncoder().encode(expectedMessage),
+  bs58.decode(receivedSignature),
+  bs58.decode(receivedPublicKey)
+);
