@@ -1090,15 +1090,42 @@ function OverlayContent() {
       // the sig immediately. We skip the wallet-adapter layer entirely
       // for that single call. Falls through to wallet-adapter's send for
       // any other context.
+      // Track which submit path was taken so the timeout report tells us
+      // whether the Phantom-native call stalled or whether we fell through
+      // to wallet-adapter's send. Without this we only know "something
+      // hung 30s" — useless for further debugging.
+      let pathTaken: 'unknown' | 'phantom_native' | 'wallet_adapter' = 'unknown';
+      let phantomProviderDetected = false;
+
       const sendOverride = async (tx: import('@solana/web3.js').Transaction, conn: import('@solana/web3.js').Connection, opts?: unknown): Promise<string> => {
         if (typeof window !== 'undefined') {
           const phantom = (window as unknown as { phantom?: { solana?: { signAndSendTransaction?: (t: unknown) => Promise<{ signature: string }> } } }).phantom?.solana;
+          phantomProviderDetected = !!phantom;
           if (phantom?.signAndSendTransaction) {
-            const result = await phantom.signAndSendTransaction(tx);
-            return result.signature;
+            // Inner 12s timeout. If Phantom Android's signAndSendTransaction
+            // hangs (sometimes it does — see Discord ping with mobile=true,
+            // signature_missing=false), fall through to wallet-adapter
+            // rather than burning the full 30s outer timeout for nothing.
+            const PHANTOM_INNER_TIMEOUT_MS = 12_000;
+            try {
+              pathTaken = 'phantom_native';
+              const result = await Promise.race([
+                phantom.signAndSendTransaction(tx),
+                new Promise<never>((_, reject) =>
+                  setTimeout(() => reject(new Error('phantom_native_inner_timeout')), PHANTOM_INNER_TIMEOUT_MS),
+                ),
+              ]);
+              return (result as { signature: string }).signature;
+            } catch (innerErr) {
+              console.warn('[bookSlot] phantom native send failed, falling through:', innerErr);
+              // Fall through to wallet-adapter path.
+            }
           }
         }
-        if (sendTransaction) return sendTransaction(tx, conn, opts as never);
+        if (sendTransaction) {
+          pathTaken = 'wallet_adapter';
+          return sendTransaction(tx, conn, opts as never);
+        }
         throw new Error('No sendTransaction available');
       };
 
@@ -1246,6 +1273,13 @@ function OverlayContent() {
         // True when our own 30s race timed out AND the PDA probe found
         // nothing — i.e. the tx was probably never submitted by the wallet.
         rpc_timeout: err instanceof Error && err.message === 'rpc_confirmation_timeout',
+        // Diagnostics for the mobile-hang investigation: which submit path
+        // ran, and whether window.phantom.solana was even injected. If
+        // path_taken === 'unknown' the sendOverride never ran (something
+        // failed earlier — blockhash fetch, tx build, etc).
+        path_taken: pathTaken,
+        phantom_provider_detected: phantomProviderDetected,
+        wallet_adapter_name: wallet?.adapter?.name ?? null,
       });
       await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
       setTxStatus('error'); setTxError(userMsg);
