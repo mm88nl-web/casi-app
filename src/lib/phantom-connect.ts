@@ -77,6 +77,16 @@ export function getOrCreateDappKeypair(): DappKeypair {
 
 // ── Session persistence ──────────────────────────────────────────────────
 
+/** Storage event we dispatch ourselves when saveSession/clearSession runs.
+ *  Lets `useStoredSession` re-render in the same tab — `storage` events only
+ *  fire across tabs, not within. */
+const SESSION_EVENT = 'casi-phantom-session-changed';
+
+function notifySessionChange(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(SESSION_EVENT));
+}
+
 export function getStoredSession(): ConnectSession | null {
   if (typeof window === 'undefined') return null;
   const raw = window.localStorage.getItem(KEY_CONNECT_SESSION);
@@ -87,11 +97,32 @@ export function getStoredSession(): ConnectSession | null {
 export function saveSession(s: ConnectSession): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(KEY_CONNECT_SESSION, JSON.stringify(s));
+  notifySessionChange();
 }
 
 export function clearSession(): void {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(KEY_CONNECT_SESSION);
+  notifySessionChange();
+}
+
+// React hook — returns the current Phantom Connect session, re-rendering
+// when it changes. Single source for "is the user connected via Phantom
+// Connect?" across WalletNav, WalletPill, and the booking flow.
+import { useEffect, useState } from 'react';
+export function useStoredPhantomConnectSession(): ConnectSession | null {
+  const [s, setS] = useState<ConnectSession | null>(null);
+  useEffect(() => {
+    const refresh = () => setS(getStoredSession());
+    refresh();
+    window.addEventListener(SESSION_EVENT, refresh);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener(SESSION_EVENT, refresh);
+      window.removeEventListener('storage', refresh);
+    };
+  }, []);
+  return s;
 }
 
 // ── Pending booking stash ────────────────────────────────────────────────

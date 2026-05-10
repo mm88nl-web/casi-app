@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
+import { useStoredPhantomConnectSession, clearSession as clearPhantomConnectSession } from '@/lib/phantom-connect';
+import { PublicKey } from '@solana/web3.js';
 import { NETWORK_LABEL } from '@/lib/solana-network';
 import { useWalletBalances, refreshWalletBalances } from '@/lib/wallet-balances';
 // (mobile-wallet handoff helpers removed — Phantom Connect handles mobile signing directly now)
@@ -162,6 +164,13 @@ function truncate(pk: PublicKey): string {
 export default function WalletNav() {
   const { connected, publicKey, disconnect, wallet, connect, connecting } = useWallet();
   const { setVisible } = useWalletModal();
+  // Phantom Connect deeplink session — when present, the user is connected
+  // via the encrypted-deeplink path even if wallet-adapter publicKey is null
+  // (this happens on mobile Chrome when wallet-adapter's deeplink connect
+  // times out before Phantom returns).
+  const pcSession = useStoredPhantomConnectSession();
+  const effectivePublicKey = publicKey ?? (pcSession ? new PublicKey(pcSession.walletPublicKey) : null);
+  const isConnected = connected || !!pcSession;
 
   // Single source of truth — the same values feed every other balance
   // surface in the app (the overlay booking-form "Your balance" line,
@@ -217,32 +226,60 @@ export default function WalletNav() {
 
   const handleDisconnect = () => {
     disconnect().catch(() => {});
+    // Also clear any Phantom Connect session — otherwise the user would
+    // appear "connected via Phantom Mobile" right after they disconnected.
+    clearPhantomConnectSession();
     setDropOpen(false);
   };
 
   /* ── Disconnected / connecting ── */
-  if (!connected || !publicKey) {
-    // (Mobile users used to see an "Open in Phantom" handoff that sent
-    // them to Phantom's in-app browser. That browser's WebView bridge
-    // turned out to silently drop signing taps, and the mobile-Chrome →
-    // Phantom-deeplink path returns txs missing the partial signature.
-    // Both made bookings impossible. Now mobile signing is handled via
-    // the official Phantom Connect deeplink protocol — wallet-adapter
-    // does the connect handshake fine on mobile and Phantom Connect
-    // picks up at sign time. See src/lib/phantom-connect.ts.)
+  if (!isConnected || !effectivePublicKey) {
+    // On mobile the wallet-adapter's deeplink-based connect frequently
+    // times out before the user is even back from Phantom. Give them a
+    // direct "Connect via Phantom Mobile" path that uses Phantom Connect
+    // — the encrypted deeplink protocol that's reliable regardless of
+    // what the WebView bridge does. The button handler lives in the
+    // page (it calls into phantom-connect.ts with a redirect URL we
+    // pick up on return).
+    const onPhantomMobileConnect = async () => {
+      const pc = await import('@/lib/phantom-connect');
+      const cluster = (process.env.NEXT_PUBLIC_SOLANA_CLUSTER === 'mainnet-beta'
+        ? 'mainnet-beta' : 'devnet') as 'devnet' | 'mainnet-beta';
+      const here = window.location.origin + window.location.pathname + window.location.search;
+      window.location.href = pc.buildConnectUrl({
+        cluster,
+        redirectTo: `${here}#phantom-connect-resume`,
+      });
+    };
+    const isMobileUA = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
     return (
       <>
         <style>{CSS}</style>
-        <button
-          className="wn-connect"
-          onClick={openWalletModal}
-          disabled={connecting}
-          style={{ opacity: connecting ? 0.6 : 1, cursor: connecting ? 'not-allowed' : 'pointer' }}
-        >
-          <SolanaIcon size={12} />
-          {connecting ? 'Connecting…' : 'Connect Wallet'}
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <button
+            className="wn-connect"
+            onClick={openWalletModal}
+            disabled={connecting}
+            style={{ opacity: connecting ? 0.6 : 1, cursor: connecting ? 'not-allowed' : 'pointer' }}
+          >
+            <SolanaIcon size={12} />
+            {connecting ? 'Connecting…' : 'Connect Wallet'}
+          </button>
+          {isMobileUA && (
+            <button
+              type="button"
+              onClick={onPhantomMobileConnect}
+              style={{
+                background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                fontFamily: 'var(--font-casi-mono), monospace',
+                fontSize: 9, letterSpacing: 1, color: '#9945FF', textDecoration: 'underline',
+              }}
+            >
+              Mobile? Connect via Phantom →
+            </button>
+          )}
+        </div>
       </>
     );
   }
@@ -281,7 +318,7 @@ export default function WalletNav() {
           onClick={openDrop}
           aria-expanded={dropOpen}
         >
-          {truncate(publicKey)}
+          {truncate(effectivePublicKey)}
           <span className={`wn-chevron${dropOpen ? ' open' : ''}`}>▾</span>
         </button>
 
@@ -290,7 +327,7 @@ export default function WalletNav() {
           <div className="wn-drop" style={{ top: dropPos.top, right: dropPos.right }}>
             <div className="wn-drop-addr">
               <span className="wn-drop-addr-label">Wallet address</span>
-              {publicKey.toBase58()}
+              {effectivePublicKey.toBase58()}
             </div>
             <div className="wn-drop-row">
               <span className="wn-drop-row-label">SOL</span>
