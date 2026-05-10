@@ -85,7 +85,7 @@ async function sendFlashSolana(input: SendFlashInput): Promise<SendFlashResult> 
     throw new Error('Solana payments are disabled on this build');
   }
   const { solana, streamerSolanaWallet, amountUsdc } = input;
-  if (!solana?.wallet.publicKey || !solana.wallet.signTransaction) {
+  if (!solana?.wallet.publicKey) {
     throw new Error('Please connect your wallet');
   }
   if (!streamerSolanaWallet) {
@@ -111,17 +111,22 @@ async function sendFlashSolana(input: SendFlashInput): Promise<SendFlashResult> 
   if (!solana_wallet)      throw new Error('Streamer wallet not found');
 
   const { publicKey, signTransaction, signAllTransactions } = solana.wallet;
+  // signTransaction is null on Phantom Connect mobile sessions — the wallet
+  // adapter has no signer. The Phantom Connect deeplink branch below
+  // doesn't actually call signTransaction (the build-only path on
+  // CasiEscrowClient just needs publicKey), so a stub is fine. Desktop /
+  // in-app-browser callers always have a real signer.
+  const signStub = async () => { throw new Error('Sign via Phantom Connect deeplink, not adapter'); };
   const anchorWallet = {
     publicKey,
-    signTransaction,
+    signTransaction: signTransaction ?? signStub,
     signAllTransactions:
       signAllTransactions ||
       (async <T,>(txs: T[]) => {
         const signed: T[] = [];
-        for (const tx of txs) signed.push(await signTransaction!(tx as never) as T);
+        for (const tx of txs) signed.push((signTransaction ? await signTransaction(tx as never) : await signStub()) as T);
         return signed;
       }),
-  // Narrow enough for CasiEscrowClient (which wants an AnchorProvider-compatible wallet).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 
@@ -129,6 +134,46 @@ async function sendFlashSolana(input: SendFlashInput): Promise<SendFlashResult> 
   const { PublicKey: PK }    = await import('@solana/web3.js');
   const client = new CasiEscrowClient(solana.connection, anchorWallet, WALLET_ADAPTER_CLUSTER);
 
+  // ── Mobile Phantom Connect branch ────────────────────────────────────
+  // Build the unsigned tx, stash flash context for the return handler in
+  // overlay/page.tsx, and navigate to Phantom's signTransaction deeplink.
+  // Page navigates away — caller doesn't get a result back. The return
+  // handler will submit the signed tx via our RPC and call
+  // /api/flashes/attach-escrow itself.
+  const { needsMobileHandoff, isInWalletBrowser } = await import('@/lib/mobile-wallet');
+  const phantomConnect = await import('@/lib/phantom-connect');
+  const session = phantomConnect.getStoredSession();
+  if (needsMobileHandoff() && !isInWalletBrowser() && session) {
+    const { tx, escrowPda } = await client.buildInitializeFlashTx({
+      escrowId: flash_id,
+      streamer: new PK(solana_wallet),
+      amountUsdc,
+    });
+    const bs58Mod = await import('bs58');
+    const bs58Local = bs58Mod.default;
+    const txB58 = bs58Local.encode(tx.serialize({ requireAllSignatures: false, verifySignatures: false }));
+    phantomConnect.stashPendingBooking({
+      kind:           'flash',
+      booking_id:     String(flash_id),
+      cancel_token:   '',
+      escrow_pda:     escrowPda.toBase58(),
+      viewer_wallet:  publicKey.toBase58(),
+    });
+    const baseHere = window.location.origin + window.location.pathname + window.location.search;
+    const sep = window.location.search ? '&' : '?';
+    window.location.href = phantomConnect.buildSignTransactionUrl({
+      session,
+      transactionB58: txB58,
+      redirectTo: `${baseHere}${sep}phantom_action=sign-resume`,
+    });
+    // Throw so the caller's promise doesn't resolve before the redirect
+    // takes effect — the page is unmounting; the throw is never seen.
+    throw new Error('Redirecting to Phantom for signing — flash will finalize on return');
+  }
+
+  if (!signTransaction) {
+    throw new Error('Please connect your wallet');
+  }
   const { sig, escrowPda, solscanUrl } = await client.initializeFlash({
     escrowId: flash_id,
     streamer: new PK(solana_wallet),
