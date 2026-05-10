@@ -37,6 +37,19 @@ const CSS = `
   }
   .wp-connect:hover { filter: brightness(1.1); }
   .wp-connect:disabled { opacity: 0.6; cursor: not-allowed; }
+  .wp-phantom-mobile {
+    display: inline-flex; align-items: center;
+    background: rgba(153,69,255,0.08);
+    border: 1px solid rgba(153,69,255,0.25);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-family: var(--M);
+    font-size: 9px; letter-spacing: 0.06em;
+    color: #b56eff;
+    text-decoration: none;
+    text-transform: uppercase;
+  }
+  .wp-phantom-mobile:hover { border-color: rgba(153,69,255,0.5); color: #c79aff; }
 
   /* Connected pill — three segments separated by --line dividers,
      ink-04 wash on the network segment, sharp corners. Mirrors v9
@@ -258,16 +271,9 @@ export default function WalletPill() {
 
   /* ── Disconnected ── */
   if (!isConnected || !effectivePublicKey) {
-    // (Mobile "Open in Phantom" handoff dropped — Phantom Connect deeplink
-    // now handles signing inside the user's mobile browser. See
-    // src/lib/phantom-connect.ts.)
-
     const isMobileUA = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
     const phantomConnectUrl = isMobileUA && typeof window !== 'undefined'
       ? buildClientPhantomConnectUrl()
-      : null;
-    const lastUrlForDebug = typeof window !== 'undefined'
-      ? window.localStorage.getItem('casi-phantom-last-url')
       : null;
 
     return (
@@ -279,23 +285,9 @@ export default function WalletPill() {
             {connecting ? 'Connecting…' : 'Connect Wallet'}
           </button>
           {isMobileUA && phantomConnectUrl && (
-            <a
-              href={phantomConnectUrl}
-              style={{
-                fontFamily: 'var(--font-casi-mono), monospace',
-                fontSize: 9, letterSpacing: 1, color: '#9945FF', textDecoration: 'underline',
-              }}
-            >
-              Mobile? Connect via Phantom →
+            <a href={phantomConnectUrl} className="wp-phantom-mobile">
+              Use Phantom Mobile
             </a>
-          )}
-          {isMobileUA && lastUrlForDebug && (
-            <details style={{ maxWidth: 280, fontSize: 8, color: '#666', fontFamily: 'monospace' }}>
-              <summary style={{ cursor: 'pointer' }}>debug: last URL</summary>
-              <div style={{ wordBreak: 'break-all', userSelect: 'all', padding: 4, background: '#111', border: '1px solid #222', borderRadius: 4, marginTop: 4 }}>
-                {lastUrlForDebug}
-              </div>
-            </details>
           )}
         </div>
       </>

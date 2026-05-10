@@ -58,49 +58,6 @@ const STRIPE_DENIED_WINDOW_MS = 10 * 60 * 1000;
 
 
 
-/** Always-visible debug footer (mobile only) showing the most recent
- *  Phantom Connect deeplink we generated. Lets us verify the URL we send
- *  to Phantom whether the user is connected or not — the debug panel that
- *  used to live in WalletPill only rendered while disconnected. */
-function PhantomConnectDebug() {
-  const [outUrl, setOutUrl] = useState<string | null>(null);
-  const [retUrl, setRetUrl] = useState<string | null>(null);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    if (!isMobile) return;
-    const refresh = () => {
-      setOutUrl(window.localStorage.getItem('casi-phantom-last-url'));
-      setRetUrl(window.localStorage.getItem('casi-phantom-last-return'));
-    };
-    refresh();
-    const id = setInterval(refresh, 1000);
-    return () => clearInterval(id);
-  }, []);
-  if (!outUrl && !retUrl) return null;
-  const cellStyle = {
-    wordBreak: 'break-all' as const, userSelect: 'all' as const, padding: 6,
-    background: '#111', border: '1px solid #222', borderRadius: 4, marginTop: 4,
-  };
-  return (
-    <details style={{ margin: '20px 12px 60px', fontSize: 9, color: '#666', fontFamily: 'monospace' }}>
-      <summary style={{ cursor: 'pointer' }}>debug: last phantom URL</summary>
-      {outUrl && (
-        <>
-          <div style={{ marginTop: 6, color: '#888' }}>→ sent to Phantom:</div>
-          <div style={cellStyle}>{outUrl}</div>
-        </>
-      )}
-      {retUrl && (
-        <>
-          <div style={{ marginTop: 6, color: '#888' }}>← received from Phantom:</div>
-          <div style={cellStyle}>{retUrl}</div>
-        </>
-      )}
-    </details>
-  );
-}
-
 function OverlayContent() {
   const searchParams = useSearchParams();
   const username = searchParams.get('s') || '';
@@ -234,10 +191,6 @@ function OverlayContent() {
     const params = new URLSearchParams(window.location.search);
     const action = params.get('phantom_action');
     if (action !== 'connect-resume' && action !== 'sign-resume') return;
-
-    // Persist the full return URL so the on-page debug footer can show
-    // exactly what Phantom sent back (including any errorCode/errorMessage).
-    try { window.localStorage.setItem('casi-phantom-last-return', window.location.href); } catch { /* ignore */ }
 
     // Strip ONLY the phantom-* params from the URL — leave everything else
     // (especially `s=<streamer>`) intact. Otherwise the page-level guard
@@ -2790,7 +2743,6 @@ function OverlayContent() {
           )}
 
           {!isOBS && <BrandFooter />}
-          {!isOBS && <PhantomConnectDebug />}
         </main>
       </div>
 
