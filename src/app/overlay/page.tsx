@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { useStoredPhantomConnectSession } from '@/lib/phantom-connect';
 import SkinProvider from '@/components/SkinProvider';
 import { formatSlotPrice } from '@/lib/slot-pricing';
 import WalletPill from '@/components/WalletPill';
@@ -134,6 +135,11 @@ function OverlayContent() {
   // ── Wallet state ──────────────────────────────────────────────────────────
   const { wallet, connected, connecting, connect, publicKey, signTransaction, signAllTransactions, sendTransaction } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
+  // Phantom Connect (deeplink) session — when present, the user is
+  // effectively connected even without a wallet-adapter publicKey. Used
+  // to gate the booking-form's Pay button on mobile.
+  const phantomConnectSession = useStoredPhantomConnectSession();
+  const hasPhantomConnectSession = !!phantomConnectSession;
 
   // Only connect when the user explicitly clicked a Connect button.
   // Without this guard the effect fires on page load because Wallet Standard
@@ -980,7 +986,17 @@ function OverlayContent() {
     const effectiveSolImageUrl    = uploadMode === 'upload' ? uploadedUrl    : imageUrl;
     const effectiveSolStoragePath = uploadMode === 'upload' ? uploadedPath   : null;
     const effectiveSolFileType    = uploadMode === 'upload' ? uploadedFileType : (imageUrl ? getUrlFileType(imageUrl) : null);
-    if (!savedViewerName || !effectiveSolImageUrl || !selectedSlot || !publicKey || !wallet?.adapter) return;
+    // Allow Phantom-Connect-only sessions through this gate. Mobile users
+    // who connected via the deeplink path (PR #93+) won't have a wallet-
+    // adapter publicKey or wallet.adapter, but they DO have a session
+    // pubkey we can use as the viewer for tx-build and balance probes.
+    const pcSession = await import('@/lib/phantom-connect').then(m => m.getStoredSession());
+    const sessionPubkey = pcSession ? new PublicKey(pcSession.walletPublicKey) : null;
+    const effectivePublicKey = publicKey ?? sessionPubkey;
+    if (!savedViewerName || !effectiveSolImageUrl || !selectedSlot || !effectivePublicKey) return;
+    // wallet.adapter is only needed for the desktop / in-app-browser path
+    // (it powers Anchor's signing). The mobile-Phantom-Connect path
+    // signs in Phantom natively so we don't need it there.
     if (Number(selectedSlot.price_value) === 0) {
       // Free slots go through submitBooking, not the Solana rail.
       showNotif('This slot is free — use “Send Free Request” instead', 'warning');
@@ -1082,7 +1098,7 @@ function OverlayContent() {
       // SOL: initialize_escrow creates both the EscrowState PDA and a PDA-owned
       // vault ATA (~2× rent) plus a signature fee. Empirically ~0.003 SOL on
       // devnet — we require 0.01 for safety margin.
-      const solLamports = await connection.getBalance(publicKey);
+      const solLamports = await connection.getBalance(effectivePublicKey);
       const MIN_SOL     = 0.01 * 1e9;
       if (solLamports < MIN_SOL) {
         showNotif(
@@ -1098,7 +1114,7 @@ function OverlayContent() {
 
       // USDC ATA balance check.
       const { value: tokenAccounts } = await connection.getParsedTokenAccountsByOwner(
-        publicKey,
+        effectivePublicKey,
         { mint: new PublicKey(USDC_MINT) },
       );
       if (tokenAccounts.length === 0) {
@@ -1129,15 +1145,20 @@ function OverlayContent() {
       // Lock full amount in the CASI escrow PDA. Settlement pays the
       // streamer 100% of the vested portion with no platform fee deducted.
       const { CasiEscrowClient } = await import('@/lib/casi-escrow');
-      if (!signTransaction) throw new Error('Wallet missing signTransaction');
+      // Phantom-Connect-only sessions don't have a wallet-adapter
+      // signTransaction. That's fine for THIS code path because we only
+      // call buildInitializeBeamTx() which builds an unsigned tx — no
+      // signing. The actual signing happens in Phantom natively via the
+      // deeplink. Stub the sign methods to throw if anything tries to
+      // call them anyway (caught by the catch block below).
+      const signStub = async () => { throw new Error('Wallet sign not available — use Phantom Connect deeplink path'); };
       const anchorWallet = {
-        publicKey,
-        signTransaction,
-        signAllTransactions:
-          signAllTransactions ||
-          (async <T,>(txs: T[]) => {
+        publicKey: effectivePublicKey,
+        signTransaction: signTransaction ?? signStub,
+        signAllTransactions: signAllTransactions
+          || (async <T,>(txs: T[]) => {
             const out: T[] = [];
-            for (const tx of txs) out.push((await signTransaction(tx as never)) as T);
+            for (const tx of txs) out.push((signTransaction ? await signTransaction(tx as never) : await signStub()) as T);
             return out;
           }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1230,7 +1251,7 @@ function OverlayContent() {
             booking_id:    String(newBooking.id),
             cancel_token:  cancelToken,
             escrow_pda:    escrowPda,
-            viewer_wallet: publicKey.toBase58(),
+            viewer_wallet: effectivePublicKey.toBase58(),
             pending_tx:    txB58,
           });
           window.location.href = pc.buildConnectUrl({
@@ -1246,7 +1267,7 @@ function OverlayContent() {
           booking_id:    String(newBooking.id),
           cancel_token:  cancelToken,
           escrow_pda:    escrowPda,
-          viewer_wallet: publicKey.toBase58(),
+          viewer_wallet: effectivePublicKey.toBase58(),
         });
         window.location.href = pc.buildSignAndSendUrl({
           session,
@@ -1332,7 +1353,7 @@ function OverlayContent() {
           cancel_token:  readBookingTokens()[newBooking.id],
           tx_signature:  sig,
           escrow_pda:    escrowPda,
-          viewer_wallet: publicKey.toBase58(),
+          viewer_wallet: effectivePublicKey.toBase58(),
         }),
       });
       if (!attachRes.ok) {
@@ -1410,7 +1431,7 @@ function OverlayContent() {
               booking_id:    newBooking.id,
               cancel_token:  readBookingTokens()[newBooking.id],
               escrow_pda:    escrowPda.toBase58(),
-              viewer_wallet: publicKey.toBase58(),
+              viewer_wallet: effectivePublicKey.toBase58(),
             }),
           });
           if (recoverRes.ok) {
@@ -1442,7 +1463,7 @@ function OverlayContent() {
         booking_id:    String(newBooking.id),
         profile_id:    profile?.id,
         duration_secs: Math.round(durationSeconds),
-        viewer_wallet: publicKey?.toBase58() ?? null,
+        viewer_wallet: effectivePublicKey?.toBase58() ?? null,
         mobile:        typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent),
         signature_missing: isWalletSignatureMissing(err),
         // True when our own 30s race timed out AND the PDA probe found
@@ -2597,7 +2618,7 @@ function OverlayContent() {
               message={message}
               onMessageChange={setMessage}
               estimatedCost={estimatedCost}
-              walletConnected={connected}
+              walletConnected={connected || hasPhantomConnectSession}
               usdcBalance={usdcBalance}
               activeBookings={activeBookings}
               approvedQueuedBookings={approvedQueuedBookings}
