@@ -3,7 +3,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import SettingsSection from './SettingsSection';
-import DelegateKeyCard from '@/app/admin/_components/DelegateKeyCard';
+import DelegateKeyCard from '@/app/studio/_components/DelegateKeyCard';
 import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 
 type Props = {
