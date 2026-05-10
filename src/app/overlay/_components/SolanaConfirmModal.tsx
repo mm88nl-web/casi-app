@@ -7,29 +7,6 @@ import { formatTime } from './time';
 
 export type TxStatus = 'idle' | 'booking' | 'streaming' | 'waiting' | 'error';
 
-/** Build the Phantom mobile deeplink that opens this page inside Phantom's
- *  in-app browser. Strips the protocol per Phantom's `ul/browse/<url>` spec.
- *  Falls back to the bare site if window isn't available (SSR — though this
- *  component is client-only). */
-function buildPhantomBrowseUrl(): string {
-  if (typeof window === 'undefined') return 'https://phantom.app/ul/browse/casi.gg';
-  const here = window.location.href;
-  const stripped = here.replace(/^https?:\/\//, '');
-  return `https://phantom.app/ul/browse/${stripped}?ref=${encodeURIComponent(window.location.origin)}`;
-}
-
-/** Show the "Open in Phantom" deeplink only on mobile, and only when the
- *  user is NOT already inside Phantom's in-app browser. Phantom mobile sets
- *  a "Phantom" tag in the UA when its in-app browser is the host, so the
- *  button hides for users who already followed the recommended path. */
-function shouldShowPhantomDeepLink(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent;
-  const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
-  const isPhantom = /Phantom/i.test(ua);
-  return isMobile && !isPhantom;
-}
-
 type Props = {
   slot: {
     price_value: number | string;
@@ -166,26 +143,10 @@ export default function SolanaConfirmModal({
           </div>
         )}
 
-        {/* "Open in Phantom" deeplink — surfaces on mobile after a tx
-            failure. Phantom Mobile's deeplink takes the user from a flaky
-            mobile-Chrome / Brave session into Phantom's in-app browser
-            pointed at this same URL, which sidesteps the deeplink-drops-
-            partial-signature class of failures. Hidden on desktop and
-            inside Phantom's own browser (UA contains "Phantom"). */}
-        {txStatus === 'error' && shouldShowPhantomDeepLink() && (
-          <a
-            href={buildPhantomBrowseUrl()}
-            style={{
-              display:'block', textAlign:'center',
-              background:'rgba(153,69,255,0.15)', border:'1px solid rgba(153,69,255,0.4)',
-              borderRadius:10, padding:'10px 14px', marginBottom:16,
-              fontFamily:"var(--font-casi-sans),sans-serif", fontWeight:700, fontSize:12,
-              color:'#c4a0ff', textDecoration:'none',
-            }}
-          >
-            📱 Open in Phantom →
-          </a>
-        )}
+        {/* (The "Open in Phantom" deeplink was here. Removed in favour of
+            Phantom Connect — the native Phantom deeplink protocol now
+            handles signing in mobile Chrome directly, no in-app-browser
+            handoff needed. See src/lib/phantom-connect.ts.) */}
 
         {/* Buttons */}
         <div style={{ display:'flex', gap:10 }}>
