@@ -192,18 +192,36 @@ function OverlayContent() {
     const action = params.get('phantom_action');
     if (action !== 'connect-resume' && action !== 'sign-resume') return;
 
+    // Strip ONLY the phantom-* params from the URL — leave everything else
+    // (especially `s=<streamer>`) intact. Otherwise the page-level guard
+    // `if (!isOBS && !username) → /search` fires on the next render and
+    // the user lands on the search page right after a successful connect.
+    const cleanUrl = (): void => {
+      const next = new URLSearchParams(window.location.search);
+      next.delete('phantom_action');
+      next.delete('phantom_encryption_public_key');
+      next.delete('data');
+      next.delete('nonce');
+      next.delete('errorCode');
+      next.delete('errorMessage');
+      const qs = next.toString();
+      const url = window.location.origin + window.location.pathname + (qs ? '?' + qs : '');
+      history.replaceState(null, '', url);
+    };
+
     (async () => {
       const pc = await import('@/lib/phantom-connect');
       try {
         if (action === 'connect-resume') {
           const session = pc.parseConnectResponse(params);
           pc.saveSession(session);
-          history.replaceState(null, '', window.location.origin + window.location.pathname);
+          cleanUrl();
           // If a tx was stashed (we redirected to connect mid-booking),
           // chain straight into sign with the freshly minted session.
           const pending = pc.readPendingBooking();
           if (pending?.pending_tx) {
-            const here = window.location.origin + window.location.pathname + '?phantom_action=sign-resume';
+            const sep = window.location.search ? '&' : '?';
+            const here = window.location.origin + window.location.pathname + window.location.search + `${sep}phantom_action=sign-resume`;
             window.location.href = pc.buildSignAndSendUrl({
               session,
               transactionB58: pending.pending_tx,
@@ -217,12 +235,12 @@ function OverlayContent() {
         const session = pc.getStoredSession();
         if (!session) {
           showNotif('Phantom session expired — please retry the booking', 'denied');
-          history.replaceState(null, '', window.location.origin + window.location.pathname);
+          cleanUrl();
           return;
         }
         const { signature } = pc.parseSignAndSendResponse(params, session);
         const pending = pc.readPendingBooking();
-        history.replaceState(null, '', window.location.origin + window.location.pathname);
+        cleanUrl();
         if (!pending) {
           showNotif('Lost track of which booking — please retry', 'denied');
           return;
@@ -249,7 +267,7 @@ function OverlayContent() {
         const { reportClientError } = await import('@/lib/report-client-error');
         reportClientError('overlay/phantom-connect-return', err, { action });
         showNotif(err instanceof Error ? err.message : 'Phantom return failed', 'denied');
-        history.replaceState(null, '', window.location.origin + window.location.pathname);
+        cleanUrl();
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
