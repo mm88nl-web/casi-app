@@ -166,12 +166,44 @@ export async function GET(req: Request) {
     }
   }
 
+  // ── Stale Solana flashes ─────────────────────────────────────────────
+  // Mirror of the stripe-janitor flash sweep: any flash that's been
+  // pending longer than FLASH_PENDING_MAX_AGE_HOURS gets flipped to
+  // denied so the streamer's queue stays clean. The on-chain escrow
+  // is left alone — the viewer's overlay surfaces a "Recover USDC"
+  // chip on denied rows, and after 7 days the program's
+  // cancel_stale_pending crank refunds the viewer permissionlessly.
+  // Without this sweep nothing ever denied old Solana flashes (the
+  // reconciler previously only touched bookings).
+  const FLASH_PENDING_MAX_AGE_HOURS = 48;
+  const flashCutoff = new Date(Date.now() - FLASH_PENDING_MAX_AGE_HOURS * 3600 * 1000).toISOString();
+  const { data: staleFlashes } = await supabase
+    .from('flashes')
+    .select('id')
+    .eq('status', 'pending')
+    .eq('payment_method', 'solana')
+    .lt('created_at', flashCutoff)
+    .returns<{ id: string }[]>();
+  let flashesDenied = 0;
+  if (staleFlashes?.length) {
+    const { error: flErr } = await supabase
+      .from('flashes')
+      .update({ status: 'denied' })
+      .in('id', staleFlashes.map(f => f.id));
+    if (flErr) {
+      logError('solana-reconciler', flErr, { stage: 'stale-flashes' });
+    } else {
+      flashesDenied = staleFlashes.length;
+    }
+  }
+
   return NextResponse.json({
     scanned: {
       pending: pending.data?.length ?? 0,
       active: active.data?.length ?? 0,
+      staleFlashes: staleFlashes?.length ?? 0,
     },
-    healed,
+    healed: { ...healed, flashesDenied },
   });
 }
 
