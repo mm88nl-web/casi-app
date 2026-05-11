@@ -67,6 +67,10 @@ export default function AuthPage() {
   // shared
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
+  // True iff we landed on step='username' with an already-live Supabase session
+  // (i.e. user completed OAuth but bailed before picking a username). Used to
+  // show a "Use a different account" escape hatch.
+  const [postOAuth, setPostOAuth] = useState(false);
   const router  = useRouter();
   const supabase = useRef(createClient()).current;
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -101,6 +105,7 @@ export default function AuthPage() {
       const meta = session.user.user_metadata || {};
       setMode('signup');
       setStep('username');
+      setPostOAuth(true);
       setRegEmail(session.user.email ?? '');
       setDisplayName(meta.full_name || meta.name || '');
       if (typeof meta.avatar_url === 'string' && meta.avatar_url.startsWith('http')) {
@@ -598,7 +603,25 @@ export default function AuthPage() {
                     </div>
                   )}
                   <div className="auth-btn-row">
-                    <button type="button" className="auth-btn-back" onClick={() => { setStep('account'); setError(''); }}>← Back</button>
+                    {postOAuth ? (
+                      <button
+                        type="button"
+                        className="auth-btn-back"
+                        onClick={async () => {
+                          await supabase.auth.signOut();
+                          setPostOAuth(false);
+                          setMode('signin');
+                          setStep('account');
+                          setRegEmail(''); setDisplayName(''); setAvatarUrl(''); setAvatarValid(false);
+                          setUsername(''); setUsernameStatus('idle'); setBio(''); setAcceptedTos(false);
+                          setError('');
+                        }}
+                      >
+                        Use a different account
+                      </button>
+                    ) : (
+                      <button type="button" className="auth-btn-back" onClick={() => { setStep('account'); setError(''); }}>← Back</button>
+                    )}
                     <button type="submit" disabled={usernameStatus !== 'available'} className="auth-btn">Continue →</button>
                   </div>
                 </form>
