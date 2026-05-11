@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import Nav from '@/components/Nav';
 import WalletPill from '@/components/WalletPill';
+import SignOutButton from '@/components/SignOutButton';
 import SettingsLayout, { type RailGroup } from '@/components/settings/SettingsLayout';
 import ProfileSection, { type ProfileRow } from '@/components/settings/ProfileSection';
 import PayoutsSection from '@/components/settings/PayoutsSection';
@@ -101,6 +102,7 @@ export default function StudioSettingsPage() {
             <span className="font-mono uppercase" style={navChipStyle({ active: true })}>
               Settings
             </span>
+            <SignOutButton />
             <WalletPill />
           </>
         }
