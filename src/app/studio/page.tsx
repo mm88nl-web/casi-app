@@ -410,6 +410,7 @@ function StudioPageInner() {
       if (cancelled) return;
       if (error || !data) {
         setState({ kind: 'missing-profile' });
+        router.replace('/login?finish=true');
         return;
       }
       setState({ kind: 'ready', profile: data as Profile });
@@ -829,7 +830,7 @@ function StudioPageInner() {
     return <StatusScreen>Loading studio…</StatusScreen>;
   }
   if (state.kind === 'missing-profile') {
-    return <StatusScreen>Finish signup first — no profile row for this account.</StatusScreen>;
+    return <StatusScreen>Finishing signup…</StatusScreen>;
   }
 
   const { profile } = state;
