@@ -47,6 +47,53 @@ type Step = 'account' | 'username' | 'profile';
 const STEPS: Step[] = ['account', 'username', 'profile'];
 const STEP_LABELS = ['Account', 'Username', 'Profile'];
 
+// Minimum password length. Matches the Supabase Auth setting we want
+// configured in the dashboard (Auth → Policies → Min password length).
+// Bumping client + server in sync prevents the form from advancing on
+// passwords Supabase would reject anyway.
+const PASSWORD_MIN_LENGTH = 8;
+
+// Avatar URL guard. Mirrors the DB CHECK constraint
+// (migrations/20260511000000) so the form rejects unusable URLs before
+// the insert round-trips. Extension list is the common image types
+// browsers can <img> render. Query strings are stripped before matching
+// so signed CDN URLs (.png?token=...) still pass.
+const AVATAR_MAX_LEN = 1024;
+const AVATAR_EXT_RE = /\.(png|jpe?g|gif|webp|svg|avif)(\?.*)?$/i;
+function isPlausibleAvatarUrl(url: string): boolean {
+  if (!url) return true; // optional
+  if (url.length > AVATAR_MAX_LEN) return false;
+  if (!url.startsWith('https://')) return false;
+  // We accept either a recognizable image extension OR a common image-host
+  // shape (avatars.githubusercontent.com etc. don't use extensions). The
+  // <img> onLoad/onError in step 3 is the final word — this is a guard
+  // against the obvious nasties only.
+  try {
+    const parsed = new URL(url);
+    if (!/^[a-z0-9.-]+$/i.test(parsed.hostname)) return false;
+    if (AVATAR_EXT_RE.test(parsed.pathname)) return true;
+    // Whitelisted image hosts that don't include extensions in their URLs.
+    const host = parsed.hostname.toLowerCase();
+    return (
+      host.endsWith('.githubusercontent.com') ||
+      host.endsWith('.googleusercontent.com') ||
+      host.endsWith('.discordapp.com') ||
+      host.endsWith('.discordapp.net') ||
+      host.endsWith('.twimg.com') ||
+      host.endsWith('.jtvnw.net') ||  // Twitch
+      host === 'gravatar.com' ||
+      host.endsWith('.gravatar.com')
+    );
+  } catch {
+    return false;
+  }
+}
+
+// TOS version recorded at signup time. Bump the string when the legal
+// text changes (e.g. 'v2-2026-07') so the DB row pins exactly which
+// version this user agreed to.
+const TOS_VERSION = 'v1-2026-05';
+
 export default function AuthPage() {
   // mode
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
@@ -162,19 +209,51 @@ export default function AuthPage() {
   const handleAccountStep = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (regPassword.length < 6) { setError('Password must be at least 6 characters'); return; }
-    if (!acceptedTos)            { setError('Please accept the Terms and Privacy Policy'); return; }
+    if (regPassword.length < PASSWORD_MIN_LENGTH) {
+      setError(`Password must be at least ${PASSWORD_MIN_LENGTH} characters`);
+      return;
+    }
+    if (!acceptedTos) { setError('Please accept the Terms and Privacy Policy'); return; }
     setStep('username');
   };
 
-  /* ── Sign up ── username check */
+  /* ── Sign up ── username check
+   *
+   * Two-stage check, fail-closed:
+   *   (1) Reserved list — server-seeded table of route-shadowing handles.
+   *   (2) Uniqueness — case-insensitive lookup, matches the DB UNIQUE
+   *       index on LOWER(username).
+   *
+   * .maybeSingle() returns { data: null } when no row matches, instead
+   * of .single()'s "0 rows" error which the old code was implicitly
+   * swallowing as "available". maybeSingle differentiates "no match"
+   * (available) from "real error" (network etc., where we should NOT
+   * say available).
+   *
+   * The DB CHECK constraint is the final word; this is just UX. If the
+   * client check passes but the trigger blocks, the insert error path
+   * surfaces it.
+   */
   const checkUsername = async (val: string) => {
-    const cleaned = val.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const cleaned = val.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
     setUsername(cleaned);
     if (cleaned.length < 3) { setUsernameStatus('idle'); return; }
     setUsernameStatus('checking');
-    const { data } = await supabase.from('profiles').select('username').eq('username', cleaned).single();
-    setUsernameStatus(data ? 'taken' : 'available');
+    // Reserved-list lookup first — cheaper, also doesn't depend on
+    // network race outcomes if both queries fire in parallel.
+    const { data: reserved } = await supabase
+      .from('reserved_usernames')
+      .select('username')
+      .eq('username', cleaned)
+      .maybeSingle();
+    if (reserved) { setUsernameStatus('taken'); return; }
+    const { data: taken, error: lookupError } = await supabase
+      .from('profiles')
+      .select('username')
+      .ilike('username', cleaned)
+      .maybeSingle();
+    if (lookupError) { setUsernameStatus('idle'); return; }
+    setUsernameStatus(taken ? 'taken' : 'available');
   };
 
   const handleUsernameStep = (e: React.FormEvent) => {
@@ -204,15 +283,16 @@ export default function AuthPage() {
         password: regPassword,
       });
       if (authError) {
-        const msg = authError.message.toLowerCase();
-        if (msg.includes('already registered') || msg.includes('already in use') || msg.includes('already exists')) {
-          setError('That email already has an account — signing you in instead.');
-          setEmail(regEmail);
-          setPassword('');
-          setMode('signin');
-        } else {
-          setError(authError.message);
-        }
+        // Generic error message — don't differentiate "email already
+        // registered" from other auth errors. Telling the user "that
+        // email already has an account" is a user-enumeration vector
+        // (someone fishing a list of emails can confirm CASI accounts).
+        // The "try signing in" hint is still useful — if they did
+        // register before, the sign-in tab will work; if they didn't,
+        // the generic message just nudges them to retry.
+        setError('Could not create account. If you already have one, try signing in instead.');
+        setEmail(regEmail);
+        setPassword('');
         setLoading(false);
         return;
       }
@@ -220,16 +300,44 @@ export default function AuthPage() {
       userId = authData.user.id;
     }
 
+    // Final avatar URL gate — even though step 3 hides the field if not
+    // validated, a determined user could still submit a non-image URL.
+    // DB CHECK catches it but the error message is opaque; gate here for
+    // a clearer message.
+    const avatarToWrite = avatarValid && isPlausibleAvatarUrl(avatarUrl) ? avatarUrl : null;
+    if (avatarUrl && !avatarToWrite) {
+      setError('Avatar URL must be an https:// link to an image (.png, .jpg, .gif, .webp, .svg, .avif).');
+      setLoading(false);
+      return;
+    }
+
     const { error: profileError } = await supabase.from('profiles').insert({
       id: userId,
       username,
-      display_name: displayName || username,
-      bio: bio || null,
-      avatar_url: avatarValid ? avatarUrl : null,
+      display_name: (displayName || username).slice(0, 64),
+      bio: bio ? bio.slice(0, 320) : null,
+      avatar_url: avatarToWrite,
       is_live: false,
+      tos_accepted_at: new Date().toISOString(),
+      tos_version: TOS_VERSION,
     });
     if (profileError) {
-      setError('Could not create profile — ' + profileError.message);
+      // The DB has UNIQUE + CHECK constraints; surface a friendly
+      // message when we know the cause, otherwise echo the error verbatim
+      // (these errors are rare on the happy path and the verbose form
+      // helps debugging when something goes sideways).
+      const msg = profileError.message.toLowerCase();
+      if (msg.includes('reserved')) {
+        setError('That username is reserved. Try a different one.');
+        setStep('username');
+        setUsernameStatus('taken');
+      } else if (msg.includes('duplicate key') || msg.includes('unique')) {
+        setError('That username was just taken. Try a different one.');
+        setStep('username');
+        setUsernameStatus('taken');
+      } else {
+        setError('Could not create profile — ' + profileError.message);
+      }
       setLoading(false);
       return;
     }
@@ -545,11 +653,15 @@ export default function AuthPage() {
                   </div>
                   <div className="auth-field">
                     <label className="auth-label">Password</label>
-                    <input required type="password" placeholder="Min 6 characters"
+                    <input required type="password" placeholder={`Min ${PASSWORD_MIN_LENGTH} characters`}
                       className="auth-input" value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)} />
-                    <div className={`auth-hint ${regPassword.length === 0 ? 'dim' : regPassword.length < 6 ? 'err' : 'ok'}`}>
-                      {regPassword.length === 0 ? 'At least 6 characters' : regPassword.length < 6 ? `${6 - regPassword.length} more needed` : '✓ Looks good'}
+                    <div className={`auth-hint ${regPassword.length === 0 ? 'dim' : regPassword.length < PASSWORD_MIN_LENGTH ? 'err' : 'ok'}`}>
+                      {regPassword.length === 0
+                        ? `At least ${PASSWORD_MIN_LENGTH} characters`
+                        : regPassword.length < PASSWORD_MIN_LENGTH
+                          ? `${PASSWORD_MIN_LENGTH - regPassword.length} more needed`
+                          : '✓ Looks good'}
                     </div>
                   </div>
                   <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, fontFamily: "var(--font-casi-mono), monospace", fontSize: 10.5, color: 'var(--casi-text-mid)', lineHeight: 1.5, cursor: 'pointer' }}>
@@ -643,11 +755,13 @@ export default function AuthPage() {
                           : '👤'}
                       </div>
                       <input type="text" placeholder="https://your-image.png" className="auth-input" value={avatarUrl}
+                        maxLength={AVATAR_MAX_LEN}
                         style={{ flex: 1 }}
                         onChange={(e) => { setAvatarUrl(e.target.value); setAvatarValid(false); }} />
-                      {avatarUrl && <img src={avatarUrl} alt="" style={{ display: 'none' }} onLoad={() => setAvatarValid(true)} onError={() => setAvatarValid(false)} />}
+                      {avatarUrl && isPlausibleAvatarUrl(avatarUrl) && <img src={avatarUrl} alt="" style={{ display: 'none' }} onLoad={() => setAvatarValid(true)} onError={() => setAvatarValid(false)} />}
                     </div>
-                    {avatarUrl && <div className={`auth-hint ${avatarValid ? 'ok' : 'err'}`}>{avatarValid ? '✓ Image loaded' : 'Image not loading — check URL'}</div>}
+                    {avatarUrl && !isPlausibleAvatarUrl(avatarUrl) && <div className="auth-hint err">Must be an https:// link to an image (.png, .jpg, .gif, .webp, .svg, .avif).</div>}
+                    {avatarUrl && isPlausibleAvatarUrl(avatarUrl) && <div className={`auth-hint ${avatarValid ? 'ok' : 'err'}`}>{avatarValid ? '✓ Image loaded' : 'Image not loading — check URL'}</div>}
                   </div>
                   <div className="auth-field">
                     <label className="auth-label">Display name</label>
