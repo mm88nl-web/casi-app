@@ -68,6 +68,34 @@ export default function HomePage() {
             </Link>
             <span className="l-cta-note">Free · 2 min setup</span>
           </div>
+
+          {/* Trust signals — escrow openness, payment rails, audit posture.
+              Judges + technical viewers scan this for credibility; same
+              role the "as seen in" press strip plays on marketing sites. */}
+          <ul className="l-trust">
+            <li className="l-trust-item">
+              <span className="l-trust-glyph">{'{ }'}</span>
+              <span>
+                Open source ·{' '}
+                <a
+                  href="https://github.com/mm88nl-web/casi-app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="l-trust-link"
+                >
+                  Apache 2.0 escrow on GitHub
+                </a>
+              </span>
+            </li>
+            <li className="l-trust-item">
+              <span className="l-trust-glyph">◉</span>
+              <span>USDC on Solana · Cards via Stripe Connect</span>
+            </li>
+            <li className="l-trust-item">
+              <span className="l-trust-glyph">⌖</span>
+              <span>Currently on devnet · external audit in scoping</span>
+            </li>
+          </ul>
         </div>
 
         <div className="l-hero-r">
@@ -360,6 +388,49 @@ export default function HomePage() {
           text-transform: uppercase;
           color: var(--text-4);
           margin-left: 4px;
+        }
+
+        /* TRUST STRIP */
+        .l-trust {
+          list-style: none;
+          padding: 0;
+          margin: 32px 0 0 0;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          max-width: 520px;
+        }
+        .l-trust-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          font-family: var(--M);
+          font-size: 11.5px;
+          letter-spacing: 0.04em;
+          color: var(--text-3);
+        }
+        .l-trust-glyph {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          background: var(--ink-08);
+          color: var(--ink);
+          font-family: var(--M);
+          font-size: 10px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+        .l-trust-link {
+          color: var(--ink);
+          text-decoration: none;
+          font-weight: 600;
+          border-bottom: 1px solid var(--ink-22);
+          transition: border-color 0.14s;
+        }
+        .l-trust-link:hover {
+          border-bottom-color: var(--ink);
         }
 
         /* HERO RIGHT */
