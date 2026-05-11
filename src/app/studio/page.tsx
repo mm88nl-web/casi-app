@@ -988,7 +988,7 @@ function StudioPageInner() {
         onReject={handleReject}
         onPreview={setPreviewId}
         pendingIds={moderating}
-        emptyLabel="No pending bookings · nothing to approve"
+        emptyLabel="Nothing pending · share your viewer link above to get your first beam"
       />
 
       <FlashesLog

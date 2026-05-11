@@ -136,16 +136,20 @@ export default function StreamerBar({ username, displayName, avatarUrl, bio, isL
           </span>
           <a
             href={`/overlay?s=${username}`}
-            className="font-mono uppercase"
+            className="font-mono uppercase inline-flex items-center"
             style={{
+              gap: '6px',
               fontSize: '9.5px',
-              letterSpacing: '0.12em',
+              letterSpacing: '0.16em',
               color: 'var(--casi-text-dim)',
               textDecoration: 'none',
-              transition: 'color .14s',
+              padding: '5px 10px',
+              borderRadius: '5px',
+              border: '1px solid var(--casi-border-2)',
+              transition: 'color .14s, border-color .14s',
             }}
           >
-            ↗ www.casi.gg/overlay?s={username}
+            ↗ Open booking
           </a>
         </div>
       </div>

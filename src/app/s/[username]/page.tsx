@@ -201,73 +201,125 @@ export default function ViewerBookingPage() {
 }
 
 /**
- * Hero CTA replacing the old shell BookingPanel + "still on classic overlay"
- * note. /s/[username] is positioned as the streamer's shareable landing page;
- * the actual Stripe/Solana booking flow lives at /overlay where it's been
- * battle-tested. Funnelling here keeps one canonical surface for payment +
- * escrow without duplicating the careful state machine.
+ * Right-column CTA on the streamer's public landing page. /s/[username]
+ * itself is a sharable bio/landing surface; the actual Stripe + Solana
+ * booking flow lives at /overlay where the careful state machine is
+ * battle-tested. This card funnels visitors there without duplicating
+ * the booking surface in two places.
+ *
+ * v9-aligned: sharp edges, single-color confident type, the three
+ * protocol guarantees (0% cut, you approve, refund on deny) inlined as
+ * mono caps so a first-time visitor sees the trust contract without
+ * scrolling.
  */
 function BookingHero({ username, isLive }: { username: string; isLive: boolean }) {
   return (
     <div
       style={{
-        padding: '28px 24px',
-        background:
-          'linear-gradient(160deg, rgba(var(--casi-accent-rgb), 0.10), rgba(var(--casi-accent2-rgb), 0.04))',
-        border: '1px solid rgba(var(--casi-accent-rgb), 0.25)',
-        borderRadius: '16px',
+        padding: '32px 28px',
+        background: 'var(--casi-surface)',
+        border: '1px solid var(--casi-border-2)',
+        borderRadius: '12px',
         position: 'relative',
-        overflow: 'hidden',
       }}
     >
       <div
         className="font-mono uppercase"
         style={{
           fontSize: '10px',
-          letterSpacing: '0.18em',
+          letterSpacing: '0.2em',
           color: 'var(--casi-accent)',
-          marginBottom: '10px',
+          marginBottom: '14px',
         }}
       >
-        ◇ Book a beam
+        ◇ Book a slot
       </div>
       <h2
         className="font-extrabold"
         style={{
-          fontFamily: 'var(--font-casi-sans)',
-          fontSize: '24px',
-          lineHeight: 1.15,
-          letterSpacing: '-0.8px',
+          fontFamily: 'var(--font-casi-display), var(--font-casi-sans), sans-serif',
+          fontSize: '28px',
+          lineHeight: 1.1,
+          letterSpacing: '-1px',
           color: 'var(--casi-text)',
-          marginBottom: '8px',
+          marginBottom: '10px',
         }}
       >
-        Put your image, video, or message on @{username}&apos;s stream.
+        Put your image, video, or message on{' '}
+        <span style={{ color: 'var(--casi-accent)' }}>@{username}</span>&apos;s stream.
       </h2>
-      <p style={{ fontSize: '13.5px', lineHeight: 1.55, color: 'var(--casi-text-mid)', marginBottom: '18px' }}>
-        Pick a slot, pick a duration, pay with card or USDC. Your beam goes
-        live the moment {isLive ? '@' + username : 'the streamer'} approves it.
+      <p
+        style={{
+          fontSize: '14px',
+          lineHeight: 1.55,
+          color: 'var(--casi-text-mid)',
+          marginBottom: '22px',
+        }}
+      >
+        Pick a slot, pick a duration, pay with card or USDC. Your beam goes live the moment{' '}
+        {isLive ? `@${username}` : 'the streamer'} approves it — or you get a full refund.
       </p>
+
+      {/* Three protocol guarantees in mono caps — the trust contract */}
+      <ul
+        style={{
+          listStyle: 'none',
+          padding: 0,
+          margin: '0 0 24px 0',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+        }}
+      >
+        {[
+          ['0%', 'casi takes nothing'],
+          ['→', 'you approve every one'],
+          ['↺', 'denied = instant refund'],
+        ].map(([icon, label]) => (
+          <li
+            key={label}
+            className="font-mono uppercase"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              fontSize: '10.5px',
+              letterSpacing: '0.18em',
+              color: 'var(--casi-text-mid)',
+            }}
+          >
+            <span style={{ color: 'var(--casi-accent)', minWidth: '20px', fontWeight: 700 }}>
+              {icon}
+            </span>
+            {label}
+          </li>
+        ))}
+      </ul>
+
       <Link
         href={`/overlay?s=${username}`}
-        className="inline-flex items-center gap-2 font-bold"
+        className="inline-flex items-center"
         style={{
-          padding: '12px 18px',
-          borderRadius: '10px',
+          gap: '12px',
+          padding: '14px 22px',
           background: 'var(--casi-accent)',
           color: '#0a0a0a',
-          fontFamily: 'var(--font-casi-sans)',
-          fontSize: '13px',
+          fontFamily: 'var(--font-casi-display), var(--font-casi-sans), sans-serif',
+          fontSize: '12.5px',
+          fontWeight: 700,
           textDecoration: 'none',
-          letterSpacing: '-0.2px',
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
         }}
       >
-        Open booking →
+        Open booking
+        <span style={{ fontFamily: 'var(--font-casi-mono), monospace' }}>→</span>
       </Link>
       <div
-        className="mt-4 font-mono uppercase"
+        className="font-mono uppercase"
         style={{
-          fontSize: '9px',
+          marginTop: '18px',
+          fontSize: '9.5px',
           letterSpacing: '0.18em',
           color: 'var(--casi-text-faint)',
         }}
