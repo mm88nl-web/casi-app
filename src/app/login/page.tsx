@@ -212,7 +212,7 @@ export default function AuthPage() {
    * provider is enabled in the UI here but not in the dashboard, the
    * button will surface a "provider is not enabled" error.
    */
-  type OAuthProvider = 'google' | 'twitch' | 'discord' | 'twitter';
+  type OAuthProvider = 'google' | 'twitch' | 'discord' | 'x';
   const handleOAuth = async (provider: OAuthProvider) => {
     setLoading(true);
     setError('');
@@ -618,7 +618,7 @@ export default function AuthPage() {
                   <DiscordIcon />
                   Continue with Discord
                 </button>
-                <button type="button" onClick={() => handleOAuth('twitter')} disabled={loading} className="auth-oauth-btn">
+                <button type="button" onClick={() => handleOAuth('x')} disabled={loading} className="auth-oauth-btn">
                   <XIcon />
                   Continue with X
                 </button>
@@ -664,7 +664,7 @@ export default function AuthPage() {
                   <DiscordIcon />
                   Continue with Discord
                 </button>
-                <button type="button" onClick={() => handleOAuth('twitter')} disabled={loading} className="auth-oauth-btn">
+                <button type="button" onClick={() => handleOAuth('x')} disabled={loading} className="auth-oauth-btn">
                   <XIcon />
                   Continue with X
                 </button>
