@@ -1,8 +1,9 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 import { CasiMark } from '@/components/v9';
+import TurnstileWidget from '@/components/TurnstileWidget';
 
 /** Google's "G" mark — official 4-color SVG, no external assets. */
 function GoogleG() {
@@ -118,6 +119,22 @@ export default function AuthPage() {
   // (i.e. user completed OAuth but bailed before picking a username). Used to
   // show a "Use a different account" escape hatch.
   const [postOAuth, setPostOAuth] = useState(false);
+  // Cloudflare Turnstile token. Set to 'dev-skip' when NEXT_PUBLIC_TURNSTILE_SITE_KEY
+  // is unset (TurnstileWidget short-circuits). When Supabase has CAPTCHA
+  // enabled in the dashboard, sending a token is mandatory on signUp /
+  // signInWithPassword — without it the auth call fails. We pass it
+  // unconditionally when present and Supabase ignores it on projects
+  // that don't have CAPTCHA enabled, so this is safe in both modes.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  // Memoize onVerify so TurnstileWidget's effect doesn't re-render the
+  // widget on every parent re-render (would burn through anti-replay
+  // quotas and flash the widget UI).
+  const onCaptchaVerify = useCallback((t: string) => setCaptchaToken(t), []);
+  const onCaptchaExpire = useCallback(() => setCaptchaToken(null), []);
+  // Only forward the token to Supabase when it's a real one; 'dev-skip'
+  // is our sentinel for "no Turnstile configured" — passing it would
+  // make Supabase reject the auth call if CAPTCHA is enabled there.
+  const realCaptchaToken = captchaToken && captchaToken !== 'dev-skip' ? captchaToken : undefined;
   const router  = useRouter();
   const supabase = useRef(createClient()).current;
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -174,7 +191,11 @@ export default function AuthPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+    const { error: err } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: realCaptchaToken ? { captchaToken: realCaptchaToken } : undefined,
+    });
     if (err) { setError(err.message); setLoading(false); }
     else router.push('/studio');
   };
@@ -281,6 +302,7 @@ export default function AuthPage() {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: regEmail,
         password: regPassword,
+        options: realCaptchaToken ? { captchaToken: realCaptchaToken } : undefined,
       });
       if (authError) {
         // Generic error message — don't differentiate "email already
@@ -615,6 +637,9 @@ export default function AuthPage() {
                       onChange={(e) => setPassword(e.target.value)} />
                   </div>
                   {error && <div className="auth-error">{error}</div>}
+                  <div style={{ marginBottom: 10 }}>
+                    <TurnstileWidget onVerify={onCaptchaVerify} onExpire={onCaptchaExpire} compact />
+                  </div>
                   <button type="submit" disabled={loading} className="auth-btn">
                     {loading ? 'Signing in…' : 'Enter studio →'}
                   </button>
@@ -679,6 +704,9 @@ export default function AuthPage() {
                     </span>
                   </label>
                   {error && <div className="auth-error" style={{ marginTop: 12 }}>{error}</div>}
+                  <div style={{ marginTop: 12 }}>
+                    <TurnstileWidget onVerify={onCaptchaVerify} onExpire={onCaptchaExpire} compact />
+                  </div>
                   <div style={{ marginTop: 8 }}>
                     <button type="submit" disabled={!acceptedTos} className="auth-btn">Continue →</button>
                   </div>
