@@ -109,7 +109,21 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF NEW.username IS NOT NULL AND public.username_is_reserved(NEW.username) THEN
+  IF NEW.username IS NULL THEN
+    RETURN NEW;
+  END IF;
+  -- Allow UPDATE that keeps the same username (no-op rename) even if
+  -- that username is now reserved. Protects existing rows whose handle
+  -- was grandfathered onto the reserved list later — e.g. the founder
+  -- owns 'casi' but 'casi' is reserved against future signups. Without
+  -- this, any UPDATE that mentions `username` in the SET clause would
+  -- fire the trigger and refuse the save, even when the value is
+  -- unchanged (UPDATE OF column triggers fire on SET inclusion, not on
+  -- value change).
+  IF TG_OP = 'UPDATE' AND OLD.username = NEW.username THEN
+    RETURN NEW;
+  END IF;
+  IF public.username_is_reserved(NEW.username) THEN
     RAISE EXCEPTION 'username % is reserved', NEW.username
       USING ERRCODE = '23514';  -- check_violation
   END IF;
