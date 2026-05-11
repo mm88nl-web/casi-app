@@ -41,15 +41,52 @@ const serif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "casi",
-  description: "Rent a slot on your favourite streamer's screen.",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || 'https://casi.gg',
+  ),
+  title: {
+    default: 'casi — Your stream is real estate. Lease it.',
+    template: '%s · casi',
+  },
+  description:
+    'Pay-per-minute streamer overlays. Viewers pay to place clips, images, and banners on stream — by the minute or per flash. The streamer approves every one and keeps 100%. Apache 2.0 escrow on Solana.',
+  keywords: [
+    'streaming',
+    'tipping',
+    'Solana',
+    'crypto',
+    'streamer tools',
+    'USDC',
+    'escrow',
+    'OBS',
+    'time-vested',
+    'open source',
+  ],
+  authors: [{ name: 'Matthew Melendez' }],
+  creator: 'Matthew Melendez',
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: 'https://casi.gg',
+    siteName: 'casi',
+    title: 'casi — Your stream is real estate. Lease it.',
+    description:
+      'Pay-per-minute streamer overlays. 0% casi cut. Apache 2.0 escrow on Solana.',
+    // Next.js auto-wires src/app/opengraph-image.tsx — no images array needed.
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'casi — Your stream is real estate. Lease it.',
+    description:
+      'Pay-per-minute streamer overlays. 0% casi cut. Apache 2.0 escrow on Solana.',
+  },
   // Explicit icon metadata so wallet popups (Phantom/Solflare/etc.) reliably
   // pick up the filled-square brand mark instead of falling back to a default
   // glyph when the auto-detected SVG renders thin against their dark theme.
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    shortcut: "/icon.svg",
-    apple: "/icon.svg",
+    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
   },
 };
 
