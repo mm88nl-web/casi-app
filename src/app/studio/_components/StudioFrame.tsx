@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { NavBar } from '@/components/v9';
 import WalletPill from '@/components/WalletPill';
+import SignOutButton from '@/components/SignOutButton';
 
 type StudioFrameProps = {
   /** Streamer handle, e.g. "@droptv" — rendered with leading "@" inside. */
@@ -39,9 +40,12 @@ export default function StudioFrame({
     <main className="min-h-screen" style={{ background: 'var(--paper)', color: 'var(--text)' }}>
       <NavBar
         chips={
-          <Link href="/studio/settings" title="Profile, payouts, appearance" style={chipStyle()}>
-            ⚙ Settings
-          </Link>
+          <>
+            <Link href="/studio/settings" title="Profile, payouts, appearance" style={chipStyle()}>
+              ⚙ Settings
+            </Link>
+            <SignOutButton />
+          </>
         }
         right={<WalletPill />}
       />
