@@ -24,14 +24,15 @@ export default function HomePage() {
     };
   }, [supabase]);
 
-  // Marquee + live indicator copy. Live count is real; the "€48K paid out"
-  // stat below is mocked per HANDOFF ("all dollar amounts ... mocked") until
-  // a public 30-day payouts aggregate ships.
+  // Marquee + live indicator copy. Both are pulled from real state — the live
+  // count is a real DB query against profiles.is_live, and the hero stat block
+  // states the actual protocol invariant (0% / 100% to streamers) rather than
+  // a fabricated dollar figure. No mocked numbers anywhere on this page.
   const liveLabel = liveCount === null ? '— LIVE NOW' : `${liveCount} LIVE NOW`;
   const marqueeText =
-    'NOW LIVE · ' +
-    (liveCount ?? '—') +
-    ' STREAMERS · 0% CASI CUT · BOOK A SLOT IN 4 SECONDS · ✺ · STRIPE & USDC · APPROVED OR REFUNDED · YOU APPROVE EVERY ONE';
+    liveCount && liveCount > 0
+      ? `${liveCount} STREAMERS LIVE · 0% CASI CUT · STRIPE & USDC · APPROVED OR REFUNDED · APACHE 2.0 ESCROW · ON SOLANA · ✺`
+      : 'OPEN BETA · ON SOLANA DEVNET · 0% CASI CUT · STRIPE & USDC · APPROVED OR REFUNDED · APACHE 2.0 ESCROW · ✺';
 
   return (
     <main className="casi-v9-landing">
@@ -72,15 +73,15 @@ export default function HomePage() {
         <div className="l-hero-r">
           <div className="l-stat">
             <div className="l-stat-n">
-              €48<sup>K</sup>
+              100<sup>%</sup>
             </div>
-            <div className="l-stat-l">paid out to streamers · last 30 days</div>
+            <div className="l-stat-l">of every booking goes to streamers · 0% casi cut</div>
           </div>
           <div className="l-scene" aria-hidden="true">
             <div className="l-scene-bg" />
             <div className="l-scene-tag">
               <span className="l-scene-tag-dot" />
-              droptv · live
+              your stream · live
             </div>
             <div className="l-scene-slot">
               <span className="l-scene-icon">✦</span>
@@ -89,10 +90,11 @@ export default function HomePage() {
             <div className="l-scene-hex" />
             <div className="l-scene-banner">
               <div className="l-scene-ticker">
-                ▰ STREAMADS_NL · LOGO PLACEMENT · BEAM 10M · ✺ · SPEEDRUN_PETE · &quot;5:30 PB
-                INCOMING&quot; ▰
+                ▰ YOUR_SPONSOR · BANNER PLACEMENT · BEAM 10M · ✺ · A_VIEWER · &quot;GOOD LUCK ON
+                THE RUN&quot; ▰
               </div>
             </div>
+            <div className="l-scene-mock-label">Illustrative — not a live stream</div>
           </div>
         </div>
       </section>
@@ -115,7 +117,7 @@ export default function HomePage() {
             <div className="l-rail">
               <span className="l-rail-ico">€</span>
               <span className="l-rail-name">Cards · Stripe</span>
-              <span className="l-rail-note">2.9%</span>
+              <span className="l-rail-note">direct charge</span>
             </div>
             <div className="l-rail">
               <span className="l-rail-ico"><UsdcIcon size={14} mono="currentColor" /></span>
@@ -138,7 +140,7 @@ export default function HomePage() {
           <div className="l-band-n">03 ──── protection</div>
           <div className="l-band-flow">
             <div className="l-flow-row ok">
-              <span className="l-flow-num">→</span>Approved · 4 seconds avg
+              <span className="l-flow-num">→</span>Approved · goes live on stream
             </div>
             <div className="l-flow-row">
               <span className="l-flow-num">→</span>Denied · full refund instantly
@@ -543,6 +545,20 @@ export default function HomePage() {
           height: 6px;
           border-radius: 50%;
           background: var(--ink);
+        }
+        .l-scene-mock-label {
+          position: absolute;
+          bottom: 14%;
+          right: 8px;
+          z-index: 4;
+          font-family: var(--M);
+          font-size: 8px;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: var(--text-4);
+          background: var(--paper);
+          padding: 3px 6px;
+          border: 1px solid var(--line);
         }
 
         /* MANIFESTO BAND */
