@@ -166,16 +166,19 @@ END$$;
 -- if a streamer ever disputes it. Version is a free-form text so we can
 -- bump it when the legal text changes ('v1', 'v2', '2026-05-11', etc.).
 --
--- Backfill existing rows with the migration date + 'v1' since those
+-- Backfill existing rows with now() + 'v1-backfill' since those
 -- streamers already signed up under the v1 ToS — they accepted it via
 -- the old checkbox, we just weren't persisting the timestamp yet.
+-- profiles doesn't carry a created_at column so we can't pinpoint the
+-- original signup time; now() is good enough for a "consent on file"
+-- audit record.
 
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS tos_accepted_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS tos_version     TEXT;
 
 UPDATE public.profiles
-  SET tos_accepted_at = COALESCE(tos_accepted_at, created_at, now()),
+  SET tos_accepted_at = COALESCE(tos_accepted_at, now()),
       tos_version     = COALESCE(tos_version, 'v1-backfill')
   WHERE tos_accepted_at IS NULL;
 
