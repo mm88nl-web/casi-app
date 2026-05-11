@@ -1,12 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import type { CSSProperties, ReactNode } from 'react';
 import { NavBar } from '@/components/v9';
 import WalletPill from '@/components/WalletPill';
-import { createClient } from '@/utils/supabase/client';
+import SignOutButton from '@/components/SignOutButton';
 
 type StudioFrameProps = {
   /** Streamer handle, e.g. "@droptv" — rendered with leading "@" inside. */
@@ -37,16 +35,6 @@ export default function StudioFrame({
   children,
 }: StudioFrameProps) {
   const slug = username || 'streamer';
-  const router = useRouter();
-  const [signingOut, setSigningOut] = useState(false);
-
-  const handleSignOut = async () => {
-    if (signingOut) return;
-    setSigningOut(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.replace('/');
-  };
 
   return (
     <main className="min-h-screen" style={{ background: 'var(--paper)', color: 'var(--text)' }}>
@@ -56,21 +44,7 @@ export default function StudioFrame({
             <Link href="/studio/settings" title="Profile, payouts, appearance" style={chipStyle()}>
               ⚙ Settings
             </Link>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              disabled={signingOut}
-              title="Sign out of this account"
-              style={{
-                ...chipStyle(),
-                background: 'transparent',
-                cursor: signingOut ? 'wait' : 'pointer',
-                opacity: signingOut ? 0.5 : 1,
-                fontFamily: 'var(--M)',
-              }}
-            >
-              {signingOut ? 'Signing out…' : 'Sign out ↗'}
-            </button>
+            <SignOutButton />
           </>
         }
         right={<WalletPill />}
