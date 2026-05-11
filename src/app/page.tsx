@@ -6,8 +6,45 @@ import { createClient } from '@/utils/supabase/client';
 import { NavBar, Marquee, Footer } from '@/components/v9';
 import UsdcIcon from '@/components/icons/UsdcIcon';
 
+/**
+ * Convert a Loom or YouTube share URL to its embed equivalent so the
+ * pitch video can be dropped in via env var without code changes:
+ *   https://www.loom.com/share/abc          → https://www.loom.com/embed/abc
+ *   https://www.youtube.com/watch?v=abc     → https://www.youtube.com/embed/abc
+ *   https://youtu.be/abc                    → https://www.youtube.com/embed/abc
+ * Returns null for unrecognized URLs so the section renders its
+ * placeholder state.
+ */
+function toEmbedUrl(raw: string | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    if (u.hostname.endsWith('loom.com')) {
+      const m = u.pathname.match(/\/share\/([a-z0-9]+)/i);
+      if (m) return `https://www.loom.com/embed/${m[1]}`;
+      if (u.pathname.startsWith('/embed/')) return raw;
+    }
+    if (u.hostname.endsWith('youtube.com')) {
+      const v = u.searchParams.get('v');
+      if (v) return `https://www.youtube.com/embed/${v}`;
+      if (u.pathname.startsWith('/embed/')) return raw;
+    }
+    if (u.hostname.endsWith('youtu.be')) {
+      const id = u.pathname.slice(1);
+      if (id) return `https://www.youtube.com/embed/${id}`;
+    }
+  } catch {
+    /* fall through */
+  }
+  return null;
+}
+
 export default function HomePage() {
   const [liveCount, setLiveCount] = useState<number | null>(null);
+  // Pitch video — set NEXT_PUBLIC_PITCH_VIDEO_URL to a Loom or YouTube
+  // share URL to embed it on the landing page below the hero. Hidden
+  // when unset (no placeholder shown to first-time visitors).
+  const pitchEmbed = toEmbedUrl(process.env.NEXT_PUBLIC_PITCH_VIDEO_URL);
   const supabase = createClient();
 
   useEffect(() => {
@@ -24,14 +61,15 @@ export default function HomePage() {
     };
   }, [supabase]);
 
-  // Marquee + live indicator copy. Live count is real; the "€48K paid out"
-  // stat below is mocked per HANDOFF ("all dollar amounts ... mocked") until
-  // a public 30-day payouts aggregate ships.
+  // Marquee + live indicator copy. Both are pulled from real state — the live
+  // count is a real DB query against profiles.is_live, and the hero stat block
+  // states the actual protocol invariant (0% / 100% to streamers) rather than
+  // a fabricated dollar figure. No mocked numbers anywhere on this page.
   const liveLabel = liveCount === null ? '— LIVE NOW' : `${liveCount} LIVE NOW`;
   const marqueeText =
-    'NOW LIVE · ' +
-    (liveCount ?? '—') +
-    ' STREAMERS · 0% CASI CUT · BOOK A SLOT IN 4 SECONDS · ✺ · STRIPE & USDC · APPROVED OR REFUNDED · YOU APPROVE EVERY ONE';
+    liveCount && liveCount > 0
+      ? `${liveCount} STREAMERS LIVE · 0% CASI CUT · STRIPE & USDC · APPROVED OR REFUNDED · APACHE 2.0 ESCROW · ON SOLANA · ✺`
+      : 'OPEN BETA · ON SOLANA DEVNET · 0% CASI CUT · STRIPE & USDC · APPROVED OR REFUNDED · APACHE 2.0 ESCROW · ✺';
 
   return (
     <main className="casi-v9-landing">
@@ -67,20 +105,48 @@ export default function HomePage() {
             </Link>
             <span className="l-cta-note">Free · 2 min setup</span>
           </div>
+
+          {/* Trust signals — escrow openness, payment rails, audit posture.
+              Judges + technical viewers scan this for credibility; same
+              role the "as seen in" press strip plays on marketing sites. */}
+          <ul className="l-trust">
+            <li className="l-trust-item">
+              <span className="l-trust-glyph">{'{ }'}</span>
+              <span>
+                Open source ·{' '}
+                <a
+                  href="https://github.com/mm88nl-web/casi-app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="l-trust-link"
+                >
+                  Apache 2.0 escrow on GitHub
+                </a>
+              </span>
+            </li>
+            <li className="l-trust-item">
+              <span className="l-trust-glyph">◉</span>
+              <span>USDC on Solana · Cards via Stripe Connect</span>
+            </li>
+            <li className="l-trust-item">
+              <span className="l-trust-glyph">⌖</span>
+              <span>Currently on devnet · external audit in scoping</span>
+            </li>
+          </ul>
         </div>
 
         <div className="l-hero-r">
           <div className="l-stat">
             <div className="l-stat-n">
-              €48<sup>K</sup>
+              100<sup>%</sup>
             </div>
-            <div className="l-stat-l">paid out to streamers · last 30 days</div>
+            <div className="l-stat-l">of every booking goes to streamers · 0% casi cut</div>
           </div>
           <div className="l-scene" aria-hidden="true">
             <div className="l-scene-bg" />
             <div className="l-scene-tag">
               <span className="l-scene-tag-dot" />
-              droptv · live
+              your stream · live
             </div>
             <div className="l-scene-slot">
               <span className="l-scene-icon">✦</span>
@@ -89,13 +155,38 @@ export default function HomePage() {
             <div className="l-scene-hex" />
             <div className="l-scene-banner">
               <div className="l-scene-ticker">
-                ▰ STREAMADS_NL · LOGO PLACEMENT · BEAM 10M · ✺ · SPEEDRUN_PETE · &quot;5:30 PB
-                INCOMING&quot; ▰
+                ▰ YOUR_SPONSOR · BANNER PLACEMENT · BEAM 10M · ✺ · A_VIEWER · &quot;GOOD LUCK ON
+                THE RUN&quot; ▰
               </div>
             </div>
+            <div className="l-scene-mock-label">Illustrative — not a live stream</div>
           </div>
         </div>
       </section>
+
+      {/* DEMO VIDEO ──────────────────────────────────────────────────── */}
+      {pitchEmbed && (
+        <section className="l-demo">
+          <div className="l-demo-hd">
+            <div className="l-demo-eyebrow">
+              <span className="l-demo-tag">90-second pitch</span>
+              See it in action.
+            </div>
+            <h2 className="l-demo-title">
+              From booking to <em>beam on stream</em> in 90 seconds.
+            </h2>
+          </div>
+          <div className="l-demo-frame">
+            <iframe
+              src={pitchEmbed}
+              title="casi — product pitch"
+              allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+              allowFullScreen
+              className="l-demo-iframe"
+            />
+          </div>
+        </section>
+      )}
 
       {/* MANIFESTO BAND ──────────────────────────────────────────────── */}
       <div className="l-band">
@@ -115,7 +206,7 @@ export default function HomePage() {
             <div className="l-rail">
               <span className="l-rail-ico">€</span>
               <span className="l-rail-name">Cards · Stripe</span>
-              <span className="l-rail-note">2.9%</span>
+              <span className="l-rail-note">direct charge</span>
             </div>
             <div className="l-rail">
               <span className="l-rail-ico"><UsdcIcon size={14} mono="currentColor" /></span>
@@ -138,7 +229,7 @@ export default function HomePage() {
           <div className="l-band-n">03 ──── protection</div>
           <div className="l-band-flow">
             <div className="l-flow-row ok">
-              <span className="l-flow-num">→</span>Approved · 4 seconds avg
+              <span className="l-flow-num">→</span>Approved · goes live on stream
             </div>
             <div className="l-flow-row">
               <span className="l-flow-num">→</span>Denied · full refund instantly
@@ -360,6 +451,49 @@ export default function HomePage() {
           margin-left: 4px;
         }
 
+        /* TRUST STRIP */
+        .l-trust {
+          list-style: none;
+          padding: 0;
+          margin: 32px 0 0 0;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          max-width: 520px;
+        }
+        .l-trust-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          font-family: var(--M);
+          font-size: 11.5px;
+          letter-spacing: 0.04em;
+          color: var(--text-3);
+        }
+        .l-trust-glyph {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          background: var(--ink-08);
+          color: var(--ink);
+          font-family: var(--M);
+          font-size: 10px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+        .l-trust-link {
+          color: var(--ink);
+          text-decoration: none;
+          font-weight: 600;
+          border-bottom: 1px solid var(--ink-22);
+          transition: border-color 0.14s;
+        }
+        .l-trust-link:hover {
+          border-bottom-color: var(--ink);
+        }
+
         /* HERO RIGHT */
         .l-hero-r {
           display: flex;
@@ -543,6 +677,85 @@ export default function HomePage() {
           height: 6px;
           border-radius: 50%;
           background: var(--ink);
+        }
+        .l-scene-mock-label {
+          position: absolute;
+          bottom: 14%;
+          right: 8px;
+          z-index: 4;
+          font-family: var(--M);
+          font-size: 8px;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: var(--text-4);
+          background: var(--paper);
+          padding: 3px 6px;
+          border: 1px solid var(--line);
+        }
+
+        /* DEMO VIDEO SECTION */
+        .l-demo {
+          padding: 72px var(--pad);
+          border-bottom: 1px solid var(--line);
+        }
+        .l-demo-hd {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          margin-bottom: 36px;
+          max-width: 900px;
+        }
+        .l-demo-eyebrow {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          font-family: var(--M);
+          font-size: 11px;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: var(--text-3);
+        }
+        .l-demo-eyebrow::before {
+          content: '';
+          width: 24px;
+          height: 1px;
+          background: var(--ink);
+        }
+        .l-demo-tag {
+          padding: 3px 9px;
+          border: 1px solid var(--ink);
+          color: var(--ink);
+          font-size: 9.5px;
+          letter-spacing: 0.18em;
+        }
+        .l-demo-title {
+          font-family: var(--H);
+          font-weight: 800;
+          font-variation-settings: 'opsz' 96;
+          font-size: clamp(36px, 5vw, 72px);
+          line-height: 1;
+          letter-spacing: -0.035em;
+          color: var(--text);
+        }
+        .l-demo-title em {
+          font-family: var(--S);
+          font-style: italic;
+          font-weight: 400;
+          color: var(--ink);
+        }
+        .l-demo-frame {
+          position: relative;
+          aspect-ratio: 16 / 9;
+          width: 100%;
+          background: var(--surf);
+          border: 1px solid var(--line);
+          overflow: hidden;
+        }
+        .l-demo-iframe {
+          width: 100%;
+          height: 100%;
+          border: 0;
+          display: block;
         }
 
         /* MANIFESTO BAND */

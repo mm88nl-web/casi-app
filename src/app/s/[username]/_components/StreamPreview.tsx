@@ -1,5 +1,15 @@
 'use client';
 
+/**
+ * Illustrative scene preview for the streamer's public landing page.
+ *
+ * Replaces the previous fake-activity mockup ("CoolTiger42 is beaming!",
+ * "rina_42: yoooo") which read as real on-stream activity even when the
+ * streamer was offline — same credibility issue as the fabricated stats
+ * on the landing page. Now strictly a diagram: one labeled "your beam"
+ * slot and one labeled "taken" slot, both clearly marked as illustrative,
+ * no invented usernames or chat.
+ */
 export default function StreamPreview() {
   return (
     <div
@@ -11,7 +21,6 @@ export default function StreamPreview() {
         borderRadius: '14px',
       }}
     >
-      {/* subtle scene backdrop so the box isn't flat */}
       <div
         aria-hidden
         style={{
@@ -22,44 +31,41 @@ export default function StreamPreview() {
         }}
       />
 
-      {/* hint pill */}
       <span
         className="absolute font-mono uppercase"
         style={{
           top: '12px',
-          right: '12px',
+          left: '12px',
           zIndex: 5,
-          fontSize: '10px',
-          letterSpacing: '0.16em',
+          fontSize: '9px',
+          letterSpacing: '0.18em',
           background: 'rgba(0,0,0,0.6)',
-          color: 'var(--casi-text-mid)',
-          padding: '5px 10px',
-          borderRadius: '999px',
+          color: 'var(--casi-text-dim)',
+          padding: '4px 9px',
+          borderRadius: '4px',
           border: '1px solid var(--casi-border-2)',
         }}
       >
-        Preview · your spot shown live
+        Illustrative · slot layout
       </span>
 
-      {/* Your beam slot (available) */}
+      {/* Available beam slot — the one a viewer can book */}
       <div
         className="absolute flex flex-col items-center justify-center"
         style={{
-          top: '8%',
-          left: '5%',
-          width: '22%',
-          height: '28%',
-          borderRadius: '6px',
+          top: '14%',
+          left: '6%',
+          width: '26%',
+          height: '36%',
+          borderRadius: '8px',
           background:
             'linear-gradient(135deg, rgba(var(--casi-accent-rgb), 0.18), rgba(var(--casi-accent-rgb), 0.04))',
-          border: '2px dashed rgba(var(--casi-accent-rgb), 0.45)',
+          border: '2px dashed rgba(var(--casi-accent-rgb), 0.5)',
           color: 'var(--casi-accent)',
+          gap: '6px',
         }}
       >
-        <span
-          className="font-bold"
-          style={{ fontSize: '11px', letterSpacing: '-0.1px' }}
-        >
+        <span className="font-bold" style={{ fontSize: '12px', letterSpacing: '-0.1px' }}>
           Your beam here
         </span>
         <span
@@ -68,60 +74,84 @@ export default function StreamPreview() {
             fontSize: '9px',
             letterSpacing: '0.16em',
             color: 'var(--casi-accent)',
-            marginTop: '4px',
           }}
         >
-          €5/min
+          Streamer sets price
         </span>
       </div>
 
-      {/* Taken slot (occupied by another viewer) */}
+      {/* Generic occupied slot — no fake username, just shows the layout */}
       <div
         className="absolute flex flex-col items-center justify-center"
         style={{
-          top: '8%',
-          right: '5%',
-          width: '22%',
-          height: '28%',
-          borderRadius: '6px',
-          background: 'rgba(var(--casi-accent2-rgb), 0.12)',
-          border: '1px solid rgba(var(--casi-accent2-rgb), 0.4)',
+          top: '14%',
+          right: '6%',
+          width: '26%',
+          height: '36%',
+          borderRadius: '8px',
+          background: 'rgba(var(--casi-accent2-rgb), 0.08)',
+          border: '1px solid rgba(var(--casi-accent2-rgb), 0.3)',
+          gap: '6px',
         }}
       >
-        <span style={{ fontSize: '22px' }} aria-hidden>
-          🔥
-        </span>
+        <span
+          aria-hidden
+          style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '6px',
+            background: 'rgba(var(--casi-accent2-rgb), 0.18)',
+            border: '1px solid rgba(var(--casi-accent2-rgb), 0.35)',
+          }}
+        />
         <span
           className="font-mono uppercase"
           style={{
             fontSize: '9px',
-            letterSpacing: '0.14em',
-            color: 'var(--casi-accent2)',
-            marginTop: '4px',
+            letterSpacing: '0.16em',
+            color: 'var(--casi-text-dim)',
           }}
         >
-          ● CoolTiger42
+          Booked
         </span>
       </div>
 
-      {/* Mock chat lines */}
+      {/* Banner placement at the bottom — premium full-width surface */}
       <div
-        className="absolute flex flex-col gap-0.5"
+        className="absolute flex items-center"
         style={{
-          left: '12px',
-          bottom: '12px',
-          fontSize: '11px',
-          color: 'var(--casi-text-mid)',
+          left: '6%',
+          right: '6%',
+          bottom: '10%',
+          height: '14%',
+          borderRadius: '6px',
+          background: 'rgba(var(--casi-accent-rgb), 0.06)',
+          border: '1px dashed rgba(var(--casi-accent-rgb), 0.3)',
+          paddingLeft: '14px',
+          paddingRight: '14px',
+          gap: '10px',
         }}
       >
-        <div>
-          <span style={{ color: 'var(--casi-accent)', marginRight: '6px' }}>rina_42</span>
-          yoooo
-        </div>
-        <div>
-          <span style={{ color: 'var(--casi-accent2)', marginRight: '6px' }}>m_r</span>
-          sick setup
-        </div>
+        <span
+          aria-hidden
+          style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: 'rgba(var(--casi-accent-rgb), 0.5)',
+          }}
+        />
+        <span
+          className="font-mono uppercase"
+          style={{
+            flex: 1,
+            fontSize: '10px',
+            letterSpacing: '0.18em',
+            color: 'var(--casi-text-dim)',
+          }}
+        >
+          Banner · full-width placement
+        </span>
       </div>
     </div>
   );
