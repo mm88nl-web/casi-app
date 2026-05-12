@@ -47,7 +47,7 @@ export default function ObsSourcesSection({ username }: Props) {
       desc={
         <>
           Two Browser Sources at 1920×1080. Stack them in this Z-order: Backdrop at the back,
-          Beams on top. Flashes come through the Beams layer — no separate source needed.
+          Beams on top. Flashes come through the Beams layer, no separate source needed.
         </>
       }
     >
@@ -68,7 +68,7 @@ export default function ObsSourcesSection({ username }: Props) {
             </>
           }
           value={beamsUrl}
-          hint="All shaped slots render here — plus the 15s flash popups."
+          hint="All shaped slots render here, plus the 15s flash popups."
         />
       </div>
 

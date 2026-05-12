@@ -41,9 +41,10 @@ export default function BuildersPage() {
             <span className="underscore">on Solana.</span>
           </h1>
           <p className="b-sub">
-            <code className="b-code">casi-escrow</code> is an Anchor program that locks USDC in a
-            PDA vault and vests it linearly over a configured duration. Pro-rata settle on early
-            end, full refund on cancel, permissionless crank after timeout. Apache 2.0 — fork it.
+            <code className="b-code">casi-escrow</code> is a Solana program that holds USDC and
+            releases it gradually over the time the service runs. End early and the rest
+            auto-refunds to the buyer. Cancel before it starts and the full amount goes back.
+            Apache 2.0. Fork it.
           </p>
           <div className="b-cta-row">
             <a
@@ -64,15 +65,15 @@ export default function BuildersPage() {
           <ul className="b-trust">
             <li className="b-trust-item">
               <span className="b-trust-glyph">{'{ }'}</span>
-              <span>Single-file Anchor program · 4 user-facing instructions</span>
+              <span>One Solana program · four user-facing actions</span>
             </li>
             <li className="b-trust-item">
               <span className="b-trust-glyph">◉</span>
-              <span>Session-key delegation built in · no popup per action</span>
+              <span>Built-in session keys · one-tap approve, no wallet popup every time</span>
             </li>
             <li className="b-trust-item">
               <span className="b-trust-glyph">⌖</span>
-              <span>External audit in scoping · permissionless liveness backstops live today</span>
+              <span>External audit in scoping · funds can&apos;t get stuck even today</span>
             </li>
           </ul>
         </div>
@@ -151,28 +152,28 @@ export default function BuildersPage() {
           <div className="b-band-claim">Liveness without trust.</div>
           <p className="b-band-copy">
             Funds can&apos;t get stuck. Permissionless cranks let anyone resolve abandoned
-            escrows after the configured timeout — no central party required.
+            escrows after the configured timeout. No central party required.
           </p>
         </div>
 
         <div className="b-band-cell">
-          <div className="b-band-n">03 ──── delegation</div>
+          <div className="b-band-n">03 ──── session keys</div>
           <div className="b-band-flow">
             <div className="b-flow-row ok">
-              <span className="b-flow-num">→</span>set_delegate · once per session
+              <span className="b-flow-num">→</span>Sign in once
             </div>
             <div className="b-flow-row">
-              <span className="b-flow-num">→</span>start_beam_delegated · no popup
+              <span className="b-flow-num">→</span>Approve actions with one tap
             </div>
             <div className="b-flow-row">
-              <span className="b-flow-num">→</span>revoke_delegate · instant
+              <span className="b-flow-num">→</span>Revoke any time
             </div>
           </div>
           <div className="b-band-claim">Scoped session keys.</div>
           <p className="b-band-copy">
-            A pre-registered session key can call the four delegated instruction twins — and
-            nothing else. Compromise gives at most an early settle at the current vested point,
-            never a fund withdrawal outside the declared destinations.
+            A registered session key can only run the four user-facing actions, nothing else.
+            Worst-case compromise is an early settle — funds still go to their declared
+            destinations, never anywhere else.
           </p>
         </div>
       </div>
@@ -189,8 +190,8 @@ export default function BuildersPage() {
             <div className="b-how-n">A · Streaming</div>
             <h3 className="b-how-h">Paid on-stream overlays</h3>
             <p className="b-how-p">
-              The reference integration. Viewers fund an escrow per-booking; vesting clock starts
-              when the streamer approves; pro-rata refund on early end. Lives at{' '}
+              The reference integration. Viewers fund a booking up front, the timer starts when
+              the streamer approves, the unused portion auto-refunds on early end. Lives at{' '}
               <Link href="/" className="b-how-link">
                 casi.gg
               </Link>
@@ -209,9 +210,8 @@ export default function BuildersPage() {
             <div className="b-how-n">C · Subscriptions</div>
             <h3 className="b-how-h">Pay-per-minute services</h3>
             <p className="b-how-p">
-              Any service where the user pays for duration rather than a fixed deliverable.
-              Pause + resume require an additional state machine, but the vesting math is the
-              same.
+              Any service where the user pays for time rather than a fixed deliverable. Pause and
+              resume need a thin extra layer on top, but the core money math is identical.
             </p>
           </div>
         </div>
@@ -220,7 +220,7 @@ export default function BuildersPage() {
       {/* ROADMAP */}
       <section className="b-roadmap">
         <h2 className="b-roadmap-title">
-          Roadmap <em className="ink">— building in the open</em>
+          Roadmap <em className="ink">· building in the open</em>
         </h2>
         <ol className="b-roadmap-list">
           <li className="b-roadmap-item b-roadmap-done">
@@ -255,7 +255,7 @@ export default function BuildersPage() {
           <li className="b-roadmap-item">
             <span className="b-roadmap-tick">○</span>
             <span className="b-roadmap-text">
-              <b>Mainnet — capped launch first.</b> Per-booking + per-streamer caps live in the
+              <b>Mainnet: capped launch first.</b> Per-booking + per-streamer caps live in the
               application layer so the audited program can be deployed without re-audit when the
               caps relax post-PMF.
             </span>

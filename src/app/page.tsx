@@ -6,45 +6,8 @@ import { createClient } from '@/utils/supabase/client';
 import { NavBar, Marquee, Footer } from '@/components/v9';
 import UsdcIcon from '@/components/icons/UsdcIcon';
 
-/**
- * Convert a Loom or YouTube share URL to its embed equivalent so the
- * pitch video can be dropped in via env var without code changes:
- *   https://www.loom.com/share/abc          → https://www.loom.com/embed/abc
- *   https://www.youtube.com/watch?v=abc     → https://www.youtube.com/embed/abc
- *   https://youtu.be/abc                    → https://www.youtube.com/embed/abc
- * Returns null for unrecognized URLs so the section renders its
- * placeholder state.
- */
-function toEmbedUrl(raw: string | undefined): string | null {
-  if (!raw) return null;
-  try {
-    const u = new URL(raw);
-    if (u.hostname.endsWith('loom.com')) {
-      const m = u.pathname.match(/\/share\/([a-z0-9]+)/i);
-      if (m) return `https://www.loom.com/embed/${m[1]}`;
-      if (u.pathname.startsWith('/embed/')) return raw;
-    }
-    if (u.hostname.endsWith('youtube.com')) {
-      const v = u.searchParams.get('v');
-      if (v) return `https://www.youtube.com/embed/${v}`;
-      if (u.pathname.startsWith('/embed/')) return raw;
-    }
-    if (u.hostname.endsWith('youtu.be')) {
-      const id = u.pathname.slice(1);
-      if (id) return `https://www.youtube.com/embed/${id}`;
-    }
-  } catch {
-    /* fall through */
-  }
-  return null;
-}
-
 export default function HomePage() {
   const [liveCount, setLiveCount] = useState<number | null>(null);
-  // Pitch video — set NEXT_PUBLIC_PITCH_VIDEO_URL to a Loom or YouTube
-  // share URL to embed it on the landing page below the hero. Hidden
-  // when unset (no placeholder shown to first-time visitors).
-  const pitchEmbed = toEmbedUrl(process.env.NEXT_PUBLIC_PITCH_VIDEO_URL);
   const supabase = createClient();
 
   useEffect(() => {
@@ -91,7 +54,7 @@ export default function HomePage() {
             <span className="underscore">Lease it.</span>
           </h1>
           <p className="l-sub">
-            Drop one OBS source. Viewers pay to place clips, images, and banners on your screen —
+            Drop one OBS source. Viewers pay to place clips, images, and banners on your screen,
             by the minute or per flash. You approve every one. Casi takes{' '}
             <b style={{ color: 'var(--ink)' }}>zero</b>.
           </p>
@@ -159,34 +122,10 @@ export default function HomePage() {
                 THE RUN&quot; ▰
               </div>
             </div>
-            <div className="l-scene-mock-label">Illustrative — not a live stream</div>
+            <div className="l-scene-mock-label">Illustrative · not a live stream</div>
           </div>
         </div>
       </section>
-
-      {/* DEMO VIDEO ──────────────────────────────────────────────────── */}
-      {pitchEmbed && (
-        <section className="l-demo">
-          <div className="l-demo-hd">
-            <div className="l-demo-eyebrow">
-              <span className="l-demo-tag">90-second pitch</span>
-              See it in action.
-            </div>
-            <h2 className="l-demo-title">
-              From booking to <em>beam on stream</em> in 90 seconds.
-            </h2>
-          </div>
-          <div className="l-demo-frame">
-            <iframe
-              src={pitchEmbed}
-              title="casi — product pitch"
-              allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-              allowFullScreen
-              className="l-demo-iframe"
-            />
-          </div>
-        </section>
-      )}
 
       {/* MANIFESTO BAND ──────────────────────────────────────────────── */}
       <div className="l-band">
@@ -195,8 +134,8 @@ export default function HomePage() {
           <div className="l-band-stat">0%</div>
           <div className="l-band-claim">We don&apos;t touch your money.</div>
           <p className="l-band-copy">
-            Cards go straight to Stripe. USDC sits in open-source on-chain escrow. Casi is software
-            — not a bank.
+            Cards go straight to Stripe. USDC sits in open-source on-chain escrow. Casi is software,
+            not a bank.
           </p>
         </div>
 
@@ -238,7 +177,7 @@ export default function HomePage() {
               <span className="l-flow-num">→</span>Stopped mid-beam · prorated back
             </div>
           </div>
-          <div className="l-band-claim">Tap yes — or money back.</div>
+          <div className="l-band-claim">Tap yes, or money back.</div>
           <p className="l-band-copy">
             Nothing goes live without your approval. Every denial triggers an automatic refund.
           </p>
@@ -269,7 +208,7 @@ export default function HomePage() {
             </div>
             <h3 className="l-how-h">Time-rented slots</h3>
             <p className="l-how-p">
-              Hex, circle, banner, rect, rounded — sized and priced however you like. Viewers pay
+              Hex, circle, banner, rect, rounded. Sized and priced however you like. Viewers pay
               per minute. You approve once.
             </p>
           </div>
@@ -301,7 +240,7 @@ export default function HomePage() {
             </div>
             <h3 className="l-how-h">Full-bleed sponsor skin</h3>
             <p className="l-how-p">
-              Sponsors pay to skin your entire scene background. The most premium surface — usually
+              Sponsors pay to skin your entire scene background. The most premium surface, usually
               booked weeks ahead.
             </p>
           </div>
@@ -726,75 +665,6 @@ export default function HomePage() {
           background: var(--paper);
           padding: 3px 6px;
           border: 1px solid var(--line);
-        }
-
-        /* DEMO VIDEO SECTION */
-        .l-demo {
-          padding: 72px var(--pad);
-          border-bottom: 1px solid var(--line);
-        }
-        .l-demo-hd {
-          display: flex;
-          flex-direction: column;
-          gap: 14px;
-          margin-bottom: 36px;
-          max-width: 900px;
-        }
-        .l-demo-eyebrow {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          font-family: var(--M);
-          font-size: 11px;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: var(--text-3);
-        }
-        .l-demo-eyebrow::before {
-          content: '';
-          width: 24px;
-          height: 1px;
-          background: var(--ink);
-        }
-        .l-demo-tag {
-          padding: 3px 9px;
-          border: 1px solid var(--ink);
-          color: var(--ink);
-          font-size: 9.5px;
-          letter-spacing: 0.18em;
-        }
-        .l-demo-title {
-          font-family: var(--H);
-          font-weight: 800;
-          font-variation-settings: 'opsz' 96;
-          font-size: clamp(36px, 5vw, 72px);
-          line-height: 1;
-          letter-spacing: -0.035em;
-          color: var(--text);
-        }
-        .l-demo-title em {
-          font-family: var(--S);
-          font-style: italic;
-          font-weight: 400;
-          color: var(--ink);
-        }
-        .l-demo-frame {
-          position: relative;
-          aspect-ratio: 16 / 9;
-          width: 100%;
-          background: var(--surf);
-          border: 1px solid var(--line);
-          overflow: hidden;
-        }
-        .l-demo-iframe {
-          width: 100%;
-          height: 100%;
-          border: 0;
-          display: block;
-        }
-        @media (max-width: 540px) {
-          .l-demo { padding: 48px 20px; }
-          .l-demo-hd { margin-bottom: 24px; }
         }
 
         /* MANIFESTO BAND */
