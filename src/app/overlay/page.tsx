@@ -2300,6 +2300,22 @@ function OverlayContent() {
           .bf-sub { width:100%; text-align:center; }
           .slots-grid { grid-template-columns:1fr; }
         }
+        /* iPhone-class viewports: nav-right block fits WalletPill (already
+           collapsed to identity-only at ≤768px) + viewer chip without the
+           username clipping the wallet address. Truncate the chip name and
+           tighten the toast width so a moderation toast can't push the
+           layout past the viewport edge. */
+        @media (max-width:420px) {
+          .ov-nav { padding:0 12px; }
+          .ov-nav-right { gap:8px; }
+          .notif { max-width:140px; font-size:9.5px; padding:5px 10px; }
+          .viewer-chip { padding:5px 9px; }
+          .vname { max-width:84px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+          .bf-grid { padding:16px; gap:14px; }
+          .bf-hdr { padding:14px 16px; }
+          .bf-footer { padding:14px 16px; }
+          .bf-cost-val { font-size:28px; }
+        }
       `}</style>
 
       <div className="ov">

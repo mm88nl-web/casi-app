@@ -192,6 +192,14 @@ const CSS = `
     .wp-net { padding: 0 9px; }
     .wp-identity { padding: 0 11px; }
   }
+  /* iPhone-class: hide the address text so the pill collapses to just the
+     net-dot + avatar; the dropdown still shows the full address. Keeps
+     the overlay nav from exceeding 375px when a viewer chip is also
+     present alongside it. */
+  @media (max-width: 420px) {
+    .wp-addr, .wp-caret { display: none; }
+    .wp-identity { padding: 0 9px; gap: 0; }
+  }
 `;
 
 function truncate(pk: PublicKey): string {
