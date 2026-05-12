@@ -318,7 +318,7 @@ export default function AuthPage() {
         setLoading(false);
         return;
       }
-      if (!authData.user) { setError('Signup failed — please try again'); setLoading(false); return; }
+      if (!authData.user) { setError('Signup failed. Please try again.'); setLoading(false); return; }
       userId = authData.user.id;
     }
 
@@ -358,7 +358,7 @@ export default function AuthPage() {
         setStep('username');
         setUsernameStatus('taken');
       } else {
-        setError('Could not create profile — ' + profileError.message);
+        setError('Could not create profile: ' + profileError.message);
       }
       setLoading(false);
       return;
@@ -651,7 +651,7 @@ export default function AuthPage() {
             {mode === 'signup' && step === 'account' && (
               <>
                 <div className="auth-title">Create your studio</div>
-                <div className="auth-subtitle">Step 1 of 3 — Account</div>
+                <div className="auth-subtitle">Step 1 of 3 · Account</div>
                 <button type="button" onClick={() => handleOAuth('google')} disabled={loading} className="auth-oauth-btn">
                   <GoogleG />
                   Continue with Google
@@ -718,7 +718,7 @@ export default function AuthPage() {
             {mode === 'signup' && step === 'username' && (
               <>
                 <div className="auth-title">Pick your username</div>
-                <div className="auth-subtitle">Step 2 of 3 — Becomes your URL</div>
+                <div className="auth-subtitle">Step 2 of 3 · Becomes your URL</div>
                 <form onSubmit={handleUsernameStep}>
                   <div className="auth-field">
                     <label className="auth-label">Username</label>
@@ -772,7 +772,7 @@ export default function AuthPage() {
             {mode === 'signup' && step === 'profile' && (
               <>
                 <div className="auth-title">Set up your profile</div>
-                <div className="auth-subtitle">Step 3 of 3 — Optional, edit anytime</div>
+                <div className="auth-subtitle">Step 3 of 3 · Optional, edit anytime</div>
                 <form onSubmit={handleSignup}>
                   <div className="auth-field">
                     <label className="auth-label">Avatar URL</label>
@@ -789,7 +789,7 @@ export default function AuthPage() {
                       {avatarUrl && isPlausibleAvatarUrl(avatarUrl) && <img src={avatarUrl} alt="" style={{ display: 'none' }} onLoad={() => setAvatarValid(true)} onError={() => setAvatarValid(false)} />}
                     </div>
                     {avatarUrl && !isPlausibleAvatarUrl(avatarUrl) && <div className="auth-hint err">Must be an https:// link to an image (.png, .jpg, .gif, .webp, .svg, .avif).</div>}
-                    {avatarUrl && isPlausibleAvatarUrl(avatarUrl) && <div className={`auth-hint ${avatarValid ? 'ok' : 'err'}`}>{avatarValid ? '✓ Image loaded' : 'Image not loading — check URL'}</div>}
+                    {avatarUrl && isPlausibleAvatarUrl(avatarUrl) && <div className={`auth-hint ${avatarValid ? 'ok' : 'err'}`}>{avatarValid ? '✓ Image loaded' : 'Image not loading. Check the URL.'}</div>}
                   </div>
                   <div className="auth-field">
                     <label className="auth-label">Display name</label>
@@ -798,7 +798,7 @@ export default function AuthPage() {
                       onChange={(e) => setDisplayName(e.target.value)} autoFocus />
                   </div>
                   <div className="auth-field">
-                    <label className="auth-label">Bio <span style={{ color: 'var(--casi-text-faint)', textTransform: 'none', fontSize: 9 }}>— optional</span></label>
+                    <label className="auth-label">Bio <span style={{ color: 'var(--casi-text-faint)', textTransform: 'none', fontSize: 9 }}>· optional</span></label>
                     <textarea placeholder="What do you stream?" rows={3} maxLength={160}
                       style={{ width: '100%', background: 'var(--casi-surface)', border: '1px solid var(--casi-border)', borderRadius: 9, padding: '12px 14px', fontSize: 14, color: 'var(--casi-text)', outline: 'none', fontFamily: "var(--font-casi-sans), sans-serif", resize: 'none', transition: 'border-color .18s', lineHeight: 1.5 }}
                       value={bio} onChange={(e) => setBio(e.target.value)} />

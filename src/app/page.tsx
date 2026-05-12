@@ -54,7 +54,7 @@ export default function HomePage() {
             <span className="underscore">Lease it.</span>
           </h1>
           <p className="l-sub">
-            Drop one OBS source. Viewers pay to place clips, images, and banners on your screen —
+            Drop one OBS source. Viewers pay to place clips, images, and banners on your screen,
             by the minute or per flash. You approve every one. Casi takes{' '}
             <b style={{ color: 'var(--ink)' }}>zero</b>.
           </p>
@@ -122,7 +122,7 @@ export default function HomePage() {
                 THE RUN&quot; ▰
               </div>
             </div>
-            <div className="l-scene-mock-label">Illustrative — not a live stream</div>
+            <div className="l-scene-mock-label">Illustrative · not a live stream</div>
           </div>
         </div>
       </section>
@@ -134,8 +134,8 @@ export default function HomePage() {
           <div className="l-band-stat">0%</div>
           <div className="l-band-claim">We don&apos;t touch your money.</div>
           <p className="l-band-copy">
-            Cards go straight to Stripe. USDC sits in open-source on-chain escrow. Casi is software
-            — not a bank.
+            Cards go straight to Stripe. USDC sits in open-source on-chain escrow. Casi is software,
+            not a bank.
           </p>
         </div>
 
@@ -177,7 +177,7 @@ export default function HomePage() {
               <span className="l-flow-num">→</span>Stopped mid-beam · prorated back
             </div>
           </div>
-          <div className="l-band-claim">Tap yes — or money back.</div>
+          <div className="l-band-claim">Tap yes, or money back.</div>
           <p className="l-band-copy">
             Nothing goes live without your approval. Every denial triggers an automatic refund.
           </p>
@@ -208,7 +208,7 @@ export default function HomePage() {
             </div>
             <h3 className="l-how-h">Time-rented slots</h3>
             <p className="l-how-p">
-              Hex, circle, banner, rect, rounded — sized and priced however you like. Viewers pay
+              Hex, circle, banner, rect, rounded. Sized and priced however you like. Viewers pay
               per minute. You approve once.
             </p>
           </div>
@@ -240,7 +240,7 @@ export default function HomePage() {
             </div>
             <h3 className="l-how-h">Full-bleed sponsor skin</h3>
             <p className="l-how-p">
-              Sponsors pay to skin your entire scene background. The most premium surface — usually
+              Sponsors pay to skin your entire scene background. The most premium surface, usually
               booked weeks ahead.
             </p>
           </div>
