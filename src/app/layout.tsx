@@ -45,11 +45,11 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_URL || 'https://casi.gg',
   ),
   title: {
-    default: 'casi — Your stream is real estate. Lease it.',
+    default: 'casi',
     template: '%s · casi',
   },
   description:
-    'Pay-per-minute streamer overlays. Viewers pay to place clips, images, and banners on stream — by the minute or per flash. The streamer approves every one and keeps 100%. Apache 2.0 escrow on Solana.',
+    'Pay-per-minute streamer overlays. Viewers pay to place clips, images, and banners on stream, by the minute or per flash. The streamer approves every one and keeps 100%. Apache 2.0 escrow on Solana.',
   keywords: [
     'streaming',
     'tipping',
