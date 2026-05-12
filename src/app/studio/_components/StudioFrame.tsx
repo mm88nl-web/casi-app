@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { NavBar } from '@/components/v9';
 import WalletPill from '@/components/WalletPill';
+import SignOutButton from '@/components/SignOutButton';
 
 type StudioFrameProps = {
   /** Streamer handle, e.g. "@droptv" — rendered with leading "@" inside. */
@@ -39,9 +40,12 @@ export default function StudioFrame({
     <main className="min-h-screen" style={{ background: 'var(--paper)', color: 'var(--text)' }}>
       <NavBar
         chips={
-          <Link href="/studio/settings" title="Profile, payouts, appearance" style={chipStyle()}>
-            ⚙ Settings
-          </Link>
+          <>
+            <Link href="/studio/settings" title="Profile, payouts, appearance" style={chipStyle()}>
+              ⚙ Settings
+            </Link>
+            <SignOutButton />
+          </>
         }
         right={<WalletPill />}
       />
@@ -127,6 +131,7 @@ export default function StudioFrame({
                 letterSpacing: '0.14em',
                 textTransform: 'uppercase',
                 border: '1px solid var(--line-2)',
+                borderRadius: '6px',
                 background: 'transparent',
                 color: 'var(--text-3)',
                 cursor: togglingLive ? 'wait' : 'pointer',
@@ -202,6 +207,7 @@ function chipStyle({ active = false }: { active?: boolean } = {}): CSSProperties
     background: active ? 'var(--ink-08)' : 'transparent',
     border: `1px solid ${active ? 'color-mix(in oklab, var(--ink) 30%, var(--paper))' : 'var(--line)'}`,
     padding: '7px 12px',
+    borderRadius: '6px',
     textDecoration: 'none',
     transition: 'color .14s, border-color .14s',
   };

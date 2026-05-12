@@ -699,34 +699,57 @@
    v9 STUDIO LIVE EDITOR — screen 04
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* Sticky OBS-source URL bar above the editor toolbar. */
+/* OBS-source URL bars above the editor toolbar. Two rows stacked —
+   Backdrop (layer=backdrop) + Beams (layer=beams). Streamer paste each
+   into an OBS Browser Source at 1920×1080. */
+.casi-v9-le-url-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
 .casi-v9-le-url {
   display: flex;
   align-items: stretch;
   gap: 0;
   border: 1px solid var(--line-2);
   background: var(--surf);
-  margin-bottom: 18px;
+}
+.casi-v9-le-url-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--line);
+  font-family: var(--H);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink);
+  background: var(--ink-04);
 }
 .casi-v9-le-url-lbl {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 14px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 8px 14px;
   border-right: 1px solid var(--line);
+  min-width: 170px;
+}
+.casi-v9-le-url-lbl-name {
+  font-family: var(--M);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.casi-v9-le-url-lbl-sub {
   font-family: var(--M);
   font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   color: var(--text-4);
-}
-.casi-v9-le-url-lbl::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink);
 }
 .casi-v9-le-url-val {
   flex: 1;
