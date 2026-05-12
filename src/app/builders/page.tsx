@@ -43,7 +43,7 @@ export default function BuildersPage() {
           <p className="b-sub">
             <code className="b-code">casi-escrow</code> is an Anchor program that locks USDC in a
             PDA vault and vests it linearly over a configured duration. Pro-rata settle on early
-            end, full refund on cancel, permissionless crank after timeout. Apache 2.0 — fork it.
+            end, full refund on cancel, permissionless crank after timeout. Apache 2.0. Fork it.
           </p>
           <div className="b-cta-row">
             <a
@@ -151,7 +151,7 @@ export default function BuildersPage() {
           <div className="b-band-claim">Liveness without trust.</div>
           <p className="b-band-copy">
             Funds can&apos;t get stuck. Permissionless cranks let anyone resolve abandoned
-            escrows after the configured timeout — no central party required.
+            escrows after the configured timeout. No central party required.
           </p>
         </div>
 
@@ -170,7 +170,7 @@ export default function BuildersPage() {
           </div>
           <div className="b-band-claim">Scoped session keys.</div>
           <p className="b-band-copy">
-            A pre-registered session key can call the four delegated instruction twins — and
+            A pre-registered session key can call the four delegated instruction twins, and
             nothing else. Compromise gives at most an early settle at the current vested point,
             never a fund withdrawal outside the declared destinations.
           </p>
@@ -220,7 +220,7 @@ export default function BuildersPage() {
       {/* ROADMAP */}
       <section className="b-roadmap">
         <h2 className="b-roadmap-title">
-          Roadmap <em className="ink">— building in the open</em>
+          Roadmap <em className="ink">· building in the open</em>
         </h2>
         <ol className="b-roadmap-list">
           <li className="b-roadmap-item b-roadmap-done">
@@ -255,7 +255,7 @@ export default function BuildersPage() {
           <li className="b-roadmap-item">
             <span className="b-roadmap-tick">○</span>
             <span className="b-roadmap-text">
-              <b>Mainnet — capped launch first.</b> Per-booking + per-streamer caps live in the
+              <b>Mainnet: capped launch first.</b> Per-booking + per-streamer caps live in the
               application layer so the audited program can be deployed without re-audit when the
               caps relax post-PMF.
             </span>

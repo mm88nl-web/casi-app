@@ -257,7 +257,7 @@ function BookingHero({ username, isLive }: { username: string; isLive: boolean }
         }}
       >
         Pick a slot, pick a duration, pay with card or USDC. Your beam goes live the moment{' '}
-        {isLive ? `@${username}` : 'the streamer'} approves it — or you get a full refund.
+        {isLive ? `@${username}` : 'the streamer'} approves it, or you get a full refund.
       </p>
 
       {/* Three protocol guarantees in mono caps — the trust contract */}

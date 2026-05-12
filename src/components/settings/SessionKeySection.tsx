@@ -63,7 +63,7 @@ export default function SessionKeySection({ supabase, savedSolanaWallet }: Props
     <SettingsSection
       id="session-key"
       title="Session key"
-      desc="Lets the server approve and settle your beams without popping a wallet on every action. Scoped to four instructions on your active escrows — can't move funds outside their declared destinations, can't change delegation. You can revoke any time."
+      desc="Lets the server approve and settle your beams without popping a wallet on every action. Scoped to four instructions on your active escrows. Can't move funds outside their declared destinations, can't change delegation. You can revoke any time."
     >
       <DelegateKeyCard
         supabase={supabase}
