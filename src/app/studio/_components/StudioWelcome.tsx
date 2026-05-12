@@ -181,11 +181,10 @@ export default function StudioWelcome({ profileId }: Props) {
           <h2 className="casi-studio-welcome-title">Welcome to your studio.</h2>
           <p className="casi-studio-welcome-sub">
             Three small setup steps before viewers can book your stream. Each takes a couple of minutes.
-            You can dismiss this and come back to it via Settings.
           </p>
         </div>
-        <button type="button" className="casi-studio-welcome-dismiss" onClick={dismiss} aria-label="Dismiss welcome">
-          Dismiss
+        <button type="button" className="casi-studio-welcome-dismiss" onClick={dismiss} aria-label="Don't show this welcome again">
+          Don&apos;t show again
         </button>
       </div>
 
