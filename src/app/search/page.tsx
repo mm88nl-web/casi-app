@@ -67,24 +67,27 @@ export default function BrowsePage() {
                 href={`/overlay?s=${p.username}`}
                 className="b-card"
               >
-                <div className="b-card-avatar">
-                  {p.avatar_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.avatar_url} alt="" />
-                  ) : (
-                    (p.display_name || p.username).charAt(0).toUpperCase()
-                  )}
+                <div className="b-card-head">
+                  <div className="b-card-avatar">
+                    {p.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.avatar_url} alt="" />
+                    ) : (
+                      (p.display_name || p.username).charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <span className="b-card-live">
+                    <span className="b-card-live-dot" />
+                    Live
+                  </span>
                 </div>
                 <div className="b-card-info">
                   <div className="b-card-name">{p.display_name || p.username}</div>
                   <div className="b-card-handle">@{p.username}</div>
                   {p.bio ? <p className="b-card-bio">{p.bio}</p> : null}
                 </div>
-                <div className="b-card-cta">
-                  <span className="b-card-live">
-                    <span className="b-card-live-dot" />
-                    Live
-                  </span>
+                <div className="b-card-foot">
+                  <span className="b-card-cta">Book a slot</span>
                   <span className="b-card-arrow">→</span>
                 </div>
               </Link>
@@ -161,31 +164,37 @@ export default function BrowsePage() {
           text-align: center;
         }
         .b-empty :global(a) { color: var(--ink); margin-left: 6px; }
+        /* Auto-fill grid: cards sit at ~320-380px regardless of streamer
+           count. With 1 streamer you get one tile (not a stretched-full-
+           width row), with 6 you get 3 columns on a wide monitor, with 12
+           you get 3-4 columns. Portrait monitors still get a sensible
+           multi-column layout because cards have a max effective width. */
         .b-grid {
           display: grid;
-          grid-template-columns: 1fr;
+          grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
           gap: 0;
           border: 1px solid var(--line);
           background: var(--surf);
         }
-        @media (min-width: 760px) {
-          .b-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (min-width: 1100px) {
-          .b-grid { grid-template-columns: repeat(3, 1fr); }
-        }
         .b-card {
           display: flex;
-          align-items: center;
-          gap: 16px;
-          padding: 20px;
+          flex-direction: column;
+          gap: 14px;
+          padding: 22px 22px 18px;
           border-right: 1px solid var(--line);
           border-bottom: 1px solid var(--line);
           text-decoration: none;
           color: inherit;
           transition: background 0.14s;
+          min-height: 220px;
         }
         .b-card:hover { background: var(--ink-04); }
+        .b-card-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
         .b-card-avatar {
           width: 56px;
           height: 56px;
@@ -211,10 +220,10 @@ export default function BrowsePage() {
         .b-card-name {
           font-family: var(--H);
           font-weight: 700;
-          font-size: 18px;
+          font-size: 19px;
           letter-spacing: -0.02em;
           color: var(--text);
-          line-height: 1.1;
+          line-height: 1.15;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -228,21 +237,33 @@ export default function BrowsePage() {
         }
         .b-card-bio {
           font-size: 13px;
-          color: var(--text-3);
-          margin-top: 8px;
-          line-height: 1.4;
+          color: var(--text-2);
+          margin-top: 10px;
+          line-height: 1.5;
           overflow: hidden;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
         }
-        .b-card-cta {
+        .b-card-foot {
           display: flex;
-          flex-direction: column;
-          align-items: flex-end;
-          gap: 10px;
-          flex-shrink: 0;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-top: 14px;
+          border-top: 1px solid var(--line);
+          margin-top: auto;
         }
+        .b-card-cta {
+          font-family: var(--M);
+          font-size: 10.5px;
+          font-weight: 600;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: var(--text-3);
+          transition: color 0.14s;
+        }
+        .b-card:hover .b-card-cta { color: var(--ink); }
         .b-card-live {
           display: inline-flex;
           align-items: center;
