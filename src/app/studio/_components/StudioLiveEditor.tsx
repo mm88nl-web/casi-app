@@ -60,7 +60,6 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [saveStatus, setSaveStatus] = useState<'Ready' | 'Saving…' | 'Saved'>('Ready');
   const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
-  const [obsUrlCopied, setObsUrlCopied] = useState(false);
 
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
   const isDragging = useRef(false);
@@ -277,25 +276,38 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
   }, [elements, slotState]);
 
   // Build the OBS source URL the streamer drops into OBS browser source.
-  // We don't have access to the per-streamer overlay key here (it's stored
-  // server-side and surfaced in /studio/settings) — link to the canonical
-  // shape so the streamer at least sees what the URL looks like.
-  const obsUrl = useMemo(() => {
+  // Two OBS browser sources, stacked Z-order in the scene:
+  //   1. Backdrop — full-bleed, sits behind everything (game, webcam, …)
+  //   2. Beams    — shaped slot overlays + flash popups, on top
+  //
+  // /obs is chrome-less + transparent — the only correct URL to paste
+  // into an OBS Browser Source. The legacy /overlay?s= URL is the
+  // VIEWER booking page and was being mis-labeled as the OBS source
+  // here, which is why streamers were seeing CASI nav chrome and cream
+  // side-bars bleed into their scenes.
+  const obsBackdropUrl = useMemo(() => {
     if (typeof window === 'undefined') return '';
     const origin = window.location.origin;
-    return username ? `${origin}/overlay?s=${username}` : `${origin}/overlay`;
+    return username ? `${origin}/obs?s=${username}&layer=backdrop` : '';
+  }, [username]);
+  const obsBeamsUrl = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const origin = window.location.origin;
+    return username ? `${origin}/obs?s=${username}&layer=beams` : '';
   }, [username]);
 
-  const copyObsUrl = useCallback(async () => {
-    if (!obsUrl) return;
+  const [copiedKey, setCopiedKey] = useState<'backdrop' | 'beams' | null>(null);
+  const copyObsUrl = useCallback(async (kind: 'backdrop' | 'beams') => {
+    const url = kind === 'backdrop' ? obsBackdropUrl : obsBeamsUrl;
+    if (!url) return;
     try {
-      await navigator.clipboard.writeText(obsUrl);
-      setObsUrlCopied(true);
-      setTimeout(() => setObsUrlCopied(false), 1800);
+      await navigator.clipboard.writeText(url);
+      setCopiedKey(kind);
+      setTimeout(() => setCopiedKey((c) => (c === kind ? null : c)), 1800);
     } catch {
       showToast('Could not copy — check clipboard permissions', 'err');
     }
-  }, [obsUrl]);
+  }, [obsBackdropUrl, obsBeamsUrl]);
 
   // Lock toggle from the Layers panel — same path as the lock chip on the
   // selected slot but without requiring the canvas selection round-trip.
@@ -321,27 +333,46 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
         }}>{toast.msg}</div>
       ) : null}
 
-      {/* v9 OBS-source URL bar */}
+      {/* v9 OBS-source URL bars — two browser sources at 1920×1080.
+          Stack in OBS scene Z-order: Backdrop at the bottom, Beams on top. */}
       {!onAddHandler ? (
-        <div className="casi-v9-le-url">
-          <span className="casi-v9-le-url-lbl">OBS Source</span>
-          <span className="casi-v9-le-url-val">
-            {obsUrl ? (
-              <>
-                {obsUrl.split('?s=')[0]}?s=
-                <em>{username || 'streamer'}</em>
-              </>
-            ) : (
-              '—'
-            )}
-          </span>
-          <button type="button" className="casi-v9-le-url-cpy" onClick={copyObsUrl}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <rect x="9" y="9" width="13" height="13" rx="1" />
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-            </svg>
-            <span>{obsUrlCopied ? 'Copied' : 'Copy'}</span>
-          </button>
+        <div className="casi-v9-le-url-stack">
+          {(['backdrop', 'beams'] as const).map((kind) => {
+            const url = kind === 'backdrop' ? obsBackdropUrl : obsBeamsUrl;
+            const num = kind === 'backdrop' ? '1' : '2';
+            const subtitle = kind === 'backdrop'
+              ? 'Full-bleed · sits behind everything'
+              : 'Shaped slots + 15s flashes · on top';
+            return (
+              <div key={kind} className="casi-v9-le-url">
+                <span className="casi-v9-le-url-num" aria-hidden>{num}</span>
+                <span className="casi-v9-le-url-lbl">
+                  <span className="casi-v9-le-url-lbl-name">
+                    {kind === 'backdrop' ? 'Backdrop' : 'Beams'}
+                  </span>
+                  <span className="casi-v9-le-url-lbl-sub">{subtitle}</span>
+                </span>
+                <span className="casi-v9-le-url-val">
+                  {url ? (
+                    <>
+                      {url.replace(`?s=${username}&layer=${kind}`, `?s=`)}
+                      <em>{username || 'streamer'}</em>
+                      <span>&amp;layer={kind}</span>
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </span>
+                <button type="button" className="casi-v9-le-url-cpy" onClick={() => copyObsUrl(kind)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <rect x="9" y="9" width="13" height="13" rx="1" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  <span>{copiedKey === kind ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+            );
+          })}
         </div>
       ) : null}
 
