@@ -327,6 +327,15 @@ export default function HomePage() {
           gap: 48px;
           overflow: hidden;
         }
+        /* Narrow-phone padding: 32px gutters eat 17% of a 375px viewport
+           and crowd the hero copy. Shrink horizontal pad + tighten top
+           space so the headline lands above the fold on iPhone 12/13. */
+        @media (max-width: 540px) {
+          .l-hero {
+            padding: 56px 20px 48px;
+            gap: 36px;
+          }
+        }
         @media (min-width: 900px) {
           .l-hero {
             grid-template-columns: 1.4fr 1fr;
@@ -339,6 +348,8 @@ export default function HomePage() {
           display: flex;
           align-items: center;
           gap: 12px;
+          flex-wrap: wrap;
+          row-gap: 8px;
           font-family: var(--M);
           font-size: 11px;
           font-weight: 500;
@@ -364,7 +375,11 @@ export default function HomePage() {
         .l-display {
           font-family: var(--H);
           font-weight: 800;
-          font-size: clamp(64px, 10vw, 168px);
+          /* min lowered from 64px so 'is real estate.' fits a 375px iPhone
+             viewport — at 64px the italic-serif line measures ~480px and
+             overflowed horizontally. 13vw scales smoothly through tablet
+             before the upper clamp takes over on desktop. */
+          font-size: clamp(44px, 13vw, 168px);
           font-variation-settings: 'opsz' 96;
           line-height: 0.86;
           letter-spacing: -0.045em;
@@ -392,12 +407,32 @@ export default function HomePage() {
           color: var(--text-2);
           max-width: 520px;
         }
+        @media (max-width: 540px) {
+          .l-sub { font-size: 16px; margin-top: 24px; }
+        }
         .l-cta-row {
           margin-top: 40px;
           display: flex;
           align-items: center;
           gap: 16px;
           flex-wrap: wrap;
+        }
+        /* Mobile: both CTAs claim full row width so they stack cleanly
+           instead of wrapping mid-row with a half-empty trailing line.
+           Note still sits centered below on its own line. */
+        @media (max-width: 540px) {
+          .l-cta-row {
+            margin-top: 28px;
+            gap: 12px;
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .l-cta-row :global(.l-btn),
+          .l-cta-row :global(.l-btn-ghost) {
+            justify-content: center;
+            width: 100%;
+          }
+          .l-cta-note { margin-left: 0; text-align: center; }
         }
         .l-cta-row :global(.l-btn) {
           display: inline-flex;
@@ -757,6 +792,10 @@ export default function HomePage() {
           border: 0;
           display: block;
         }
+        @media (max-width: 540px) {
+          .l-demo { padding: 48px 20px; }
+          .l-demo-hd { margin-bottom: 24px; }
+        }
 
         /* MANIFESTO BAND */
         .l-band {
@@ -786,6 +825,12 @@ export default function HomePage() {
           .l-band-cell {
             border-right: none;
             border-bottom: 1px solid var(--line);
+          }
+        }
+        @media (max-width: 540px) {
+          .l-band-cell {
+            padding: 36px 20px 40px;
+            gap: 14px;
           }
         }
         .l-band-n {
@@ -899,6 +944,9 @@ export default function HomePage() {
           padding: 80px var(--pad);
           border-bottom: 1px solid var(--line);
         }
+        @media (max-width: 540px) {
+          .l-how { padding: 56px 20px; }
+        }
         .l-how-hd {
           display: flex;
           align-items: flex-end;
@@ -906,6 +954,9 @@ export default function HomePage() {
           flex-wrap: wrap;
           gap: 24px;
           margin-bottom: 48px;
+        }
+        @media (max-width: 540px) {
+          .l-how-hd { margin-bottom: 32px; }
         }
         .l-how-title {
           font-family: var(--H);
@@ -949,6 +1000,9 @@ export default function HomePage() {
             border-right: none;
             border-bottom: 1px solid var(--line);
           }
+        }
+        @media (max-width: 540px) {
+          .l-how-cell { padding: 28px 20px; }
         }
         .l-how-n {
           font-family: var(--M);
