@@ -2305,7 +2305,7 @@ function OverlayContent() {
       <div className="ov">
         {!isOBS && (
           <nav className="ov-nav">
-            <a href="/search" className="ov-logo">
+            <a href="/" className="ov-logo">
               <CasiMark width={50} height={25} />
               <Wordmark />
             </a>
