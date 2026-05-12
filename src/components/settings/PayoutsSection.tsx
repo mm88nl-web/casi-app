@@ -212,7 +212,7 @@ export default function PayoutsSection({
       // the streamer knows to reconnect rather than seeing an opaque
       // "Stripe link failed (401)".
       if (!session?.access_token) {
-        throw new Error('Sign in expired — reload the page to reconnect.');
+        throw new Error('Sign in expired. Reload the page to reconnect.');
       }
       const res = await fetch('/api/stripe/connect', {
         method: 'POST',
@@ -261,7 +261,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={STRIPE_LOGO}
-          title="Stripe — checking…"
+          title="Stripe ·checking…"
           meta={<><StatusDot kind="off" />loading account status</>}
           action={null}
         />
@@ -271,7 +271,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={STRIPE_LOGO}
-          title="Stripe — not connected"
+          title="Stripe ·not connected"
           meta={<><StatusDot kind="off" />card payments + EUR payouts</>}
           action={
             <GhostButton type="button" onClick={handleStripeAction} disabled={busy === 'stripe'}>
@@ -285,7 +285,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={STRIPE_LOGO}
-          title="Stripe — status unavailable"
+          title="Stripe ·status unavailable"
           meta={<><StatusDot kind="warn" />{stripe.message}</>}
           action={
             <GhostButton type="button" onClick={handleStripeAction} disabled={busy === 'stripe'}>
@@ -302,9 +302,9 @@ export default function PayoutsSection({
       : stripe.kind === 'restricted' ? `${shortAcct(stripe.accountId)} · review required`
       :                                `${shortAcct(stripe.accountId)} · ${stripe.dueCount} step${stripe.dueCount === 1 ? '' : 's'} remaining`;
     const title =
-      stripe.kind === 'active'     ? 'Stripe — connected'
-      : stripe.kind === 'restricted' ? 'Stripe — restricted'
-      :                                'Stripe — onboarding incomplete';
+      stripe.kind === 'active'     ? 'Stripe ·connected'
+      : stripe.kind === 'restricted' ? 'Stripe ·restricted'
+      :                                'Stripe ·onboarding incomplete';
     return (
       <ConnectedCard
         logo={STRIPE_LOGO}
@@ -327,7 +327,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={SOLANA_LOGO}
-          title="Solana wallet — linked"
+          title="Solana wallet ·linked"
           meta={<><StatusDot kind="ok" />{shortPk(savedWallet)} · USDC auto-claim on</>}
           action={
             <GhostButton type="button" onClick={() => setWalletModalVisible(true)}>
@@ -341,7 +341,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={SOLANA_LOGO}
-          title="Solana wallet — linked (not connected)"
+          title="Solana wallet ·linked (not connected)"
           meta={<><StatusDot kind="warn" />{shortPk(savedWallet)} · connect wallet to sign</>}
           action={
             <GhostButton type="button" onClick={() => setWalletModalVisible(true)}>
@@ -355,7 +355,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={SOLANA_LOGO}
-          title="Solana wallet — different wallet connected"
+          title="Solana wallet ·different wallet connected"
           meta={<><StatusDot kind="warn" />saved {shortPk(savedWallet)} · connected {shortPk(connected)}</>}
           action={
             <GhostButton type="button" onClick={handleLinkWallet} disabled={busy === 'wallet'}>
@@ -370,7 +370,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={SOLANA_LOGO}
-          title="Solana wallet — ready to link"
+          title="Solana wallet ·ready to link"
           meta={<><StatusDot kind="warn" />{shortPk(connected)} · save to receive USDC tips</>}
           action={
             <GhostButton type="button" onClick={handleLinkWallet} disabled={busy === 'wallet'}>
@@ -383,7 +383,7 @@ export default function PayoutsSection({
     return (
       <ConnectedCard
         logo={SOLANA_LOGO}
-        title="Solana wallet — not linked"
+        title="Solana wallet ·not linked"
         meta={<><StatusDot kind="off" />USDC tips + escrow refunds</>}
         action={
           <GhostButton type="button" onClick={handleLinkWallet}>
@@ -398,7 +398,7 @@ export default function PayoutsSection({
     <SettingsSection
       id="payouts"
       title="Payouts"
-      desc="Casi takes 0%. Cards settle through Stripe (Stripe's own fee ~2.9% + €0.25 per tip). USDC hits your wallet on settle — near-zero on-chain fees."
+      desc="Casi takes 0%. Cards settle through Stripe (Stripe's own fee ~2.9% + €0.25 per tip). USDC hits your wallet on settle, near-zero on-chain fees."
     >
       <div
         className="mb-3.5 flex items-start gap-3"
