@@ -56,11 +56,11 @@ export default function NameEntryScreen({ onConfirm, tc }: Props) {
             onClick={() => setShowNote(!showNote)}
             style={{ width:'100%', background:'none', border:'none', fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#333', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5, padding:'10px 0' }}
           >
-            Have an account? Sign in
+            Why no account?
           </button>
           {showNote && (
             <div style={{ background:'rgba(255,255,255,0.02)', border:'1px solid #111', borderRadius:10, padding:16, textAlign:'center', marginTop:8 }}>
-              <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:11, color:'#444', lineHeight:1.7 }}>Account sign-in coming soon.<br />Your name is saved on this device for now.</div>
+              <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:11, color:'#444', lineHeight:1.7 }}>Viewers don&apos;t need one. Your name lives on this device so we can show your bookings here. Clear cookies to reset.<br /><br />Streamer? <a href="/login" style={{ color:'#888', textDecoration:'underline' }}>Sign in</a>.</div>
             </div>
           )}
         </div>
