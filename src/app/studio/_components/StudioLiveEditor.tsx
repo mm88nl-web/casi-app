@@ -285,29 +285,11 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
   // VIEWER booking page and was being mis-labeled as the OBS source
   // here, which is why streamers were seeing CASI nav chrome and cream
   // side-bars bleed into their scenes.
-  const obsBackdropUrl = useMemo(() => {
-    if (typeof window === 'undefined') return '';
-    const origin = window.location.origin;
-    return username ? `${origin}/obs?s=${username}&layer=backdrop` : '';
-  }, [username]);
-  const obsBeamsUrl = useMemo(() => {
-    if (typeof window === 'undefined') return '';
-    const origin = window.location.origin;
-    return username ? `${origin}/obs?s=${username}&layer=beams` : '';
-  }, [username]);
-
-  const [copiedKey, setCopiedKey] = useState<'backdrop' | 'beams' | null>(null);
-  const copyObsUrl = useCallback(async (kind: 'backdrop' | 'beams') => {
-    const url = kind === 'backdrop' ? obsBackdropUrl : obsBeamsUrl;
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedKey(kind);
-      setTimeout(() => setCopiedKey((c) => (c === kind ? null : c)), 1800);
-    } catch {
-      showToast('Could not copy — check clipboard permissions', 'err');
-    }
-  }, [obsBackdropUrl, obsBeamsUrl]);
+  //
+  // The copy-paste UI for these URLs lives in /studio/settings → OBS
+  // sources. Rendering them inline in the live editor was redundant
+  // chrome that ate vertical space on every visit; the welcome banner
+  // points first-time streamers at the settings page directly.
 
   // Lock toggle from the Layers panel — same path as the lock chip on the
   // selected slot but without requiring the canvas selection round-trip.
@@ -331,49 +313,6 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
           border: `1px solid ${toast.kind === 'ok' ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'}`,
           color: toast.kind === 'ok' ? '#4ade80' : '#f87171',
         }}>{toast.msg}</div>
-      ) : null}
-
-      {/* v9 OBS-source URL bars — two browser sources at 1920×1080.
-          Stack in OBS scene Z-order: Backdrop at the bottom, Beams on top. */}
-      {!onAddHandler ? (
-        <div className="casi-v9-le-url-stack">
-          {(['backdrop', 'beams'] as const).map((kind) => {
-            const url = kind === 'backdrop' ? obsBackdropUrl : obsBeamsUrl;
-            const num = kind === 'backdrop' ? '1' : '2';
-            const subtitle = kind === 'backdrop'
-              ? 'Full-bleed · sits behind everything'
-              : 'Shaped slots + 15s flashes · on top';
-            return (
-              <div key={kind} className="casi-v9-le-url">
-                <span className="casi-v9-le-url-num" aria-hidden>{num}</span>
-                <span className="casi-v9-le-url-lbl">
-                  <span className="casi-v9-le-url-lbl-name">
-                    {kind === 'backdrop' ? 'Backdrop' : 'Beams'}
-                  </span>
-                  <span className="casi-v9-le-url-lbl-sub">{subtitle}</span>
-                </span>
-                <span className="casi-v9-le-url-val">
-                  {url ? (
-                    <>
-                      {url.replace(`?s=${username}&layer=${kind}`, `?s=`)}
-                      <em>{username || 'streamer'}</em>
-                      <span>&amp;layer={kind}</span>
-                    </>
-                  ) : (
-                    '—'
-                  )}
-                </span>
-                <button type="button" className="casi-v9-le-url-cpy" onClick={() => copyObsUrl(kind)}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <rect x="9" y="9" width="13" height="13" rx="1" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </svg>
-                  <span>{copiedKey === kind ? 'Copied' : 'Copy'}</span>
-                </button>
-              </div>
-            );
-          })}
-        </div>
       ) : null}
 
       {/* v9 toolbar — status / +Beam. Edit/Preview toggle was removed —
