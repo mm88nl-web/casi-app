@@ -63,7 +63,19 @@ export default function SessionKeySection({ supabase, savedSolanaWallet }: Props
     <SettingsSection
       id="session-key"
       title="Session key"
-      desc="Lets the server approve and settle your beams without popping a wallet on every action. Scoped to four instructions on your active escrows. Can't move funds outside their declared destinations, can't change delegation. You can revoke any time."
+      desc={
+        <>
+          Turn this on and approving a booking takes one tap. No wallet popup every time.
+          <br /><br />
+          <b>How it works.</b> You sign one quick transaction now. After that, CASI can approve
+          and end beams on your behalf, but <i>only</i> those two things. It can&apos;t move your
+          money, can&apos;t change your settings, can&apos;t do anything else. Flip it off any time.
+          <br /><br />
+          <b>Who pays the fees?</b> CASI does. Every Solana action has a tiny fee — we cover it,
+          not you. If we ever can&apos;t, the wallet popups come back on their own. Nothing gets
+          stuck either way.
+        </>
+      }
     >
       <DelegateKeyCard
         supabase={supabase}
