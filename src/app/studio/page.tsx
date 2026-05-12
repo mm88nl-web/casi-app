@@ -13,6 +13,7 @@ import ApprovalQueue, { type QueueItem } from './_components/ApprovalQueue';
 import EndStreamDialog, { type DelegateHealth } from './_components/EndStreamDialog';
 import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
 import PreviewBookingModal, { type PreviewBooking } from './_components/PreviewBookingModal';
+import StudioWelcome from './_components/StudioWelcome';
 import StudioFrame from './_components/StudioFrame';
 
 // Explicit column lists. BOOKING_COLS adds the moderation-critical fields the
@@ -974,6 +975,7 @@ function StudioPageInner() {
       error={errorMsg}
       onDismissError={() => setErrorMsg(null)}
     >
+      <StudioWelcome profileId={profile.id} />
       <EarningsBar
         viewerLink={`casi.gg/overlay?s=${slug}`}
         todayLines={todayLines}
