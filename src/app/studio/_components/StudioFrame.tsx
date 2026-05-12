@@ -45,7 +45,7 @@ export default function StudioFrame({
     setSigningOut(true);
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.replace('/login');
+    router.replace('/');
   };
 
   return (
@@ -157,6 +157,7 @@ export default function StudioFrame({
                 letterSpacing: '0.14em',
                 textTransform: 'uppercase',
                 border: '1px solid var(--line-2)',
+                borderRadius: '6px',
                 background: 'transparent',
                 color: 'var(--text-3)',
                 cursor: togglingLive ? 'wait' : 'pointer',
@@ -232,6 +233,7 @@ function chipStyle({ active = false }: { active?: boolean } = {}): CSSProperties
     background: active ? 'var(--ink-08)' : 'transparent',
     border: `1px solid ${active ? 'color-mix(in oklab, var(--ink) 30%, var(--paper))' : 'var(--line)'}`,
     padding: '7px 12px',
+    borderRadius: '6px',
     textDecoration: 'none',
     transition: 'color .14s, border-color .14s',
   };
