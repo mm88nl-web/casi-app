@@ -18,11 +18,6 @@ type Props = {
    *  excluded from this number — they still appear as rows above so the
    *  streamer sees them, just don't count toward the total. */
   total: string;
-  /** Called when the streamer clicks Refund on a flash row. Receives the
-   *  flash id (without the "flash-" prefix, just the raw UUID). */
-  onRefund?: (flashId: string) => void;
-  /** Set of flash ids currently being refunded — row shows a wait state. */
-  refunding?: ReadonlySet<string>;
 };
 
 const CHIP_CLASS: Record<FlashLogItem['chip']['kind'], string> = {
@@ -32,13 +27,14 @@ const CHIP_CLASS: Record<FlashLogItem['chip']['kind'], string> = {
 };
 
 /**
- * v7 .fl-r flat-row list. Time / who / message / amount-chip / Refund.
- * Only approved flashes appear — denied rows refund on-chain immediately
- * so there's nothing useful to surface here. Footer tile shows today's
- * totals. Filter tabs from v3 dropped — v7 has none, the log is short
- * enough to scan.
+ * v7 .fl-r flat-row list. Time / who / message / amount-chip. Only approved
+ * flashes appear — denied rows refund on-chain immediately so there's nothing
+ * useful to surface here. Post-approval refund isn't offered: funds have
+ * already settled to the streamer (Stripe capture / on-chain approve_flash),
+ * and the program has no clawback instruction. Footer tile shows today's
+ * totals.
  */
-export default function FlashesLog({ items, total, onRefund, refunding }: Props) {
+export default function FlashesLog({ items, total }: Props) {
   return (
     <section className="flex flex-col">
       <style>{`
@@ -53,10 +49,6 @@ export default function FlashesLog({ items, total, onRefund, refunding }: Props)
         .casi-fl-amt.u { color: var(--casi-accent); background: rgba(var(--casi-accent-rgb), 0.07); }
         .casi-fl-amt.e { color: var(--casi-accent); background: rgba(var(--casi-accent-rgb), 0.07); }
         .casi-fl-amt.f { color: var(--casi-text-dim); background: var(--casi-surface-2); }
-        .casi-fl-refund:hover {
-          border-color: rgba(239,68,68,0.3) !important;
-          color: #f87171 !important;
-        }
       `}</style>
 
       <div
@@ -95,7 +87,6 @@ export default function FlashesLog({ items, total, onRefund, refunding }: Props)
           </div>
         ) : (
           items.map(flash => {
-            const isRefunding = refunding?.has(flash.id) ?? false;
             const chipClass = CHIP_CLASS[flash.chip.kind];
             return (
               <div key={flash.id} className="casi-fl-r">
@@ -153,29 +144,6 @@ export default function FlashesLog({ items, total, onRefund, refunding }: Props)
                   ) : null}
                   {flash.chip.label}
                 </span>
-                {onRefund ? (
-                  <button
-                    type="button"
-                    onClick={() => onRefund(flash.id)}
-                    disabled={isRefunding}
-                    className="casi-fl-refund"
-                    title="Deny and refund"
-                    style={{
-                      padding: '4px 9px',
-                      borderRadius: 0,
-                      fontSize: '10.5px',
-                      border: '1px solid var(--casi-border)',
-                      color: 'var(--casi-text-faint)',
-                      background: 'transparent',
-                      cursor: isRefunding ? 'wait' : 'pointer',
-                      opacity: isRefunding ? 0.5 : 1,
-                      fontFamily: 'inherit',
-                      transition: 'all .13s',
-                    }}
-                  >
-                    {isRefunding ? '…' : 'Refund'}
-                  </button>
-                ) : null}
               </div>
             );
           })
