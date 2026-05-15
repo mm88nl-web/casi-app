@@ -325,7 +325,6 @@ function StudioPageInner() {
   const [flashLogRaw, setFlashLogRaw] = useState<FlashRow[]>([]);
   const [moderating, setModerating] = useState<Set<string>>(new Set());
   const [endingEarly, setEndingEarly] = useState<Set<string>>(new Set());
-  const [refundingFlash, setRefundingFlash] = useState<Set<string>>(new Set());
   const [playingNowId, setPlayingNowId] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [endStreamOpen, setEndStreamOpen] = useState(false);
@@ -810,23 +809,6 @@ function StudioPageInner() {
     }
   }, [moderationCtx, pendingBookings, pendingFlashes, markModerating]);
 
-  const handleFlashRefund = useCallback(async (flashId: string) => {
-    if (!moderationCtx) return;
-    setErrorMsg(null);
-    const flash = flashLogRaw.find((f) => f.id === flashId);
-    if (!flash) return;
-    setRefundingFlash((prev) => new Set(prev).add(flashId));
-    const result = await moderateFlash(moderationCtx, flash, 'deny');
-    setRefundingFlash((prev) => {
-      const next = new Set(prev);
-      next.delete(flashId);
-      return next;
-    });
-    if (!result.ok) {
-      setErrorMsg(result.message);
-    }
-  }, [moderationCtx, flashLogRaw]);
-
   if (state.kind === 'loading' || state.kind === 'anonymous') {
     return <StatusScreen>Loading studio…</StatusScreen>;
   }
@@ -996,8 +978,6 @@ function StudioPageInner() {
       <FlashesLog
         items={flashLog}
         total={todayTotal}
-        onRefund={handleFlashRefund}
-        refunding={refundingFlash}
       />
 
       <EndStreamDialog
