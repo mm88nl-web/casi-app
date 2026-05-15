@@ -51,7 +51,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid duration' }, { status: 400 });
   }
 
-  const amount = calcAmountCents(element.price_value, element.price_unit, durationMinutes);
+  // Charge in the streamer's Stripe Connect default currency, not USD.
+  // A Dutch streamer with an EUR Connect account that we charge in USD
+  // loses ~2-3% to FX on every booking; same shape for any non-USD
+  // account. Pulling default_currency at authorize time means the PI
+  // settles 1:1 into their account.
+  const account = await stripe.accounts.retrieve(profile.stripe_account_id);
+  const currency = (account.default_currency || 'usd').toLowerCase();
+
+  const amount = calcAmountCents(element.price_value, element.price_unit, durationMinutes, currency);
   if (amount <= 0) {
     return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
   }
@@ -70,9 +78,9 @@ export async function POST(req: Request) {
       line_items: [
         {
           price_data: {
-            currency: 'usd',
+            currency,
             product_data: {
-              name: `Beam slot — $${element.price_value}/${element.price_unit}`,
+              name: `Beam slot — ${element.price_value}/${element.price_unit}`,
               description: `${durationMinutes} min on ${profile.username}'s stream`,
             },
             unit_amount: amount,
