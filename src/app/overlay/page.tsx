@@ -2420,11 +2420,26 @@ function OverlayContent() {
                   await settleSolanaBeam(booking);
                   if (activeBooking) await clientExpireBooking(activeBooking);
                 } else {
-                  await fetch('/api/stripe/end-early', {
+                  // Stripe rail. Wait for the server to confirm before
+                  // celebrating — previously this fired the success toast
+                  // unconditionally, so a 502 from /api/stripe/end-early
+                  // (e.g. when the pro-rated amount is below Stripe's
+                  // currency minimum) still showed 'Beam ended — refund
+                  // issued' on the viewer side while the beam kept
+                  // running. clientExpireBooking also moved on, which
+                  // realtime then snapped back, leaving the viewer with
+                  // a contradictory chip.
+                  const res = await fetch('/api/stripe/end-early', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ booking_id: booking.id }),
                   });
+                  if (!res.ok) {
+                    const body = await res.json().catch(() => ({} as { message?: string; error?: string }));
+                    const detail = body.message || body.error || `HTTP ${res.status}`;
+                    showNotif(`Couldn't end beam early — ${detail}. The beam will continue running until it expires naturally.`, 'error');
+                    return;
+                  }
                   if (activeBooking) await clientExpireBooking(activeBooking);
                   showNotif('Beam ended — prorated refund issued', 'warning');
                 }
