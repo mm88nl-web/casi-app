@@ -63,13 +63,25 @@ export async function GET(req: Request) {
       ? ('active' as const)
       : ('pending' as const);
 
+    // Mirror the settlement currency onto profiles so viewer-facing
+    // surfaces (overlay booking form, /s/[username]) can read it
+    // without a Stripe round-trip on every render. Best-effort — a
+    // failure here must not break the status response.
+    const defaultCurrency = account.default_currency ?? null;
+    if (defaultCurrency) {
+      await supabase
+        .from('profiles')
+        .update({ settlement_currency: defaultCurrency.toLowerCase() })
+        .eq('id', user.id);
+    }
+
     return NextResponse.json({
       status,
       accountId,
       chargesEnabled,
       payoutsEnabled,
       dueCount,
-      defaultCurrency: account.default_currency ?? null,
+      defaultCurrency,
     });
   } catch (err) {
     logError('stripe-connect-status', err, { user: user.id });

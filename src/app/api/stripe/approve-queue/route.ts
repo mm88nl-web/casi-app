@@ -67,6 +67,13 @@ export async function POST(req: Request) {
   const account = await stripe.accounts.retrieve(profile.stripe_account_id);
   const currency = (account.default_currency || 'usd').toLowerCase();
 
+  // Mirror onto profiles.settlement_currency so viewer-facing surfaces
+  // can read it without their own Stripe round-trip.
+  void supabase
+    .from('profiles')
+    .update({ settlement_currency: currency })
+    .eq('id', booking.profile_id);
+
   const amount = calcAmountCents(element.price_value, element.price_unit, durationMinutes, currency);
   if (amount <= 0) {
     return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });

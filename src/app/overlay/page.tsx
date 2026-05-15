@@ -2749,7 +2749,9 @@ function OverlayContent() {
             })}
 
             {/* Flash Feed — overlaid on canvas in OBS mode */}
-            {isOBS && profile?.id && <FlashFeed profileId={profile.id} />}
+            {isOBS && profile?.id && (
+              <FlashFeed profileId={profile.id} streamerCurrency={profile.settlement_currency ?? null} />
+            )}
           </div>
 
           {/* "Browse other streams" link — sits directly under the canvas
@@ -2794,6 +2796,7 @@ function OverlayContent() {
               message={message}
               onMessageChange={setMessage}
               estimatedCost={estimatedCost}
+              streamerCurrency={profile?.settlement_currency ?? null}
               walletConnected={connected || hasPhantomConnectSession}
               usdcBalance={usdcBalance}
               activeBookings={activeBookings}

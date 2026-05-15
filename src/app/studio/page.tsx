@@ -15,7 +15,7 @@ import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
 import PreviewBookingModal, { type PreviewBooking } from './_components/PreviewBookingModal';
 import StudioWelcome from './_components/StudioWelcome';
 import StudioFrame from './_components/StudioFrame';
-import { formatFiat } from '@/lib/currency';
+import { fiatSymbol, formatFiat } from '@/lib/currency';
 
 // Explicit column lists. BOOKING_COLS adds the moderation-critical fields the
 // old /studio page didn't need: element_id / is_queued (slot + queue logic),
@@ -128,6 +128,7 @@ type FlashRow = {
 function bookingToQueueItem(
   b: BookingRow,
   shape: string | null = null,
+  currency: string | null = null,
 ): QueueItem {
   const who = b.viewer_name || 'anon';
   const snippet = b.message
@@ -142,7 +143,7 @@ function bookingToQueueItem(
   const isUsdc = b.payment_method === 'usdc' || b.payment_method === 'solana';
   const priceLabel = isUsdc
     ? `${total.toFixed(total % 1 === 0 ? 0 : 2)} USDC`
-    : `€${total.toFixed(total % 1 === 0 ? 0 : 2)}`;
+    : formatFiat(currency, total);
   return {
     id: `booking-${b.id}`,
     kind: 'beam',
@@ -158,14 +159,14 @@ function bookingToQueueItem(
   };
 }
 
-function flashToQueueItem(f: FlashRow): QueueItem {
+function flashToQueueItem(f: FlashRow, currency: string | null = null): QueueItem {
   const who = f.viewer_name || 'anon';
   const snippet = (f.message || '').slice(0, 28);
   const overflow = (f.message?.length ?? 0) > 28;
   const isUsdc = f.payment_method === 'usdc' || f.payment_method === 'solana';
   const priceLabel = isUsdc
     ? `${((f.amount_cents ?? 0) / 100).toFixed(2)} USDC`
-    : `€${((f.amount_cents ?? 0) / 100).toFixed(2)}`;
+    : formatFiat(currency, (f.amount_cents ?? 0) / 100);
   return {
     id: `flash-${f.id}`,
     kind: 'flash',
@@ -194,7 +195,10 @@ function slotLabel(
   return `${shape} · ${pos}`;
 }
 
-function bookingTotal(b: BookingRow): { total: number; isUsdc: boolean; label: string } {
+function bookingTotal(
+  b: BookingRow,
+  currency: string | null = null,
+): { total: number; isUsdc: boolean; label: string } {
   const duration = Number(b.duration_minutes) || 0;
   const rate = Number(b.price_value) || 0;
   const unitMinutes = b.price_unit === 'hr' ? 60 : 1;
@@ -204,14 +208,14 @@ function bookingTotal(b: BookingRow): { total: number; isUsdc: boolean; label: s
   return {
     total,
     isUsdc,
-    label: isUsdc ? `${fmt} USDC` : `€${fmt}`,
+    label: isUsdc ? `${fmt} USDC` : formatFiat(currency, total),
   };
 }
 
-function bookingToAiringItem(b: BookingRow): AiringItem {
+function bookingToAiringItem(b: BookingRow, currency: string | null = null): AiringItem {
   const who = b.viewer_name || 'anon';
   const snippet = b.message ? `"${b.message.slice(0, 40)}"` : b.file_type === 'video' ? 'video clip' : 'image';
-  const { total, isUsdc, label } = bookingTotal(b);
+  const { total, isUsdc, label } = bookingTotal(b, currency);
   const startMs = b.started_at ? new Date(b.started_at).getTime() : Date.now();
   const durationSecs = (Number(b.duration_minutes) || 0) * 60;
   const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
@@ -230,9 +234,10 @@ function bookingToAiringItem(b: BookingRow): AiringItem {
     const decimals = total % 1 === 0 && vested % 1 === 0 ? 0 : 2;
     const vestedFmt = vested.toFixed(decimals);
     const totalFmt = total.toFixed(decimals);
+    const sym = fiatSymbol(currency);
     earnedLabel = isUsdc
       ? `${vestedFmt} / ${totalFmt} USDC`
-      : `€${vestedFmt} / €${totalFmt}`;
+      : `${sym}${vestedFmt} / ${sym}${totalFmt}`;
   }
 
   return {
@@ -246,8 +251,8 @@ function bookingToAiringItem(b: BookingRow): AiringItem {
   };
 }
 
-function bookingToQueuedRow(b: BookingRow): QueuedRowItem {
-  const { label, isUsdc, total } = bookingTotal(b);
+function bookingToQueuedRow(b: BookingRow, currency: string | null = null): QueuedRowItem {
+  const { label, isUsdc, total } = bookingTotal(b, currency);
   return {
     id: String(b.id),
     viewerName: b.viewer_name || 'anon',
@@ -260,7 +265,7 @@ function bookingToQueuedRow(b: BookingRow): QueuedRowItem {
   };
 }
 
-function flashToLogItem(f: FlashRow): FlashLogItem {
+function flashToLogItem(f: FlashRow, currency: string | null = null): FlashLogItem {
   const isUsdc = f.payment_method === 'usdc' || f.payment_method === 'solana';
   const isFree = f.payment_method === 'free';
   const chipKind: FlashLogItem['chip']['kind'] = isFree ? 'free' : isUsdc ? 'usdc' : 'fiat';
@@ -268,7 +273,7 @@ function flashToLogItem(f: FlashRow): FlashLogItem {
     ? 'Free'
     : isUsdc
       ? `${((f.amount_cents ?? 0) / 100).toFixed(0)} USDC`
-      : `€${((f.amount_cents ?? 0) / 100).toFixed(2)}`;
+      : formatFiat(currency, (f.amount_cents ?? 0) / 100);
   return {
     id: f.id,
     time: logTime(f.created_at),
@@ -892,11 +897,11 @@ function StudioPageInner() {
       // Pass slot shape so the row thumb gets the same on-stream mask
       // (circle / hex / banner / rounded / rect) — gives the streamer a
       // "this is what'll appear on stream" preview before tapping Approve.
-      item: bookingToQueueItem(b, b.element_id ? elementsById[b.element_id]?.shape ?? null : null),
+      item: bookingToQueueItem(b, b.element_id ? elementsById[b.element_id]?.shape ?? null : null, stripeCurrency),
       ts: new Date(b.created_at).getTime(),
     })),
     ...pendingFlashes.map((f) => ({
-      item: flashToQueueItem(f),
+      item: flashToQueueItem(f, stripeCurrency),
       ts: new Date(f.created_at).getTime(),
     })),
   ].sort((a, b) => b.ts - a.ts).map(({ item }) => item);
@@ -906,7 +911,7 @@ function StudioPageInner() {
   // so position = array index + 1 here.
   const queueByElement = queuedBookings.reduce<Record<string, QueuedRowItem[]>>((acc, b) => {
     if (!b.element_id) return acc;
-    (acc[b.element_id] ??= []).push(bookingToQueuedRow(b));
+    (acc[b.element_id] ??= []).push(bookingToQueuedRow(b, stripeCurrency));
     return acc;
   }, {});
 
@@ -916,11 +921,11 @@ function StudioPageInner() {
   // on the client so the streamer never sees yesterday's flashes.
   const flashLog: FlashLogItem[] = flashLogRaw
     .filter((f) => new Date(f.created_at).getTime() >= startOfDayMs)
-    .map(flashToLogItem);
+    .map((f) => flashToLogItem(f, stripeCurrency));
 
   const airing: AiringItem[] = activeBookings.map((b) => {
     const bookingId = String(b.id);
-    const base = bookingToAiringItem(b);
+    const base = bookingToAiringItem(b, stripeCurrency);
     const element = b.element_id ? elementsById[b.element_id] : undefined;
     const label = slotLabel(element);
     const subtitle = label ? `${label} · ${base.subtitle}` : base.subtitle;

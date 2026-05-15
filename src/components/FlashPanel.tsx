@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import SendFlashSection from '@/components/overlay/SendFlashSection';
 import { EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
+import { formatFiat } from '@/lib/currency';
 
 type FlashRow = {
   id: string;
@@ -37,6 +38,9 @@ interface StreamerProfileLite {
   solana_wallet?: string | null;
   allow_free_flashes?: boolean | null;
   stripe_account_id?: string | null;
+  /** Stripe Connect default_currency (lowercase ISO-4217). Drives the fiat
+   *  symbol on the amount chip. null when Stripe isn't connected. */
+  settlement_currency?: string | null;
 }
 
 type Props = {
@@ -64,10 +68,12 @@ function formatTs(iso: string): string {
   return `${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
 }
 
-function flashAmount(f: FlashRow): string | null {
+function flashAmount(f: FlashRow, currency: string | null | undefined): string | null {
   if (f.payment_method === 'free' || !f.amount_cents) return null;
-  if (f.payment_method === 'solana') return `${(f.amount_cents / 100).toFixed(0)} USDC`;
-  return `$${(f.amount_cents / 100).toFixed(2)}`;
+  if (f.payment_method === 'solana' || f.payment_method === 'usdc') {
+    return `${(f.amount_cents / 100).toFixed(0)} USDC`;
+  }
+  return formatFiat(currency, f.amount_cents / 100);
 }
 
 export default function FlashPanel({
@@ -253,7 +259,7 @@ export default function FlashPanel({
           </div>
         ) : (
           flashes.map((f) => {
-            const amt = flashAmount(f);
+            const amt = flashAmount(f, streamerProfile?.settlement_currency);
             return (
               <div
                 key={f.id}
