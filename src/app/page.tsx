@@ -89,11 +89,11 @@ export default function HomePage() {
             </li>
             <li className="l-trust-item">
               <span className="l-trust-glyph">◉</span>
-              <span>USDC on Solana · Cards via Stripe Connect</span>
+              <span>Cards live worldwide via Stripe · USDC on Solana</span>
             </li>
             <li className="l-trust-item">
               <span className="l-trust-glyph">⌖</span>
-              <span>Currently on devnet · external audit in scoping</span>
+              <span>USDC rail on devnet pending external audit · cards already settling</span>
             </li>
           </ul>
         </div>

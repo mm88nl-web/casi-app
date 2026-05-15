@@ -51,7 +51,7 @@ function logTime(createdAt: string): string {
 function flashRowToFlash(f: FlashRow): Flash {
   const isUsdc = f.payment_method === 'usdc' || f.payment_method === 'solana';
   const isFree = f.payment_method === 'free';
-  const chipKind: Flash['chip']['kind'] = isFree ? 'free' : isUsdc ? 'usdc' : 'eur';
+  const chipKind: Flash['chip']['kind'] = isFree ? 'free' : isUsdc ? 'usdc' : 'fiat';
   const chipLabel = isFree
     ? 'Free'
     : isUsdc

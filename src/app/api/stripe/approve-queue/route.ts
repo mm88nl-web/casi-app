@@ -61,7 +61,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid duration' }, { status: 400 });
   }
 
-  const amount = calcAmountCents(element.price_value, element.price_unit, durationMinutes);
+  // Charge in the streamer's Stripe Connect default currency. See
+  // authorize/route.ts for the rationale — same fix here so a queue-spot
+  // top-up matches the original booking's currency.
+  const account = await stripe.accounts.retrieve(profile.stripe_account_id);
+  const currency = (account.default_currency || 'usd').toLowerCase();
+
+  const amount = calcAmountCents(element.price_value, element.price_unit, durationMinutes, currency);
   if (amount <= 0) {
     return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
   }
@@ -76,9 +82,9 @@ export async function POST(req: Request) {
       },
       line_items: [{
         price_data: {
-          currency: 'usd',
+          currency,
           product_data: {
-            name: `Queue slot — $${element.price_value}/${element.price_unit}`,
+            name: `Queue slot — ${element.price_value}/${element.price_unit}`,
             description: `${durationMinutes} min on ${profile.username}'s stream`,
           },
           unit_amount: amount,

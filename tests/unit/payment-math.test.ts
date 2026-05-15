@@ -38,6 +38,29 @@ describe('calcAmountCents', () => {
     expect(calcAmountCents(undefined, 'min', 5)).to.equal(0);
     expect(calcAmountCents(5, null, 5)).to.equal(2500); // null unit → per-minute fallback
   });
+
+  describe('currency-aware minor units', () => {
+    it('USD defaults to 2 decimals (* 100)', () => {
+      expect(calcAmountCents(5, 'min', 4, 'usd')).to.equal(2000);
+    });
+
+    it('GBP, EUR, AUD, CAD, BRL, SGD all use 2 decimals', () => {
+      for (const c of ['gbp', 'eur', 'aud', 'cad', 'brl', 'sgd']) {
+        expect(calcAmountCents(5, 'min', 4, c)).to.equal(2000);
+      }
+    });
+
+    it('JPY is zero-decimal — no * 100 multiplier', () => {
+      // 500 JPY/min × 4 min = ¥2000 (NOT ¥200000)
+      expect(calcAmountCents(500, 'min', 4, 'jpy')).to.equal(2000);
+    });
+
+    it('unknown / null currency falls back to USD-shaped minor units', () => {
+      expect(calcAmountCents(5, 'min', 4, 'xyz')).to.equal(2000);
+      expect(calcAmountCents(5, 'min', 4, null)).to.equal(2000);
+      expect(calcAmountCents(5, 'min', 4)).to.equal(2000);
+    });
+  });
 });
 
 describe('proRataCaptureCents', () => {

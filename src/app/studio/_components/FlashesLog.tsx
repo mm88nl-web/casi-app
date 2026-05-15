@@ -7,7 +7,7 @@ export type FlashLogItem = {
   time: string;
   who: string;
   message: string;
-  chip: { kind: 'free' | 'usdc' | 'eur'; label: string };
+  chip: { kind: 'free' | 'usdc' | 'fiat'; label: string };
   pinned?: boolean;
 };
 
@@ -22,7 +22,7 @@ type Props = {
 
 const CHIP_CLASS: Record<FlashLogItem['chip']['kind'], string> = {
   usdc: 'u',
-  eur: 'e',
+  fiat: 'e',
   free: 'f',
 };
 
