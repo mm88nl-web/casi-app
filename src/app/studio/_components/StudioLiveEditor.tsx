@@ -37,12 +37,13 @@ type Props = {
   /** Streamer handle, used to render the OBS-source URL bar at the top of
    *  the editor. Falls back to a placeholder when missing. */
   username?: string | null;
-  /** Stripe Connect's default currency for this streamer's account. Drives
-   *  which Stripe currency row renders on the slot Pricing tab — we show
-   *  the rate input in whatever currency Stripe will actually charge in,
-   *  not in a free-form picker. null means Stripe isn't connected yet;
-   *  the Stripe row is hidden and the streamer prices in USDC only. */
-  stripeCurrency?: 'eur' | 'usd' | null;
+  /** Stripe Connect's default currency for this streamer's account
+   *  (lowercase ISO-4217 — usd/eur/gbp/jpy/brl/aud/...). Drives the
+   *  Stripe currency row on the slot Pricing tab so the rate input is
+   *  in whatever currency Stripe will actually charge in. null means
+   *  Stripe isn't connected yet; the row is hidden and the streamer
+   *  prices in USDC only. */
+  stripeCurrency?: string | null;
   /** Called from the add-beam toolbar button (external header) so the parent
    *  can render the button in its own layout. Optional — if not provided,
    *  an internal button renders above the canvas. */

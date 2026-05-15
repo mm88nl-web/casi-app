@@ -4,10 +4,22 @@ export default function TermsPage() {
   return (
     <>
       <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Terms of Service</h1>
-      <p style={{ color: '#a1a1aa', fontSize: 13, marginBottom: 32 }}>Last updated: 17 April 2026 · Draft v0.1 — pending legal review.</p>
+      <p style={{ color: '#a1a1aa', fontSize: 13, marginBottom: 32 }}>Last updated: 15 May 2026 · v1.0.</p>
 
       <h2 style={h2}>1. Who we are</h2>
-      <p>casi (&ldquo;casi&rdquo;, &ldquo;we&rdquo;) operates a platform where streamers (&ldquo;Streamers&rdquo;) publish a viewer-facing page that lets viewers (&ldquo;Viewers&rdquo;) send images, videos, and messages (&ldquo;Content&rdquo;) to appear on the Streamer&apos;s live overlay, optionally in exchange for a tip.</p>
+      <p>
+        casi (&ldquo;casi&rdquo;, &ldquo;we&rdquo;) is operated by <strong>Terminal Data Solutions</strong>,
+        an eenmanszaak registered in the Netherlands (KvK 80519687, Spanjaardstraat 121 D, 3025 TM
+        Rotterdam). casi is a software platform where streamers (&ldquo;Streamers&rdquo;) publish a
+        viewer-facing page that lets viewers (&ldquo;Viewers&rdquo;) send images, videos, and messages
+        (&ldquo;Content&rdquo;) to appear on the Streamer&apos;s live overlay, optionally in exchange
+        for a tip. See the <a href="/legal/imprint" style={a}>Imprint</a> for full operator details.
+      </p>
+      <p>
+        casi does not hold, route, or process tip funds. Card tips flow directly viewer-to-Streamer via
+        Stripe Connect; on-chain tips flow viewer-to-Streamer via our open-source escrow program on
+        Solana. We are a software provider, not a payments institution.
+      </p>
 
       <h2 style={h2}>2. Acceptance</h2>
       <p>By creating an account, sending a tip, or submitting Content, you agree to these Terms, the <a href="/legal/aup" style={a}>Acceptable Use Policy</a>, and the <a href="/legal/privacy" style={a}>Privacy Policy</a>. If you do not agree, do not use the service.</p>
@@ -16,8 +28,8 @@ export default function TermsPage() {
       <p>You must be at least 18 years old to create a Streamer account. You are responsible for all activity under your account and for keeping your credentials secure.</p>
 
       <h2 style={h2}>4. Tips and payments</h2>
-      <p>Tips are processed by Stripe or, where enabled, on the Solana blockchain via our escrow program. casi does not take a platform fee on tips; Stripe fees and on-chain network fees apply as disclosed at checkout. Tips are paid directly to the Streamer&apos;s connected payout account.</p>
-      <p>Tips are <strong>non-refundable</strong> once captured, except where refund is required by law or where the Streamer has not delivered the agreed display (for example, the Streamer was offline or denied the booking). Refund decisions for paid tips are at Stripe&apos;s and the Streamer&apos;s discretion.</p>
+      <p>Tips are processed by Stripe (card rail) or executed by our open-source escrow program on Solana (USDC rail). casi does not take a platform fee on tips; Stripe fees and on-chain network fees apply as disclosed at checkout. Tips are paid directly to the Streamer&apos;s connected payout account. The Streamer&apos;s settlement currency is determined by their Stripe Connect account (typically the currency of their country of residence); Viewers are charged in that currency at checkout.</p>
+      <p>Tips are <strong>non-refundable</strong> once captured or settled, except: (a) where refund is required by law, (b) where the Streamer has not delivered the agreed display (for example, the Streamer was offline or denied the booking), or (c) for on-chain tips, where the program&apos;s <code>cancel_escrow</code> or <code>cancel_stale_pending</code> instructions permit a refund. Refund decisions for captured card tips are at Stripe&apos;s and the Streamer&apos;s discretion; on-chain refunds are governed by the program&apos;s deterministic rules.</p>
 
       <h2 style={h2}>5. User content</h2>
       <p>You retain ownership of Content you submit. By submitting, you grant casi and the receiving Streamer a worldwide, non-exclusive, royalty-free licence to display, transmit, cache, and moderate the Content for the purpose of operating the service.</p>
@@ -44,8 +56,11 @@ export default function TermsPage() {
       <h2 style={h2}>12. Changes</h2>
       <p>We may update these Terms. Material changes will be announced via the site or email. Continued use after changes take effect constitutes acceptance.</p>
 
-      <h2 style={h2}>13. Contact</h2>
-      <p>Questions about these Terms: <a href="mailto:legal@casi.gg" style={a}>legal@casi.gg</a>. Abuse reports: <a href="mailto:abuse@casi.gg" style={a}>abuse@casi.gg</a>.</p>
+      <h2 style={h2}>13. Governing law and jurisdiction</h2>
+      <p>These Terms are governed by Dutch law. Any dispute arising from or relating to these Terms or the service is subject to the exclusive jurisdiction of the competent court in Rotterdam, Netherlands, except where mandatory consumer-protection law grants you the right to bring a claim in your country of residence.</p>
+
+      <h2 style={h2}>14. Contact</h2>
+      <p>Questions about these Terms: <a href="mailto:legal@casi.gg" style={a}>legal@casi.gg</a>. Abuse reports: <a href="mailto:abuse@casi.gg" style={a}>abuse@casi.gg</a>. Operator details: <a href="/legal/imprint" style={a}>Imprint</a>.</p>
     </>
   );
 }

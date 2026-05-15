@@ -11,6 +11,7 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
         <Link href="/legal/privacy" style={{ color: '#e4e4e7', textDecoration: 'none' }}>Privacy</Link>
         <Link href="/legal/aup"     style={{ color: '#e4e4e7', textDecoration: 'none' }}>Acceptable Use</Link>
         <Link href="/legal/dmca"    style={{ color: '#e4e4e7', textDecoration: 'none' }}>DMCA / Report</Link>
+        <Link href="/legal/imprint" style={{ color: '#e4e4e7', textDecoration: 'none' }}>Imprint</Link>
       </nav>
       <article style={{ lineHeight: 1.6, fontSize: 15 }}>{children}</article>
     </div>

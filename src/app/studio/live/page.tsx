@@ -40,7 +40,7 @@ export default function StudioLivePage() {
   // connected (or the fetch hasn't returned yet); the slot UI hides its
   // Stripe row in that case so the streamer can't set a rate that nothing
   // will charge against.
-  const [stripeCurrency, setStripeCurrency] = useState<'usd' | 'eur' | null>(null);
+  const [stripeCurrency, setStripeCurrency] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +51,7 @@ export default function StudioLivePage() {
         const json = await res.json();
         if (cancelled) return;
         const cur = (json?.defaultCurrency ?? null) as string | null;
-        if (cur === 'eur' || cur === 'usd') setStripeCurrency(cur);
+        setStripeCurrency(cur ? cur.toLowerCase() : null);
       } catch {
         /* leave null — slot UI degrades to USDC-only */
       }
