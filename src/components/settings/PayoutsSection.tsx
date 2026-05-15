@@ -34,9 +34,13 @@ type ConnectedCardProps = {
   title: React.ReactNode;
   meta: React.ReactNode;
   action: React.ReactNode;
+  /** Allow `meta` to wrap onto multiple lines and surface long content
+   *  (typically Stripe error messages with URLs). Default keeps the
+   *  tight nowrap+ellipsis treatment for normal status strings. */
+  wrapMeta?: boolean;
 };
 
-function ConnectedCard({ logo, title, meta, action }: ConnectedCardProps) {
+function ConnectedCard({ logo, title, meta, action, wrapMeta = false }: ConnectedCardProps) {
   return (
     <div
       className="flex items-center justify-between gap-4"
@@ -70,9 +74,11 @@ function ConnectedCard({ logo, title, meta, action }: ConnectedCardProps) {
               fontSize: '10px',
               letterSpacing: '0.1em',
               color: 'var(--text-3, var(--casi-text-dim))',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              overflow: wrapMeta ? 'visible' : 'hidden',
+              textOverflow: wrapMeta ? 'clip' : 'ellipsis',
+              whiteSpace: wrapMeta ? 'normal' : 'nowrap',
+              lineHeight: wrapMeta ? 1.45 : undefined,
+              textTransform: wrapMeta ? 'none' : undefined,
             }}
           >
             {meta}
@@ -81,6 +87,43 @@ function ConnectedCard({ logo, title, meta, action }: ConnectedCardProps) {
       </div>
       <div className="flex shrink-0 gap-2">{action}</div>
     </div>
+  );
+}
+
+/**
+ * Renders a string and turns any embedded URL into a clickable link. We
+ * use it for Stripe error messages — Stripe's API frequently embeds a
+ * resolution URL in the .message field (e.g. "Please review the
+ * responsibilities ... at https://dashboard.stripe.com/...") and a plain
+ * text render swallows that URL into an opaque, truncated sentence.
+ */
+function MessageWithLinks({ text }: { text: string }) {
+  // Conservative URL regex — matches http(s):// up to the next whitespace.
+  // Stripe error messages don't embed inline punctuation that we'd want
+  // stripped from the URL, so the simple form is fine here.
+  const parts = text.split(/(https?:\/\/\S+)/);
+  return (
+    <>
+      {parts.map((p, i) =>
+        /^https?:\/\//.test(p) ? (
+          <a
+            key={i}
+            href={p}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              color: 'var(--ink, var(--casi-accent2))',
+              textDecoration: 'underline',
+              wordBreak: 'break-all',
+            }}
+          >
+            {p}
+          </a>
+        ) : (
+          <span key={i}>{p}</span>
+        ),
+      )}
+    </>
   );
 }
 
@@ -286,7 +329,16 @@ export default function PayoutsSection({
         <ConnectedCard
           logo={STRIPE_LOGO}
           title="Stripe ·status unavailable"
-          meta={<><StatusDot kind="warn" />{stripe.message}</>}
+          // Wrap the meta line so streamers actually see the full Stripe
+          // error message (typically a sentence ending in a dashboard URL
+          // that they need to click). Linkify any URL in the message.
+          wrapMeta
+          meta={
+            <>
+              <StatusDot kind="warn" />
+              <MessageWithLinks text={stripe.message} />
+            </>
+          }
           action={
             <GhostButton type="button" onClick={handleStripeAction} disabled={busy === 'stripe'}>
               {busy === 'stripe' ? 'Opening…' : 'Manage'}
