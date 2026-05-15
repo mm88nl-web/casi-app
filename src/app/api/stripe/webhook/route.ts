@@ -14,8 +14,17 @@ export async function POST(req: Request) {
   const body = await req.text();
   const sig  = req.headers.get('stripe-signature');
 
-  if (!process.env.STRIPE_WEBHOOK_SECRET) {
-    console.error('[stripe webhook] STRIPE_WEBHOOK_SECRET is not set — rejecting request');
+  // Stripe Connect requires two webhook endpoints for full event coverage:
+  //   - Connected accounts scope (payment_intent / charge / checkout events)
+  //   - Your account scope       (account.updated / .deauthorized — platform-level)
+  // Both endpoints can point at this same route, but each Stripe webhook
+  // gets its own signing secret. Try the primary first, fall back to the
+  // platform secret if it's set. Either one passing means the event is
+  // authentic; we don't care which webhook delivered it.
+  const primarySecret  = process.env.STRIPE_WEBHOOK_SECRET;
+  const platformSecret = process.env.STRIPE_WEBHOOK_SECRET_PLATFORM;
+  if (!primarySecret && !platformSecret) {
+    console.error('[stripe webhook] Neither STRIPE_WEBHOOK_SECRET nor STRIPE_WEBHOOK_SECRET_PLATFORM is set — rejecting request');
     return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 });
   }
   if (!sig) {
@@ -23,11 +32,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
   }
 
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('[stripe webhook] Signature verification failed:', err instanceof Error ? err.message : err);
+  let event: Stripe.Event | null = null;
+  let lastErr: unknown = null;
+  for (const secret of [primarySecret, platformSecret]) {
+    if (!secret) continue;
+    try {
+      event = stripe.webhooks.constructEvent(body, sig, secret);
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (!event) {
+    console.error('[stripe webhook] Signature verification failed for all configured secrets:', lastErr instanceof Error ? lastErr.message : lastErr);
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
