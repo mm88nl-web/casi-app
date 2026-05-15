@@ -4,11 +4,14 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 import { NavBar, Footer } from '@/components/v9';
+
 type LiveProfile = {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
   bio: string | null;
+  ink_color: string | null;
+  theme_color: string | null;
 };
 
 export default function BrowsePage() {
@@ -20,7 +23,7 @@ export default function BrowsePage() {
     (async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('username, display_name, avatar_url, bio')
+        .select('username, display_name, avatar_url, bio, ink_color, theme_color')
         .eq('is_live', true)
         .order('username');
       if (!cancelled) setLive((data ?? []) as LiveProfile[]);
@@ -56,42 +59,58 @@ export default function BrowsePage() {
         {live === null ? (
           <div className="b-empty">Loading…</div>
         ) : live.length === 0 ? (
-          <div className="b-empty">
-            Nobody&apos;s live right now. <Link href="/studio">Go live yourself →</Link>
+          <div className="b-empty-state">
+            <div className="b-empty-tag">Off-air</div>
+            <h2 className="b-empty-h">No one&apos;s live right now.</h2>
+            <p className="b-empty-p">
+              CASI is live whenever a streamer flips their is-live switch in Studio.
+              Be the first to broadcast.
+            </p>
+            <Link href="/studio" className="b-empty-cta">
+              Go live yourself <span>→</span>
+            </Link>
           </div>
         ) : (
           <div className="b-grid">
-            {live.map((p) => (
-              <Link
-                key={p.username}
-                href={`/overlay?s=${p.username}`}
-                className="b-card"
-              >
-                <div className="b-card-head">
-                  <div className="b-card-avatar">
-                    {p.avatar_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.avatar_url} alt="" />
-                    ) : (
-                      (p.display_name || p.username).charAt(0).toUpperCase()
-                    )}
+            {live.map((p) => {
+              // Streamer's brand color drives the card's hero band so each tile
+              // feels like part of THEIR space. Falls back to ink if they haven't
+              // picked one. theme_color is the legacy v7 column; ink_color is v9.
+              const accent = p.ink_color || p.theme_color || null;
+              const initial = (p.display_name || p.username).charAt(0).toUpperCase();
+              return (
+                <Link
+                  key={p.username}
+                  href={`/overlay?s=${p.username}`}
+                  className="b-card"
+                  style={accent ? ({ '--card-ink': accent } as React.CSSProperties) : undefined}
+                >
+                  <div className="b-card-hero">
+                    <span className="b-card-live">
+                      <span className="b-card-live-dot" />
+                      Live
+                    </span>
+                    <div className="b-card-avatar">
+                      {p.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.avatar_url} alt="" />
+                      ) : (
+                        <span>{initial}</span>
+                      )}
+                    </div>
                   </div>
-                  <span className="b-card-live">
-                    <span className="b-card-live-dot" />
-                    Live
-                  </span>
-                </div>
-                <div className="b-card-info">
-                  <div className="b-card-name">{p.display_name || p.username}</div>
-                  <div className="b-card-handle">@{p.username}</div>
-                  {p.bio ? <p className="b-card-bio">{p.bio}</p> : null}
-                </div>
-                <div className="b-card-foot">
-                  <span className="b-card-cta">Book a slot</span>
-                  <span className="b-card-arrow">→</span>
-                </div>
-              </Link>
-            ))}
+                  <div className="b-card-body">
+                    <div className="b-card-name">{p.display_name || p.username}</div>
+                    <div className="b-card-handle">@{p.username}</div>
+                    {p.bio ? <p className="b-card-bio">{p.bio}</p> : <p className="b-card-bio b-card-bio-empty">No bio yet.</p>}
+                  </div>
+                  <div className="b-card-foot">
+                    <span className="b-card-cta">Book a slot</span>
+                    <span className="b-card-arrow">→</span>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </section>
@@ -154,8 +173,10 @@ export default function BrowsePage() {
           max-width: 520px;
         }
         .b-body { flex: 1; padding: 32px var(--pad) 80px; }
+
+        /* Loading-text placeholder */
         .b-empty {
-          padding: 48px 0;
+          padding: 64px 0;
           font-family: var(--M);
           font-size: 12px;
           letter-spacing: 0.16em;
@@ -163,52 +184,154 @@ export default function BrowsePage() {
           color: var(--text-3);
           text-align: center;
         }
-        .b-empty :global(a) { color: var(--ink); margin-left: 6px; }
-        /* Auto-fill grid: cards sit at ~320-380px regardless of streamer
-           count. With 1 streamer you get one tile (not a stretched-full-
-           width row), with 6 you get 3 columns on a wide monitor, with 12
-           you get 3-4 columns. Portrait monitors still get a sensible
-           multi-column layout because cards have a max effective width. */
+
+        /* Zero-streamers empty state — designed to feel like a deliberate
+           page state, not a broken render. The earlier inline 'Nobody's live'
+           collapsed to a one-line message that read like an error. */
+        .b-empty-state {
+          max-width: 540px;
+          margin: 48px 0 64px;
+          padding: 40px 0;
+          border-top: 1px solid var(--line);
+          border-bottom: 1px solid var(--line);
+        }
+        .b-empty-tag {
+          display: inline-block;
+          font-family: var(--M);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          color: var(--ink);
+          padding: 3px 9px;
+          border: 1px solid var(--ink);
+          margin-bottom: 20px;
+        }
+        .b-empty-h {
+          font-family: var(--H);
+          font-weight: 700;
+          font-size: clamp(28px, 4vw, 40px);
+          letter-spacing: -0.025em;
+          line-height: 1.05;
+          color: var(--text);
+        }
+        .b-empty-p {
+          margin-top: 16px;
+          font-size: 15px;
+          line-height: 1.55;
+          color: var(--text-2);
+        }
+        .b-empty-cta {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          margin-top: 24px;
+          padding: 11px 18px;
+          background: var(--ink);
+          color: var(--on-ink);
+          font-family: var(--M);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          text-decoration: none;
+          transition: opacity 0.14s;
+        }
+        .b-empty-cta:hover { opacity: 0.85; }
+
+        /* Grid: each tile is capped to a sensible card width (360px max,
+           280px min). Critically uses justify-content: start so a single
+           streamer renders as a single 360px tile in the top-left, NOT
+           stretched to the full viewport. As streamers join the grid fills
+           left-to-right and wraps cleanly. */
         .b-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-          gap: 0;
-          border: 1px solid var(--line);
-          background: var(--surf);
+          grid-template-columns: repeat(auto-fill, minmax(280px, 360px));
+          gap: 16px;
+          justify-content: start;
         }
+
+        /* Card — three vertical zones (hero / body / foot) with the
+           streamer's accent driving the hero band so each card feels like
+           an extension of THEIR space, not a stamped template. Falls back
+           to default --ink when the streamer hasn't picked a brand color. */
         .b-card {
           display: flex;
           flex-direction: column;
-          gap: 14px;
-          padding: 22px 22px 18px;
-          border-right: 1px solid var(--line);
-          border-bottom: 1px solid var(--line);
+          border: 1px solid var(--line);
+          background: var(--surf);
           text-decoration: none;
           color: inherit;
-          transition: background 0.14s;
-          min-height: 220px;
+          transition: transform 0.14s, border-color 0.14s;
+          overflow: hidden;
         }
-        .b-card:hover { background: var(--ink-04); }
-        .b-card-head {
-          display: flex;
+        .b-card:hover {
+          transform: translateY(-2px);
+          border-color: var(--card-ink, var(--ink));
+        }
+
+        /* Hero band — colored fill, oversized avatar overlapping the bottom
+           edge so it bleeds into the body. Gives the card immediate visual
+           identity even before reading the name. */
+        .b-card-hero {
+          position: relative;
+          aspect-ratio: 16 / 9;
+          background:
+            radial-gradient(
+              circle at 30% 30%,
+              color-mix(in oklab, var(--card-ink, var(--ink)) 65%, transparent),
+              color-mix(in oklab, var(--card-ink, var(--ink)) 20%, transparent) 70%
+            ),
+            var(--paper);
+          border-bottom: 1px solid var(--line);
+        }
+        .b-card-live {
+          position: absolute;
+          top: 12px;
+          right: 12px;
+          display: inline-flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 12px;
+          gap: 6px;
+          padding: 4px 9px;
+          background: var(--paper);
+          color: var(--text);
+          font-family: var(--M);
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          border: 1px solid var(--line);
+        }
+        .b-card-live-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--card-ink, var(--ink));
+          box-shadow: 0 0 0 3px color-mix(in oklab, var(--card-ink, var(--ink)) 25%, transparent);
+          animation: livePulse 1.8s ease-in-out infinite;
+        }
+        @keyframes livePulse {
+          0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--card-ink, var(--ink)) 25%, transparent); }
+          50%      { box-shadow: 0 0 0 5px color-mix(in oklab, var(--card-ink, var(--ink)) 12%, transparent); }
         }
         .b-card-avatar {
-          width: 56px;
-          height: 56px;
-          flex-shrink: 0;
-          background: var(--ink);
-          color: var(--on-ink);
+          position: absolute;
+          left: 18px;
+          bottom: -22px;
+          width: 64px;
+          height: 64px;
+          background: var(--paper);
+          color: var(--card-ink, var(--ink));
           display: flex;
           align-items: center;
           justify-content: center;
           font-family: var(--H);
           font-weight: 800;
-          font-size: 24px;
+          font-size: 28px;
           letter-spacing: -0.04em;
+          border: 2px solid var(--paper);
           overflow: hidden;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
         }
         .b-card-avatar :global(img) {
           width: 100%;
@@ -216,11 +339,15 @@ export default function BrowsePage() {
           object-fit: cover;
           display: block;
         }
-        .b-card-info { flex: 1; min-width: 0; }
+
+        .b-card-body {
+          padding: 34px 20px 18px;
+          flex: 1;
+        }
         .b-card-name {
           font-family: var(--H);
           font-weight: 700;
-          font-size: 19px;
+          font-size: 20px;
           letter-spacing: -0.02em;
           color: var(--text);
           line-height: 1.15;
@@ -238,21 +365,23 @@ export default function BrowsePage() {
         .b-card-bio {
           font-size: 13px;
           color: var(--text-2);
-          margin-top: 10px;
+          margin-top: 14px;
           line-height: 1.5;
           overflow: hidden;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
         }
+        .b-card-bio-empty { color: var(--text-4); font-style: italic; }
+
         .b-card-foot {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 12px;
-          padding-top: 14px;
+          padding: 14px 20px;
           border-top: 1px solid var(--line);
-          margin-top: auto;
+          background: var(--surf-2);
         }
         .b-card-cta {
           font-family: var(--M);
@@ -263,26 +392,7 @@ export default function BrowsePage() {
           color: var(--text-3);
           transition: color 0.14s;
         }
-        .b-card:hover .b-card-cta { color: var(--ink); }
-        .b-card-live {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 4px 9px;
-          background: var(--ink);
-          color: var(--on-ink);
-          font-family: var(--M);
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-        }
-        .b-card-live-dot {
-          width: 5px;
-          height: 5px;
-          border-radius: 50%;
-          background: var(--on-ink);
-        }
+        .b-card:hover .b-card-cta { color: var(--card-ink, var(--ink)); }
         .b-card-arrow {
           font-family: var(--M);
           font-size: 16px;
@@ -290,8 +400,16 @@ export default function BrowsePage() {
           transition: color 0.14s, transform 0.14s;
         }
         .b-card:hover .b-card-arrow {
-          color: var(--ink);
+          color: var(--card-ink, var(--ink));
           transform: translateX(3px);
+        }
+
+        /* Mobile: stretch cards to full width below 480px since side-by-side
+           tiles get crammed. Keep the same 360px cap on tablet+. */
+        @media (max-width: 480px) {
+          .b-grid {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
     </main>
