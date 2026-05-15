@@ -224,20 +224,31 @@ export default function BrowsePage() {
         .b-empty-cta {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
           margin-top: 24px;
-          padding: 11px 18px;
+          padding: 13px 22px;
           background: var(--ink);
           color: var(--on-ink);
           font-family: var(--M);
           font-size: 11px;
           font-weight: 700;
-          letter-spacing: 0.18em;
+          letter-spacing: 0.2em;
           text-transform: uppercase;
           text-decoration: none;
-          transition: opacity 0.14s;
+          border: 1px solid var(--ink);
+          transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+          position: relative;
         }
-        .b-empty-cta:hover { opacity: 0.85; }
+        .b-empty-cta :global(span) {
+          font-size: 14px;
+          transition: transform 0.16s ease;
+        }
+        .b-empty-cta:hover {
+          background: transparent;
+          color: var(--ink);
+        }
+        .b-empty-cta:hover :global(span) { transform: translateX(4px); }
+        .b-empty-cta:active { transform: translateY(1px); }
 
         /* Grid: each tile is capped to a sensible card width (360px max,
            280px min). Critically uses justify-content: start so a single
@@ -374,6 +385,11 @@ export default function BrowsePage() {
         }
         .b-card-bio-empty { color: var(--text-4); font-style: italic; }
 
+        /* Footer reads as a real CTA button when the card is hovered: the
+           whole strip fills with the streamer's ink color, the text inverts
+           to --on-ink, the arrow slides. At rest it's a quiet 'Book a slot'
+           label on the surf-2 strip so the card doesn't shout from across
+           the page. Smooth color-fill transition (180ms) so it feels intentional. */
         .b-card-foot {
           display: flex;
           align-items: center;
@@ -382,26 +398,32 @@ export default function BrowsePage() {
           padding: 14px 20px;
           border-top: 1px solid var(--line);
           background: var(--surf-2);
+          transition: background 0.18s ease, border-top-color 0.18s ease;
+          position: relative;
+        }
+        .b-card:hover .b-card-foot {
+          background: var(--card-ink, var(--ink));
+          border-top-color: var(--card-ink, var(--ink));
         }
         .b-card-cta {
           font-family: var(--M);
           font-size: 10.5px;
-          font-weight: 600;
-          letter-spacing: 0.16em;
+          font-weight: 700;
+          letter-spacing: 0.18em;
           text-transform: uppercase;
           color: var(--text-3);
-          transition: color 0.14s;
+          transition: color 0.18s ease;
         }
-        .b-card:hover .b-card-cta { color: var(--card-ink, var(--ink)); }
+        .b-card:hover .b-card-cta { color: var(--on-ink); }
         .b-card-arrow {
           font-family: var(--M);
           font-size: 16px;
           color: var(--text-3);
-          transition: color 0.14s, transform 0.14s;
+          transition: color 0.18s ease, transform 0.18s ease;
         }
         .b-card:hover .b-card-arrow {
-          color: var(--card-ink, var(--ink));
-          transform: translateX(3px);
+          color: var(--on-ink);
+          transform: translateX(4px);
         }
 
         /* Mobile: stretch cards to full width below 480px since side-by-side
