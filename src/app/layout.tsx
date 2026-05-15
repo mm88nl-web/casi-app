@@ -5,6 +5,7 @@ import "./globals.css";
 import Providers from "@/components/Providers";
 import ClientErrorReporter from "@/components/ClientErrorReporter";
 import DevBanner from "@/components/DevBanner";
+import { CookieNotice } from "@/components/CookieNotice";
 import { DevScreenSwitcher, DevTweaksPanel } from "@/components/v9";
 
 // v9 type system: Bricolage Grotesque (display + body), JetBrains Mono (meta/labels),
@@ -107,6 +108,7 @@ export default function RootLayout({
               <DevBanner />
             </Suspense>
             {children}
+            <CookieNotice />
             {/* v9 dev tools — render only in non-production builds (gated inside each
                 component). Mounted at the root so they appear on every page during
                 the v9 port. */}
