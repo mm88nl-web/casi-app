@@ -15,6 +15,7 @@ import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
 import PreviewBookingModal, { type PreviewBooking } from './_components/PreviewBookingModal';
 import StudioWelcome from './_components/StudioWelcome';
 import StudioFrame from './_components/StudioFrame';
+import { formatFiat } from '@/lib/currency';
 
 // Explicit column lists. BOOKING_COLS adds the moderation-critical fields the
 // old /studio page didn't need: element_id / is_queued (slot + queue logic),
@@ -25,12 +26,6 @@ const BOOKING_COLS =
 const FLASH_COLS =
   'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, escrow_pda, viewer_wallet';
 const PROFILE_COLS = 'id, username, solana_wallet, is_live';
-
-const FIAT_SYMBOL: Record<'eur' | 'usd', string> = { eur: '€', usd: '$' };
-
-function formatFiat(currency: 'eur' | 'usd', amount: number): string {
-  return `${FIAT_SYMBOL[currency]}${amount.toFixed(2)}`;
-}
 
 function formatUsdc(amount: number): string {
   return `${amount.toFixed(amount % 1 === 0 ? 0 : 2)} USDC`;
@@ -268,7 +263,7 @@ function bookingToQueuedRow(b: BookingRow): QueuedRowItem {
 function flashToLogItem(f: FlashRow): FlashLogItem {
   const isUsdc = f.payment_method === 'usdc' || f.payment_method === 'solana';
   const isFree = f.payment_method === 'free';
-  const chipKind: FlashLogItem['chip']['kind'] = isFree ? 'free' : isUsdc ? 'usdc' : 'eur';
+  const chipKind: FlashLogItem['chip']['kind'] = isFree ? 'free' : isUsdc ? 'usdc' : 'fiat';
   const chipLabel = isFree
     ? 'Free'
     : isUsdc
@@ -328,10 +323,11 @@ function StudioPageInner() {
   const [playingNowId, setPlayingNowId] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [endStreamOpen, setEndStreamOpen] = useState(false);
-  // Stripe Connect default currency for this streamer's account. Drives the
-  // fiat label on the Today tile (€ vs $). null when Stripe isn't connected
-  // — the Today tile then only shows the USDC line if there were USDC tips.
-  const [stripeCurrency, setStripeCurrency] = useState<'usd' | 'eur' | null>(null);
+  // Stripe Connect default currency for this streamer's account (lowercase
+  // ISO-4217 — usd/eur/gbp/jpy/brl/aud/...). Drives the fiat label on the
+  // Today tile. null when Stripe isn't connected — the tile then only
+  // shows the USDC line if there were USDC tips.
+  const [stripeCurrency, setStripeCurrency] = useState<string | null>(null);
   const [endStreamProgress, setEndStreamProgress] = useState<EndStreamProgress | null>(null);
   const [delegateHealth, setDelegateHealth] = useState<DelegateHealth>('unknown');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -436,7 +432,7 @@ function StudioPageInner() {
         const json = await res.json();
         if (cancelled) return;
         const cur = (json?.defaultCurrency ?? null) as string | null;
-        setStripeCurrency(cur === 'eur' || cur === 'usd' ? cur : null);
+        setStripeCurrency(cur ? cur.toLowerCase() : null);
       } catch {
         /* leave null */
       }
