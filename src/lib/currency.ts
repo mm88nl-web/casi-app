@@ -101,3 +101,41 @@ export function toStripeAmount(iso: string | null | undefined, amount: number): 
   const factor = cfg.stripeDecimals === 0 ? 1 : cfg.stripeDecimals === 3 ? 1000 : 100;
   return Math.round(amount * factor);
 }
+
+/**
+ * Stripe's minimum charge amount in minor units, per currency.
+ *
+ * Stripe rejects capture / charge calls below this floor with
+ * `amount_too_small`. Critically: this hits CASI's `/api/stripe/end-early`
+ * when a streamer ends a beam within the first minute or two of approval
+ * — the pro-rated amount works out to 1-15 cents, below the floor, and
+ * the partial-capture call 502s.
+ *
+ * Source: https://stripe.com/docs/currencies#minimum-and-maximum-charge-amounts
+ * Values are conservative — some accounts may have higher floors during
+ * onboarding or for specific card types. CASI treats this as a floor for
+ * UX safety, not a precise Stripe-mirror.
+ */
+const STRIPE_MIN_BY_ISO: Record<string, number> = {
+  usd: 50,
+  eur: 50,
+  gbp: 30,
+  aud: 50,
+  cad: 50,
+  brl: 50,
+  jpy: 50,   // zero-decimal — ¥50 minimum
+  sgd: 50,
+};
+
+const STRIPE_MIN_FALLBACK = 50;
+
+/**
+ * Floor for any Stripe charge / capture on the given currency. Use to
+ * decide whether a pro-rated capture below this is safe (it isn't —
+ * Stripe will reject it) so callers can fall back to cancellation or
+ * raise the capture amount to the minimum.
+ */
+export function stripeMinAmount(iso: string | null | undefined): number {
+  if (!iso) return STRIPE_MIN_FALLBACK;
+  return STRIPE_MIN_BY_ISO[iso.toLowerCase()] ?? STRIPE_MIN_FALLBACK;
+}

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { stripe } from '@/lib/stripe';
 import { proRataCaptureCents } from '@/lib/payment-math';
+import { stripeMinAmount } from '@/lib/currency';
 import { logError } from '@/lib/observability';
 
 const supabase = createClient(
@@ -42,10 +43,11 @@ export async function POST(req: Request) {
   // Need the streamer's connected account id for Direct-Charges PI calls.
   const { data: bookingProfile } = await supabase
     .from('profiles')
-    .select('stripe_account_id')
+    .select('stripe_account_id, settlement_currency')
     .eq('id', booking.profile_id)
     .single();
   const stripeAccount = bookingProfile?.stripe_account_id;
+  const settlementCurrency = bookingProfile?.settlement_currency ?? null;
 
   // Prorated capture. Only fire if the PI is still capturable — if something
   // else (janitor, dashboard, another end-early retry) already settled it we
@@ -56,21 +58,49 @@ export async function POST(req: Request) {
   if (booking.payment_intent_id && booking.original_amount_cents && booking.started_at && stripeAccount) {
     const opts = { stripeAccount };
     const elapsedMinutes = (Date.now() - new Date(booking.started_at).getTime()) / 60_000;
-    const captureAmount = proRataCaptureCents(
+    const proRata = proRataCaptureCents(
       booking.original_amount_cents,
       Number(booking.duration_minutes),
       elapsedMinutes,
     );
 
+    // Stripe rejects captures below the currency's minimum charge (50 cents
+    // for EUR/USD, 30 for GBP, etc) with amount_too_small. That's a real
+    // case here — a 30-minute €0.50 beam ended after 8 minutes pro-rates
+    // to 13 cents, below the floor. Three branches:
+    //   - proRata >= min:           normal partial capture
+    //   - 0 < proRata < min:        cancel the PI (full refund to viewer).
+    //                               Streamer eats the visible time but
+    //                               doesn't accidentally charge full price
+    //                               for a few seconds of beam.
+    //   - proRata == 0:             nothing to do, fall through to expire.
+    const min = stripeMinAmount(settlementCurrency);
+
     try {
       const pi = await stripe.paymentIntents.retrieve(booking.payment_intent_id, undefined, opts);
-      if (pi.status === 'requires_capture' && captureAmount > 0) {
+
+      if (pi.status === 'requires_capture' && proRata >= min) {
         await stripe.paymentIntents.capture(
           booking.payment_intent_id,
-          { amount_to_capture: captureAmount },
+          { amount_to_capture: proRata },
           opts,
         );
-        console.log('End early capture:', captureAmount, 'of', booking.original_amount_cents);
+        console.log('End early capture:', proRata, 'of', booking.original_amount_cents);
+      } else if (pi.status === 'requires_capture' && proRata > 0 && proRata < min) {
+        // Pro-rated amount is below the Stripe floor. Cancel the
+        // authorization so the viewer's card hold drops without a charge.
+        // Logged at warn-ish level so we can spot streamers hitting this
+        // pattern often (could mean their slot rates are misconfigured).
+        console.log(
+          'End early cancel (proRata',
+          proRata,
+          '< min',
+          min,
+          'for',
+          settlementCurrency,
+          ')',
+        );
+        await stripe.paymentIntents.cancel(booking.payment_intent_id, undefined, opts);
       }
       // pi.status in {succeeded, canceled, ...}: nothing to capture, fall through.
     } catch (err) {
@@ -78,6 +108,9 @@ export async function POST(req: Request) {
         booking_id: booking.id,
         payment_intent_id: booking.payment_intent_id,
         stripeAccount,
+        proRata,
+        currencyMin: min,
+        settlementCurrency,
       });
       return NextResponse.json(
         { error: 'capture_failed', message: err instanceof Error ? err.message : 'Stripe capture failed' },
