@@ -10,8 +10,9 @@ import Nav from '@/components/Nav';
 import StreamerBar from './_components/StreamerBar';
 import StreamPreview from './_components/StreamPreview';
 import FlashesFeed, { type Flash } from './_components/FlashesFeed';
+import { formatFiat } from '@/lib/currency';
 
-const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, is_live, skin, theme_color, ink_color, paper_color';
+const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, is_live, skin, theme_color, ink_color, paper_color, settlement_currency';
 const FLASH_COLS = 'id, created_at, viewer_name, status, message, amount_cents, payment_method';
 
 type Profile = {
@@ -25,6 +26,7 @@ type Profile = {
   theme_color: string | null;
   ink_color: string | null;
   paper_color: string | null;
+  settlement_currency: string | null;
 };
 
 type FlashRow = {
@@ -48,15 +50,20 @@ function logTime(createdAt: string): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-function flashRowToFlash(f: FlashRow): Flash {
+function flashRowToFlash(f: FlashRow, streamerCurrency: string | null): Flash {
   const isUsdc = f.payment_method === 'usdc' || f.payment_method === 'solana';
   const isFree = f.payment_method === 'free';
   const chipKind: Flash['chip']['kind'] = isFree ? 'free' : isUsdc ? 'usdc' : 'fiat';
+  // Pricing rail amount: USDC is always integer-ish (no cents); fiat
+  // amounts render in the streamer's settlement currency. Falls back
+  // to '$' when Stripe isn't connected yet (the chip will basically
+  // never show in that case — no fiat flashes possible — but we keep
+  // the formatter total).
   const chipLabel = isFree
     ? 'Free'
     : isUsdc
       ? `${((f.amount_cents ?? 0) / 100).toFixed(0)} USDC`
-      : `€${((f.amount_cents ?? 0) / 100).toFixed(2)}`;
+      : formatFiat(streamerCurrency, (f.amount_cents ?? 0) / 100);
   return {
     id: f.id,
     time: logTime(f.created_at),
@@ -98,8 +105,9 @@ export default function ViewerBookingPage() {
   }, [supabase, username]);
 
   const profileId = state.kind === 'ready' ? state.profile.id : null;
+  const streamerCurrency = state.kind === 'ready' ? state.profile.settlement_currency : null;
 
-  const loadFlashes = useCallback(async (id: string) => {
+  const loadFlashes = useCallback(async (id: string, currency: string | null) => {
     // Today-only window — yesterday's flashes shouldn't make a quiet stream
     // look "active" on the public landing page. Browser-local midnight, same
     // boundary studio's Today tile uses.
@@ -113,7 +121,7 @@ export default function ViewerBookingPage() {
       .gte('created_at', startOfDay.toISOString())
       .order('created_at', { ascending: false })
       .limit(30);
-    setFlashes(((data ?? []) as FlashRow[]).map(flashRowToFlash));
+    setFlashes(((data ?? []) as FlashRow[]).map((r) => flashRowToFlash(r, currency)));
   }, [supabase]);
 
   // Realtime subscription on flashes for this streamer.
@@ -121,7 +129,7 @@ export default function ViewerBookingPage() {
   useEffect(() => {
     if (!profileId) return;
     lastEventRef.current = Date.now();
-    loadFlashes(profileId);
+    loadFlashes(profileId, streamerCurrency);
 
     const bump = () => { lastEventRef.current = Date.now(); };
     const channel = supabase
@@ -129,14 +137,14 @@ export default function ViewerBookingPage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profileId}` },
-        () => { bump(); loadFlashes(profileId); },
+        () => { bump(); loadFlashes(profileId, streamerCurrency); },
       )
       .subscribe();
 
     const watchdog = setInterval(() => {
       if (Date.now() - lastEventRef.current > 30_000) {
         bump();
-        loadFlashes(profileId);
+        loadFlashes(profileId, streamerCurrency);
       }
     }, 30_000);
 
@@ -144,7 +152,7 @@ export default function ViewerBookingPage() {
       supabase.removeChannel(channel);
       clearInterval(watchdog);
     };
-  }, [profileId, supabase, loadFlashes]);
+  }, [profileId, streamerCurrency, supabase, loadFlashes]);
 
   if (state.kind === 'loading') {
     return <StatusScreen>Loading @{username}…</StatusScreen>;
