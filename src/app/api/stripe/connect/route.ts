@@ -70,8 +70,14 @@ export async function POST(req: Request) {
     // Create onboarding link
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${appUrl}/profile/edit?stripe=refresh`,
-      return_url: `${appUrl}/profile/edit?stripe=success`,
+      // Land returning streamers on the canonical /studio/settings page.
+      // The legacy /profile/edit URL predates the v9 settings split — the
+      // page still works but uses pre-v9 colors and duplicates what
+      // PayoutsSection / AppearanceSection now do better. PayoutsSection
+      // auto-refetches /api/stripe/connect/status on mount so the card
+      // flips to "Stripe ·connected" without any ?stripe=success handler.
+      refresh_url: `${appUrl}/studio/settings?stripe=refresh`,
+      return_url: `${appUrl}/studio/settings?stripe=success`,
       type: 'account_onboarding',
     });
 
