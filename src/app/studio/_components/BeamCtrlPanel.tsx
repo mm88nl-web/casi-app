@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import SlotMedia from '@/components/SlotMedia';
 import UsdcIcon from '@/components/icons/UsdcIcon';
 import { SHAPE_OPTIONS } from '@/lib/banner';
+import { getFiatConfig } from '@/lib/currency';
 import { formatTime, getSecondsRemaining } from './time';
 
 type Tab = 'properties' | 'pricing' | 'behavior';
@@ -92,23 +93,32 @@ export default function BeamCtrlPanel({
   onDone: () => void;
   onUpdateShape?: (id: string, shape: string) => void;
   onUpdateGlow?: (id: string, glow: boolean) => void;
-  /** Stripe Connect's default currency for this streamer. Drives which
-   *  Stripe row renders on the slot Pricing tab — the rate input is in
-   *  whatever Stripe will actually charge in, eliminating the "rate in
-   *  EUR but PI in USD" mismatch the prior free-form picker allowed.
-   *  null means Stripe isn't connected; the Stripe row hides entirely
-   *  and the streamer prices in USDC only. */
-  stripeCurrency?: 'eur' | 'usd' | null;
+  /** Stripe Connect's default currency (lowercase ISO-4217) for this
+   *  streamer. Drives the Stripe row on the slot Pricing tab — the rate
+   *  input is in whatever Stripe will actually charge in, eliminating the
+   *  "rate in EUR but PI in USD" mismatch the prior free-form picker
+   *  allowed. null means Stripe isn't connected; the Stripe row hides
+   *  entirely and the streamer prices in USDC only. Unknown currencies
+   *  fall back to a generic $ render via getFiatConfig. */
+  stripeCurrency?: string | null;
 }) {
   const [tab, setTab] = useState<Tab>('properties');
   // Per-rail rates — fall back to price_value when a rail isn't set on the row.
   // The legacy single price_value continues to drive the booking flow today;
   // the per-rail values are the source of truth for the studio UI and will
   // power per-rail booking once the booking flow is wired through (follow-up).
-  const fallbackUsd = String(el.price_value ?? 0);
-  const [rateUsd, setRateUsd] = useState<string>(String(el.prices?.usd ?? fallbackUsd));
-  const [rateEur, setRateEur] = useState<string>(String(el.prices?.eur ?? fallbackUsd));
-  const [rateUsdc, setRateUsdc] = useState<string>(String(el.prices?.usdc ?? fallbackUsd));
+  // Stripe rail rate is keyed by the streamer's actual currency. We track
+  // it under whichever ISO code Stripe Connect reports so a streamer in
+  // GBP-land prices in £ without us ever round-tripping their input
+  // through USD or EUR. Fallback to USD when Stripe isn't connected
+  // (stripeCurrency === null) — the row hides anyway in that case.
+  const fiatKey = (stripeCurrency || 'usd').toLowerCase();
+  const fiatCfg = getFiatConfig(stripeCurrency);
+  const fallbackFiat = String(el.price_value ?? 0);
+  const [rateFiat, setRateFiat] = useState<string>(
+    String(el.prices?.[fiatKey] ?? fallbackFiat),
+  );
+  const [rateUsdc, setRateUsdc] = useState<string>(String(el.prices?.usdc ?? fallbackFiat));
   const [editUnit, setEditUnit] = useState(el.price_unit || 'min');
   const [minMin, setMinMin] = useState<string>(
     String(el.prices?.min_min ?? el.min_duration_minutes ?? ''),
@@ -123,13 +133,12 @@ export default function BeamCtrlPanel({
   // whatever the streamer last had instead of jumping to a hardcoded
   // default. Cleared whenever a different element is selected (the
   // useEffect below) so a stale snapshot from another slot can't leak in.
-  const preFreeRatesRef = useRef<{ usd: string; eur: string; usdc: string } | null>(null);
+  const preFreeRatesRef = useRef<{ fiat: string; usdc: string } | null>(null);
 
   // Sync editor state + reset to Properties when a different element is selected
   useEffect(() => {
     const fb = String(el.price_value ?? 0);
-    setRateUsd(String(el.prices?.usd ?? fb));
-    setRateEur(String(el.prices?.eur ?? fb));
+    setRateFiat(String(el.prices?.[fiatKey] ?? fb));
     setRateUsdc(String(el.prices?.usdc ?? fb));
     setEditUnit(el.price_unit || 'min');
     setMinMin(String(el.prices?.min_min ?? el.min_duration_minutes ?? ''));
@@ -137,7 +146,7 @@ export default function BeamCtrlPanel({
     preFreeRatesRef.current = null;
     setTab('properties');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [el.id]);
+  }, [el.id, fiatKey]);
 
   useEffect(() => {
     if (!activeBooking) return;
@@ -159,13 +168,12 @@ export default function BeamCtrlPanel({
   // rateUsd alone, which mis-detected USDC-only slots (where rateUsd is
   // just the loaded fallback of '0' even when rateUsdc is a real price)
   // as free. Now requires zeros across the board so a slot priced at 23.5
-  // USDC isn't flagged free just because its USD rail is empty.
+  // USDC isn't flagged free just because its fiat rail is empty.
   const numOr0 = (s: string) => {
     const n = parseFloat(s);
     return Number.isFinite(n) ? n : 0;
   };
-  const beamFree =
-    numOr0(rateUsd) === 0 && numOr0(rateEur) === 0 && numOr0(rateUsdc) === 0;
+  const beamFree = numOr0(rateFiat) === 0 && numOr0(rateUsdc) === 0;
   const glowOn = el.glow_on_start ?? true;
 
   const saveRates = () => {
@@ -176,17 +184,14 @@ export default function BeamCtrlPanel({
     const minN = num(minMin);
     const maxN = num(maxMin);
     // Only persist the Stripe rail the streamer can actually charge in.
-    // The other Stripe state values (e.g. rateUsd loaded from a stale
-    // legacy price_value when Stripe isn't connected) would otherwise
-    // round-trip back to prices.usd and resurface in formatSlotPrice as
-    // "$1/min" on a slot the streamer only set in USDC. USDC is always
+    // When Stripe isn't connected (stripeCurrency null) the fiat rate
+    // isn't persisted — it would otherwise resurface in formatSlotPrice
+    // as "$1/min" on a slot the streamer only set in USDC. USDC is always
     // persisted; the on-chain rail doesn't depend on Stripe.
-    const usdN = stripeCurrency === 'usd' ? num(rateUsd) : null;
-    const eurN = stripeCurrency === 'eur' ? num(rateEur) : null;
+    const fiatN = stripeCurrency ? num(rateFiat) : null;
     const usdcN = num(rateUsdc);
-    const prices = {
-      usd: usdN,
-      eur: eurN,
+    const prices: Record<string, number | null> = {
+      [fiatKey]: fiatN,
       usdc: usdcN,
       min_min: minN,
       max_min: maxN,
@@ -201,10 +206,7 @@ export default function BeamCtrlPanel({
     // in callers that haven't migrated to formatSlotPrice yet. Track the
     // streamer's primary rail so a USDC-only streamer setting USDC=5
     // doesn't end up with price_value=0 marking the slot as free.
-    const legacyPriceValue =
-      stripeCurrency === 'usd' ? num(rateUsd) ?? 0
-      : stripeCurrency === 'eur' ? num(rateEur) ?? 0
-      : usdcN ?? 0;
+    const legacyPriceValue = stripeCurrency ? (num(rateFiat) ?? 0) : (usdcN ?? 0);
     updateLayer(el.id, {
       price_value: legacyPriceValue,
       price_unit: editUnit,
@@ -272,27 +274,19 @@ export default function BeamCtrlPanel({
                 default currency. Hidden entirely when Stripe isn't
                 connected (stripeCurrency === null) so the streamer can't
                 set a rate that nothing will charge against — they price
-                in USDC only until Stripe is hooked up via Settings. */}
-            {stripeCurrency === 'eur' ? (
+                in USDC only until Stripe is hooked up via Settings.
+                Symbol + step come from getFiatConfig so a streamer in
+                GBP-land gets £ with whole-pound steps, JPY-land gets ¥
+                with ¥100 steps, etc. */}
+            {stripeCurrency ? (
               <RailRow
-                glyph={<span style={{ color: 'var(--ink)' }}>€</span>}
-                name="EUR"
+                glyph={<span style={{ color: 'var(--ink)' }}>{fiatCfg.symbol}</span>}
+                name={fiatKey.toUpperCase()}
                 sub="via Stripe"
-                value={rateEur}
-                onChange={setRateEur}
+                value={rateFiat}
+                onChange={setRateFiat}
                 unit={editUnit}
-                step={1}
-                disabled={beamFree}
-              />
-            ) : stripeCurrency === 'usd' ? (
-              <RailRow
-                glyph={<span style={{ color: 'var(--ink)' }}>$</span>}
-                name="USD"
-                sub="via Stripe"
-                value={rateUsd}
-                onChange={setRateUsd}
-                unit={editUnit}
-                step={1}
+                step={fiatCfg.rateStep}
                 disabled={beamFree}
               />
             ) : null}
@@ -356,16 +350,14 @@ export default function BeamCtrlPanel({
                   // only when no snapshot exists (e.g. the slot was
                   // already free in the DB at load time).
                   const prev = preFreeRatesRef.current;
-                  setRateUsd(prev?.usd ?? '1');
-                  setRateEur(prev?.eur ?? '1');
+                  setRateFiat(prev?.fiat ?? '1');
                   setRateUsdc(prev?.usdc ?? '1');
                   preFreeRatesRef.current = null;
                 } else {
                   // Going free → snapshot current rates so un-toggling
                   // restores them, then zero everything.
-                  preFreeRatesRef.current = { usd: rateUsd, eur: rateEur, usdc: rateUsdc };
-                  setRateUsd('0');
-                  setRateEur('0');
+                  preFreeRatesRef.current = { fiat: rateFiat, usdc: rateUsdc };
+                  setRateFiat('0');
                   setRateUsdc('0');
                 }
               }}

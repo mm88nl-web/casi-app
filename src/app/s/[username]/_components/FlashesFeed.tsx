@@ -5,14 +5,14 @@ export type Flash = {
   time: string;
   who: string;
   message: string;
-  chip: { kind: 'free' | 'usdc' | 'eur'; label: string };
+  chip: { kind: 'free' | 'usdc' | 'fiat'; label: string };
   mine?: boolean;
   fresh?: boolean;
 };
 
 const CHIP_CLASS: Record<Flash['chip']['kind'], string> = {
   usdc: 'u',
-  eur: 'e',
+  fiat: 'e',
   free: 'f',
 };
 
