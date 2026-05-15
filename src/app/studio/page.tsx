@@ -432,7 +432,16 @@ function StudioPageInner() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/stripe/connect/status', { cache: 'no-store' });
+        // /api/stripe/connect/status is auth-gated (Bearer token) —
+        // without one it 401s and stripeCurrency stays null, which would
+        // hide the Today tile's fiat line for a streamer who can actually
+        // charge fiat. Match PayoutsSection's pattern.
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const res = await fetch('/api/stripe/connect/status', {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
         if (!res.ok) return;
         const json = await res.json();
         if (cancelled) return;
@@ -443,7 +452,7 @@ function StudioPageInner() {
       }
     })();
     return () => { cancelled = true; };
-  }, [profileId]);
+  }, [profileId, supabase]);
 
   useEffect(() => {
     if (!profileId) return;

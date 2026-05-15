@@ -46,7 +46,16 @@ export default function StudioLivePage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/stripe/connect/status', { cache: 'no-store' });
+        // /api/stripe/connect/status requires a Bearer token — without one
+        // it returns 401 and stripeCurrency stays null, so the slot UI
+        // hides the fiat row even when Stripe is fully connected. Match
+        // PayoutsSection's pattern: pull the session, attach the token.
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const res = await fetch('/api/stripe/connect/status', {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
         if (!res.ok) return;
         const json = await res.json();
         if (cancelled) return;
@@ -57,7 +66,7 @@ export default function StudioLivePage() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     let cancelled = false;
