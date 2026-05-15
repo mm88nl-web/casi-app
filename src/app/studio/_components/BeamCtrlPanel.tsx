@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import SlotMedia from '@/components/SlotMedia';
 import UsdcIcon from '@/components/icons/UsdcIcon';
 import { SHAPE_OPTIONS } from '@/lib/banner';
-import { getFiatConfig } from '@/lib/currency';
+import { getFiatConfig, fiatSymbol, stripeMinAmount, toStripeAmount } from '@/lib/currency';
 import { formatTime, getSecondsRemaining } from './time';
 
 type Tab = 'properties' | 'pricing' | 'behavior';
@@ -339,6 +339,34 @@ export default function BeamCtrlPanel({
               style={{ width: 80, textAlign: 'right' }}
             />
           </div>
+
+          {/* Quiet inline hint when the per-minute rate falls below Stripe's
+              currency floor — in that range, viewers ending a beam early
+              get a full refund (the cancel path in /api/stripe/end-early)
+              instead of a pro-rated charge. Conditional + minimal so it
+              only surfaces when actually relevant. */}
+          {(() => {
+            if (!stripeCurrency) return null;
+            const perMin = editUnit === 'hr' ? Number(rateFiat) / 60 : Number(rateFiat);
+            if (!Number.isFinite(perMin) || perMin <= 0) return null;
+            const perMinMinor = toStripeAmount(stripeCurrency, perMin);
+            const floor = stripeMinAmount(stripeCurrency);
+            if (perMinMinor >= floor) return null;
+            const floorDisplay = `${fiatSymbol(stripeCurrency)}${(floor / 100).toFixed(2)}`;
+            return (
+              <div
+                style={{
+                  fontSize: 10,
+                  color: 'var(--text-3)',
+                  padding: '2px 4px 0',
+                  lineHeight: 1.5,
+                  fontFamily: 'var(--B), var(--font-casi-sans), sans-serif',
+                }}
+              >
+                End-early refunds in full when the pro-rated amount is below {floorDisplay} (Stripe minimum).
+              </div>
+            );
+          })()}
           <div className="casi-v9-cp-row">
             <span className="casi-v9-cp-lbl">Free tier</span>
             <button
