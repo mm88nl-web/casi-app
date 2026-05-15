@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { BANNER_MAX_MESSAGE } from '@/lib/banner';
 import TurnstileWidget from '@/components/TurnstileWidget';
 import UsdcIcon from '@/components/icons/UsdcIcon';
@@ -124,6 +125,78 @@ export default function BookingForm(props: Props) {
 
   const isFreeSlot = Number(slot.price_value) === 0;
   const freeBlocked = isFreeSlot && !turnstileToken;
+
+  // Per-rail availability + cost. The slot's prices JSONB holds rates
+  // keyed by ISO code (gbp / eur / jpy / etc — set by BeamCtrlPanel based
+  // on the streamer's Stripe Connect default_currency) and one usdc key.
+  // We compute both costs locally so the rail picker can surface them
+  // side by side and the pay button can label itself with the right
+  // amount, instead of the prior approach where the parent passed one
+  // pre-formatted estimatedCost that didn't match what each rail would
+  // actually charge.
+  type Rail = 'stripe' | 'usdc' | 'free';
+  const fiatCode = (streamerCurrency || 'usd').toLowerCase();
+  const fiatRate = Number(slot.prices?.[fiatCode] ?? slot.price_value ?? 0) || 0;
+  const usdcRate = Number(slot.prices?.usdc ?? 0) || 0;
+  const stripeAvailable = !isFreeSlot && fiatRate > 0;
+  const usdcAvailable = !isFreeSlot && usdcRate > 0;
+  const secsPerUnit = slot.price_unit === 'hr' ? 3600 : 60;
+  const stripeCost = stripeAvailable ? (fiatRate * durationSeconds) / secsPerUnit : 0;
+  const usdcCost = usdcAvailable ? (usdcRate * durationSeconds) / secsPerUnit : 0;
+
+  // Default rail: free slots = free; paid slots prefer stripe when both
+  // rails are priced (matches viewer expectation that "card" is the
+  // default payment method on the modern web); USDC-only slots auto-pick
+  // usdc. The state stays internal to the form — parent doesn't need to
+  // know which rail the viewer picked, only which submit callback to
+  // run (onStripeSubmit vs onSolanaPay) when the pay button is clicked.
+  const defaultRail: Rail = isFreeSlot
+    ? 'free'
+    : stripeAvailable
+      ? 'stripe'
+      : 'usdc';
+  const [paymentRail, setPaymentRail] = useState<Rail>(defaultRail);
+
+  // Format the cost string for a given rail. Used on rail-picker cards
+  // AND on the pay button, so the two stay in sync without a separate
+  // memo or prop drill.
+  const costLabel = (rail: Rail): string => {
+    if (rail === 'free') return 'Free';
+    if (rail === 'stripe') return `${fiatSymbol(streamerCurrency)}${stripeCost.toFixed(2)}`;
+    return `${usdcCost.toFixed(2)} USDC`;
+  };
+
+  // What the pay button says + which submit callback it runs.
+  const payButtonProps = (() => {
+    if (paymentRail === 'free') {
+      return {
+        label: submitting ? 'Sending…' : (isQueue ? 'Join free queue' : 'Send free request'),
+        onClick: onStripeSubmit, // free + stripe share the request handler
+        disabled: !canSubmit || submitting || freeBlocked,
+        icon: 'free' as const,
+      };
+    }
+    if (paymentRail === 'stripe') {
+      return {
+        label: submitting ? 'Sending…' : `Pay ${costLabel('stripe')}`,
+        onClick: onStripeSubmit,
+        disabled: !canSubmit || submitting,
+        icon: 'stripe' as const,
+      };
+    }
+    return {
+      label: connecting
+        ? 'Connecting…'
+        : !walletConnected
+          ? `Connect wallet · ${costLabel('usdc')}`
+          : submitting
+            ? 'Sending…'
+            : `Pay ${costLabel('usdc')}`,
+      onClick: onSolanaPay,
+      disabled: connecting || submitting || (walletConnected && !canSubmit),
+      icon: 'usdc' as const,
+    };
+  })();
 
   const maxSecs = slot.max_duration_minutes ? slot.max_duration_minutes * 60 : null;
   const presets = [
@@ -406,41 +479,120 @@ export default function BookingForm(props: Props) {
         onMediaZoomChange={onMediaZoomChange}
       />
 
-      {/* USDC cost preview (paid slots only) */}
-      {!isFreeSlot && (
-        <div style={{ background: 'rgba(153,69,255,0.05)', border: '1px solid rgba(153,69,255,0.2)', borderRadius: 10, padding: '12px 14px', margin: '12px 0', fontFamily: "var(--font-casi-mono),monospace", fontSize: 11 }}>
-          {[['Duration', formatTime(durationSeconds)], ['Rate', formatSlotPrice(slot).label]].map(([l, v]) => (
-            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', color: '#555', marginBottom: 5 }}>
-              <span>{l}</span><span>{v}</span>
+      {/* Rail picker + cost summary. Replaces the prior USDC-only preview
+          box, which only spoke to one of the three rails and silently
+          assumed the viewer wanted USDC. Now: one block shows BOTH rails
+          (when both are priced), the selected rail gets the accent
+          border + filled radio, and the cost on each card is what THAT
+          rail will charge — not a shared number translated between
+          currencies. Free slots collapse this to a single inert card. */}
+      {(() => {
+        const rails: Rail[] = isFreeSlot
+          ? ['free']
+          : [
+              ...(stripeAvailable ? ['stripe' as const] : []),
+              ...(usdcAvailable ? ['usdc' as const] : []),
+            ];
+        const railName = (r: Rail) => (r === 'free' ? 'Free' : r === 'stripe' ? 'Card' : 'USDC');
+        const railSub = (r: Rail) =>
+          r === 'free' ? 'rate-limited' : r === 'stripe' ? 'via Stripe' : 'on-chain · Solana';
+        const railIcon = (r: Rail) =>
+          r === 'free' ? (
+            <span style={{ fontSize: 13, lineHeight: 1 }}>★</span>
+          ) : r === 'stripe' ? (
+            <StripeIcon size={12} mono="currentColor" />
+          ) : (
+            <UsdcIcon size={14} />
+          );
+
+        return (
+          <div className="bf-rail" style={{ margin: '14px 0 12px' }}>
+            <div className="bf-rail-row" style={{ display: 'grid', gridTemplateColumns: `repeat(${rails.length}, minmax(0, 1fr))`, gap: 8 }}>
+              {rails.map((r) => {
+                const selected = paymentRail === r;
+                const railAccent = r === 'free' ? '#4ade80' : r === 'usdc' ? '#9945FF' : accentColor;
+                const disabled = isFreeSlot ? false : rails.length === 1; // sole rail isn't really a picker
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => !disabled && setPaymentRail(r)}
+                    disabled={disabled}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      gap: 6,
+                      padding: '12px 14px',
+                      background: selected ? `color-mix(in oklab, ${railAccent} 12%, transparent)` : 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${selected ? railAccent : 'rgba(255,255,255,0.08)'}`,
+                      borderRadius: 10,
+                      cursor: disabled ? 'default' : 'pointer',
+                      color: 'var(--casi-text)',
+                      textAlign: 'left',
+                      fontFamily: "var(--B), var(--font-casi-sans), sans-serif",
+                      transition: 'border-color 0.14s, background 0.14s',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                      <span
+                        aria-hidden
+                        style={{
+                          width: 14, height: 14, borderRadius: '50%',
+                          border: `1.5px solid ${selected ? railAccent : 'rgba(255,255,255,0.25)'}`,
+                          background: selected ? railAccent : 'transparent',
+                          flexShrink: 0,
+                          display: 'inline-block',
+                          boxShadow: selected ? `inset 0 0 0 2px var(--casi-bg, #0c0d11)` : 'none',
+                        }}
+                      />
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: railAccent, fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700 }}>
+                        {railIcon(r)}
+                        {railName(r)}
+                      </span>
+                    </div>
+                    <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 18, fontWeight: 700, color: selected ? railAccent : 'var(--casi-text)', letterSpacing: 0.5, marginTop: 2 }}>
+                      {costLabel(r)}
+                    </div>
+                    <div style={{ fontFamily: "var(--M), var(--font-casi-mono),monospace", fontSize: 9, color: '#666', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                      {railSub(r)}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-          ))}
-          <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #1c1c1c', paddingTop: 8, marginTop: 4, fontSize: 13, fontWeight: 700, color: '#9945FF' }}>
-            <span>Total</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              <UsdcIcon size={12} />
-              {estimatedCost} USDC
-            </span>
-          </div>
-          {walletConnected && usdcBalance !== null ? (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, color: '#555' }}>
-                <span>Your balance</span>
-                <span style={{ color: usdcBalance < parseFloat(estimatedCost) ? '#f87171' : '#6ee7b7', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+
+            {/* Sub-detail line — duration + rate breakdown, neutralized
+                visually so it doesn't compete with the rail cards above. */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, padding: '0 4px', fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: '#666', letterSpacing: 0.5 }}>
+              <span>{formatTime(durationSeconds)} · {slot.price_unit === 'hr' ? 'hourly rate' : 'per-minute rate'}</span>
+              <span>{paymentRail === 'free' ? 'no charge' : paymentRail === 'stripe' ? `${fiatSymbol(streamerCurrency)}${fiatRate}/${slot.price_unit}` : `${usdcRate} USDC/${slot.price_unit}`}</span>
+            </div>
+
+            {/* USDC balance + insufficient warning — only when the USDC
+                rail is the active one. No more showing USDC balance to
+                a card-paying viewer. */}
+            {paymentRail === 'usdc' && walletConnected && usdcBalance !== null ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, padding: '0 4px', fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, letterSpacing: 0.5 }}>
+                <span style={{ color: '#666' }}>Your balance</span>
+                <span style={{ color: usdcBalance < usdcCost ? '#f87171' : '#6ee7b7', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <UsdcIcon size={10} />
                   {usdcBalance.toFixed(2)} USDC
                 </span>
               </div>
-              {usdcBalance < parseFloat(estimatedCost) && (
-                <div style={{ color: '#f87171', fontSize: 10, marginTop: 5, textAlign: 'right' }}>⚠ Insufficient balance</div>
-              )}
-            </>
-          ) : walletConnected ? (
-            <div style={{ color: '#555', fontSize: 10, marginTop: 6 }}>Fetching balance…</div>
-          ) : (
-            <div style={{ color: '#555', fontSize: 10, marginTop: 6 }}>Connect wallet to pay with USDC on-chain</div>
-          )}
-        </div>
-      )}
+            ) : null}
+            {paymentRail === 'usdc' && walletConnected && usdcBalance !== null && usdcBalance < usdcCost ? (
+              <div style={{ color: '#f87171', fontSize: 10, marginTop: 5, textAlign: 'right' }}>⚠ Insufficient balance</div>
+            ) : null}
+            {paymentRail === 'usdc' && walletConnected && usdcBalance === null ? (
+              <div style={{ color: '#555', fontSize: 10, marginTop: 6, textAlign: 'right' }}>Fetching balance…</div>
+            ) : null}
+            {paymentRail === 'usdc' && !walletConnected ? (
+              <div style={{ color: '#555', fontSize: 10, marginTop: 6, textAlign: 'right' }}>Connect wallet to pay with USDC on-chain</div>
+            ) : null}
+          </div>
+        );
+      })()}
 
       {/* Queue wait estimate */}
       {queueWait && (
@@ -460,43 +612,62 @@ export default function BookingForm(props: Props) {
         </div>
       )}
 
-      <div className="bf-footer">
-        <div>
-          <div className="bf-cost-lbl">{isFreeSlot ? 'Cost' : 'Estimated cost'}</div>
-          <div className="bf-cost-val" style={{ color: isFreeSlot ? '#4ade80' : accentColor }}>
-            {isFreeSlot ? 'Free' : `${fiatSymbol(streamerCurrency)}${estimatedCost}`}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {/* Stripe / Free */}
-          <button
-            onClick={onStripeSubmit}
-            disabled={!canSubmit || submitting || freeBlocked}
-            className="bf-sub"
-            style={{ background: isFreeSlot ? '#4ade80' : accentColor, color: 'var(--casi-bg)', display: 'flex', alignItems: 'center', gap: 7, opacity: (!canSubmit || submitting || freeBlocked) ? 0.5 : 1 }}
-          >
-            {isFreeSlot ? (
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M6.5 1l1.545 3.13L11.5 4.635 9 7.073l.59 3.442L6.5 8.89 3.41 10.515 4 7.073 1.5 4.635l3.455-.505L6.5 1z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" />
-              </svg>
-            ) : (
-              <StripeIcon size={11} mono="currentColor" />
-            )}
-            {submitting ? 'Sending…' : isExtend ? 'Extend' : isFreeSlot ? (isQueue ? 'Join Free Queue' : 'Send Free Request') : isQueue ? 'Join Queue' : 'Send Request'}
-          </button>
-
-          {/* Solana / CASI escrow (hidden for free slots) */}
-          {!isFreeSlot && (
+      {/* Single pay button — the rail picker above already named the
+          chosen rail + its cost, so the button is just the commit
+          action. Color matches the selected rail so the visual link
+          between picker and CTA is obvious. */}
+      <div style={{ marginTop: 4 }}>
+        {(() => {
+          const railAccent =
+            paymentRail === 'free' ? '#4ade80'
+            : paymentRail === 'usdc' ? '#9945FF'
+            : accentColor;
+          // For USDC rail with unconnected wallet, fall to ghost style so
+          // the action reads as 'connect first' rather than 'commit now'.
+          const ghost = paymentRail === 'usdc' && !walletConnected;
+          return (
             <button
-              disabled={connecting || submitting || (walletConnected && !canSubmit)}
+              onClick={payButtonProps.onClick}
+              disabled={payButtonProps.disabled}
               className="bf-sub"
-              style={{ background: walletConnected ? '#9945FF' : 'rgba(153,69,255,0.12)', color: walletConnected ? '#fff' : '#9945FF', border: walletConnected ? 'none' : '1px solid rgba(153,69,255,0.35)', display: 'flex', alignItems: 'center', gap: 7, opacity: (connecting || submitting || (walletConnected && !canSubmit)) ? 0.5 : 1 }}
-              onClick={onSolanaPay}
+              style={{
+                width: '100%',
+                background: ghost ? 'transparent' : railAccent,
+                color: ghost ? railAccent : (paymentRail === 'usdc' ? '#fff' : 'var(--casi-bg)'),
+                border: ghost ? `1px solid ${railAccent}` : 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                padding: '14px 18px',
+                fontFamily: "var(--font-casi-sans), sans-serif",
+                fontWeight: 800,
+                fontSize: 14,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                opacity: payButtonProps.disabled ? 0.5 : 1,
+                cursor: payButtonProps.disabled ? 'not-allowed' : 'pointer',
+                transition: 'opacity 0.16s',
+              }}
             >
-              <UsdcIcon size={12} mono={walletConnected ? '#fff' : '#9945FF'} />
-              {connecting ? 'Connecting…' : walletConnected ? 'Pay with USDC' : 'Connect & Pay USDC'}
+              {payButtonProps.icon === 'stripe' ? <StripeIcon size={12} mono="currentColor" />
+                : payButtonProps.icon === 'usdc' ? <UsdcIcon size={14} mono={ghost ? railAccent : '#fff'} />
+                : <span style={{ fontSize: 14, lineHeight: 1 }}>★</span>}
+              <span>{isExtend ? 'Extend slot' : payButtonProps.label}</span>
             </button>
-          )}
+          );
+        })()}
+
+        {/* Trust copy — small footnote below the button so first-time
+            viewers know what 'pay' commits them to. The streamer's
+            approval gate is the strongest reassurance and worth
+            surfacing. */}
+        <div style={{ marginTop: 10, fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#555', textAlign: 'center' }}>
+          {paymentRail === 'free'
+            ? 'Free flashes are rate-limited · streamer can deny'
+            : paymentRail === 'usdc'
+              ? 'USDC held in escrow until streamer approves · 100% refund on deny'
+              : 'Authorized until streamer approves · 100% refund on deny · CASI 0%'}
         </div>
       </div>
     </div>
