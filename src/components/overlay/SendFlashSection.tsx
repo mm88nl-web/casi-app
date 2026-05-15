@@ -21,11 +21,16 @@ import { EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 import { TurnstileWidget } from '@/components/TurnstileWidget';
 import StripeIcon from '@/components/icons/StripeIcon';
 import UsdcIcon from '@/components/icons/UsdcIcon';
+import { fiatSymbol, formatFiat } from '@/lib/currency';
 
 // Minimal shape of the streamer profile we actually read.
 interface StreamerProfileLite {
   solana_wallet?: string | null;
   allow_free_flashes?: boolean | null;
+  /** Stripe Connect default_currency (lowercase ISO-4217). Drives the fiat
+   *  symbol on the amount input + submit button. null means Stripe isn't
+   *  connected — the fiat option won't render, so this never gets used. */
+  settlement_currency?: string | null;
 }
 
 // Matching the old `myFlash` shape returned by Supabase realtime.
@@ -381,10 +386,14 @@ export default function SendFlashSection({
           </div>
 
           {/* Amount — hidden entirely for the free rail */}
-          {paymentMethod !== 'free' && (
+          {paymentMethod !== 'free' && (() => {
+            const streamerFiat = profile.settlement_currency ?? 'usd';
+            const fiatSym = fiatSymbol(streamerFiat);
+            const fiatLabel = streamerFiat.toUpperCase();
+            return (
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-text-muted)', display: 'block', marginBottom: 8 }}>
-                Amount {paymentMethod === 'solana' ? '(USDC)' : '(EUR)'}
+                Amount {paymentMethod === 'solana' ? '(USDC)' : `(${fiatLabel})`}
               </label>
               <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                 {AMOUNT_PRESETS.map(p => (
@@ -393,22 +402,23 @@ export default function SendFlashSection({
                       ...(parseFloat(amount) === p
                         ? { background: 'rgba(var(--casi-accent-rgb),0.12)', borderColor: 'rgba(var(--casi-accent-rgb),0.35)', color: 'var(--casi-accent)' }
                         : { background: 'none', borderColor: 'var(--casi-border)', color: 'var(--casi-text-muted)' }) }}>
-                    {paymentMethod === 'solana' ? `${p} USDC` : `$${p}`}
+                    {paymentMethod === 'solana' ? `${p} USDC` : `${fiatSym}${p}`}
                   </button>
                 ))}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '10px 14px' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 13, color: 'var(--casi-text-muted)' }}>
-                  {paymentMethod === 'solana' ? <UsdcIcon size={14} /> : '$'}
+                  {paymentMethod === 'solana' ? <UsdcIcon size={14} /> : fiatSym}
                 </span>
                 <input type="number" value={amount} min="1" step="1" onChange={e => setAmount(e.target.value)}
                   style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 17, fontWeight: 700, color: 'var(--casi-text)', fontFamily: "var(--B), var(--font-casi-sans), sans-serif" }} />
                 <span style={{ fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 9, color: '#333', whiteSpace: 'nowrap' }}>
-                  {paymentMethod === 'solana' ? 'min 1 USDC' : 'min $1'}
+                  {paymentMethod === 'solana' ? 'min 1 USDC' : `min ${fiatSym}1`}
                 </span>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Captcha — only needed for free rail */}
           {paymentMethod === 'free' && (
@@ -445,7 +455,7 @@ export default function SendFlashSection({
               ? (submitting ? (onChainStatus === 'locking' ? 'Locking on-chain…' : 'Submitting…') : `${(amountCents / 100).toFixed(2)} USDC Flash`)
               : paymentMethod === 'free'
                 ? (submitting ? 'Sending…' : 'Send Free Flash')
-                : (submitting ? 'Redirecting…' : `$${(amountCents / 100).toFixed(2)} Flash`)}
+                : (submitting ? 'Redirecting…' : `${formatFiat(profile.settlement_currency, amountCents / 100)} Flash`)}
           </button>
 
           <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#2a2a2a', textAlign: 'center', marginTop: 10, lineHeight: 1.9 }}>

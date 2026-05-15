@@ -5,6 +5,7 @@ import TurnstileWidget from '@/components/TurnstileWidget';
 import UsdcIcon from '@/components/icons/UsdcIcon';
 import StripeIcon from '@/components/icons/StripeIcon';
 import { formatSlotPrice } from '@/lib/slot-pricing';
+import { fiatSymbol } from '@/lib/currency';
 import CustomizePanel from './CustomizePanel';
 import { formatTime, getSecondsRemaining } from './time';
 
@@ -56,6 +57,10 @@ type Props = {
 
   // Cost / wallet
   estimatedCost: string;
+  /** Streamer's Stripe Connect settlement currency (lowercase ISO-4217).
+   *  Drives the fiat symbol on the estimated-cost footer. null means
+   *  Stripe isn't connected — the footer falls back to '$'. */
+  streamerCurrency?: string | null;
   walletConnected: boolean;
   usdcBalance: number | null;
 
@@ -98,7 +103,7 @@ export default function BookingForm(props: Props) {
     imageUrl, imageValid, onImageUrlChange, onImageValidChange, getUrlFileType,
     durationSeconds, onDurationChange,
     message, onMessageChange,
-    estimatedCost, walletConnected, usdcBalance,
+    estimatedCost, streamerCurrency, walletConnected, usdcBalance,
     activeBookings, approvedQueuedBookings,
     turnstileToken, onTurnstileVerify, onTurnstileExpire,
     customizeOpen, onCustomizeToggle,
@@ -459,7 +464,7 @@ export default function BookingForm(props: Props) {
         <div>
           <div className="bf-cost-lbl">{isFreeSlot ? 'Cost' : 'Estimated cost'}</div>
           <div className="bf-cost-val" style={{ color: isFreeSlot ? '#4ade80' : accentColor }}>
-            {isFreeSlot ? 'Free' : `$${estimatedCost}`}
+            {isFreeSlot ? 'Free' : `${fiatSymbol(streamerCurrency)}${estimatedCost}`}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>

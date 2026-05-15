@@ -3,19 +3,31 @@
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
+import { formatFiat } from '@/lib/currency';
 
 type FlashItem = {
   id: string;
   viewer_name: string;
   message: string;
   amount_cents: number;
+  payment_method: string | null;
   enteredAt: number;
   tx_signature?: string | null;
 };
 
 const DISPLAY_MS = 25_000;
 
-export default function FlashFeed({ profileId }: { profileId: string }) {
+export default function FlashFeed({
+  profileId,
+  streamerCurrency,
+}: {
+  profileId: string;
+  /** Streamer's Stripe Connect settlement currency (lowercase ISO-4217).
+   *  Used to render the fiat chip symbol on Stripe flashes; USDC flashes
+   *  ignore it and render '<amount> USDC' regardless. null falls back to
+   *  USD-style '$' rendering for legacy rows. */
+  streamerCurrency?: string | null;
+}) {
   const [items, setItems] = useState<FlashItem[]>([]);
   const supabase = useRef(createClient()).current;
   // Commit-timestamp dedup so reconnect replays can't re-pop a flash
@@ -27,7 +39,7 @@ export default function FlashFeed({ profileId }: { profileId: string }) {
     const since = new Date(Date.now() - DISPLAY_MS).toISOString();
     supabase
       .from('flashes')
-      .select('id, viewer_name, message, amount_cents, tx_signature')
+      .select('id, viewer_name, message, amount_cents, payment_method, tx_signature')
       .eq('profile_id', profileId)
       .eq('status', 'approved')
       .gte('created_at', since)
@@ -58,11 +70,12 @@ export default function FlashFeed({ profileId }: { profileId: string }) {
           setItems(prev => {
             const item: FlashItem = {
               id,
-              viewer_name:   n.viewer_name as string,
-              message:       n.message as string,
-              amount_cents:  n.amount_cents as number,
-              tx_signature:  n.tx_signature as string | null | undefined,
-              enteredAt:     Date.now(),
+              viewer_name:    n.viewer_name as string,
+              message:        n.message as string,
+              amount_cents:   n.amount_cents as number,
+              payment_method: (n.payment_method as string | null | undefined) ?? null,
+              tx_signature:   n.tx_signature as string | null | undefined,
+              enteredAt:      Date.now(),
             };
             return [...prev.filter(f => f.id !== item.id), item].slice(-5);
           });
@@ -92,7 +105,9 @@ export default function FlashFeed({ profileId }: { profileId: string }) {
               ⚡ {flash.viewer_name}
             </span>
             <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, background: 'rgba(var(--casi-accent-rgb),0.18)', color: 'var(--casi-accent)', border: '1px solid rgba(var(--casi-accent-rgb),0.35)', borderRadius: 20, padding: '1px 8px' }}>
-              ${(flash.amount_cents / 100).toFixed(2)}
+              {flash.payment_method === 'usdc' || flash.payment_method === 'solana'
+                ? `${(flash.amount_cents / 100).toFixed(2)} USDC`
+                : formatFiat(streamerCurrency, flash.amount_cents / 100)}
             </span>
           </div>
           <div style={{ background: 'rgba(255,255,255,0.93)', borderRadius: '18px 18px 4px 18px', padding: '11px 15px', boxShadow: '0 6px 24px rgba(0,0,0,0.4)' }}>
