@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useIsOverlayRoute } from '@/lib/use-is-overlay-route';
 
 const DISMISS_KEY = 'casi-cookie-notice-dismissed-v1';
 
 export function CookieNotice() {
   const [visible, setVisible] = useState(false);
+  const isOverlay = useIsOverlayRoute();
 
   useEffect(() => {
     try {
@@ -23,6 +25,9 @@ export function CookieNotice() {
     setVisible(false);
   };
 
+  // OBS browser sources can't click through banners without Interact mode,
+  // and the notice copy is meaningless on a stream canvas anyway.
+  if (isOverlay) return null;
   if (!visible) return null;
 
   return (
