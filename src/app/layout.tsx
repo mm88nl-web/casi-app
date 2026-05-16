@@ -108,6 +108,10 @@ export default function RootLayout({
               <DevBanner />
             </Suspense>
             {children}
+            {/* UI chrome below: anything that renders here leaks onto OBS
+                browser-source routes (/overlay, /obs) unless it gates itself
+                via `useIsOverlayRoute()` from `@/lib/use-is-overlay-route`.
+                See CookieNotice for the pattern. */}
             <CookieNotice />
             {/* v9 dev tools — render only in non-production builds (gated inside each
                 component). Mounted at the root so they appear on every page during
