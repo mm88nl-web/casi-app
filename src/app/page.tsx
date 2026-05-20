@@ -52,7 +52,7 @@ export default function HomePage() {
 
       <section className="lede">
         <h1>
-          Your stream is space <span className="hl">for rent.</span>
+          Interactive <span className="hl">overlay.</span>
         </h1>
 
         <div className="cta-row">
@@ -230,6 +230,7 @@ export default function HomePage() {
           max-width: 1200px;
           width: 100%;
           margin: 0 auto;
+          text-align: center;
         }
         @media (max-width: 640px) {
           .lede { padding: 36px 22px 56px; }
@@ -244,7 +245,6 @@ export default function HomePage() {
           letter-spacing: -0.038em;
           color: var(--type);
           text-wrap: balance;
-          max-width: 980px;
         }
         h1 .hl {
           background-image: linear-gradient(
@@ -261,6 +261,7 @@ export default function HomePage() {
           margin-top: 44px;
           display: flex;
           align-items: center;
+          justify-content: center;
           gap: 24px;
           flex-wrap: wrap;
         }
