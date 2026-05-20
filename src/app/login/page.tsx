@@ -380,8 +380,9 @@ export default function AuthPage() {
           --casi-surface-2:  #e4d4be;
           --casi-border:     rgba(34, 26, 20, 0.14);
           --casi-border-2:   rgba(34, 26, 20, 0.26);
-          --casi-accent:     #c04830;
-          --casi-accent-rgb: 192, 72, 48;
+          --casi-accent:     #294b3c;
+          --casi-accent-rgb: 41, 75, 60;
+          --casi-dot:        #c04830;
           --casi-text:       #221a14;
           --casi-text-muted: #6a574b;
           --casi-text-mid:   #8a7a5a;
@@ -426,7 +427,7 @@ export default function AuthPage() {
         }
         .auth-brand { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; }
         .auth-brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 0; }
-        .auth-brand-name { font-family: var(--H); font-size: 28px; font-weight: 800; color: var(--text); letter-spacing: -0.04em; }
+        .auth-brand-name { font-family: var(--H); font-size: 28px; font-weight: 800; color: var(--casi-text); letter-spacing: -0.04em; }
         .auth-brand-tag  { font-family: var(--M); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-4); margin-top: 5px; }
 
         .auth-quote { position: relative; z-index: 1; }
@@ -569,7 +570,7 @@ export default function AuthPage() {
           <div className="auth-brand">
             <div className="auth-brand-row">
               <CasiMark width={60} height={30} />
-              <span className="auth-brand-name">casi<span style={{ color: 'var(--casi-accent)' }}>.</span></span>
+              <span className="auth-brand-name">casi<span style={{ color: 'var(--casi-dot)' }}>.</span></span>
             </div>
           </div>
 

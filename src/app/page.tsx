@@ -219,20 +219,21 @@ export default function HomePage() {
           display: flex;
           flex-direction: column;
           align-items: center;
-          padding: 32px 40px 72px;
+          padding: 64px 40px 80px;
         }
         @media (max-width: 640px) {
-          .lede { padding: 24px 22px 56px; }
+          .lede { padding: 40px 22px 64px; }
         }
         .hero-mark {
           display: inline-flex;
+          flex-direction: column;
           align-items: center;
-          gap: 20px;
+          gap: 24px;
           text-decoration: none;
-          margin-bottom: 52px;
+          margin-bottom: 80px;
         }
         @media (max-width: 640px) {
-          .hero-mark { gap: 14px; margin-bottom: 36px; }
+          .hero-mark { gap: 18px; margin-bottom: 52px; }
         }
 
         .cta-row {
