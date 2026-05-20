@@ -197,6 +197,22 @@ export const SKINS: Skin[] = [
     isLight:    true,
     category:   'fresh',
   },
+  {
+    id: 'apothecary',
+    name: 'Apothecary',
+    accent:     '#C8A45C',
+    accentRgb:  '200, 164, 92',
+    accent2:    '#7C5C2A',
+    accent2Rgb: '124, 92, 42',
+    bg:         '#0F0C07',
+    surface:    '#1A1508',
+    border:     '#2E2310',
+    text:       '#F5EDD8',
+    textMuted:  '#8A7A5A',
+    ink:        '#C8A45C',
+    paper:      '#0F0C07',
+    category:   'fresh',
+  },
   // ── Custom ────────────────────────────────────────────────────────────
   // Sentinel skin: ink/paper here are seed defaults the picker uses on
   // first selection. The actual visible ink/paper come from
