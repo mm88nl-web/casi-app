@@ -132,8 +132,8 @@ export default function HomePage() {
           color: var(--type);
           font-family: var(--H);
           font-weight: 800;
-          font-size: 72px;
-          letter-spacing: -0.04em;
+          font-size: 120px;
+          letter-spacing: -0.045em;
           line-height: 1;
         }
         .casi-landing :global(.casi-v9-wordmark .casi-v9-dot) {
@@ -141,12 +141,16 @@ export default function HomePage() {
         }
         .casi-landing :global(.casi-v9-mark) {
           color: var(--ink);
-          width: 134px;
-          height: 67px;
+          width: 200px;
+          height: 100px;
         }
-        @media (max-width: 640px) {
-          .casi-landing :global(.casi-v9-wordmark) { font-size: 52px; }
-          .casi-landing :global(.casi-v9-mark) { width: 96px; height: 48px; }
+        @media (max-width: 768px) {
+          .casi-landing :global(.casi-v9-wordmark) { font-size: 80px; }
+          .casi-landing :global(.casi-v9-mark) { width: 134px; height: 67px; }
+        }
+        @media (max-width: 480px) {
+          .casi-landing :global(.casi-v9-wordmark) { font-size: 60px; }
+          .casi-landing :global(.casi-v9-mark) { width: 100px; height: 50px; }
         }
 
         /* NAV — login link only, no logo */
@@ -219,21 +223,21 @@ export default function HomePage() {
           display: flex;
           flex-direction: column;
           align-items: center;
-          padding: 64px 40px 80px;
+          padding: 80px 40px 100px;
         }
-        @media (max-width: 640px) {
-          .lede { padding: 40px 22px 64px; }
+        @media (max-width: 768px) {
+          .lede { padding: 60px 28px 80px; }
         }
         .hero-mark {
-          display: inline-flex;
+          display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 24px;
+          gap: 32px;
           text-decoration: none;
-          margin-bottom: 80px;
+          margin-bottom: 72px;
         }
-        @media (max-width: 640px) {
-          .hero-mark { gap: 18px; margin-bottom: 52px; }
+        @media (max-width: 768px) {
+          .hero-mark { gap: 24px; margin-bottom: 56px; }
         }
 
         .cta-row {
