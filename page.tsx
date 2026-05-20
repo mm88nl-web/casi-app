@@ -146,7 +146,7 @@ export default function HomePage() {
           color: var(--type);
           font-family: var(--H);
           font-weight: 800;
-          font-size: 22px;
+          font-size: 28px;
           letter-spacing: -0.035em;
         }
         .casi-landing :global(.casi-v9-wordmark .casi-v9-dot) {
@@ -154,31 +154,39 @@ export default function HomePage() {
         }
         .casi-landing :global(.casi-v9-mark) {
           color: var(--ink);
-          width: 48px;
-          height: 24px;
+          width: 60px;
+          height: 30px;
         }
 
         .top {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          padding: 28px 40px 0;
+          justify-content: center;
+          position: relative;
+          padding: 32px 40px 0;
         }
         @media (max-width: 640px) {
           .top {
-            padding: 22px 22px 0;
+            padding: 26px 22px 0;
           }
         }
         .mark {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
         }
 
         .top-r {
+          position: absolute;
+          right: 40px;
           display: flex;
           align-items: center;
           gap: 18px;
+        }
+        @media (max-width: 640px) {
+          .top-r {
+            right: 22px;
+          }
         }
         .stamp {
           font-family: var(--S);
