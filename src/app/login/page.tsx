@@ -571,7 +571,7 @@ export default function AuthPage() {
               <CasiMark width={60} height={30} />
               <span className="auth-brand-name">casi<span style={{ color: 'var(--ink)' }}>.</span></span>
             </div>
-            <div className="auth-brand-tag">Stream monetization</div>
+            <div className="auth-brand-tag">Interactive overlay</div>
           </div>
 
           {mode === 'signup' ? (
@@ -592,11 +592,10 @@ export default function AuthPage() {
           ) : (
             <div className="auth-quote">
               <div className="auth-quote-text">
-                Your stream.<br />
-                <span className="o">Your space.</span><br />
-                Their stage.
+                Interactive<br />
+                <span className="o">overlay.</span>
               </div>
-              <div className="auth-quote-sub">Monetize your live stream with paid slots</div>
+              <div className="auth-quote-sub">Viewers book time · You approve · They appear</div>
             </div>
           )}
         </div>
