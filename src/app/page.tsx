@@ -234,10 +234,10 @@ export default function HomePage() {
           align-items: center;
           gap: 32px;
           text-decoration: none;
-          margin-bottom: 72px;
+          margin-bottom: 120px;
         }
         @media (max-width: 768px) {
-          .hero-mark { gap: 24px; margin-bottom: 56px; }
+          .hero-mark { gap: 24px; margin-bottom: 80px; }
         }
 
         .cta-row {
