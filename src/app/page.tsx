@@ -33,10 +33,6 @@ export default function HomePage() {
   return (
     <main className="casi-landing" data-paper="light">
       <header className="top">
-        <Link href="/" className="mark" aria-label="Casi">
-          <CasiMark />
-          <Wordmark />
-        </Link>
         <div className="top-r">
           {showLive && (
             <>
@@ -51,9 +47,10 @@ export default function HomePage() {
       </header>
 
       <section className="lede">
-        <h1>
-          Interactive <span className="hl">overlay.</span>
-        </h1>
+        <Link href="/" className="hero-mark" aria-label="Casi">
+          <CasiMark />
+          <Wordmark />
+        </Link>
 
         <div className="cta-row">
           {/* Inline styles bypass styled-jsx scoping issues in production */}
@@ -135,44 +132,37 @@ export default function HomePage() {
           color: var(--type);
           font-family: var(--H);
           font-weight: 800;
-          font-size: 28px;
-          letter-spacing: -0.035em;
+          font-size: 72px;
+          letter-spacing: -0.04em;
+          line-height: 1;
         }
         .casi-landing :global(.casi-v9-wordmark .casi-v9-dot) {
           color: var(--accent);
         }
         .casi-landing :global(.casi-v9-mark) {
           color: var(--ink);
-          width: 60px;
-          height: 30px;
+          width: 134px;
+          height: 67px;
+        }
+        @media (max-width: 640px) {
+          .casi-landing :global(.casi-v9-wordmark) { font-size: 52px; }
+          .casi-landing :global(.casi-v9-mark) { width: 96px; height: 48px; }
         }
 
-        /* NAV */
+        /* NAV — login link only, no logo */
         .top {
           display: flex;
           align-items: center;
-          justify-content: center;
-          position: relative;
-          padding: 32px 40px 0;
+          justify-content: flex-end;
+          padding: 28px 40px 0;
         }
         @media (max-width: 640px) {
-          .top { padding: 26px 22px 0; }
-        }
-        .mark {
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-          text-decoration: none;
+          .top { padding: 22px 22px 0; }
         }
         .top-r {
-          position: absolute;
-          right: 40px;
           display: flex;
           align-items: center;
           gap: 18px;
-        }
-        @media (max-width: 640px) {
-          .top-r { right: 22px; }
         }
 
         /* LIVE STAMP */
@@ -223,42 +213,29 @@ export default function HomePage() {
           .stamp, .stamp .n, .login { font-size: 15px; }
         }
 
-        /* HERO */
+        /* HERO — logo is the content */
         .lede {
           align-self: center;
-          padding: 48px 40px 72px;
-          max-width: 1200px;
-          width: 100%;
-          margin: 0 auto;
-          text-align: center;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 32px 40px 72px;
         }
         @media (max-width: 640px) {
-          .lede { padding: 36px 22px 56px; }
+          .lede { padding: 24px 22px 56px; }
         }
-
-        h1 {
-          font-family: var(--H);
-          font-weight: 700;
-          font-variation-settings: 'opsz' 96;
-          font-size: clamp(44px, 8vw, 116px);
-          line-height: 0.96;
-          letter-spacing: -0.038em;
-          color: var(--type);
-          text-wrap: balance;
+        .hero-mark {
+          display: inline-flex;
+          align-items: center;
+          gap: 20px;
+          text-decoration: none;
+          margin-bottom: 52px;
         }
-        h1 .hl {
-          background-image: linear-gradient(
-            transparent 68%, var(--accent) 68%, var(--accent) 96%, transparent 96%
-          );
-          background-repeat: no-repeat;
-          background-size: 100% 100%;
-          padding: 0 8px;
-          margin: 0 -4px;
-          color: var(--type);
+        @media (max-width: 640px) {
+          .hero-mark { gap: 14px; margin-bottom: 36px; }
         }
 
         .cta-row {
-          margin-top: 44px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -266,7 +243,7 @@ export default function HomePage() {
           flex-wrap: wrap;
         }
         @media (max-width: 540px) {
-          .cta-row { margin-top: 32px; gap: 16px; }
+          .cta-row { gap: 16px; }
         }
 
         /* FOOTER */

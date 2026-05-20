@@ -573,7 +573,7 @@ export default function AuthPage() {
             </div>
           </div>
 
-          {mode === 'signup' ? (
+          {mode === 'signup' && (
             <div className="left-steps">
               {STEPS.map((s, i) => {
                 const state = i < stepIndex ? 'done' : i === stepIndex ? 'current' : 'pending';
@@ -587,14 +587,6 @@ export default function AuthPage() {
                   </div>
                 );
               })}
-            </div>
-          ) : (
-            <div className="auth-quote">
-              <div className="auth-quote-text">
-                Interactive<br />
-                <span className="o">overlay.</span>
-              </div>
-              <div className="auth-quote-sub">Viewers book time · You approve · They appear</div>
             </div>
           )}
         </div>
