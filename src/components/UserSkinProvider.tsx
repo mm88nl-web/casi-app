@@ -67,16 +67,14 @@ function applySkinToRoot(skin: Skin, inkOverride: string | null, paperOverride: 
   if (lightMode) root.setAttribute('data-paper', 'light');
   else           root.removeAttribute('data-paper');
 
-  // v7 alias layer kept in sync.
+  // v7 alias layer — only the values that can't derive from --ink/--paper
+  // via color-mix() in globals.css. Surface/border/text are intentionally
+  // omitted so the globals.css derivations win over stale inline overrides.
   root.style.setProperty('--casi-accent',     ink);
   root.style.setProperty('--casi-accent-rgb', inkRgb);
   root.style.setProperty('--casi-accent2',     skin.accent2);
   root.style.setProperty('--casi-accent2-rgb', skin.accent2Rgb);
   root.style.setProperty('--casi-bg',          paper);
-  root.style.setProperty('--casi-surface',     skin.surface);
-  root.style.setProperty('--casi-border',      skin.border);
-  root.style.setProperty('--casi-text',        skin.text);
-  root.style.setProperty('--casi-text-muted',  skin.textMuted);
 }
 
 export function UserSkinProvider({ children }: { children: ReactNode }) {

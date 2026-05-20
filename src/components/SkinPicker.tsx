@@ -6,8 +6,7 @@ import { useUserSkin } from '@/components/UserSkinProvider';
 // Pre-grouped so the picker can render section headers without re-walking
 // the array on every render. Order here drives display order.
 const GROUPS: { id: string; label: string }[] = [
-  { id: 'casi',     label: 'Casi' },
-  { id: 'fresh',    label: 'New' },
+  { id: 'casi',     label: 'Presets' },
   { id: 'platform', label: 'Platforms' },
   { id: 'custom',   label: 'Yours' },
 ];
