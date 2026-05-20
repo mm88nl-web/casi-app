@@ -46,8 +46,21 @@ const nextConfig: NextConfig = {
 
               // Block plugins (Flash, etc.) entirely.
               "object-src 'none'",
+
+              // Prevent this app from being framed by other origins (clickjacking).
+              "frame-ancestors 'self'",
             ].join('; '),
           },
+          // Prevent browsers from MIME-sniffing a response away from the declared
+          // content-type (e.g. treating a text/plain upload as text/html).
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          // Legacy clickjacking protection for browsers that don't honour CSP
+          // frame-ancestors.
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          // Only send the origin (no path) as Referer to cross-origin destinations.
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // Disable browser features the app never uses.
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
         ],
       },
     ];
