@@ -3,7 +3,13 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
-import { NavBar, Footer } from '@/components/v9';
+import { CasiMark } from '@/components/v9/CasiMark';
+import { Wordmark } from '@/components/v9/Wordmark';
+
+// Same three roots as the landing — edit once, updates both.
+const P = '#f5e1d2';
+const I = '#294b3c';
+const A = '#c04830';
 
 type LiveProfile = {
   username: string;
@@ -28,65 +34,79 @@ export default function BrowsePage() {
         .order('username');
       if (!cancelled) setLive((data ?? []) as LiveProfile[]);
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [supabase]);
 
+  const showLive = live !== null && live.length > 0;
+
   return (
-    <main className="casi-v9-browse">
-      <NavBar
-        liveLabel={live === null ? '— LIVE NOW' : `${live.length} LIVE NOW`}
-      />
+    <main className="casi-browse" data-paper="light">
+      <header className="top">
+        <Link href="/" className="mark" aria-label="Casi">
+          <CasiMark />
+          <Wordmark />
+        </Link>
+        <div className="top-r">
+          {showLive && (
+            <>
+              <div className="stamp">
+                <span className="n">{live!.length}</span> live
+              </div>
+              <span className="sep" aria-hidden="true" />
+            </>
+          )}
+          <Link href="/login" className="login">Log in</Link>
+        </div>
+      </header>
 
       <section className="b-head">
-        <div className="b-eyebrow">
-          <span className="b-eyebrow-rule" />
-          <span className="b-eyebrow-tag">Browse</span>
-          Live now
-        </div>
-        <h1 className="b-title">
-          Pick a streamer.
-          <br />
+        <h1>
+          Pick a streamer.<br />
           <em>Take their screen.</em>
         </h1>
-        <p className="b-sub">
-          Every streamer below is live right now. Click in to book a slot.
-        </p>
       </section>
 
       <section className="b-body">
         {live === null ? (
-          <div className="b-empty">Loading…</div>
+          <div className="b-loading">Loading…</div>
         ) : live.length === 0 ? (
-          <div className="b-empty-state">
-            <div className="b-empty-tag">Off-air</div>
-            <h2 className="b-empty-h">No one&apos;s live right now.</h2>
-            <p className="b-empty-p">
-              CASI is live whenever a streamer flips their is-live switch in Studio.
-              Be the first to broadcast.
-            </p>
-            <Link href="/studio" className="b-empty-cta">
-              Go live yourself <span>→</span>
+          <div className="b-empty">
+            <h2>No one&apos;s live right now.</h2>
+            <p>Be the first to go live.</p>
+            <Link
+              href="/studio"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                marginTop: '20px',
+                background: I,
+                color: P,
+                padding: '13px 22px',
+                fontFamily: 'var(--font-casi-display), system-ui, sans-serif',
+                fontWeight: 700,
+                fontSize: '15px',
+                border: `1.5px solid ${I}`,
+                textDecoration: 'none',
+              }}
+            >
+              Go live yourself →
             </Link>
           </div>
         ) : (
           <div className="b-grid">
             {live.map((p) => {
-              // Streamer's brand color drives the card's hero band so each tile
-              // feels like part of THEIR space. Falls back to ink if they haven't
-              // picked one. theme_color is the legacy v7 column; ink_color is v9.
-              const accent = p.ink_color || p.theme_color || null;
+              const accent = p.ink_color || p.theme_color || I;
               const initial = (p.display_name || p.username).charAt(0).toUpperCase();
               return (
                 <Link
                   key={p.username}
                   href={`/overlay?s=${p.username}`}
                   className="b-card"
-                  style={accent ? ({ '--card-ink': accent } as React.CSSProperties) : undefined}
+                  style={{ '--card-ink': accent } as React.CSSProperties}
                 >
                   <div className="b-card-hero">
-                    <span className="b-card-live">
+                    <span className="b-card-live-pill">
                       <span className="b-card-live-dot" />
                       Live
                     </span>
@@ -102,7 +122,10 @@ export default function BrowsePage() {
                   <div className="b-card-body">
                     <div className="b-card-name">{p.display_name || p.username}</div>
                     <div className="b-card-handle">@{p.username}</div>
-                    {p.bio ? <p className="b-card-bio">{p.bio}</p> : <p className="b-card-bio b-card-bio-empty">No bio yet.</p>}
+                    {p.bio
+                      ? <p className="b-card-bio">{p.bio}</p>
+                      : <p className="b-card-bio b-card-bio-empty">No bio yet.</p>
+                    }
                   </div>
                   <div className="b-card-foot">
                     <span className="b-card-cta">Book a slot</span>
@@ -115,224 +138,219 @@ export default function BrowsePage() {
         )}
       </section>
 
-      <Footer />
+      <footer className="foot">
+        <div className="foot-left">
+          <span>© {new Date().getFullYear()} Casi</span>
+          <a href="https://github.com/mm88nl-web/casi-app" target="_blank" rel="noopener noreferrer">
+            github
+          </a>
+        </div>
+        <div className="foot-right">
+          <Link href="/legal/terms">terms</Link>
+          <Link href="/legal/privacy">privacy</Link>
+          <Link href="/legal/aup">use</Link>
+        </div>
+      </footer>
+
+      <div className="seal" aria-hidden="true" />
 
       <style jsx>{`
-        .casi-v9-browse {
+        .casi-browse {
+          --paper: ${P};
+          --ink:   ${I};
+          --accent: ${A};
+          --type:   #221a14;
+          --type-2: #6a574b;
+          --H: var(--font-casi-display), 'Bricolage Grotesque', system-ui, sans-serif;
+          --S: var(--font-casi-serif), 'Instrument Serif', Georgia, serif;
+          --M: var(--font-casi-mono), 'JetBrains Mono', ui-monospace, monospace;
+
           background: var(--paper);
-          color: var(--text);
+          color: var(--type);
+          font-family: var(--H);
           min-height: 100vh;
           display: flex;
           flex-direction: column;
+          position: relative;
+          overflow-x: hidden;
         }
-        .b-head {
-          padding: 64px var(--pad) 40px;
-          border-bottom: 1px solid var(--line);
-        }
-        .b-eyebrow {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          font-family: var(--M);
-          font-size: 11px;
-          font-weight: 500;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: var(--text-3);
-          margin-bottom: 24px;
-        }
-        .b-eyebrow-rule { display: block; width: 24px; height: 1px; background: var(--ink); }
-        .b-eyebrow-tag {
-          padding: 3px 9px;
-          border: 1px solid var(--ink);
-          color: var(--ink);
-          font-size: 9.5px;
-          letter-spacing: 0.18em;
-        }
-        .b-title {
+
+        .casi-browse :global(.casi-v9-wordmark) {
+          color: var(--type);
           font-family: var(--H);
           font-weight: 800;
+          font-size: 28px;
+          letter-spacing: -0.035em;
+        }
+        .casi-browse :global(.casi-v9-wordmark .casi-v9-dot) { color: var(--accent); }
+        .casi-browse :global(.casi-v9-mark) { color: var(--ink); width: 60px; height: 30px; }
+
+        /* NAV — identical pattern to landing */
+        .top {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+          padding: 32px 40px 0;
+        }
+        @media (max-width: 640px) { .top { padding: 26px 22px 0; } }
+        .mark { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
+        .top-r { position: absolute; right: 40px; display: flex; align-items: center; gap: 18px; }
+        @media (max-width: 640px) { .top-r { right: 22px; } }
+        .stamp {
+          font-family: var(--S);
+          font-style: italic;
+          font-size: 17px;
+          color: var(--type-2);
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .stamp::before {
+          content: '';
+          width: 8px; height: 8px;
+          border-radius: 50%;
+          background: var(--accent);
+          animation: blink 1.6s ease-out infinite;
+        }
+        @keyframes blink {
+          0%   { box-shadow: 0 0 0 0   rgba(192, 72, 48, 0.55); }
+          100% { box-shadow: 0 0 0 7px rgba(192, 72, 48, 0); }
+        }
+        .stamp .n {
+          color: var(--type);
+          font-style: normal;
+          font-family: var(--H);
+          font-weight: 700;
+          font-size: 17px;
+        }
+        .sep { width: 1px; height: 16px; background: rgba(34, 26, 20, 0.18); }
+        .login {
+          font-family: var(--S);
+          font-style: italic;
+          font-size: 17px;
+          color: var(--type);
+          border-bottom: 1.5px solid rgba(34, 26, 20, 0.25);
+          padding-bottom: 1px;
+          text-decoration: none;
+        }
+        @media (max-width: 540px) {
+          .sep { display: none; }
+          .stamp, .stamp .n, .login { font-size: 15px; }
+        }
+
+        /* HEAD */
+        .b-head {
+          padding: 64px 40px 48px;
+          border-bottom: 1px solid rgba(34, 26, 20, 0.1);
+        }
+        @media (max-width: 640px) { .b-head { padding: 40px 22px 36px; } }
+        h1 {
+          font-family: var(--H);
+          font-weight: 700;
           font-variation-settings: 'opsz' 96;
-          font-size: clamp(48px, 7vw, 96px);
+          font-size: clamp(44px, 7vw, 96px);
           line-height: 0.92;
           letter-spacing: -0.04em;
-          color: var(--text);
+          color: var(--type);
         }
-        .b-title :global(em) {
+        h1 :global(em) {
           font-family: var(--S);
           font-style: italic;
           font-weight: 400;
-          color: var(--ink);
+          color: var(--accent);
           font-size: 0.95em;
           letter-spacing: -0.015em;
         }
-        .b-sub {
-          margin-top: 20px;
-          font-size: 16px;
-          color: var(--text-2);
-          max-width: 520px;
-        }
-        .b-body { flex: 1; padding: 32px var(--pad) 80px; }
 
-        /* Loading-text placeholder */
-        .b-empty {
-          padding: 64px 0;
+        /* BODY */
+        .b-body { flex: 1; padding: 40px 40px 80px; }
+        @media (max-width: 640px) { .b-body { padding: 32px 22px 64px; } }
+        .b-loading {
           font-family: var(--M);
-          font-size: 12px;
-          letter-spacing: 0.16em;
+          font-size: 11px;
+          letter-spacing: 0.18em;
           text-transform: uppercase;
-          color: var(--text-3);
+          color: var(--type-2);
+          padding: 48px 0;
           text-align: center;
         }
-
-        /* Zero-streamers empty state — designed to feel like a deliberate
-           page state, not a broken render. The earlier inline 'Nobody's live'
-           collapsed to a one-line message that read like an error. */
-        .b-empty-state {
-          max-width: 540px;
-          margin: 48px 0 64px;
-          padding: 40px 0;
-          border-top: 1px solid var(--line);
-          border-bottom: 1px solid var(--line);
-        }
-        .b-empty-tag {
-          display: inline-block;
-          font-family: var(--M);
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.22em;
-          text-transform: uppercase;
-          color: var(--ink);
-          padding: 3px 9px;
-          border: 1px solid var(--ink);
-          margin-bottom: 20px;
-        }
-        .b-empty-h {
+        .b-empty { max-width: 480px; padding: 48px 0; border-top: 1px solid rgba(34, 26, 20, 0.1); }
+        .b-empty h2 {
           font-family: var(--H);
           font-weight: 700;
           font-size: clamp(28px, 4vw, 40px);
           letter-spacing: -0.025em;
-          line-height: 1.05;
-          color: var(--text);
+          color: var(--type);
         }
-        .b-empty-p {
-          margin-top: 16px;
-          font-size: 15px;
-          line-height: 1.55;
-          color: var(--text-2);
-        }
-        .b-empty-cta {
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-          margin-top: 24px;
-          padding: 13px 22px;
-          background: var(--ink);
-          color: var(--on-ink);
-          font-family: var(--M);
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
-          text-decoration: none;
-          border: 1px solid var(--ink);
-          transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
-          position: relative;
-        }
-        .b-empty-cta :global(span) {
-          font-size: 14px;
-          transition: transform 0.16s ease;
-        }
-        .b-empty-cta:hover {
-          background: transparent;
-          color: var(--ink);
-        }
-        .b-empty-cta:hover :global(span) { transform: translateX(4px); }
-        .b-empty-cta:active { transform: translateY(1px); }
+        .b-empty p { margin-top: 12px; font-size: 15px; color: var(--type-2); }
 
-        /* Grid: each tile is capped to a sensible card width (360px max,
-           280px min). Critically uses justify-content: start so a single
-           streamer renders as a single 360px tile in the top-left, NOT
-           stretched to the full viewport. As streamers join the grid fills
-           left-to-right and wraps cleanly. */
+        /* GRID */
         .b-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(280px, 360px));
           gap: 16px;
           justify-content: start;
         }
+        @media (max-width: 480px) { .b-grid { grid-template-columns: 1fr; } }
 
-        /* Card — three vertical zones (hero / body / foot) with the
-           streamer's accent driving the hero band so each card feels like
-           an extension of THEIR space, not a stamped template. Falls back
-           to default --ink when the streamer hasn't picked a brand color. */
+        /* CARD */
         .b-card {
           display: flex;
           flex-direction: column;
-          border: 1px solid var(--line);
-          background: var(--surf);
+          border: 1px solid rgba(34, 26, 20, 0.12);
+          background: rgba(255, 255, 255, 0.5);
           text-decoration: none;
           color: inherit;
           transition: transform 0.14s, border-color 0.14s;
           overflow: hidden;
         }
-        .b-card:hover {
-          transform: translateY(-2px);
-          border-color: var(--card-ink, var(--ink));
-        }
+        .b-card:hover { transform: translateY(-2px); border-color: var(--card-ink); }
 
-        /* Hero band — colored fill, oversized avatar overlapping the bottom
-           edge so it bleeds into the body. Gives the card immediate visual
-           identity even before reading the name. */
         .b-card-hero {
           position: relative;
           aspect-ratio: 16 / 9;
           background:
             radial-gradient(
               circle at 30% 30%,
-              color-mix(in oklab, var(--card-ink, var(--ink)) 65%, transparent),
-              color-mix(in oklab, var(--card-ink, var(--ink)) 20%, transparent) 70%
+              color-mix(in oklab, var(--card-ink) 50%, transparent),
+              color-mix(in oklab, var(--card-ink) 15%, transparent) 70%
             ),
-            var(--paper);
-          border-bottom: 1px solid var(--line);
+            ${P};
+          border-bottom: 1px solid rgba(34, 26, 20, 0.08);
         }
-        .b-card-live {
+        .b-card-live-pill {
           position: absolute;
-          top: 12px;
-          right: 12px;
+          top: 12px; right: 12px;
           display: inline-flex;
           align-items: center;
           gap: 6px;
           padding: 4px 9px;
-          background: var(--paper);
-          color: var(--text);
+          background: rgba(245, 225, 210, 0.92);
+          color: var(--type);
           font-family: var(--M);
           font-size: 9px;
           font-weight: 700;
           letter-spacing: 0.18em;
           text-transform: uppercase;
-          border: 1px solid var(--line);
+          border: 1px solid rgba(34, 26, 20, 0.1);
         }
         .b-card-live-dot {
-          width: 6px;
-          height: 6px;
+          width: 6px; height: 6px;
           border-radius: 50%;
-          background: var(--card-ink, var(--ink));
-          box-shadow: 0 0 0 3px color-mix(in oklab, var(--card-ink, var(--ink)) 25%, transparent);
+          background: var(--card-ink);
           animation: livePulse 1.8s ease-in-out infinite;
         }
         @keyframes livePulse {
-          0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--card-ink, var(--ink)) 25%, transparent); }
-          50%      { box-shadow: 0 0 0 5px color-mix(in oklab, var(--card-ink, var(--ink)) 12%, transparent); }
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.45; }
         }
         .b-card-avatar {
           position: absolute;
-          left: 18px;
-          bottom: -22px;
-          width: 64px;
-          height: 64px;
-          background: var(--paper);
-          color: var(--card-ink, var(--ink));
+          left: 18px; bottom: -22px;
+          width: 64px; height: 64px;
+          background: ${P};
+          color: var(--card-ink);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -340,42 +358,28 @@ export default function BrowsePage() {
           font-weight: 800;
           font-size: 28px;
           letter-spacing: -0.04em;
-          border: 2px solid var(--paper);
+          border: 2px solid ${P};
           overflow: hidden;
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+          box-shadow: 0 2px 10px rgba(34, 26, 20, 0.14);
         }
-        .b-card-avatar :global(img) {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
-        }
+        .b-card-avatar :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-        .b-card-body {
-          padding: 34px 20px 18px;
-          flex: 1;
-        }
+        .b-card-body { padding: 34px 20px 18px; flex: 1; }
         .b-card-name {
           font-family: var(--H);
           font-weight: 700;
           font-size: 20px;
           letter-spacing: -0.02em;
-          color: var(--text);
+          color: var(--type);
           line-height: 1.15;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        .b-card-handle {
-          font-family: var(--M);
-          font-size: 11px;
-          letter-spacing: 0.04em;
-          color: var(--text-3);
-          margin-top: 4px;
-        }
+        .b-card-handle { font-family: var(--M); font-size: 11px; letter-spacing: 0.04em; color: var(--type-2); margin-top: 4px; }
         .b-card-bio {
           font-size: 13px;
-          color: var(--text-2);
+          color: var(--type-2);
           margin-top: 14px;
           line-height: 1.5;
           overflow: hidden;
@@ -383,55 +387,67 @@ export default function BrowsePage() {
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
         }
-        .b-card-bio-empty { color: var(--text-4); font-style: italic; }
+        .b-card-bio-empty { font-style: italic; opacity: 0.6; }
 
-        /* Footer reads as a real CTA button when the card is hovered: the
-           whole strip fills with the streamer's ink color, the text inverts
-           to --on-ink, the arrow slides. At rest it's a quiet 'Book a slot'
-           label on the surf-2 strip so the card doesn't shout from across
-           the page. Smooth color-fill transition (180ms) so it feels intentional. */
         .b-card-foot {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 12px;
           padding: 14px 20px;
-          border-top: 1px solid var(--line);
-          background: var(--surf-2);
-          transition: background 0.18s ease, border-top-color 0.18s ease;
-          position: relative;
+          border-top: 1px solid rgba(34, 26, 20, 0.08);
+          background: rgba(34, 26, 20, 0.03);
+          transition: background 0.18s ease;
         }
-        .b-card:hover .b-card-foot {
-          background: var(--card-ink, var(--ink));
-          border-top-color: var(--card-ink, var(--ink));
-        }
+        .b-card:hover .b-card-foot { background: var(--card-ink); }
         .b-card-cta {
           font-family: var(--M);
           font-size: 10.5px;
           font-weight: 700;
           letter-spacing: 0.18em;
           text-transform: uppercase;
-          color: var(--text-3);
+          color: var(--type-2);
           transition: color 0.18s ease;
         }
-        .b-card:hover .b-card-cta { color: var(--on-ink); }
+        .b-card:hover .b-card-cta { color: ${P}; }
         .b-card-arrow {
           font-family: var(--M);
           font-size: 16px;
-          color: var(--text-3);
+          color: var(--type-2);
           transition: color 0.18s ease, transform 0.18s ease;
         }
-        .b-card:hover .b-card-arrow {
-          color: var(--on-ink);
-          transform: translateX(4px);
-        }
+        .b-card:hover .b-card-arrow { color: ${P}; transform: translateX(4px); }
 
-        /* Mobile: stretch cards to full width below 480px since side-by-side
-           tiles get crammed. Keep the same 360px cap on tablet+. */
-        @media (max-width: 480px) {
-          .b-grid {
-            grid-template-columns: 1fr;
-          }
+        /* FOOTER */
+        .foot {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 14px;
+          padding: 22px 40px 28px;
+          font-family: var(--M);
+          font-size: 11px;
+          letter-spacing: 0.04em;
+          color: var(--type-2);
+          border-top: 1px solid rgba(34, 26, 20, 0.1);
+        }
+        @media (max-width: 640px) { .foot { padding: 18px 22px 24px; } }
+        .foot-left, .foot-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+        .foot a { text-decoration: none; color: inherit; }
+
+        /* Seal */
+        .seal {
+          position: fixed;
+          right: -120px; bottom: -120px;
+          width: 360px; height: 360px;
+          border-radius: 50%;
+          border: 28px solid ${I};
+          opacity: 0.08;
+          pointer-events: none;
+        }
+        @media (max-width: 640px) {
+          .seal { width: 220px; height: 220px; border-width: 16px; right: -90px; bottom: -90px; }
         }
       `}</style>
     </main>

@@ -374,6 +374,20 @@ export default function AuthPage() {
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         .auth-page {
+          /* Apothecary palette — matches landing + search */
+          --casi-bg:         #f5e1d2;
+          --casi-surface:    #ede0cf;
+          --casi-surface-2:  #e4d4be;
+          --casi-border:     rgba(34, 26, 20, 0.14);
+          --casi-border-2:   rgba(34, 26, 20, 0.26);
+          --casi-accent:     #c04830;
+          --casi-accent-rgb: 192, 72, 48;
+          --casi-text:       #221a14;
+          --casi-text-muted: #6a574b;
+          --casi-text-mid:   #8a7a5a;
+          --casi-text-dim:   #a89a8a;
+          --ink:             #c04830;
+
           min-height: 100vh;
           background: var(--casi-bg);
           display: grid;
@@ -432,7 +446,7 @@ export default function AuthPage() {
         }
         .left-step-dot.done    { background: var(--casi-accent); color: var(--casi-bg); }
         .left-step-dot.current { background: rgba(var(--casi-accent-rgb),0.14); border: 1px solid rgba(var(--casi-accent-rgb),0.4); color: var(--casi-accent); }
-        .left-step-dot.pending { background: rgba(255,255,255,0.04); border: 1px solid var(--casi-border); color: var(--casi-text-dim); }
+        .left-step-dot.pending { background: rgba(34,26,20,0.06); border: 1px solid var(--casi-border); color: var(--casi-text-dim); }
         .left-step-label { font-family: var(--font-casi-mono), monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; transition: color .25s; }
         .left-step-label.done    { color: var(--casi-accent); }
         .left-step-label.current { color: var(--casi-text); }
