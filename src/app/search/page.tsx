@@ -18,26 +18,39 @@ type LiveProfile = {
   bio: string | null;
   ink_color: string | null;
   theme_color: string | null;
+  is_live: boolean;
 };
 
 export default function BrowsePage() {
   const supabase = createClient();
-  const [live, setLive] = useState<LiveProfile[] | null>(null);
+  const [profiles, setProfiles] = useState<LiveProfile[] | null>(null);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('username, display_name, avatar_url, bio, ink_color, theme_color')
-        .eq('is_live', true)
+        .select('username, display_name, avatar_url, bio, ink_color, theme_color, is_live')
+        .order('is_live', { ascending: false })
         .order('username');
-      if (!cancelled) setLive((data ?? []) as LiveProfile[]);
+      if (!cancelled) setProfiles((data ?? []) as LiveProfile[]);
     })();
     return () => { cancelled = true; };
   }, [supabase]);
 
-  const showLive = live !== null && live.length > 0;
+  const liveCount = profiles?.filter(p => p.is_live).length ?? 0;
+  const showLive = liveCount > 0;
+
+  const filtered = profiles === null ? null : query.trim() === ''
+    ? profiles
+    : profiles.filter(p => {
+        const q = query.toLowerCase();
+        return (
+          p.username.toLowerCase().includes(q) ||
+          (p.display_name ?? '').toLowerCase().includes(q)
+        );
+      });
 
   return (
     <main className="casi-browse" data-paper="light">
@@ -50,7 +63,7 @@ export default function BrowsePage() {
           {showLive && (
             <>
               <div className="stamp">
-                <span className="n">{live!.length}</span> live
+                <span className="n">{liveCount}</span> live
               </div>
               <span className="sep" aria-hidden="true" />
             </>
@@ -60,42 +73,52 @@ export default function BrowsePage() {
       </header>
 
       <section className="b-head">
-        <h1>
-          Pick a streamer.<br />
-          <em>Take their screen.</em>
-        </h1>
+        <h1>Find a streamer.</h1>
+        <div className="b-search-wrap">
+          <input
+            className="b-search"
+            type="search"
+            placeholder="Search by name or @username…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
       </section>
 
       <section className="b-body">
-        {live === null ? (
+        {filtered === null ? (
           <div className="b-loading">Loading…</div>
-        ) : live.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="b-empty">
-            <h2>No one&apos;s live right now.</h2>
-            <p>Be the first to go live.</p>
-            <Link
-              href="/studio"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '10px',
-                marginTop: '20px',
-                background: I,
-                color: P,
-                padding: '13px 22px',
-                fontFamily: 'var(--font-casi-display), system-ui, sans-serif',
-                fontWeight: 700,
-                fontSize: '15px',
-                border: `1.5px solid ${I}`,
-                textDecoration: 'none',
-              }}
-            >
-              Go live yourself →
-            </Link>
+            <h2>{query ? `No streamers matching "${query}"` : 'No streamers yet.'}</h2>
+            <p>{query ? 'Try a different name.' : 'Be the first to go live.'}</p>
+            {!query && (
+              <Link
+                href="/studio"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  marginTop: '20px',
+                  background: I,
+                  color: P,
+                  padding: '13px 22px',
+                  fontFamily: 'var(--font-casi-display), system-ui, sans-serif',
+                  fontWeight: 700,
+                  fontSize: '15px',
+                  border: `1.5px solid ${I}`,
+                  textDecoration: 'none',
+                }}
+              >
+                Go live yourself →
+              </Link>
+            )}
           </div>
         ) : (
           <div className="b-grid">
-            {live.map((p) => {
+            {filtered.map((p) => {
               const accent = p.ink_color || p.theme_color || I;
               const initial = (p.display_name || p.username).charAt(0).toUpperCase();
               return (
@@ -106,10 +129,12 @@ export default function BrowsePage() {
                   style={{ '--card-ink': accent } as React.CSSProperties}
                 >
                   <div className="b-card-hero">
-                    <span className="b-card-live-pill">
-                      <span className="b-card-live-dot" />
-                      Live
-                    </span>
+                    {p.is_live && (
+                      <span className="b-card-live-pill">
+                        <span className="b-card-live-dot" />
+                        Live
+                      </span>
+                    )}
                     <div className="b-card-avatar">
                       {p.avatar_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -128,7 +153,7 @@ export default function BrowsePage() {
                     }
                   </div>
                   <div className="b-card-foot">
-                    <span className="b-card-cta">Book a slot</span>
+                    <span className="b-card-cta">{p.is_live ? 'Book a slot' : 'View page'}</span>
                     <span className="b-card-arrow">→</span>
                   </div>
                 </Link>
@@ -262,6 +287,37 @@ export default function BrowsePage() {
           font-size: 0.95em;
           letter-spacing: -0.015em;
         }
+
+        /* SEARCH INPUT */
+        .b-search-wrap {
+          margin-top: 36px;
+          max-width: 560px;
+        }
+        .b-search {
+          width: 100%;
+          padding: 14px 20px;
+          font-family: var(--H);
+          font-size: 17px;
+          font-weight: 500;
+          letter-spacing: -0.01em;
+          color: var(--type);
+          background: rgba(255, 255, 255, 0.6);
+          border: 1.5px solid rgba(34, 26, 20, 0.2);
+          outline: none;
+          appearance: none;
+          -webkit-appearance: none;
+          transition: border-color 0.14s, background 0.14s;
+          box-sizing: border-box;
+        }
+        .b-search::placeholder {
+          color: var(--type-2);
+          opacity: 0.7;
+        }
+        .b-search:focus {
+          border-color: ${I};
+          background: rgba(255, 255, 255, 0.85);
+        }
+        .b-search::-webkit-search-cancel-button { display: none; }
 
         /* BODY */
         .b-body { flex: 1; padding: 40px 40px 80px; }
