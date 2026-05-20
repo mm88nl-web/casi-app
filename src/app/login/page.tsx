@@ -386,7 +386,7 @@ export default function AuthPage() {
           --casi-text-muted: #6a574b;
           --casi-text-mid:   #8a7a5a;
           --casi-text-dim:   #a89a8a;
-          --ink:             #c04830;
+          --ink:             #294b3c;
 
           min-height: 100vh;
           background: var(--casi-bg);
@@ -569,9 +569,8 @@ export default function AuthPage() {
           <div className="auth-brand">
             <div className="auth-brand-row">
               <CasiMark width={60} height={30} />
-              <span className="auth-brand-name">casi<span style={{ color: 'var(--ink)' }}>.</span></span>
+              <span className="auth-brand-name">casi<span style={{ color: 'var(--casi-accent)' }}>.</span></span>
             </div>
-            <div className="auth-brand-tag">Interactive overlay</div>
           </div>
 
           {mode === 'signup' ? (
