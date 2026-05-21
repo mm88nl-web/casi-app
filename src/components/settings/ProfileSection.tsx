@@ -18,6 +18,7 @@ export type ProfileRow = {
   theme_color: string | null;
   ink_color: string | null;
   paper_color: string | null;
+  accent2_color: string | null;
 };
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';

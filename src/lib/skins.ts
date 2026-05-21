@@ -146,6 +146,22 @@ export const SKINS: Skin[] = [
     paper:      '#0F0C07',
     category:   'casi',
   },
+  {
+    id: 'onlyfans',
+    name: 'OnlyFans',
+    accent:     '#00AFF0',
+    accentRgb:  '0, 175, 240',
+    accent2:    '#0088CC',
+    accent2Rgb: '0, 136, 204',
+    bg:         '#0A1420',
+    surface:    '#111D2C',
+    border:     '#1A3045',
+    text:       '#E0EEF8',
+    textMuted:  '#4A7090',
+    ink:        '#00AFF0',
+    paper:      '#0A1420',
+    category:   'platform',
+  },
   // ── Custom ────────────────────────────────────────────────────────────
   // Sentinel skin: ink/paper here are seed defaults the picker uses on
   // first selection. The actual visible ink/paper come from
