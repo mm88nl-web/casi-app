@@ -482,25 +482,23 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
                         <div style={{
                           width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
                           alignItems: 'center', justifyContent: 'center',
-                          border: `2px dashed rgba(${accentRgb}, 0.85)`,
+                          border: `2px dashed rgba(${accentRgb}, 0.9)`,
                           borderRadius: el.is_background ? 12 : 6,
-                          background: el.locked ? 'rgba(248,113,113,0.05)' : el.is_background ? 'rgba(153,69,255,0.06)' : `rgba(${accentRgb}, 0.07)`,
-                          // Outer dark stroke so the dashed accent line stays
-                          // visible on bright backdrops (beach / sky / snow).
-                          boxShadow: '0 0 0 1px rgba(0,0,0,0.55)',
+                          background: el.locked ? 'rgba(248,113,113,0.08)' : el.is_background ? 'rgba(153,69,255,0.1)' : `rgba(${accentRgb}, 0.1)`,
+                          // Soft glow so the slot reads as a distinct region on
+                          // the dark canvas regardless of skin color.
+                          boxShadow: el.locked
+                            ? '0 0 0 1px rgba(0,0,0,0.6), 0 0 10px rgba(248,113,113,0.15)'
+                            : `0 0 0 1px rgba(0,0,0,0.6), 0 0 10px rgba(${accentRgb}, 0.18)`,
                         }}>
                           <div style={{
                             display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
-                            // Dark scrim chip behind the icon + name + price so
-                            // they're always legible against any backdrop. Single
-                            // chip rather than per-line text-shadow to keep the
-                            // visual quieter.
                             padding: el.is_background ? '10px 16px' : '6px 12px',
                             borderRadius: 6,
-                            background: 'rgba(0,0,0,0.55)',
-                            backdropFilter: 'blur(4px)',
-                            WebkitBackdropFilter: 'blur(4px)',
-                            border: `1px solid rgba(${accentRgb}, 0.35)`,
+                            background: 'rgba(0,0,0,0.72)',
+                            backdropFilter: 'blur(6px)',
+                            WebkitBackdropFilter: 'blur(6px)',
+                            border: `1px solid rgba(${accentRgb}, 0.6)`,
                             maxWidth: '90%',
                           }}>
                             {el.locked ? (

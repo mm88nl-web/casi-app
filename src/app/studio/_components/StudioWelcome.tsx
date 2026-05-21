@@ -3,38 +3,13 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
-/**
- * First-time studio welcome banner.
- *
- * Dismissible. Stores the dismissal in localStorage so it shows once per
- * device per streamer. Renders nothing on the server / first paint to
- * avoid hydration flicker; the effect decides whether to mount based on
- * the localStorage flag.
- *
- * The three cards summarize the moves a brand-new streamer needs to make:
- *   1. Add the two OBS browser sources (Backdrop + Beams) to a scene.
- *   2. Open the canvas editor at /studio/live, drop slots, set prices.
- *   3. (Optional but recommended) Install the session-key delegate so
- *      approves and kicks don't pop a wallet every time.
- *
- * The session-key card also names the cranker so streamers understand
- * why approves are free: CASI funds a shared keypair that pays the
- * Solana fees for the delegated start_beam / settle_beam instructions.
- * If we don't name it, the "no popup" UX feels like magic; once they
- * read why, they trust it more.
- */
-
 const STORAGE_KEY = 'casi-studio-welcomed';
 
 type Props = {
-  /** Used to scope the dismissal per-streamer; clearing cookies +
-   *  switching to a different account shows the welcome again. */
   profileId: string;
 };
 
 export default function StudioWelcome({ profileId }: Props) {
-  // Start hidden — flip to visible only after the effect confirms the
-  // streamer hasn't dismissed it yet. Avoids a flash on hydration.
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -43,8 +18,7 @@ export default function StudioWelcome({ profileId }: Props) {
       const dismissed = window.localStorage.getItem(`${STORAGE_KEY}:${profileId}`);
       if (!dismissed) setVisible(true);
     } catch {
-      // localStorage can fail in private browsing / iframe contexts —
-      // in that case just don't show the welcome, no biggie.
+      // localStorage unavailable — skip welcome silently
     }
   }, [profileId]);
 
@@ -52,9 +26,7 @@ export default function StudioWelcome({ profileId }: Props) {
     setVisible(false);
     try {
       window.localStorage.setItem(`${STORAGE_KEY}:${profileId}`, String(Date.now()));
-    } catch {
-      /* noop */
-    }
+    } catch { /* noop */ }
   };
 
   if (!visible) return null;
@@ -62,10 +34,21 @@ export default function StudioWelcome({ profileId }: Props) {
   return (
     <div className="casi-studio-welcome">
       <style>{`
+        /* Apothecary palette scoped to this banner so it always reads as
+           the onboarding surface regardless of the streamer's chosen skin. */
         .casi-studio-welcome {
+          --sw-paper:  #f5e1d2;
+          --sw-surf:   #ede0cf;
+          --sw-line:   rgba(34, 26, 20, 0.12);
+          --sw-ink:    #294b3c;
+          --sw-accent: #c04830;
+          --sw-type:   #221a14;
+          --sw-type2:  #6a574b;
+          --sw-type3:  #8a7a5a;
+
           position: relative;
-          background: var(--surf);
-          border: 1px solid var(--ink-22);
+          background: var(--sw-surf);
+          border: 1px solid var(--sw-line);
           padding: 22px 26px 26px;
           display: flex;
           flex-direction: column;
@@ -83,7 +66,7 @@ export default function StudioWelcome({ profileId }: Props) {
           font-weight: 700;
           letter-spacing: 0.18em;
           text-transform: uppercase;
-          color: var(--ink);
+          color: var(--sw-accent);
           margin-bottom: 6px;
         }
         .casi-studio-welcome-title {
@@ -92,20 +75,20 @@ export default function StudioWelcome({ profileId }: Props) {
           font-size: 22px;
           letter-spacing: -0.025em;
           line-height: 1.15;
-          color: var(--text);
+          color: var(--sw-type);
         }
         .casi-studio-welcome-sub {
           font-size: 13.5px;
           line-height: 1.55;
-          color: var(--text-2);
+          color: var(--sw-type2);
           max-width: 640px;
           margin-top: 8px;
         }
         .casi-studio-welcome-dismiss {
           flex-shrink: 0;
           background: transparent;
-          border: 1px solid var(--line);
-          color: var(--text-3);
+          border: 1px solid var(--sw-line);
+          color: var(--sw-type3);
           font-family: var(--M);
           font-size: 10px;
           letter-spacing: 0.16em;
@@ -115,22 +98,23 @@ export default function StudioWelcome({ profileId }: Props) {
           transition: color 0.14s, border-color 0.14s;
         }
         .casi-studio-welcome-dismiss:hover {
-          color: var(--ink);
-          border-color: var(--ink);
+          color: var(--sw-ink);
+          border-color: var(--sw-ink);
         }
         .casi-studio-welcome-grid {
           display: grid;
           grid-template-columns: 1fr;
           gap: 12px;
         }
-        @media (min-width: 760px) {
-          .casi-studio-welcome-grid {
-            grid-template-columns: repeat(3, 1fr);
-          }
+        @media (min-width: 640px) {
+          .casi-studio-welcome-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (min-width: 1100px) {
+          .casi-studio-welcome-grid { grid-template-columns: repeat(4, 1fr); }
         }
         .casi-studio-welcome-card {
-          background: var(--paper);
-          border: 1px solid var(--line);
+          background: var(--sw-paper);
+          border: 1px solid var(--sw-line);
           padding: 16px 16px 18px;
           display: flex;
           flex-direction: column;
@@ -140,7 +124,7 @@ export default function StudioWelcome({ profileId }: Props) {
           font-family: var(--H);
           font-weight: 800;
           font-size: 22px;
-          color: var(--ink);
+          color: var(--sw-accent);
           letter-spacing: -0.03em;
           line-height: 1;
         }
@@ -149,28 +133,25 @@ export default function StudioWelcome({ profileId }: Props) {
           font-weight: 700;
           font-size: 15px;
           letter-spacing: -0.015em;
-          color: var(--text);
+          color: var(--sw-type);
         }
         .casi-studio-welcome-p {
           font-size: 12.5px;
           line-height: 1.55;
-          color: var(--text-2);
+          color: var(--sw-type2);
         }
         .casi-studio-welcome-p a {
-          color: var(--ink);
+          color: var(--sw-ink);
           text-decoration: none;
-          border-bottom: 1px solid var(--ink-22);
+          border-bottom: 1px solid rgba(41, 75, 60, 0.25);
         }
-        .casi-studio-welcome-p a:hover {
-          border-bottom-color: var(--ink);
-        }
+        .casi-studio-welcome-p a:hover { border-bottom-color: var(--sw-ink); }
         .casi-studio-welcome-foot {
           font-family: var(--M);
           font-size: 10.5px;
           letter-spacing: 0.04em;
-          color: var(--text-3);
-          padding-top: 4px;
-          border-top: 1px dashed var(--line);
+          color: var(--sw-type3);
+          border-top: 1px dashed var(--sw-line);
           padding-top: 14px;
         }
       `}</style>
@@ -180,7 +161,7 @@ export default function StudioWelcome({ profileId }: Props) {
           <div className="casi-studio-welcome-eyebrow">First time here</div>
           <h2 className="casi-studio-welcome-title">Welcome to your studio.</h2>
           <p className="casi-studio-welcome-sub">
-            Three small setup steps before viewers can book your stream. Each takes a couple of minutes.
+            Four small steps before viewers can book your stream. Each takes a couple of minutes.
           </p>
         </div>
         <button type="button" className="casi-studio-welcome-dismiss" onClick={dismiss} aria-label="Don't show this welcome again">
@@ -212,6 +193,15 @@ export default function StudioWelcome({ profileId }: Props) {
           <p className="casi-studio-welcome-p">
             One quick wallet signature now, and approving a booking is one tap from then on. No popup every time. CASI covers the Solana fees, not you.{' '}
             <Link href="/studio/settings#session-key">Set it up</Link>.
+          </p>
+        </div>
+
+        <div className="casi-studio-welcome-card">
+          <span className="casi-studio-welcome-num">4</span>
+          <h3 className="casi-studio-welcome-h">Make yourself at home!</h3>
+          <p className="casi-studio-welcome-p">
+            Write a bio, set an avatar, and pick a skin in{' '}
+            <Link href="/studio/settings">Settings</Link>. Viewers land on your streamer page before they ever open OBS — make it yours.
           </p>
         </div>
       </div>

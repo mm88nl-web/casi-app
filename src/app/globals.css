@@ -1276,6 +1276,14 @@ body {
   border: 1px solid var(--casi-border);
   background: #080808;
   overflow: visible;
+  /* Slot chips always render on #080808 regardless of the active skin.
+     Force a bright teal so slot borders/labels stay visible even when the
+     streamer has chosen a dark-ink skin like Homepage (#294b3c). */
+  --casi-accent: #2dd4bf;
+  --casi-accent-rgb: 45,212,191;
+  /* Consistent subtle grid lines on the dark canvas — skin-derived --line can
+     be near-white on light skins (too bright) or near-black (invisible). */
+  --line: rgba(255,255,255,0.06);
 }
 .canvas-hint {
   text-align: center;

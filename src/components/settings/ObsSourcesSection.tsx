@@ -70,17 +70,16 @@ export default function ObsSourcesSection({ username }: Props) {
           value={beamsUrl}
           hint="All shaped slots render here, plus the 15s flash popups."
         />
-      </div>
-
-      <div
-        className="mt-3.5 font-mono uppercase"
-        style={{
-          fontSize: '10px',
-          letterSpacing: '0.1em',
-          color: 'var(--casi-text-faint)',
-        }}
-      >
-        Custom CSS for both sources: <code style={{ color: 'var(--casi-text-dim)' }}>body &#123; background-color: rgba(0,0,0,0); &#125;</code>
+        <CopyRow
+          label={
+            <>
+              <SourceNum n={3} /> Custom CSS · paste into both sources
+            </>
+          }
+          value="body { background-color: rgba(0,0,0,0); }"
+          hint="Required — without this the overlay has a white background instead of being transparent."
+          variant="ghost"
+        />
       </div>
     </SettingsSection>
   );

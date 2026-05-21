@@ -3,8 +3,12 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
-import { NavBar, Marquee, Footer } from '@/components/v9';
-import UsdcIcon from '@/components/icons/UsdcIcon';
+import { CasiMark } from '@/components/v9/CasiMark';
+import { Wordmark } from '@/components/v9/Wordmark';
+
+const P = '#f5e1d2';
+const I = '#294b3c';
+const A = '#c04830';
 
 export default function HomePage() {
   const [liveCount, setLiveCount] = useState<number | null>(null);
@@ -19,891 +23,279 @@ export default function HomePage() {
         .eq('is_live', true);
       if (!cancelled) setLiveCount(count ?? 0);
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [supabase]);
 
-  // Marquee + live indicator copy. Both are pulled from real state — the live
-  // count is a real DB query against profiles.is_live, and the hero stat block
-  // states the actual protocol invariant (0% / 100% to streamers) rather than
-  // a fabricated dollar figure. No mocked numbers anywhere on this page.
-  const liveLabel = liveCount === null ? '— LIVE NOW' : `${liveCount} LIVE NOW`;
-  const marqueeText =
-    liveCount && liveCount > 0
-      ? `${liveCount} STREAMERS LIVE · 0% CASI CUT · STRIPE & USDC · APPROVED OR REFUNDED · APACHE 2.0 ESCROW · ON SOLANA · ✺`
-      : 'OPEN BETA · ON SOLANA DEVNET · 0% CASI CUT · STRIPE & USDC · APPROVED OR REFUNDED · APACHE 2.0 ESCROW · ✺';
+  const showLive = liveCount !== null && liveCount > 0;
 
   return (
-    <main className="casi-v9-landing">
-      <Marquee text={marqueeText} />
-      <NavBar liveLabel={liveLabel} />
-
-      {/* HERO ────────────────────────────────────────────────────────── */}
-      <section className="l-hero">
-        <div>
-          <div className="l-eyebrow">
-            <span className="tag">For streamers</span>
-            Sell space. Keep 100%.
-          </div>
-          <h1 className="l-display">
-            Your stream
-            <br />
-            is <em className="ink">real estate.</em>
-            <br />
-            <span className="underscore">Lease it.</span>
-          </h1>
-          <p className="l-sub">
-            Drop one OBS source. Viewers pay to place clips, images, and banners on your screen,
-            by the minute or per flash. You approve every one. Casi takes{' '}
-            <b style={{ color: 'var(--ink)' }}>zero</b>.
-          </p>
-          <div className="l-cta-row">
-            <Link href="/studio" className="l-btn">
-              Open studio
-              <span className="l-arr">→</span>
-            </Link>
-            <Link href="/search" className="l-btn-ghost">
-              Watch a live stream
-            </Link>
-            <span className="l-cta-note">Free · 2 min setup</span>
-          </div>
-
-          {/* Trust signals — escrow openness, payment rails, audit posture.
-              Judges + technical viewers scan this for credibility; same
-              role the "as seen in" press strip plays on marketing sites. */}
-          <ul className="l-trust">
-            <li className="l-trust-item">
-              <span className="l-trust-glyph">{'{ }'}</span>
-              <span>
-                Open source ·{' '}
-                <a
-                  href="https://github.com/mm88nl-web/casi-app"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="l-trust-link"
-                >
-                  Apache 2.0 escrow on GitHub
-                </a>
-              </span>
-            </li>
-            <li className="l-trust-item">
-              <span className="l-trust-glyph">◉</span>
-              <span>Cards live worldwide via Stripe · USDC on Solana</span>
-            </li>
-            <li className="l-trust-item">
-              <span className="l-trust-glyph">⌖</span>
-              <span>USDC rail on devnet pending external audit · cards already settling</span>
-            </li>
-          </ul>
-        </div>
-
-        <div className="l-hero-r">
-          <div className="l-stat">
-            <div className="l-stat-n">
-              100<sup>%</sup>
-            </div>
-            <div className="l-stat-l">of every booking goes to streamers · 0% casi cut</div>
-          </div>
-          <div className="l-scene" aria-hidden="true">
-            <div className="l-scene-bg" />
-            <div className="l-scene-tag">
-              <span className="l-scene-tag-dot" />
-              your stream · live
-            </div>
-            <div className="l-scene-slot">
-              <span className="l-scene-icon">✦</span>
-              <span className="l-scene-meta">$5/min · beam</span>
-            </div>
-            <div className="l-scene-hex" />
-            <div className="l-scene-banner">
-              <div className="l-scene-ticker">
-                ▰ YOUR_SPONSOR · BANNER PLACEMENT · BEAM 10M · ✺ · A_VIEWER · &quot;GOOD LUCK ON
-                THE RUN&quot; ▰
+    <main className="casi-landing" data-paper="light">
+      <header className="top">
+        <div className="top-r">
+          {showLive && (
+            <>
+              <div className="stamp">
+                <span className="n">{liveCount}</span> live
               </div>
-            </div>
-            <div className="l-scene-mock-label">Illustrative · not a live stream</div>
-          </div>
+              <span className="sep" aria-hidden="true" />
+            </>
+          )}
+          <Link href="/login" className="login">Log in</Link>
+        </div>
+      </header>
+
+      <section className="lede">
+        <Link href="/" className="hero-mark" aria-label="Casi">
+          <CasiMark />
+          <Wordmark />
+        </Link>
+
+        <p className="tagline">
+          Get on a <em>live stream.</em>
+        </p>
+
+        <div className="cta-row">
+          <Link
+            href="/studio"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '12px',
+              background: I,
+              color: P,
+              padding: '15px 28px',
+              fontFamily: 'var(--font-casi-display), system-ui, sans-serif',
+              fontWeight: 700,
+              fontSize: '16px',
+              border: `1.5px solid ${I}`,
+              borderRadius: '999px',
+              textDecoration: 'none',
+              letterSpacing: '-0.01em',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Create studio{' '}
+            <span style={{ fontFamily: 'var(--font-casi-serif), Georgia, serif', fontStyle: 'italic', fontSize: '20px', lineHeight: 1 }}>→</span>
+          </Link>
+          <Link
+            href="/search"
+            style={{
+              fontFamily: 'var(--font-casi-serif), Georgia, serif',
+              fontStyle: 'italic',
+              fontSize: '19px',
+              color: I,
+              textDecoration: 'none',
+              borderBottom: `1.5px solid rgba(41,75,60,0.35)`,
+              paddingBottom: '1px',
+              opacity: 0.78,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            find a streamer
+          </Link>
         </div>
       </section>
 
-      {/* MANIFESTO BAND ──────────────────────────────────────────────── */}
-      <div className="l-band">
-        <div className="l-band-cell">
-          <div className="l-band-n">01 ──── revenue</div>
-          <div className="l-band-stat">0%</div>
-          <div className="l-band-claim">We don&apos;t touch your money.</div>
-          <p className="l-band-copy">
-            Cards go straight to Stripe. USDC sits in open-source on-chain escrow. Casi is software,
-            not a bank.
-          </p>
-        </div>
-
-        <div className="l-band-cell">
-          <div className="l-band-n">02 ──── rails</div>
-          <div className="l-band-rails">
-            <div className="l-rail">
-              <span className="l-rail-ico">€</span>
-              <span className="l-rail-name">Cards · Stripe</span>
-              <span className="l-rail-note">direct charge</span>
-            </div>
-            <div className="l-rail">
-              <span className="l-rail-ico"><UsdcIcon size={14} mono="currentColor" /></span>
-              <span className="l-rail-name">USDC · Solana</span>
-              <span className="l-rail-note">on-chain</span>
-            </div>
-            <div className="l-rail l-rail-ghost">
-              <span className="l-rail-ico l-rail-ico-ghost">♡</span>
-              <span className="l-rail-name l-rail-name-ghost">Free tier</span>
-              <span className="l-rail-note">opt-in</span>
-            </div>
-          </div>
-          <div className="l-band-claim">Pay any way.</div>
-          <p className="l-band-copy">
-            Card or USDC, one booking flow. Free tier for streamers who want to grow first.
-          </p>
-        </div>
-
-        <div className="l-band-cell">
-          <div className="l-band-n">03 ──── protection</div>
-          <div className="l-band-flow">
-            <div className="l-flow-row ok">
-              <span className="l-flow-num">→</span>Approved · goes live on stream
-            </div>
-            <div className="l-flow-row">
-              <span className="l-flow-num">→</span>Denied · full refund instantly
-            </div>
-            <div className="l-flow-row">
-              <span className="l-flow-num">→</span>Stopped mid-beam · prorated back
-            </div>
-          </div>
-          <div className="l-band-claim">Tap yes, or money back.</div>
-          <p className="l-band-copy">
-            Nothing goes live without your approval. Every denial triggers an automatic refund.
-          </p>
-        </div>
+      <div className="foot-strip">
+        <span>free or paid</span>
+        <span className="pip" aria-hidden="true" />
+        <span>approval gated</span>
+        <span className="pip" aria-hidden="true" />
+        <span>solana · stripe</span>
       </div>
 
-      {/* HOW IT WORKS ────────────────────────────────────────────────── */}
-      <section className="l-how">
-        <div className="l-how-hd">
-          <h2 className="l-how-title">
-            Three surfaces. <em>One source.</em>
-            <br />
-            Zero spreadsheet.
-          </h2>
+      <footer className="foot">
+        <div className="foot-left">
+          <span>© {new Date().getFullYear()} Casi</span>
+          <a href="https://github.com/mm88nl-web/casi-app" target="_blank" rel="noopener noreferrer">
+            github
+          </a>
         </div>
-        <div className="l-how-grid">
-          <div className="l-how-cell">
-            <div className="l-how-n">A · Beams</div>
-            <div className="l-how-icon">
-              <svg width="100%" height="80" viewBox="0 0 200 80" preserveAspectRatio="xMinYMid meet">
-                <rect x="2" y="14" width="80" height="52" fill="none" stroke="var(--ink)" strokeWidth="2" />
-                <text x="42" y="46" textAnchor="middle" fill="var(--ink)" fontFamily="var(--S)" fontStyle="italic" fontSize="22">
-                  ✦
-                </text>
-                <rect x="92" y="20" width="40" height="40" fill="var(--ink)" opacity="0.18" />
-                <polygon points="150,18 184,18 200,40 184,62 150,62 134,40" fill="none" stroke="var(--ink)" strokeWidth="2" opacity="0.6" />
-              </svg>
-            </div>
-            <h3 className="l-how-h">Time-rented slots</h3>
-            <p className="l-how-p">
-              Hex, circle, banner, rect, rounded. Sized and priced however you like. Viewers pay
-              per minute. You approve once.
-            </p>
-          </div>
-          <div className="l-how-cell">
-            <div className="l-how-n">B · Flashes</div>
-            <div className="l-how-icon">
-              <svg width="100%" height="80" viewBox="0 0 200 80" preserveAspectRatio="xMinYMid meet">
-                <rect x="14" y="20" width="172" height="14" fill="var(--ink)" opacity="0.85" />
-                <rect x="14" y="40" width="120" height="14" fill="var(--ink)" opacity="0.4" />
-                <rect x="14" y="60" width="80" height="14" fill="var(--ink)" opacity="0.2" />
-              </svg>
-            </div>
-            <h3 className="l-how-h">15-second pop-ups</h3>
-            <p className="l-how-p">
-              Like a paid superchat that lives on the stream itself. Text, image, link.
-              Auto-expires. Refundable in one tap.
-            </p>
-          </div>
-          <div className="l-how-cell">
-            <div className="l-how-n">C · Backdrops</div>
-            <div className="l-how-icon">
-              <svg width="100%" height="80" viewBox="0 0 200 80" preserveAspectRatio="xMinYMid meet">
-                <rect x="2" y="6" width="196" height="68" fill="var(--ink)" opacity="0.12" />
-                <rect x="2" y="6" width="196" height="68" fill="none" stroke="var(--ink)" strokeWidth="2" strokeDasharray="4 6" />
-                <text x="100" y="46" textAnchor="middle" fill="var(--ink)" fontFamily="var(--M)" fontSize="11" letterSpacing="3">
-                  FULL-BLEED
-                </text>
-              </svg>
-            </div>
-            <h3 className="l-how-h">Full-bleed sponsor skin</h3>
-            <p className="l-how-p">
-              Sponsors pay to skin your entire scene background. The most premium surface, usually
-              booked weeks ahead.
-            </p>
-          </div>
+        <div className="foot-right">
+          <Link href="/legal/terms">terms</Link>
+          <Link href="/legal/privacy">privacy</Link>
+          <Link href="/legal/aup">use</Link>
         </div>
-      </section>
+      </footer>
 
-      <Footer />
-
+      <style jsx global>{`
+        /* While the landing page is mounted, override the body/html background
+           so the dark default from globals.css doesn't flash during navigation. */
+        html, body { background: ${P}; }
+      `}</style>
       <style jsx>{`
-        .casi-v9-landing {
+        .casi-landing {
+          --paper: ${P};
+          --ink:   ${I};
+          --accent: ${A};
+          --type:   #221a14;
+          --type-2: #6a574b;
+          --H: var(--font-casi-display), 'Bricolage Grotesque', system-ui, sans-serif;
+          --S: var(--font-casi-serif), 'Instrument Serif', Georgia, serif;
+          --M: var(--font-casi-mono), 'JetBrains Mono', ui-monospace, monospace;
+
           background: var(--paper);
-          color: var(--text);
-          min-height: 100vh;
-        }
-
-        /* HERO */
-        .l-hero {
-          position: relative;
-          padding: 80px var(--pad) 60px;
-          border-bottom: 1px solid var(--line);
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 48px;
-          overflow: hidden;
-        }
-        /* Narrow-phone padding: 32px gutters eat 17% of a 375px viewport
-           and crowd the hero copy. Shrink horizontal pad + tighten top
-           space so the headline lands above the fold on iPhone 12/13. */
-        @media (max-width: 540px) {
-          .l-hero {
-            padding: 56px 20px 48px;
-            gap: 36px;
-          }
-        }
-        @media (min-width: 900px) {
-          .l-hero {
-            grid-template-columns: 1.4fr 1fr;
-            align-items: end;
-            gap: 56px;
-            padding: 88px var(--pad) 72px;
-          }
-        }
-        .l-eyebrow {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          flex-wrap: wrap;
-          row-gap: 8px;
-          font-family: var(--M);
-          font-size: 11px;
-          font-weight: 500;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: var(--text-3);
-          margin-bottom: 28px;
-        }
-        .l-eyebrow::before {
-          content: '';
-          display: block;
-          width: 24px;
-          height: 1px;
-          background: var(--ink);
-        }
-        .l-eyebrow :global(.tag) {
-          padding: 3px 9px;
-          border: 1px solid var(--ink);
-          color: var(--ink);
-          font-size: 9.5px;
-          letter-spacing: 0.18em;
-        }
-        .l-display {
+          color: var(--type);
           font-family: var(--H);
-          font-weight: 800;
-          /* min lowered from 64px so 'is real estate.' fits a 375px iPhone
-             viewport — at 64px the italic-serif line measures ~480px and
-             overflowed horizontally. 13vw scales smoothly through tablet
-             before the upper clamp takes over on desktop. */
-          font-size: clamp(44px, 13vw, 168px);
-          font-variation-settings: 'opsz' 96;
-          line-height: 0.86;
-          letter-spacing: -0.045em;
-          color: var(--text);
-          text-wrap: balance;
-        }
-        .l-display :global(.ink) {
-          color: var(--ink);
-          font-style: italic;
-          font-family: var(--S);
-          font-weight: 400;
-          letter-spacing: -0.015em;
-          font-size: 0.92em;
-          line-height: 0.85;
-        }
-        .l-display :global(.underscore) {
-          display: inline-block;
-          line-height: 0.86;
-          box-shadow: inset 0 -8px 0 var(--ink);
-        }
-        .l-sub {
-          margin-top: 32px;
-          font-size: 18px;
-          line-height: 1.55;
-          color: var(--text-2);
-          max-width: 520px;
-        }
-        @media (max-width: 540px) {
-          .l-sub { font-size: 16px; margin-top: 24px; }
-        }
-        .l-cta-row {
-          margin-top: 40px;
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          flex-wrap: wrap;
-        }
-        /* Mobile: both CTAs claim full row width so they stack cleanly
-           instead of wrapping mid-row with a half-empty trailing line.
-           Note still sits centered below on its own line. */
-        @media (max-width: 540px) {
-          .l-cta-row {
-            margin-top: 28px;
-            gap: 12px;
-            flex-direction: column;
-            align-items: stretch;
-          }
-          .l-cta-row :global(.l-btn),
-          .l-cta-row :global(.l-btn-ghost) {
-            justify-content: center;
-            width: 100%;
-          }
-          .l-cta-note { margin-left: 0; text-align: center; }
-        }
-        .l-cta-row :global(.l-btn) {
-          display: inline-flex;
-          align-items: center;
-          gap: 14px;
-          padding: 18px 26px;
-          background: var(--ink);
-          color: var(--on-ink);
-          font-family: var(--M);
-          font-weight: 700;
-          font-size: 12.5px;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-          border: 1px solid var(--ink);
-          transition: transform 0.14s, filter 0.14s;
-        }
-        .l-cta-row :global(.l-btn:hover) {
-          transform: translateY(-2px);
-          filter: brightness(1.1);
-        }
-        .l-cta-row :global(.l-btn-ghost) {
-          display: inline-flex;
-          align-items: center;
-          gap: 14px;
-          padding: 18px 26px;
-          background: transparent;
-          color: var(--text);
-          font-family: var(--M);
-          font-weight: 600;
-          font-size: 12.5px;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-          border: 1px solid var(--line-2);
-          transition: border-color 0.14s, color 0.14s;
-        }
-        .l-cta-row :global(.l-btn-ghost:hover) {
-          border-color: var(--ink);
-          color: var(--ink);
-        }
-        .l-arr {
-          font-family: var(--M);
-          font-size: 14px;
-          line-height: 1;
-        }
-        .l-cta-note {
-          font-family: var(--M);
-          font-size: 10.5px;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-          color: var(--text-4);
-          margin-left: 4px;
-        }
-
-        /* TRUST STRIP */
-        .l-trust {
-          list-style: none;
-          padding: 0;
-          margin: 32px 0 0 0;
+          min-height: 100vh;
           display: flex;
           flex-direction: column;
-          gap: 10px;
-          max-width: 520px;
+          overflow-x: hidden;
         }
-        .l-trust-item {
+
+        .casi-landing :global(.casi-v9-wordmark) {
+          color: var(--type);
+          font-family: var(--H);
+          font-weight: 800;
+          font-size: 149px;
+          letter-spacing: -0.045em;
+          line-height: 0.85;
+          font-variation-settings: 'opsz' 96;
+        }
+        .casi-landing :global(.casi-v9-wordmark .casi-v9-dot) { color: var(--accent); }
+        .casi-landing :global(.casi-v9-mark) {
+          color: var(--ink);
+          width: 345px;
+          height: 172px;
+          margin-bottom: -18px;
+        }
+        @media (max-width: 900px) {
+          .casi-landing :global(.casi-v9-wordmark) { font-size: 110px; }
+          .casi-landing :global(.casi-v9-mark) { width: 260px; height: 130px; }
+        }
+        @media (max-width: 600px) {
+          .casi-landing :global(.casi-v9-wordmark) { font-size: 72px; }
+          .casi-landing :global(.casi-v9-mark) { width: 172px; height: 86px; }
+        }
+
+        .top {
           display: flex;
           align-items: center;
-          gap: 12px;
-          font-family: var(--M);
-          font-size: 11.5px;
-          letter-spacing: 0.04em;
-          color: var(--text-3);
-        }
-        .l-trust-glyph {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 22px;
-          height: 22px;
-          background: var(--ink-08);
-          color: var(--ink);
-          font-family: var(--M);
-          font-size: 10px;
-          font-weight: 700;
+          justify-content: flex-end;
+          padding: 28px 40px 0;
           flex-shrink: 0;
         }
-        .l-trust-link {
-          color: var(--ink);
-          text-decoration: none;
-          font-weight: 600;
-          border-bottom: 1px solid var(--ink-22);
-          transition: border-color 0.14s;
-        }
-        .l-trust-link:hover {
-          border-bottom-color: var(--ink);
-        }
+        @media (max-width: 640px) { .top { padding: 22px 22px 0; } }
+        .top-r { display: flex; align-items: center; gap: 18px; }
 
-        /* HERO RIGHT */
-        .l-hero-r {
+        .stamp {
+          font-family: var(--S);
+          font-style: italic;
+          font-size: 17px;
+          color: var(--type-2);
           display: flex;
-          flex-direction: column;
-          gap: 24px;
-          align-items: flex-start;
+          align-items: center;
+          gap: 10px;
         }
-        .l-stat {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          padding-top: 22px;
-          border-top: 1px solid var(--line);
-          width: 100%;
-        }
-        .l-stat-n {
-          font-family: var(--H);
-          font-weight: 800;
-          font-size: clamp(56px, 8vw, 108px);
-          font-variation-settings: 'opsz' 96;
-          line-height: 0.85;
-          letter-spacing: -0.04em;
-          color: var(--ink);
-          display: flex;
-          align-items: flex-start;
-          gap: 6px;
-        }
-        .l-stat-n sup {
-          font-size: 0.4em;
-          color: var(--text-3);
-          margin-top: 0.6em;
-          font-weight: 600;
-        }
-        .l-stat-l {
-          font-family: var(--M);
-          font-size: 10.5px;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: var(--text-3);
-        }
-
-        /* SCENE PREVIEW */
-        .l-scene {
-          width: 100%;
-          aspect-ratio: 16 / 9;
-          position: relative;
-          background: var(--paper);
-          border: 1px solid var(--ink-22);
-          overflow: hidden;
-        }
-        .l-scene::before {
+        .stamp::before {
           content: '';
-          position: absolute;
-          inset: 0;
-          z-index: 1;
-          pointer-events: none;
-          background: repeating-linear-gradient(
-            0deg,
-            transparent 0 1px,
-            color-mix(in oklab, var(--paper) 90%, black) 1px 2px
-          );
-          opacity: 0.4;
+          width: 8px; height: 8px;
+          border-radius: 50%;
+          background: var(--accent);
+          animation: blink 1.6s ease-out infinite;
         }
-        .l-scene-bg {
-          position: absolute;
-          inset: 0;
-          background:
-            radial-gradient(ellipse 60% 50% at 30% 40%, var(--ink-08) 0%, transparent 70%),
-            linear-gradient(160deg, var(--ink-04), var(--paper) 70%);
+        @keyframes blink {
+          0%   { box-shadow: 0 0 0 0   color-mix(in oklab, var(--accent) 55%, transparent); }
+          100% { box-shadow: 0 0 0 9px color-mix(in oklab, var(--accent)  0%, transparent); }
         }
-        .l-scene-slot {
-          position: absolute;
-          left: 5%;
-          top: 8%;
-          width: 34%;
-          height: 50%;
-          z-index: 2;
-          border: 2px solid var(--ink);
-          background: var(--ink-08);
+        .stamp .n { color: var(--type); font-style: normal; font-family: var(--H); font-weight: 700; font-size: 17px; }
+        .sep { width: 1px; height: 16px; background: color-mix(in oklab, var(--type) 22%, transparent); }
+        .login {
+          font-family: var(--S);
+          font-style: italic;
+          font-size: 17px;
+          color: var(--type);
+          border-bottom: 1.5px solid color-mix(in oklab, var(--type) 30%, transparent);
+          padding-bottom: 1px;
+          text-decoration: none;
+          white-space: nowrap;
+        }
+        @media (max-width: 540px) {
+          .sep { display: none; }
+          .stamp, .stamp .n, .login { font-size: 15px; }
+        }
+
+        .lede {
+          flex: 1;
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 6px;
-          animation: scenePulse 2.6s ease-in-out infinite;
+          padding: 60px 40px 80px;
+          text-align: center;
         }
-        @keyframes scenePulse {
-          0%,
-          100% {
-            box-shadow: 0 0 0 0 var(--ink-22), inset 0 0 0 0 var(--ink-08);
-          }
-          50% {
-            box-shadow: 0 0 24px var(--ink-22), inset 0 0 24px var(--ink-08);
-          }
-        }
-        .l-scene-slot::after {
-          content: 'LIVE';
-          position: absolute;
-          top: 6px;
-          right: 6px;
-          background: var(--ink);
-          color: var(--on-ink);
-          font-family: var(--M);
-          font-size: 8px;
-          font-weight: 700;
-          letter-spacing: 0.18em;
-          padding: 2px 6px;
-        }
-        .l-scene-icon {
-          font-family: var(--S);
-          font-size: 36px;
-          color: var(--ink);
-          font-style: italic;
-        }
-        .l-scene-meta {
-          font-family: var(--M);
-          font-size: 9px;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-          color: var(--ink-70);
-        }
-        .l-scene-hex {
-          position: absolute;
-          right: 7%;
-          top: 11%;
-          width: 22%;
-          aspect-ratio: 1;
-          z-index: 2;
-          clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
-          background: var(--ink-04);
-          outline: 2px solid var(--ink-22);
-          outline-offset: -2px;
-        }
-        .l-scene-banner {
-          position: absolute;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          height: 11%;
-          z-index: 3;
-          background: var(--ink-08);
-          border-top: 1px solid var(--ink-22);
+        .hero-mark {
           display: flex;
+          flex-direction: column;
           align-items: center;
-          overflow: hidden;
+          text-decoration: none;
         }
-        .l-scene-ticker {
-          white-space: nowrap;
-          padding-left: 100%;
-          font-family: var(--M);
-          font-size: 10px;
+
+        .tagline {
+          font-family: var(--H);
           font-weight: 500;
-          letter-spacing: 0.12em;
-          color: var(--ink-70);
-          animation: sceneScroll 16s linear infinite;
+          font-size: 30px;
+          letter-spacing: -0.022em;
+          color: var(--type);
+          line-height: 1.18;
+          margin: 30px 0 38px;
+          max-width: 680px;
         }
-        @keyframes sceneScroll {
-          from {
-            transform: translateX(0);
-          }
-          to {
-            transform: translateX(-100%);
-          }
+        .tagline :global(em) {
+          font-family: var(--S);
+          font-style: italic;
+          font-weight: 400;
+          color: var(--ink);
         }
-        .l-scene-tag {
-          position: absolute;
-          top: 14px;
-          left: 14px;
-          z-index: 4;
-          font-family: var(--M);
-          font-size: 9px;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: var(--text-3);
+        @media (max-width: 600px) { .tagline { font-size: 22px; margin: 22px 0 28px; } }
+
+        .cta-row {
           display: flex;
           align-items: center;
-          gap: 6px;
+          justify-content: center;
+          gap: 22px;
+          flex-wrap: wrap;
         }
-        .l-scene-tag-dot {
-          width: 6px;
-          height: 6px;
+
+        .foot-strip {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 14px;
+          font-family: var(--M);
+          font-size: 10.5px;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          color: var(--type-2);
+          padding: 0 40px 32px;
+          white-space: nowrap;
+          flex-wrap: wrap;
+        }
+        .pip {
+          width: 5px; height: 5px;
           border-radius: 50%;
           background: var(--ink);
+          opacity: 0.7;
+          display: inline-block;
         }
-        .l-scene-mock-label {
-          position: absolute;
-          bottom: 14%;
-          right: 8px;
-          z-index: 4;
-          font-family: var(--M);
-          font-size: 8px;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: var(--text-4);
-          background: var(--paper);
-          padding: 3px 6px;
-          border: 1px solid var(--line);
-        }
+        @media (max-width: 480px) { .foot-strip { font-size: 9.5px; gap: 10px; } }
 
-        /* MANIFESTO BAND */
-        .l-band {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 0;
-          border-bottom: 1px solid var(--line);
-        }
-        @media (min-width: 760px) {
-          .l-band {
-            grid-template-columns: repeat(3, 1fr);
-          }
-        }
-        .l-band-cell {
-          padding: 48px 36px 56px;
-          border-right: 1px solid var(--line);
-          display: flex;
-          flex-direction: column;
-          gap: 18px;
-          position: relative;
-          overflow: hidden;
-        }
-        .l-band-cell:last-child {
-          border-right: none;
-        }
-        @media (max-width: 760px) {
-          .l-band-cell {
-            border-right: none;
-            border-bottom: 1px solid var(--line);
-          }
-        }
-        @media (max-width: 540px) {
-          .l-band-cell {
-            padding: 36px 20px 40px;
-            gap: 14px;
-          }
-        }
-        .l-band-n {
-          font-family: var(--M);
-          font-size: 10.5px;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: var(--text-4);
-        }
-        .l-band-stat {
-          font-family: var(--H);
-          font-weight: 800;
-          font-variation-settings: 'opsz' 96;
-          font-size: clamp(72px, 9vw, 128px);
-          line-height: 0.85;
-          letter-spacing: -0.045em;
-          color: var(--ink);
-        }
-        .l-band-claim {
-          font-family: var(--H);
-          font-weight: 700;
-          font-size: 22px;
-          letter-spacing: -0.02em;
-          line-height: 1.15;
-          color: var(--text);
-        }
-        .l-band-copy {
-          font-size: 14.5px;
-          line-height: 1.6;
-          color: var(--text-2);
-          max-width: 340px;
-        }
-        .l-band-rails {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-        .l-rail {
+        .foot {
           display: flex;
           align-items: center;
-          gap: 12px;
-          padding: 10px 14px;
-          background: var(--surf);
-          border: 1px solid var(--line);
-        }
-        .l-rail-ghost {
-          background: transparent;
-          border-color: var(--line);
-        }
-        .l-rail-ico {
-          width: 26px;
-          height: 26px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-family: var(--M);
-          font-size: 13px;
-          font-weight: 600;
-          background: var(--ink);
-          color: var(--on-ink);
-        }
-        .l-rail-ico-ghost {
-          background: transparent;
-          color: var(--text-3);
-          border: 1px solid var(--line);
-        }
-        .l-rail-name {
-          font-size: 13.5px;
-          font-weight: 600;
-          flex: 1;
-          color: var(--text);
-        }
-        .l-rail-name-ghost {
-          color: var(--text-3);
-        }
-        .l-rail-note {
-          font-family: var(--M);
-          font-size: 10px;
-          color: var(--text-4);
-          letter-spacing: 0.06em;
-        }
-        .l-band-flow {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-        .l-flow-row {
-          display: flex;
-          align-items: center;
-          gap: 11px;
-          font-size: 13.5px;
-          color: var(--text-2);
-        }
-        .l-flow-num {
-          font-family: var(--M);
-          font-size: 11px;
-          color: var(--ink);
-          font-weight: 700;
-          width: 22px;
-          flex-shrink: 0;
-        }
-        .l-flow-row.ok {
-          color: var(--text);
-        }
-        .l-flow-row.ok .l-flow-num {
-          color: var(--ink);
-        }
-
-        /* HOW IT WORKS */
-        .l-how {
-          padding: 80px var(--pad);
-          border-bottom: 1px solid var(--line);
-        }
-        @media (max-width: 540px) {
-          .l-how { padding: 56px 20px; }
-        }
-        .l-how-hd {
-          display: flex;
-          align-items: flex-end;
           justify-content: space-between;
           flex-wrap: wrap;
-          gap: 24px;
-          margin-bottom: 48px;
-        }
-        @media (max-width: 540px) {
-          .l-how-hd { margin-bottom: 32px; }
-        }
-        .l-how-title {
-          font-family: var(--H);
-          font-weight: 800;
-          font-variation-settings: 'opsz' 64;
-          font-size: clamp(40px, 5vw, 72px);
-          line-height: 0.95;
-          letter-spacing: -0.035em;
-          max-width: 760px;
-          color: var(--text);
-        }
-        .l-how-title :global(em) {
-          font-family: var(--S);
-          font-style: italic;
-          font-weight: 400;
-          color: var(--ink);
-          font-size: 1em;
-          letter-spacing: -0.01em;
-        }
-        .l-how-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 0;
-          border: 1px solid var(--line);
-        }
-        @media (min-width: 760px) {
-          .l-how-grid {
-            grid-template-columns: repeat(3, 1fr);
-          }
-        }
-        .l-how-cell {
-          padding: 32px 28px;
-          border-right: 1px solid var(--line);
-          position: relative;
-        }
-        .l-how-cell:last-child {
-          border-right: none;
-        }
-        @media (max-width: 760px) {
-          .l-how-cell {
-            border-right: none;
-            border-bottom: 1px solid var(--line);
-          }
-        }
-        @media (max-width: 540px) {
-          .l-how-cell { padding: 28px 20px; }
-        }
-        .l-how-n {
+          gap: 14px;
+          padding: 16px 40px 28px;
           font-family: var(--M);
           font-size: 11px;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: var(--ink);
-          font-weight: 600;
-          margin-bottom: 18px;
+          letter-spacing: 0.04em;
+          color: var(--type-2);
+          border-top: 1px solid color-mix(in oklab, var(--type) 10%, transparent);
         }
-        .l-how-icon {
-          height: 96px;
-          display: flex;
-          align-items: center;
-          justify-content: flex-start;
-          margin-bottom: 14px;
-        }
-        .l-how-h {
-          font-family: var(--H);
-          font-weight: 700;
-          font-size: 24px;
-          letter-spacing: -0.02em;
-          color: var(--text);
-          margin-bottom: 10px;
-        }
-        .l-how-p {
-          font-size: 14px;
-          line-height: 1.6;
-          color: var(--text-2);
-          max-width: 320px;
-        }
+        @media (max-width: 640px) { .foot { padding: 16px 22px 24px; } }
+        .foot-left, .foot-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+        .foot a { text-decoration: none; color: inherit; }
       `}</style>
     </main>
   );

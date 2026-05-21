@@ -77,9 +77,10 @@ async function forwardToWebhook(entry: LogEntry): Promise<void> {
   const url = process.env.ERROR_WEBHOOK_URL;
   if (!url) return;
   const body = isDiscordWebhook(url) ? formatForDiscord(entry) : entry;
-  // Bounded: a slow webhook must not stall the request handler that fired it.
+  // 5s — Discord can be slow under load; 2s was too tight and caused
+  // the webhook POST to be abandoned before it sent.
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 2_000);
+  const timer = setTimeout(() => controller.abort(), 5_000);
   try {
     await fetch(url, {
       method: 'POST',
@@ -119,6 +120,30 @@ export function logError(
     extra,
     ts: new Date().toISOString(),
   });
+}
+
+/**
+ * Awaitable variant of logError — use in server route handlers where the
+ * function must not return a response before the webhook POST completes.
+ * Without this, Vercel terminates the lambda before the fire-and-forget
+ * forwardToWebhook resolves and Discord never receives the event.
+ */
+export async function logErrorAsync(
+  scope: string,
+  err: unknown,
+  extra?: Record<string, unknown>,
+): Promise<void> {
+  const entry: LogEntry = {
+    level: 'error',
+    scope,
+    message: errorMessage(err),
+    stack: errorStack(err),
+    extra,
+    ts: new Date().toISOString(),
+  };
+  const line = JSON.stringify(entry);
+  console.error(line);
+  await forwardToWebhook(entry);
 }
 
 export function logWarn(
