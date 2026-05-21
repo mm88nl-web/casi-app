@@ -6,11 +6,9 @@ import { createClient } from '@/utils/supabase/client';
 import { CasiMark } from '@/components/v9/CasiMark';
 import { Wordmark } from '@/components/v9/Wordmark';
 
-// Palette constants — edit here to recolor the landing.
-// Scoped to .casi-landing so it never bleeds into studio/overlay routes.
-const P = '#f5e1d2'; // paper  — salmon
-const I = '#294b3c'; // ink    — sage
-const A = '#c04830'; // accent — terracotta
+const P = '#f5e1d2';
+const I = '#294b3c';
+const A = '#c04830';
 
 export default function HomePage() {
   const [liveCount, setLiveCount] = useState<number | null>(null);
@@ -52,8 +50,11 @@ export default function HomePage() {
           <Wordmark />
         </Link>
 
+        <p className="tagline">
+          Get on a <em>live stream.</em>
+        </p>
+
         <div className="cta-row">
-          {/* Inline styles bypass styled-jsx scoping issues in production */}
           <Link
             href="/studio"
             style={{
@@ -67,11 +68,14 @@ export default function HomePage() {
               fontWeight: 700,
               fontSize: '16px',
               border: `1.5px solid ${I}`,
+              borderRadius: '999px',
               textDecoration: 'none',
               letterSpacing: '-0.01em',
+              whiteSpace: 'nowrap',
             }}
           >
-            Create studio <span style={{ fontStyle: 'italic', fontSize: '20px', lineHeight: 1 }}>→</span>
+            Create studio{' '}
+            <span style={{ fontFamily: 'var(--font-casi-serif), Georgia, serif', fontStyle: 'italic', fontSize: '20px', lineHeight: 1 }}>→</span>
           </Link>
           <Link
             href="/search"
@@ -81,15 +85,24 @@ export default function HomePage() {
               fontSize: '19px',
               color: I,
               textDecoration: 'none',
-              borderBottom: `1.5px solid ${I}`,
+              borderBottom: `1.5px solid rgba(41,75,60,0.35)`,
               paddingBottom: '1px',
-              opacity: 0.7,
+              opacity: 0.78,
+              whiteSpace: 'nowrap',
             }}
           >
-            or find streamer
+            find a streamer
           </Link>
         </div>
       </section>
+
+      <div className="foot-strip">
+        <span>free or paid</span>
+        <span className="pip" aria-hidden="true" />
+        <span>approval gated</span>
+        <span className="pip" aria-hidden="true" />
+        <span>solana · stripe</span>
+      </div>
 
       <footer className="foot">
         <div className="foot-left">
@@ -104,8 +117,6 @@ export default function HomePage() {
           <Link href="/legal/aup">use</Link>
         </div>
       </footer>
-
-      <div className="seal" aria-hidden="true" />
 
       <style jsx>{`
         .casi-landing {
@@ -122,9 +133,8 @@ export default function HomePage() {
           color: var(--type);
           font-family: var(--H);
           min-height: 100vh;
-          display: grid;
-          grid-template-rows: auto 1fr auto;
-          position: relative;
+          display: flex;
+          flex-direction: column;
           overflow-x: hidden;
         }
 
@@ -132,44 +142,37 @@ export default function HomePage() {
           color: var(--type);
           font-family: var(--H);
           font-weight: 800;
-          font-size: 120px;
+          font-size: 149px;
           letter-spacing: -0.045em;
-          line-height: 1;
+          line-height: 0.85;
+          font-variation-settings: 'opsz' 96;
         }
-        .casi-landing :global(.casi-v9-wordmark .casi-v9-dot) {
-          color: var(--accent);
-        }
+        .casi-landing :global(.casi-v9-wordmark .casi-v9-dot) { color: var(--accent); }
         .casi-landing :global(.casi-v9-mark) {
           color: var(--ink);
-          width: 200px;
-          height: 100px;
+          width: 345px;
+          height: 172px;
+          margin-bottom: -18px;
         }
-        @media (max-width: 768px) {
-          .casi-landing :global(.casi-v9-wordmark) { font-size: 80px; }
-          .casi-landing :global(.casi-v9-mark) { width: 134px; height: 67px; }
+        @media (max-width: 900px) {
+          .casi-landing :global(.casi-v9-wordmark) { font-size: 110px; }
+          .casi-landing :global(.casi-v9-mark) { width: 260px; height: 130px; }
         }
-        @media (max-width: 480px) {
-          .casi-landing :global(.casi-v9-wordmark) { font-size: 60px; }
-          .casi-landing :global(.casi-v9-mark) { width: 100px; height: 50px; }
+        @media (max-width: 600px) {
+          .casi-landing :global(.casi-v9-wordmark) { font-size: 72px; }
+          .casi-landing :global(.casi-v9-mark) { width: 172px; height: 86px; }
         }
 
-        /* NAV — login link only, no logo */
         .top {
           display: flex;
           align-items: center;
           justify-content: flex-end;
           padding: 28px 40px 0;
+          flex-shrink: 0;
         }
-        @media (max-width: 640px) {
-          .top { padding: 22px 22px 0; }
-        }
-        .top-r {
-          display: flex;
-          align-items: center;
-          gap: 18px;
-        }
+        @media (max-width: 640px) { .top { padding: 22px 22px 0; } }
+        .top-r { display: flex; align-items: center; gap: 18px; }
 
-        /* LIVE STAMP */
         .stamp {
           font-family: var(--S);
           font-style: italic;
@@ -181,28 +184,17 @@ export default function HomePage() {
         }
         .stamp::before {
           content: '';
-          width: 8px;
-          height: 8px;
+          width: 8px; height: 8px;
           border-radius: 50%;
           background: var(--accent);
           animation: blink 1.6s ease-out infinite;
         }
         @keyframes blink {
           0%   { box-shadow: 0 0 0 0   color-mix(in oklab, var(--accent) 55%, transparent); }
-          100% { box-shadow: 0 0 0 7px color-mix(in oklab, var(--accent)  0%, transparent); }
+          100% { box-shadow: 0 0 0 9px color-mix(in oklab, var(--accent)  0%, transparent); }
         }
-        .stamp .n {
-          color: var(--type);
-          font-style: normal;
-          font-family: var(--H);
-          font-weight: 700;
-          font-size: 17px;
-        }
-        .sep {
-          width: 1px;
-          height: 16px;
-          background: color-mix(in oklab, var(--type) 22%, transparent);
-        }
+        .stamp .n { color: var(--type); font-style: normal; font-family: var(--H); font-weight: 700; font-size: 17px; }
+        .sep { width: 1px; height: 16px; background: color-mix(in oklab, var(--type) 22%, transparent); }
         .login {
           font-family: var(--S);
           font-style: italic;
@@ -211,88 +203,94 @@ export default function HomePage() {
           border-bottom: 1.5px solid color-mix(in oklab, var(--type) 30%, transparent);
           padding-bottom: 1px;
           text-decoration: none;
+          white-space: nowrap;
         }
         @media (max-width: 540px) {
           .sep { display: none; }
           .stamp, .stamp .n, .login { font-size: 15px; }
         }
 
-        /* HERO — logo is the content */
         .lede {
-          align-self: center;
+          flex: 1;
           display: flex;
           flex-direction: column;
           align-items: center;
-          padding: 80px 40px 100px;
-        }
-        @media (max-width: 768px) {
-          .lede { padding: 60px 28px 80px; }
+          justify-content: center;
+          padding: 60px 40px 80px;
+          text-align: center;
         }
         .hero-mark {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 32px;
           text-decoration: none;
-          margin-bottom: 120px;
         }
-        @media (max-width: 768px) {
-          .hero-mark { gap: 24px; margin-bottom: 80px; }
+
+        .tagline {
+          font-family: var(--H);
+          font-weight: 500;
+          font-size: 30px;
+          letter-spacing: -0.022em;
+          color: var(--type);
+          line-height: 1.18;
+          margin: 30px 0 38px;
+          max-width: 680px;
         }
+        .tagline :global(em) {
+          font-family: var(--S);
+          font-style: italic;
+          font-weight: 400;
+          color: var(--ink);
+        }
+        @media (max-width: 600px) { .tagline { font-size: 22px; margin: 22px 0 28px; } }
 
         .cta-row {
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 24px;
+          gap: 22px;
           flex-wrap: wrap;
         }
-        @media (max-width: 540px) {
-          .cta-row { gap: 16px; }
-        }
 
-        /* FOOTER */
+        .foot-strip {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 14px;
+          font-family: var(--M);
+          font-size: 10.5px;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          color: var(--type-2);
+          padding: 0 40px 32px;
+          white-space: nowrap;
+          flex-wrap: wrap;
+        }
+        .pip {
+          width: 5px; height: 5px;
+          border-radius: 50%;
+          background: var(--ink);
+          opacity: 0.7;
+          display: inline-block;
+        }
+        @media (max-width: 480px) { .foot-strip { font-size: 9.5px; gap: 10px; } }
+
         .foot {
           display: flex;
           align-items: center;
           justify-content: space-between;
           flex-wrap: wrap;
           gap: 14px;
-          padding: 22px 40px 28px;
+          padding: 16px 40px 28px;
           font-family: var(--M);
           font-size: 11px;
           letter-spacing: 0.04em;
           color: var(--type-2);
+          border-top: 1px solid color-mix(in oklab, var(--type) 10%, transparent);
         }
-        @media (max-width: 640px) {
-          .foot { padding: 18px 22px 24px; }
-        }
-        .foot-left, .foot-right {
-          display: flex;
-          align-items: center;
-          gap: 18px;
-          flex-wrap: wrap;
-        }
-        .foot a {
-          text-decoration: none;
-          color: inherit;
-        }
-
-        /* SEAL — faint ring, pure decoration */
-        .seal {
-          position: fixed;
-          right: -120px;
-          bottom: -120px;
-          width: 360px;
-          height: 360px;
-          border-radius: 50%;
-          border: 28px solid var(--ink);
-          opacity: 0.12;
-          pointer-events: none;
-        }
-        @media (max-width: 640px) {
-          .seal { width: 220px; height: 220px; border-width: 16px; right: -90px; bottom: -90px; }
-        }
+        @media (max-width: 640px) { .foot { padding: 16px 22px 24px; } }
+        .foot-left, .foot-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+        .foot a { text-decoration: none; color: inherit; }
       `}</style>
     </main>
   );

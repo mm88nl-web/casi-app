@@ -6,12 +6,11 @@ import { createClient } from '@/utils/supabase/client';
 import { CasiMark } from '@/components/v9/CasiMark';
 import { Wordmark } from '@/components/v9/Wordmark';
 
-// Same three roots as the landing — edit once, updates both.
 const P = '#f5e1d2';
 const I = '#294b3c';
 const A = '#c04830';
 
-type LiveProfile = {
+type Profile = {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
@@ -21,9 +20,13 @@ type LiveProfile = {
   is_live: boolean;
 };
 
-export default function BrowsePage() {
+function fmtViewers(n: number) {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
+export default function SearchPage() {
   const supabase = createClient();
-  const [profiles, setProfiles] = useState<LiveProfile[] | null>(null);
+  const [profiles, setProfiles] = useState<Profile[] | null>(null);
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -34,7 +37,7 @@ export default function BrowsePage() {
         .select('username, display_name, avatar_url, bio, ink_color, theme_color, is_live')
         .order('is_live', { ascending: false })
         .order('username');
-      if (!cancelled) setProfiles((data ?? []) as LiveProfile[]);
+      if (!cancelled) setProfiles((data ?? []) as Profile[]);
     })();
     return () => { cancelled = true; };
   }, [supabase]);
@@ -53,13 +56,14 @@ export default function BrowsePage() {
       });
 
   return (
-    <main className="casi-browse" data-paper="light">
-      <header className="top">
-        <Link href="/" className="mark" aria-label="Casi">
+    <main className="casi-search" data-paper="light">
+      {/* NAV */}
+      <header className="nav">
+        <Link href="/" className="nav-logo" aria-label="Casi">
           <CasiMark />
           <Wordmark />
         </Link>
-        <div className="top-r">
+        <div className="nav-r">
           {showLive && (
             <>
               <div className="stamp">
@@ -68,17 +72,20 @@ export default function BrowsePage() {
               <span className="sep" aria-hidden="true" />
             </>
           )}
-          <Link href="/login" className="login">Log in</Link>
+          <Link href="/login" className="login-link">Log in</Link>
         </div>
       </header>
 
-      <section className="b-head">
-        <h1>Find a streamer.</h1>
-        <div className="b-search-wrap">
+      {/* HEAD */}
+      <section className="head">
+        <div className="eyebrow">— find a stream</div>
+        <h1>Find a <em>live stream.</em></h1>
+        <div className="search-wrap">
+          <span className="search-icon" aria-hidden="true">⌕</span>
           <input
-            className="b-search"
+            className="search-input"
             type="search"
-            placeholder="Search by name or @username…"
+            placeholder="search by name or @handle"
             value={query}
             onChange={e => setQuery(e.target.value)}
             autoComplete="off"
@@ -87,74 +94,60 @@ export default function BrowsePage() {
         </div>
       </section>
 
-      <section className="b-body">
+      {/* GRID */}
+      <section className="body">
         {filtered === null ? (
-          <div className="b-loading">Loading…</div>
+          <div className="loading">Loading…</div>
         ) : filtered.length === 0 ? (
-          <div className="b-empty">
+          <div className="empty">
             <h2>{query ? `No streamers matching "${query}"` : 'No streamers yet.'}</h2>
             <p>{query ? 'Try a different name.' : 'Be the first to go live.'}</p>
             {!query && (
-              <Link
-                href="/studio"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  marginTop: '20px',
-                  background: I,
-                  color: P,
-                  padding: '13px 22px',
-                  fontFamily: 'var(--font-casi-display), system-ui, sans-serif',
-                  fontWeight: 700,
-                  fontSize: '15px',
-                  border: `1.5px solid ${I}`,
-                  textDecoration: 'none',
-                }}
-              >
+              <Link href="/studio" className="empty-cta">
                 Go live yourself →
               </Link>
             )}
           </div>
         ) : (
-          <div className="b-grid">
-            {filtered.map((p) => {
+          <div className="grid">
+            {filtered.map(p => {
               const accent = p.ink_color || p.theme_color || I;
               const initial = (p.display_name || p.username).charAt(0).toUpperCase();
               return (
                 <Link
                   key={p.username}
                   href={`/overlay?s=${p.username}`}
-                  className="b-card"
+                  className={`card${p.is_live ? '' : ' offline'}`}
                   style={{ '--card-ink': accent } as React.CSSProperties}
                 >
-                  <div className="b-card-hero">
-                    {p.is_live && (
-                      <span className="b-card-live-pill">
-                        <span className="b-card-live-dot" />
-                        Live
-                      </span>
-                    )}
-                    <div className="b-card-avatar">
-                      {p.avatar_url ? (
+                  <div className="card-body">
+                    <div className="card-avatar">
+                      {p.avatar_url
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.avatar_url} alt="" />
-                      ) : (
-                        <span>{initial}</span>
-                      )}
+                        ? <img src={p.avatar_url} alt="" />
+                        : <span>{initial}</span>
+                      }
+                    </div>
+                    <div className="card-meta">
+                      <div className="card-name-row">
+                        <span className="card-name">{p.display_name || p.username}</span>
+                        {p.is_live && (
+                          <span className="live-pill">
+                            <span className="live-dot" />
+                            {/* viewer count not available in DB — just show live indicator */}
+                            live
+                          </span>
+                        )}
+                      </div>
+                      <div className="card-handle">@{p.username}</div>
                     </div>
                   </div>
-                  <div className="b-card-body">
-                    <div className="b-card-name">{p.display_name || p.username}</div>
-                    <div className="b-card-handle">@{p.username}</div>
-                    {p.bio
-                      ? <p className="b-card-bio">{p.bio}</p>
-                      : <p className="b-card-bio b-card-bio-empty">No bio yet.</p>
-                    }
-                  </div>
-                  <div className="b-card-foot">
-                    <span className="b-card-cta">{p.is_live ? 'Book a slot' : 'View page'}</span>
-                    <span className="b-card-arrow">→</span>
+                  <p className="card-bio">
+                    {p.bio || <span className="card-bio-empty">No bio yet.</span>}
+                  </p>
+                  <div className="card-foot">
+                    <span className="card-pill">{p.is_live ? 'visit · book' : 'view page'}</span>
+                    <span className="card-arrow">→</span>
                   </div>
                 </Link>
               );
@@ -163,12 +156,20 @@ export default function BrowsePage() {
         )}
       </section>
 
+      {/* TRUST STRIP */}
+      <div className="trust-strip">
+        <span>free or paid</span>
+        <span className="pip" aria-hidden="true" />
+        <span>approval gated</span>
+        <span className="pip" aria-hidden="true" />
+        <span>solana · stripe</span>
+      </div>
+
+      {/* FOOTER */}
       <footer className="foot">
         <div className="foot-left">
           <span>© {new Date().getFullYear()} Casi</span>
-          <a href="https://github.com/mm88nl-web/casi-app" target="_blank" rel="noopener noreferrer">
-            github
-          </a>
+          <a href="https://github.com/mm88nl-web/casi-app" target="_blank" rel="noopener noreferrer">github</a>
         </div>
         <div className="foot-right">
           <Link href="/legal/terms">terms</Link>
@@ -177,10 +178,8 @@ export default function BrowsePage() {
         </div>
       </footer>
 
-      <div className="seal" aria-hidden="true" />
-
       <style jsx>{`
-        .casi-browse {
+        .casi-search {
           --paper: ${P};
           --ink:   ${I};
           --accent: ${A};
@@ -196,315 +195,265 @@ export default function BrowsePage() {
           min-height: 100vh;
           display: flex;
           flex-direction: column;
-          position: relative;
           overflow-x: hidden;
         }
 
-        .casi-browse :global(.casi-v9-wordmark) {
+        /* Mark + wordmark sizing in nav */
+        .casi-search :global(.casi-v9-wordmark) {
           color: var(--type);
           font-family: var(--H);
           font-weight: 800;
-          font-size: 28px;
+          font-size: 24px;
           letter-spacing: -0.035em;
+          line-height: 1;
         }
-        .casi-browse :global(.casi-v9-wordmark .casi-v9-dot) { color: var(--accent); }
-        .casi-browse :global(.casi-v9-mark) { color: var(--ink); width: 60px; height: 30px; }
+        .casi-search :global(.casi-v9-wordmark .casi-v9-dot) { color: var(--accent); }
+        .casi-search :global(.casi-v9-mark) { color: var(--ink); width: 56px; height: 28px; }
 
-        /* NAV — identical pattern to landing */
-        .top {
+        /* NAV */
+        .nav {
           display: flex;
           align-items: center;
-          justify-content: center;
-          position: relative;
-          padding: 32px 40px 0;
+          justify-content: space-between;
+          padding: 28px 40px;
+          flex-shrink: 0;
         }
-        @media (max-width: 640px) { .top { padding: 26px 22px 0; } }
-        .mark { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
-        .top-r { position: absolute; right: 40px; display: flex; align-items: center; gap: 18px; }
-        @media (max-width: 640px) { .top-r { right: 22px; } }
+        @media (max-width: 640px) { .nav { padding: 22px 22px; } }
+        .nav-logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
+        .nav-r { display: flex; align-items: center; gap: 18px; }
         .stamp {
-          font-family: var(--S);
-          font-style: italic;
-          font-size: 17px;
-          color: var(--type-2);
-          display: flex;
-          align-items: center;
-          gap: 10px;
+          font-family: var(--S); font-style: italic; font-size: 17px;
+          color: var(--type-2); display: flex; align-items: center; gap: 10px;
         }
         .stamp::before {
-          content: '';
-          width: 8px; height: 8px;
-          border-radius: 50%;
-          background: var(--accent);
-          animation: blink 1.6s ease-out infinite;
+          content: ''; width: 8px; height: 8px; border-radius: 50%;
+          background: var(--accent); animation: blink 1.6s ease-out infinite;
         }
         @keyframes blink {
-          0%   { box-shadow: 0 0 0 0   rgba(192, 72, 48, 0.55); }
-          100% { box-shadow: 0 0 0 7px rgba(192, 72, 48, 0); }
+          0%   { box-shadow: 0 0 0 0   color-mix(in oklab, var(--accent) 55%, transparent); }
+          100% { box-shadow: 0 0 0 9px color-mix(in oklab, var(--accent)  0%, transparent); }
         }
-        .stamp .n {
-          color: var(--type);
-          font-style: normal;
-          font-family: var(--H);
-          font-weight: 700;
-          font-size: 17px;
-        }
-        .sep { width: 1px; height: 16px; background: rgba(34, 26, 20, 0.18); }
-        .login {
-          font-family: var(--S);
-          font-style: italic;
-          font-size: 17px;
-          color: var(--type);
-          border-bottom: 1.5px solid rgba(34, 26, 20, 0.25);
-          padding-bottom: 1px;
-          text-decoration: none;
+        .stamp .n { color: var(--type); font-style: normal; font-family: var(--H); font-weight: 700; }
+        .sep { width: 1px; height: 16px; background: color-mix(in oklab, var(--type) 22%, transparent); }
+        .login-link {
+          font-family: var(--S); font-style: italic; font-size: 17px; color: var(--type);
+          border-bottom: 1.5px solid color-mix(in oklab, var(--type) 30%, transparent);
+          padding-bottom: 1px; text-decoration: none; white-space: nowrap;
         }
         @media (max-width: 540px) {
           .sep { display: none; }
-          .stamp, .stamp .n, .login { font-size: 15px; }
+          .stamp, .stamp .n, .login-link { font-size: 15px; }
         }
 
         /* HEAD */
-        .b-head {
-          padding: 64px 40px 48px;
-          border-bottom: 1px solid rgba(34, 26, 20, 0.1);
+        .head {
+          padding: 0 40px 48px;
+          border-bottom: 1px solid color-mix(in oklab, var(--type) 10%, transparent);
         }
-        @media (max-width: 640px) { .b-head { padding: 40px 22px 36px; } }
+        @media (max-width: 640px) { .head { padding: 0 22px 36px; } }
+        .eyebrow {
+          font-family: var(--M);
+          font-size: 11px;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          color: var(--type-2);
+          margin-bottom: 12px;
+        }
         h1 {
           font-family: var(--H);
-          font-weight: 700;
-          font-variation-settings: 'opsz' 96;
-          font-size: clamp(44px, 7vw, 96px);
-          line-height: 0.92;
-          letter-spacing: -0.04em;
+          font-weight: 800;
+          font-size: clamp(52px, 8vw, 84px);
+          letter-spacing: -0.035em;
+          line-height: 0.95;
           color: var(--type);
+          font-variation-settings: 'opsz' 56;
         }
         h1 :global(em) {
           font-family: var(--S);
           font-style: italic;
           font-weight: 400;
-          color: var(--accent);
-          font-size: 0.95em;
+          color: var(--ink);
+          font-size: 0.94em;
           letter-spacing: -0.015em;
         }
 
         /* SEARCH INPUT */
-        .b-search-wrap {
-          margin-top: 36px;
+        .search-wrap {
+          margin-top: 32px;
+          position: relative;
           max-width: 560px;
         }
-        .b-search {
+        .search-icon {
+          position: absolute;
+          left: 22px;
+          top: 50%;
+          transform: translateY(-50%);
+          font-size: 20px;
+          color: var(--type-2);
+          pointer-events: none;
+        }
+        .search-input {
           width: 100%;
-          padding: 14px 20px;
-          font-family: var(--H);
-          font-size: 17px;
-          font-weight: 500;
-          letter-spacing: -0.01em;
+          padding: 16px 22px 16px 48px;
+          background: color-mix(in oklab, var(--paper) 70%, white);
           color: var(--type);
-          background: rgba(255, 255, 255, 0.6);
-          border: 1.5px solid rgba(34, 26, 20, 0.2);
+          border: 1.5px solid color-mix(in oklab, var(--type) 18%, transparent);
+          border-radius: 999px;
+          font-family: var(--H);
+          font-size: 16px;
+          font-weight: 500;
           outline: none;
           appearance: none;
           -webkit-appearance: none;
-          transition: border-color 0.14s, background 0.14s;
+          transition: border-color 0.14s;
           box-sizing: border-box;
         }
-        .b-search::placeholder {
-          color: var(--type-2);
-          opacity: 0.7;
-        }
-        .b-search:focus {
-          border-color: ${I};
-          background: rgba(255, 255, 255, 0.85);
-        }
-        .b-search::-webkit-search-cancel-button { display: none; }
+        .search-input::placeholder { color: var(--type-2); opacity: 0.6; }
+        .search-input:focus { border-color: var(--ink); }
+        .search-input::-webkit-search-cancel-button { display: none; }
 
         /* BODY */
-        .b-body { flex: 1; padding: 40px 40px 80px; }
-        @media (max-width: 640px) { .b-body { padding: 32px 22px 64px; } }
-        .b-loading {
-          font-family: var(--M);
-          font-size: 11px;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: var(--type-2);
-          padding: 48px 0;
-          text-align: center;
+        .body { flex: 1; padding: 32px 40px 60px; }
+        @media (max-width: 640px) { .body { padding: 24px 22px 48px; } }
+
+        .loading {
+          font-family: var(--M); font-size: 11px; letter-spacing: 0.18em;
+          text-transform: uppercase; color: var(--type-2);
+          padding: 48px 0; text-align: center;
         }
-        .b-empty { max-width: 480px; padding: 48px 0; border-top: 1px solid rgba(34, 26, 20, 0.1); }
-        .b-empty h2 {
-          font-family: var(--H);
-          font-weight: 700;
+        .empty { max-width: 480px; padding: 48px 0; }
+        .empty h2 {
+          font-family: var(--H); font-weight: 700;
           font-size: clamp(28px, 4vw, 40px);
-          letter-spacing: -0.025em;
-          color: var(--type);
+          letter-spacing: -0.025em; color: var(--type);
         }
-        .b-empty p { margin-top: 12px; font-size: 15px; color: var(--type-2); }
+        .empty p { margin-top: 12px; font-size: 15px; color: var(--type-2); }
+        .empty-cta {
+          display: inline-flex; align-items: center; gap: 10px; margin-top: 20px;
+          background: var(--ink); color: var(--paper);
+          padding: 13px 22px; border-radius: 999px;
+          font-family: var(--H); font-weight: 700; font-size: 15px;
+          text-decoration: none; letter-spacing: -0.01em;
+        }
 
         /* GRID */
-        .b-grid {
+        .grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(280px, 360px));
-          gap: 16px;
+          gap: 18px;
           justify-content: start;
         }
-        @media (max-width: 480px) { .b-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
 
         /* CARD */
-        .b-card {
+        .card {
           display: flex;
           flex-direction: column;
-          border: 1px solid rgba(34, 26, 20, 0.12);
-          background: rgba(255, 255, 255, 0.5);
+          background: color-mix(in oklab, var(--paper) 80%, white);
+          border: 1.5px solid color-mix(in oklab, var(--type) 12%, transparent);
+          border-radius: 20px;
+          overflow: hidden;
           text-decoration: none;
           color: inherit;
-          transition: transform 0.14s, border-color 0.14s;
-          overflow: hidden;
+          transition: transform 0.15s, border-color 0.15s;
         }
-        .b-card:hover { transform: translateY(-2px); border-color: var(--card-ink); }
+        .card:hover { transform: translateY(-2px); border-color: var(--card-ink); }
+        .card.offline { opacity: 0.78; }
 
-        .b-card-hero {
-          position: relative;
-          aspect-ratio: 16 / 9;
-          background:
-            radial-gradient(
-              circle at 30% 30%,
-              color-mix(in oklab, var(--card-ink) 50%, transparent),
-              color-mix(in oklab, var(--card-ink) 15%, transparent) 70%
-            ),
-            ${P};
-          border-bottom: 1px solid rgba(34, 26, 20, 0.08);
-        }
-        .b-card-live-pill {
-          position: absolute;
-          top: 12px; right: 12px;
-          display: inline-flex;
+        /* Card body — avatar + name/live inline */
+        .card-body {
+          padding: 20px 20px 0;
+          display: grid;
+          grid-template-columns: auto 1fr;
+          column-gap: 14px;
           align-items: center;
-          gap: 6px;
-          padding: 4px 9px;
-          background: rgba(245, 225, 210, 0.92);
-          color: var(--type);
-          font-family: var(--M);
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          border: 1px solid rgba(34, 26, 20, 0.1);
         }
-        .b-card-live-dot {
-          width: 6px; height: 6px;
+        .card-avatar {
+          width: 48px; height: 48px;
           border-radius: 50%;
-          background: var(--card-ink);
+          background: color-mix(in oklab, var(--card-ink) 14%, var(--paper));
+          color: var(--card-ink);
+          display: flex; align-items: center; justify-content: center;
+          font-family: var(--H); font-weight: 800; font-size: 21px; letter-spacing: -0.04em;
+          border: 1.5px solid color-mix(in oklab, var(--card-ink) 30%, transparent);
+          overflow: hidden;
+          flex-shrink: 0;
+        }
+        .card.offline .card-avatar {
+          background: color-mix(in oklab, var(--type) 6%, var(--paper));
+          color: var(--type-2);
+          border-color: color-mix(in oklab, var(--type) 14%, transparent);
+        }
+        .card-avatar :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .card-meta { min-width: 0; }
+        .card-name-row {
+          display: flex; align-items: center; gap: 8px; min-width: 0;
+        }
+        .card-name {
+          font-family: var(--H); font-weight: 700; font-size: 18px;
+          letter-spacing: -0.02em; color: var(--type); line-height: 1.15;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+        }
+        .live-pill {
+          flex-shrink: 0;
+          display: inline-flex; align-items: center; gap: 5px;
+          padding: 3px 8px; border-radius: 999px;
+          background: color-mix(in oklab, var(--accent) 14%, var(--paper));
+          border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+          color: var(--accent);
+          font-family: var(--M); font-size: 9.5px; font-weight: 700;
+          letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap;
+        }
+        .live-dot {
+          width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
           animation: livePulse 1.8s ease-in-out infinite;
         }
-        @keyframes livePulse {
-          0%, 100% { opacity: 1; }
-          50%       { opacity: 0.45; }
+        @keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .card-handle {
+          font-family: var(--M); font-size: 11px;
+          color: var(--type-2); margin-top: 3px; letter-spacing: 0.02em;
         }
-        .b-card-avatar {
-          position: absolute;
-          left: 18px; bottom: -22px;
-          width: 64px; height: 64px;
-          background: ${P};
-          color: var(--card-ink);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-family: var(--H);
-          font-weight: 800;
-          font-size: 28px;
-          letter-spacing: -0.04em;
-          border: 2px solid ${P};
-          overflow: hidden;
-          box-shadow: 0 2px 10px rgba(34, 26, 20, 0.14);
+        .card-bio {
+          padding: 14px 20px 18px;
+          font-size: 13.5px; line-height: 1.5; color: var(--type-2);
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
         }
-        .b-card-avatar :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .card-bio-empty { font-style: italic; opacity: 0.6; }
+        .card-foot {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 14px 18px;
+          border-top: 1px solid color-mix(in oklab, var(--type) 8%, transparent);
+        }
+        .card-pill {
+          padding: 6px 12px; border-radius: 999px;
+          background: var(--card-ink); color: var(--paper);
+          font-family: var(--M); font-size: 10px; font-weight: 700;
+          letter-spacing: 0.18em; text-transform: uppercase; white-space: nowrap;
+        }
+        .card-arrow {
+          font-family: var(--M); font-size: 16px; color: var(--type-2);
+        }
 
-        .b-card-body { padding: 34px 20px 18px; flex: 1; }
-        .b-card-name {
-          font-family: var(--H);
-          font-weight: 700;
-          font-size: 20px;
-          letter-spacing: -0.02em;
-          color: var(--type);
-          line-height: 1.15;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+        /* TRUST STRIP */
+        .trust-strip {
+          display: flex; align-items: center; justify-content: center;
+          gap: 14px; flex-wrap: wrap;
+          font-family: var(--M); font-size: 10.5px;
+          letter-spacing: 0.22em; text-transform: uppercase;
+          color: var(--type-2); padding: 0 40px 32px;
         }
-        .b-card-handle { font-family: var(--M); font-size: 11px; letter-spacing: 0.04em; color: var(--type-2); margin-top: 4px; }
-        .b-card-bio {
-          font-size: 13px;
-          color: var(--type-2);
-          margin-top: 14px;
-          line-height: 1.5;
-          overflow: hidden;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-        }
-        .b-card-bio-empty { font-style: italic; opacity: 0.6; }
-
-        .b-card-foot {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 14px 20px;
-          border-top: 1px solid rgba(34, 26, 20, 0.08);
-          background: rgba(34, 26, 20, 0.03);
-          transition: background 0.18s ease;
-        }
-        .b-card:hover .b-card-foot { background: var(--card-ink); }
-        .b-card-cta {
-          font-family: var(--M);
-          font-size: 10.5px;
-          font-weight: 700;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: var(--type-2);
-          transition: color 0.18s ease;
-        }
-        .b-card:hover .b-card-cta { color: ${P}; }
-        .b-card-arrow {
-          font-family: var(--M);
-          font-size: 16px;
-          color: var(--type-2);
-          transition: color 0.18s ease, transform 0.18s ease;
-        }
-        .b-card:hover .b-card-arrow { color: ${P}; transform: translateX(4px); }
+        .pip { width: 5px; height: 5px; border-radius: 50%; background: var(--ink); opacity: 0.7; display: inline-block; }
 
         /* FOOTER */
         .foot {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          flex-wrap: wrap;
-          gap: 14px;
-          padding: 22px 40px 28px;
-          font-family: var(--M);
-          font-size: 11px;
-          letter-spacing: 0.04em;
-          color: var(--type-2);
-          border-top: 1px solid rgba(34, 26, 20, 0.1);
+          display: flex; align-items: center; justify-content: space-between;
+          flex-wrap: wrap; gap: 14px; padding: 16px 40px 28px;
+          font-family: var(--M); font-size: 11px; letter-spacing: 0.04em; color: var(--type-2);
+          border-top: 1px solid color-mix(in oklab, var(--type) 10%, transparent);
         }
-        @media (max-width: 640px) { .foot { padding: 18px 22px 24px; } }
+        @media (max-width: 640px) { .foot { padding: 16px 22px 24px; } }
         .foot-left, .foot-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
         .foot a { text-decoration: none; color: inherit; }
-
-        /* Seal */
-        .seal {
-          position: fixed;
-          right: -120px; bottom: -120px;
-          width: 360px; height: 360px;
-          border-radius: 50%;
-          border: 28px solid ${I};
-          opacity: 0.08;
-          pointer-events: none;
-        }
-        @media (max-width: 640px) {
-          .seal { width: 220px; height: 220px; border-width: 16px; right: -90px; bottom: -90px; }
-        }
       `}</style>
     </main>
   );
