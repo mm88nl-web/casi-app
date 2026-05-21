@@ -178,6 +178,9 @@ export default function SearchPage() {
         </div>
       </footer>
 
+      <style jsx global>{`
+        html, body { background: ${P}; }
+      `}</style>
       <style jsx>{`
         .casi-search {
           --paper: ${P};

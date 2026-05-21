@@ -118,6 +118,11 @@ export default function HomePage() {
         </div>
       </footer>
 
+      <style jsx global>{`
+        /* While the landing page is mounted, override the body/html background
+           so the dark default from globals.css doesn't flash during navigation. */
+        html, body { background: ${P}; }
+      `}</style>
       <style jsx>{`
         .casi-landing {
           --paper: ${P};
