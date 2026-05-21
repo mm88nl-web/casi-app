@@ -13,7 +13,7 @@
  * row write.
  */
 import { NextResponse } from 'next/server';
-import { logError } from '@/lib/observability';
+import { logErrorAsync } from '@/lib/observability';
 
 const MAX_MESSAGE_LEN = 500;
 const MAX_STACK_LEN   = 4000;
@@ -67,7 +67,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
 
-  logError('client', new Error(safeMessage), {
+  // Await the async variant so the Vercel lambda doesn't terminate before
+  // the Discord/webhook POST completes. The fire-and-forget logError() was
+  // being cut off at the 5s function timeout before Discord confirmed receipt.
+  await logErrorAsync('client', new Error(safeMessage), {
     stack: clamp(stack, MAX_STACK_LEN),
     url:   clamp(url, MAX_URL_LEN),
     ua:    req.headers.get('user-agent')?.slice(0, 300) || null,

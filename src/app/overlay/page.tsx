@@ -1526,10 +1526,16 @@ function OverlayContent() {
         console.error('[solana beam] PDA probe failed:', probeErr);
       }
 
-      // Nothing on-chain — safe to deny. This is the actual-failure
-      // branch, so fan out to Discord here (skips user rejection + the
-      // timeout-recovered path above which already early-returned).
-      const userMsg = formatEscrowError(err);
+      // Nothing confirmed on-chain after the probe window. Do NOT call
+      // viewer-deny here — if the tx is still in-flight and lands later,
+      // the PDA backfill effect will attach it and the streamer can approve
+      // normally. Denying now would close the booking and leave USDC locked
+      // in the vault with no Recover USDC button. Leave the row as `pending`
+      // and let cancel_stale_pending crank clean it up after 7 days if the
+      // tx never lands.
+      const userMsg = isWalletSignatureMissing(err)
+        ? formatEscrowError(err)
+        : 'Transaction timed out — if any USDC left your wallet, reload this page to check. Your booking will auto-refund in 7 days if the streamer doesn\'t approve it.';
       reportClientError('overlay/booking/solana/initializeBeam', err, {
         booking_id:    String(newBooking.id),
         profile_id:    profile?.id,
@@ -1537,21 +1543,14 @@ function OverlayContent() {
         viewer_wallet: effectivePublicKey?.toBase58() ?? null,
         mobile:        typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent),
         signature_missing: isWalletSignatureMissing(err),
-        // True when our own 30s race timed out AND the PDA probe found
-        // nothing — i.e. the tx was probably never submitted by the wallet.
         rpc_timeout: err instanceof Error && err.message === 'rpc_confirmation_timeout',
-        // Diagnostics for the mobile-hang investigation: which submit path
-        // ran, and whether window.phantom.solana was even injected. If
-        // path_taken === 'unknown' the sendOverride never ran (something
-        // failed earlier — blockhash fetch, tx build, etc).
         path_taken: pathTaken,
         phantom_provider_detected: phantomProviderDetected,
         inferred_from_poll: inferredFromPoll,
         wallet_adapter_name: wallet?.adapter?.name ?? null,
       });
-      await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
       setTxStatus('error'); setTxError(userMsg);
-      showNotif(userMsg, 'denied');
+      showNotif(userMsg, 'error');
     }
 
     setSubmitting(false);

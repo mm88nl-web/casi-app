@@ -50,8 +50,8 @@ export default function SolanaConfirmModal({
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:"var(--font-casi-mono),monospace" }}>
-      <div style={{ background:'var(--casi-surface,#0d0d0d)', border:'1px solid rgba(153,69,255,0.35)', borderRadius:16, padding:28, width:'100%', maxWidth:380 }}>
-        <div style={{ fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'#9945FF', marginBottom:16 }}>Confirm your beam slot</div>
+      <div style={{ background:'var(--casi-surface,#0d0d0d)', border:'1px solid rgba(var(--casi-accent-rgb),0.35)', borderRadius:16, padding:28, width:'100%', maxWidth:380 }}>
+        <div style={{ fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'var(--casi-accent)', marginBottom:16 }}>Confirm your beam slot</div>
 
         {/* Details receipt */}
         <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:10, padding:'14px 16px', marginBottom:16 }}>
@@ -77,7 +77,7 @@ export default function SolanaConfirmModal({
           <div style={{ borderTop:'1px solid #1a1a1a', margin:'6px 0 8px' }} />
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#666' }}>
             <span>Total</span>
-            <span style={{ fontSize:18, fontWeight:800, color:'#9945FF', display:'inline-flex', alignItems:'center', gap:6 }}>
+            <span style={{ fontSize:18, fontWeight:800, color:'var(--casi-accent)', display:'inline-flex', alignItems:'center', gap:6 }}>
               <UsdcIcon size={16} />
               {estimatedCost} USDC
             </span>
@@ -119,7 +119,7 @@ export default function SolanaConfirmModal({
             ].map((step, i) => (
               <div key={i} style={{
                 display:'flex', alignItems:'center', gap:10, fontSize:11,
-                color: step.done ? '#6ee7b7' : step.active ? '#9945FF' : '#444',
+                color: step.done ? '#6ee7b7' : step.active ? 'var(--casi-accent)' : '#444',
                 marginBottom: i < 2 ? 8 : 0,
               }}>
                 <span style={{ width:14, textAlign:'center', display:'inline-block', animation: step.active ? 'casi-blink 1.2s infinite' : 'none' }}>
@@ -127,7 +127,7 @@ export default function SolanaConfirmModal({
                 </span>
                 {step.label}
                 {step.active && i === 2 && solscanUrl && (
-                  <a href={solscanUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft:'auto', fontSize:10, color:'#9945FF', textDecoration:'none', opacity:0.8 }}>
+                  <a href={solscanUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft:'auto', fontSize:10, color:'var(--casi-accent)', textDecoration:'none', opacity:0.8 }}>
                     ↗ verify tx
                   </a>
                 )}
@@ -160,7 +160,7 @@ export default function SolanaConfirmModal({
           <button
             onClick={onConfirm}
             disabled={inProgress || hasInsufficient}
-            style={{ flex:2, background: inProgress || hasInsufficient ? '#1c1c1c' : '#9945FF', border:'none', borderRadius:10, padding:'12px 0', fontFamily:"var(--font-casi-sans),sans-serif", fontWeight:800, fontSize:13, color: inProgress || hasInsufficient ? '#444' : '#fff', cursor: inProgress || hasInsufficient ? 'not-allowed' : 'pointer' }}
+            style={{ flex:2, background: inProgress || hasInsufficient ? '#1c1c1c' : 'var(--casi-accent)', border:'none', borderRadius:10, padding:'12px 0', fontFamily:"var(--font-casi-sans),sans-serif", fontWeight:800, fontSize:13, color: inProgress || hasInsufficient ? '#444' : '#fff', cursor: inProgress || hasInsufficient ? 'not-allowed' : 'pointer' }}
           >
             {inProgress ? 'Signing…' : txStatus === 'error' ? 'Retry →' : 'Confirm & Sign →'}
           </button>
