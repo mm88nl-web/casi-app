@@ -10,43 +10,11 @@ CASI lets livestream viewers pay to put their image / video / message **on strea
 
 ## Current project state (May 2026)
 
-**Phase**: pre-mainnet on Solana (USDC rail still on **devnet**) but **post-cutover on Stripe** — card payments are LIVE on real money as of 15 May 2026 against the production Stripe account for **Terminal Data Solutions** (eenmanszaak, KvK 80519687). Mainnet launch of the Solana program is gated on the external audit. The Stripe rail launched separately because Sec3 explicitly advised audits should follow PMF rather than precede it — letting fiat flow earlier means streamers can earn while the Solana side completes audit.
+**Phase**: pre-mainnet on Solana (USDC rail still on **devnet**) but **post-cutover on Stripe** — card payments are LIVE on real money. Mainnet launch of the Solana program is gated on the external audit.
 
-**Repository**: public on GitHub at `mm88nl-web/casi-app`, **Apache-2.0** for the entire codebase. Founder: Matthew Melendez (mm88nl@gmail.com), Netherlands, solo non-technical builder using AI-assisted tooling.
+**Canonical domain**: `www.casi.gg` is the canonical; `casi.gg` 307s to `www.casi.gg`. Every server-to-server callback URL (Stripe webhooks, Helius webhook, OAuth providers, `NEXT_PUBLIC_APP_URL`) must use the `www` prefix or it will 307 and be dropped — webhooks don't follow redirects.
 
-**Canonical domain**: `www.casi.gg` is the canonical; `casi.gg` 307s to `www.casi.gg`. Every server-to-server callback URL (Stripe webhooks, Helius webhook, OAuth providers, `NEXT_PUBLIC_APP_URL`) must use the `www` prefix or it will 307 and be dropped — webhooks don't follow redirects. This bit us once on the Stripe `checkout.session.completed` path before the URLs were corrected.
-
-**Live Stripe configuration** (Vercel Production scope):
-- `STRIPE_SECRET_KEY` = `sk_live_…`
-- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` = `pk_live_…`
-- `STRIPE_WEBHOOK_SECRET` = signing secret for the **Connected accounts** webhook (handles `payment_intent.*` / `checkout.session.*` / `charge.*` events on streamer accounts)
-- `STRIPE_WEBHOOK_SECRET_PLATFORM` = signing secret for the **Your account** webhook (handles `account.updated` / `account.application.deauthorized` on the platform itself)
-- `NEXT_PUBLIC_APP_URL` = `https://www.casi.gg`
-- Both webhooks point at `https://www.casi.gg/api/stripe/webhook`. The handler in `src/app/api/stripe/webhook/route.ts` verifies against both secrets in order — either passing means the event is authentic.
-- Stripe Connect platform profile has been acknowledged at https://dashboard.stripe.com/settings/connect/platform-profile (required gate for live Express account creation).
-- Stripe Connect branding (display name "casi", support email) is filled in under Settings → Connect → Branding.
-
-**Grant in flight**: a Solana Foundation grant application is being prepared, framed around `casi-escrow` as a reusable time-vested USDC escrow primitive (developer tooling category, $25k ask). Working draft lives at [`grant-answers.md`](./grant-answers.md) with two remaining TODOs (audit firm name + quote amount) blocked on quote replies. The grant funds: external audit + remediation contractor, `@casi/escrow-sdk` npm package + tutorial, public `cancel_stale_pending` cranker + design note. CASI itself is positioned as the *reference integration* — the consumer product is sustained separately by streamer SaaS, not the grant.
-
-**Audit outreach**: written quote requests sent to **Sec3** (Jack Tsai's reply: stated rate ~$18/LOC excluding comments + tests, putting `casi-escrow`'s ~1.2k LOC at roughly $22k; advised that audits should follow product-market-fit rather than precede it — directly informs the capped-mainnet plan), **OtterSec**, and **Neodyme**. Realistic total: $22k audit + ~$3k remediation contractor sourced via Superteam Earn or audit-firm referral. Full context in [`grant-answers.md`](./grant-answers.md) and [`capped-mainnet-plan.md`](./capped-mainnet-plan.md).
-
-**Monetization posture**: **no protocol fees, ever** — 100% of every booking flows directly viewer→streamer on both rails. CASI never holds, routes, or skims funds (legal posture: software company, not a payment processor). Future revenue is planned via streamer SaaS (Streamlabs Ultra-style $10–30/mo Pro tier with custom branding, auto-approve rules, team accounts, analytics) and possibly brand-deal advertising once there's enough streamer inventory. None of that is shipped yet.
-
-**Recent design overhauls**: `v9` design system (May 2026) replaced v7's 7-skin variable bag with a **two-color contract** (`--ink` + `--paper`) — see "Theme system" below. Fonts moved to Bricolage Grotesque + JetBrains Mono + Instrument Serif (Barlow + DM_Mono are gone from `layout.tsx`). Default ink stayed teal `#0DCFB0` so existing streamers don't see a brand flip; cinnabar `#FF5C2E` is now an opt-in skin. Per-streamer `profiles.skin` + `profiles.theme_color` overrides still work — they now drive `--ink` + `--paper` instead of the old per-skin variable bag. v7 tokens (`--casi-accent`, `--casi-bg`, …) are aliased onto v9 in `globals.css` so legacy code keeps rendering. Dev tools (`DevScreenSwitcher` + `DevTweaksPanel`, mounted in `layout.tsx`) ship gated to `NODE_ENV !== 'production'`. Earlier `v7` (Phases 0–7) introduced the `/studio` split (dashboard + live editor) and the four OAuth providers on `/login` — both still live.
-
-**Studio dashboard polish (PR #59, May 2026)**: per-slot inline queue under each Airing row with **Play now** per queued booking; **End Stream** confirm dialog driving sequential delegate-first shutdown via `endStreamCleanly` (kick actives → deny pendings → deny flashes → deny queue → flip `is_live`); **payment-gate** on Approve (gated on `payment_intent_id || tx_signature || free || price_value === 0`, mirroring admin); **click-to-preview modal** on pending rows; **live vested-amount** under each Airing timer (matches the on-chain settle math); streamer-level **`profiles.display_currency`** preference (eur / usd / usdc) with a picker under Profile in Settings — collapses dashboard tiles to a single currency. "Live editor" tab renamed to **"Live"**. See `studio/_components/EndStreamDialog.tsx`, `studio/_components/PreviewBookingModal.tsx`, and migration `20260502000000_profile_display_currency.sql`.
-
-**Stripe live cutover (PRs #127–#138, May 2026)**: full path from devnet-only to live Stripe rail in one session. Headline changes:
-- **Compliance**: new `/legal/imprint` identifies TDS as operator; privacy and terms upgraded to v1.0 with TDS as controller / operator + GDPR lawful-basis table + AP complaint route + Dutch governing law. Cookie notice (`src/components/CookieNotice.tsx`) is essential-only, no consent prompt, 50-line custom component. Footer carries operator + KvK attribution on every public page.
-- **Multi-currency Stripe rail**: `src/lib/currency.ts` is the single source for fiat config — symbols + minor-unit decimals + sensible rate steps + `stripeMinAmount()` per-currency floors. Supported seed: EUR/USD/GBP/AUD/CAD/BRL/JPY/SGD. CNY + BTC deliberately excluded. `stripeCurrency` widened from `'usd' | 'eur'` to free-text ISO across studio + viewer + components. PI creation now uses streamer's `account.default_currency`, not USD.
-- **`profiles.settlement_currency`** (migration `20260515000000_profile_settlement_currency.sql`): mirror of Stripe Connect's `default_currency` so viewer surfaces (overlay booking form, /s/[username] flash chips, on-stream `FlashFeed`) render the right symbol without per-render Stripe round-trip. Populated by `/api/stripe/connect/status` + `/api/stripe/authorize` + `/api/stripe/approve-queue`. Granted column-level SELECT to anon (non-sensitive ISO code).
-- **Webhook handler dual-secret** (`/api/stripe/webhook/route.ts`): verifies the incoming signature against either `STRIPE_WEBHOOK_SECRET` or `STRIPE_WEBHOOK_SECRET_PLATFORM`, supporting the two-endpoint Connect setup without splitting routes.
-- **Connect-route hardening** (`/api/stripe/connect/route.ts`): wraps `accounts.create` + `accountLinks.create` in try/catch that returns the real Stripe error message instead of opaque 500s; pre-flights `NEXT_PUBLIC_APP_URL`; self-heals test/live account-mode mismatch by clearing `stripe_account_id` on `account_invalid` / `resource_missing` (409 with a one-line note). After-onboard `return_url` now points at `/studio/settings`, not the legacy `/profile/edit`.
-- **End-early floor handling** (`/api/stripe/end-early/route.ts`): when the pro-rated capture amount is below `stripeMinAmount(currency)` (50 cents EUR, 30 GBP, etc), the route falls back to `paymentIntents.cancel()` instead of letting Stripe reject the partial capture with `amount_too_small`. Viewer gets full refund, beam expires cleanly. Surface in `BeamCtrlPanel`: a single quiet line of text appears under Min/Max duration rows when the streamer's per-minute rate × 1 minute is below the floor.
-- **Booking form rewrite** (`src/app/overlay/_components/BookingForm.tsx`): rail picker as the central control (Card / USDC / Free as side-by-side cards with per-rail cost). Single pay button that shows the amount (`Pay €0.50`, `Pay 0.50 USDC`, `Send free request`) and matches the picked rail's accent color. Per-rail trust copy under the button. Eliminates the prior contradictory three-cost-display problem.
-- **`/search` redesign** (PRs #129–#130): grid caps tiles at 360px and packs left so a single live streamer doesn't stretch to viewport-wide. Cards have a streamer-accent hero band + pulsing live dot + dedicated zero-streamers empty state. Footer fills with the streamer's ink color on hover.
-
-**What an agent picking this up should NOT do**: don't add protocol fees on the Stripe or Solana rail; don't refactor the Anchor program before audit; don't build new Pro-tier features pre-mainnet; don't widen RLS to fix permission errors (always go column-level). Read the rest of this file before changing money-moving code.
+**Hosting**: Vercel, **Hobby plan — daily-only cron, no more.**
 
 ## Stack at a glance
 
@@ -54,10 +22,9 @@ CASI lets livestream viewers pay to put their image / video / message **on strea
 - **Backend**: Next.js Route Handlers under `src/app/api/`. Webhook endpoints, cron jobs, payment flows all live here. Server routes use the Supabase service-role key and bypass RLS.
 - **Database**: Supabase (Postgres + PostgREST + RLS). Hosted. Migrations in `supabase/migrations/` with timestamp prefixes.
 - **Payments**:
-  - **Stripe Connect Direct Charges** for fiat. Streamers onboard via Connect; charges land on their connected account. **No application-fee skim** (the previous 5% platform fee was stripped in commit `46fa5ab`). 100% of the charge goes to the streamer. **Charge currency = streamer's `account.default_currency`** — pulled at authorize/approve-queue time and mirrored to `profiles.settlement_currency` so viewer surfaces (overlay, /s/[username]) render the right symbol without a per-render Stripe round-trip. Supported in the picker: EUR, USD, GBP, AUD, CAD, BRL, JPY, SGD (see `src/lib/currency.ts::SUPPORTED_FIAT`). CNY + BTC deliberately excluded — Stripe Connect doesn't support CN-based accounts and the escrow program is USDC-only.
+  - **Stripe Connect Direct Charges** for fiat. Streamers onboard via Connect; charges land on their connected account. **No application-fee skim** — 100% of the charge goes to the streamer. **Charge currency = streamer's `account.default_currency`** — pulled at authorize/approve-queue time and mirrored to `profiles.settlement_currency` so viewer surfaces (overlay, /s/[username]) render the right symbol without a per-render Stripe round-trip. Supported in the picker: EUR, USD, GBP, AUD, CAD, BRL, JPY, SGD (see `src/lib/currency.ts::SUPPORTED_FIAT`). CNY + BTC deliberately excluded — Stripe Connect doesn't support CN-based accounts and the escrow program is USDC-only.
   - **Solana escrow** for crypto. Anchor program in `programs/casi-escrow/`. Viewer locks **USDC** in a PDA-owned vault ATA; `CasiEscrowClient` in `src/lib/casi-escrow.ts` wraps the IDL. Prorated settle on early end, refund on cancel. SOL is only used for transaction fees (paid by the cranker for delegated calls; otherwise by the wallet signer).
 - **Auth**: `/login` (single page covering both sign-in and 3-step signup). Supabase email/password + four OAuth providers — Google, Twitch, Discord, X (Twitter) — wired in `src/app/login/page.tsx`. OAuth callback at `src/app/auth/callback/route.ts` is provider-agnostic. **Each OAuth provider must be enabled in the Supabase Dashboard** (Authentication → Providers) with its own client id + secret, or the button throws "provider is not enabled."
-- **Hosting**: Vercel. Cron jobs defined in `vercel.json`. **On Hobby plan — daily-only cron, no more.**
 - **Tests**: `ts-mocha` over `tests/unit/*.test.ts`. Run `npm test`.
 
 ## Repo layout
@@ -133,21 +100,14 @@ The `/login` page (`src/app/login/page.tsx`) is the single auth surface — same
 **Providers wired in code**:
 
 - **Email + password** (Supabase native, always available).
-- **Google OAuth** (commit `4786cf6`).
-- **Twitch OAuth** (commit `f52366f`).
-- **Discord OAuth** (commit `f52366f`).
-- **X / Twitter OAuth** (commit `f52366f`).
+- **Google OAuth**
+- **Twitch OAuth**
+- **Discord OAuth**
+- **X / Twitter OAuth**
 
 All four OAuth buttons call a single generic `handleOAuth(provider)` → `supabase.auth.signInWithOAuth({ provider })`. The OAuth callback at `src/app/auth/callback/route.ts` is provider-agnostic — it exchanges the code for a session and routes based on whether a `profiles` row exists.
 
 **Each provider must be separately enabled in the Supabase Dashboard** (Authentication → Providers) with its client id + secret. Google is configured today. Twitch / Discord / X were added in code but **may not be enabled in the dashboard yet** — if a streamer clicks one of those buttons and gets "provider is not enabled," the dashboard config is the missing piece, not the code. The Supabase OAuth callback URL pattern is `https://<project-ref>.supabase.co/auth/v1/callback`.
-
-**First-time OAuth signup flow**:
-1. User clicks "Continue with Twitch" (or any OAuth provider) on `/login`.
-2. Supabase redirects to provider, provider returns to `/auth/callback?code=...`.
-3. `exchangeCodeForSession` writes the cookie, then we check for a `profiles` row.
-4. **Profile exists** → redirect to `/admin` (or `?next` destination).
-5. **Profile missing** → redirect to `/login?finish=true`. Login page detects this, jumps the user to step 2 (username) of signup with display_name + avatar pre-filled from provider metadata. Final submit just inserts into `profiles` (auth.users already created).
 
 **Don'ts**:
 - Don't add a provider to the login page without also enabling it in the Supabase Dashboard — the buttons render but throw on click.
@@ -255,12 +215,12 @@ Phase 3 added a scoped delegation layer to the escrow program so the streamer do
 
 **Server surface**:
 
-- `/api/solana/delegates/install` — streamer-auth; generates a session keypair, seals the secret with `DELEGATE_ENCRYPTION_KEY` (AES-256-GCM), upserts to `streamer_delegates`.
-- `/api/solana/delegates/status` — UI helper to pick card state (not-installed / installed / expired / revoked).
-- `/api/solana/delegates/revoke` — streamer-auth; stamps `revoked_at`. Admin should also fire `revoke_delegate` on-chain.
-- `/api/solana/delegates/start-beam` — called by the admin page's approve handler when a healthy delegate exists. Signs `start_beam_delegated` with the decrypted session key. **Uses the cranker as fee payer** (the session key has no SOL; Solana refuses to debit an un-credited account).
-- `/api/solana/delegates/settle-beam` — called by admin's `kickBeam` + `settleOrClearSolanaEscrow` (deny-on-Active). Signs `settle_beam_delegated` with the session key, cranker pays fees + ATA inits. On 503 `no_cranker` or any non-OK status, the admin page falls back to wallet-signed `settle_beam`.
-- `/api/solana/delegates/approve-flash` / `/api/solana/delegates/deny-flash` — called by admin's `moderateSolanaFlash` before the wallet-sign path. Sign `approve_flash_delegated` / `deny_flash_delegated`; same outcome shape as settle-beam so `describeDelegateSettleFailure` maps reasons to toasts. Webhook mirror: the Helius handler routes flash instructions through `applyFlashTransition` (parallel to the bookings path) to flip `flashes.status` — both wallet-signed and delegate-signed trips converge there.
+- `/api/solana/delegates/install` — generates a session keypair, seals it with `DELEGATE_ENCRYPTION_KEY`, upserts to `streamer_delegates`.
+- `/api/solana/delegates/status` — UI helper; returns card state (not-installed / installed / expired / revoked).
+- `/api/solana/delegates/revoke` — stamps `revoked_at`; caller should also fire `revoke_delegate` on-chain.
+- `/api/solana/delegates/start-beam` — signs `start_beam_delegated` with the decrypted session key; cranker pays fees.
+- `/api/solana/delegates/settle-beam` — signs `settle_beam_delegated`; cranker pays fees + ATA inits. On 503 `no_cranker` the admin page falls back to wallet-signed `settle_beam`.
+- `/api/solana/delegates/approve-flash` / `/api/solana/delegates/deny-flash` — sign the delegated flash instructions; same outcome shape as settle-beam.
 
 **The cranker** (`SOLANA_CRANKER_KEYPAIR` env var, loaded via `src/lib/cranker-keypair.ts`):
 
@@ -272,18 +232,7 @@ Phase 3 added a scoped delegation layer to the escrow program so the streamer do
 
 **Where the install UI lives**: `DelegateKeyCard.tsx` (in `src/app/admin/_components/`) is the reusable card. It's mounted inside `src/app/admin/settings/_components/SessionKeySection.tsx`, which provides the `onInstalled` callback that signs `set_delegate` from the streamer wallet. The legacy `/admin` route's `ProfileEditCard` also references it but the new settings page is the canonical home.
 
-**Install UX contract** (see `DelegateKeyCard.tsx` state machine):
-
-Install is a two-phase write — DB row (server) + on-chain `set_delegate` (streamer wallet). Either can fail independently, so the component tracks a `needs-finalize` state:
-
-1. `loading` → fetch status.
-2. `absent` → "Install" button. Disabled unless `walletReady` (wallet connected AND matches `profile.solana_wallet`).
-3. Click Install → POST `/api/solana/delegates/install` (DB upsert). Then call `onInstalled(sessionPubkey, expiresAt)` which the admin page implements as a `set_delegate` tx from the streamer wallet.
-4. If step 3b throws, component stays in `needs-finalize` with a "Finalize →" button. Clicking re-runs `onInstalled` with the **same** session pubkey — no DB write, no key regeneration. Idempotent retry.
-5. Green "✓ Delegate registered on-chain — view tx" with Solscan link on success.
-6. Rotate = same flow but keeps the old `installed_at`; revoke flips DB `revoked_at` and (should) fire `revoke_delegate` on-chain.
-
-**Never regenerate session keys on finalize retry** — the DB already has the pubkey committed. A new key means the on-chain `set_delegate` would register a stranger. Always re-use the pubkey the server returned.
+**Install UX contract**: Install is two-phase — DB upsert (POST `/api/solana/delegates/install`) then on-chain `set_delegate` signed by the streamer wallet. Never regenerate session keys on finalize retry — reuse the pubkey the server returned. A new key means the on-chain `set_delegate` would register a stranger.
 
 **Env vars introduced in phase 3**:
 
@@ -364,12 +313,11 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 - **Don't hardcode `$` or `€` symbols in viewer-facing UI**. Use `fiatSymbol(streamerCurrency)` / `formatFiat(streamerCurrency, amount)` from `src/lib/currency.ts`. `streamerCurrency` comes from `profile.settlement_currency` (mirror of Stripe Connect's `account.default_currency`); fall back to `null` for graceful USD-style rendering. A streamer with a GBP Connect account whose viewer sees `$5/min` and is charged £5 has a UX bug — and pre-fix, was being charged USD with FX loss.
 - **`calcAmountCents(value, unit, minutes, currency)` is currency-aware**. JPY is zero-decimal; calling it without the 4th arg means USD-style `* 100`, which over-charges JPY by 100×. Always pass the streamer's `account.default_currency` in routes that hit Stripe.
 - **Stripe rejects captures/charges below the currency floor with `amount_too_small`**. Pro-rated end-early on a low-rate booking can land here (e.g. €1/hr × 8min = 13 cents, under the 50-cent EUR floor). The fix in `/api/stripe/end-early` falls back to `paymentIntents.cancel()` (full refund) when prorate < `stripeMinAmount(currency)`. Mirror this pattern in any new route that does partial captures. `stripeMinAmount` lives in `src/lib/currency.ts`.
-- **Always pass `Authorization: Bearer <session>` when calling `/api/stripe/connect/status` from the client**. The route 401s without it; the front-end silently bails on `!res.ok` and `stripeCurrency` stays null → the BeamCtrlPanel fiat row hides itself even for a properly-connected streamer. Look at PayoutsSection for the pattern; studio/page.tsx + studio/live/page.tsx both got fixed for this in PR #135.
+- **Always pass `Authorization: Bearer <session>` when calling `/api/stripe/connect/status` from the client**. The route 401s without it; the front-end silently bails on `!res.ok` and `stripeCurrency` stays null → the BeamCtrlPanel fiat row hides itself even for a properly-connected streamer. Look at PayoutsSection for the pattern.
 - **Server-to-server callback URLs must use `https://www.casi.gg`, not the apex**. The apex 307s to `www`, and webhook senders (Stripe, Helius, OAuth providers) don't follow redirects — they treat the 307 as terminal and the event is dropped. This includes: Stripe webhooks (both Connected accounts + Your account), Helius webhook, OAuth callback URLs in Google/Twitch/Discord/X provider settings, `NEXT_PUBLIC_APP_URL`. Browser-initiated traffic is fine because browsers follow redirects transparently.
 - **Streamer's `stripe_account_id` is mode-bound (test vs live)**. An account created with `sk_test_…` doesn't exist under `sk_live_…` and vice versa. The connect route now self-heals by clearing `stripe_account_id` (and `settlement_currency`) on Stripe errors `account_invalid` / `resource_missing` — next click creates a fresh account in the current API mode. Don't hand-update `stripe_account_id` in SQL when rotating API modes; just let the self-heal trigger.
 - **PostgREST returns NUMERIC columns as strings**. Always `Number(booking.duration_minutes)` before math.
 - **Server routes need `export const dynamic = 'force-dynamic'`** (or a similar opt-out) whenever they read headers/cookies — or you'll get a build error about dynamic server usage.
-- **Stripe Connect application fees** are set on the PaymentIntent at creation; can't be changed on capture. Plan the split up front.
 - **Solana cluster mismatch**: `WALLET_ADAPTER_CLUSTER` + `EXPLORER_CLUSTER_QUERY` must match. Devnet wallet on mainnet endpoint = silent failure.
 - **`file_type: 'video'`** means use `<video autoPlay loop muted playsInline>`. `SlotMedia` does this — don't `<img>` a video URL.
 - **`profile_id` vs `auth.uid()`**: `profiles.id` = user id = `auth.uid()` for authenticated streamers. `bookings.profile_id` points at the streamer (who *receives*), not the viewer.
@@ -413,41 +361,3 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 - **Don't build a second booking surface.** `/overlay` is the canonical Stripe + Solana booking flow; `/s/[username]` is a marketing landing page that funnels into it. If you need richer in-page booking on /s/[username], wire it through `/api/stripe/authorize` + `CasiEscrowClient` — never a parallel implementation.
 - **Don't refactor the Anchor program before the audit.** It's frozen pending external review. Bug fixes only, and only with a clear test demonstrating the bug.
 - **Don't ship new Pro-tier streamer features pre-mainnet.** SaaS upsell is the planned monetization but it's premature — focus is shipping mainnet + onboarding the first cohort.
-
-## Where things stand right now (May 15-16 2026 — pick-up notes)
-
-Live Stripe rail is **shipped and end-to-end exercised** (one €0.50 test booking by the founder, captured + cancelled cleanly through the new floor-handling path). The deploy is on Vercel main. Things in the air for the next session:
-
-**Open product questions, not blocking anything:**
-
-- **Booking-form trust copy** is always-visible under the pay button. Considered making it `localStorage.casi-booking-trust-seen`-gated to show only on a viewer's first booking. Not shipped; deferred for noise-creep audit.
-- **`/studio/settings` Payouts** has a "CASI never holds your money" paragraph that's always visible. Could collapse to a small subtitle once streamers have seen it. Not shipped.
-- **Legacy `/profile/edit`** still works and is reachable but no longer the Stripe return URL. Candidate for redirect-to-`/studio/settings` the way `/admin/settings` already does. Verify free-flashes toggle is in `ProfileSection` first — if not, port it before redirecting.
-- **OBS flashes layer** (`?layer=flashes` as a third Browser Source URL alongside `?layer=beams` + `?layer=backdrop`). Discussed but not shipped. Streamer would add it as a separately-positioned source. Also: `SkinProvider` isn't loaded on `/obs` so glow + banner edges are hardcoded purple `#9945FF` regardless of the streamer's accent. Two small fixes, one possible PR.
-- **Slot chip on the canvas only shows one rail.** A slot priced at €1/hr + 1 USDC/hr displays as just `€1/hr`. Considered a `€1/hr · 1 USDC/hr` dual-rail chip but didn't ship.
-
-**Recently-fixed loose ends to verify in production:**
-
-- `compliance-and-currency` work landed in two PRs (#127 + #128) because of a squash-merge that captured a stale branch state. Self-heal is in place but pay attention if you see another "PR #127 merged but the migration isn't on main" symptom — the GitHub squash-merge can capture the PR's HEAD as recorded at PR creation, not the latest push. Fix is the same: open a follow-up PR with the orphaned commits.
-- Stripe webhook URLs were `casi.gg/...` (apex) and got 307'd to www → events dropped silently. Both webhooks (Connected accounts + Your account) are now on `www.casi.gg`. If a streamer's `payment_intent_id` ever doesn't populate after viewer payment, check this first.
-- BookingForm rail picker landed in PR #136. If a viewer reports "I can only see USDC, no card option" — confirm `profiles.settlement_currency` is populated (gets set on first `/api/stripe/connect/status` hit) AND that the slot has a `prices.<iso>` value (BeamCtrlPanel saves under the streamer's currency key).
-
-**If you're picking this up tomorrow morning, do this in order:**
-
-1. `git pull --ff-only origin main` (latest is around commit `358ab80…` — the floor-hint).
-2. Confirm `npm test` → 75 passing.
-3. Open `https://www.casi.gg/studio/live` in a fresh browser, log in, verify the slot pricing tab shows TWO rate rows (EUR + USDC) — that's the end-state proof multi-currency widened correctly.
-4. Open `https://www.casi.gg/overlay?s=casi` in incognito, click a paid slot, verify the rail picker renders side-by-side cards with per-rail costs.
-5. Skim this AGENTS.md "Stripe live cutover" entry for the full set of files touched if you need to find something.
-
-## Known compliance + product gaps (not bugs, but on the followup list)
-
-- **No custom SMTP wired in code.** Verification + password-reset emails go through Supabase's default sender, which has terrible deliverability. Configure Resend/Postmark + SPF/DKIM/DMARC on `casi.gg` in the Supabase Dashboard before mainnet.
-- **No onboarding email drip.** Streamer signs up → verification email → silence. Activation is going to suffer post-mainnet without at minimum a Day-0 welcome + Day-2 "set up your slot canvas" + Day-7 "first earnings" sequence (Loops / Customer.io / Resend).
-- **No demo video / screenshot on the landing page.** `LandingSplitDoor` is interactive but text-only. Single highest-leverage marketing fix when product is polished enough for it.
-- **Per-IP rate limit only on booking-creation routes.** Sophisticated abuse from a proxy pool bypasses. Add per-`profile_id` rate limit alongside per-IP — one column on `free_flash_rate_limits` table.
-- **SOL as a third bookable rail (post-audit).** Currently CASI prices in USDC only — the Anchor program transfers USDC tokens between SPL accounts and has no native-SOL transfer path on `start_beam` / `settle_beam` / `cancel_escrow`. A streamer wanting to accept native SOL tips would need (a) program changes (~200 LOC + tests for SOL-branched instructions, separate `EscrowState` accounting field), (b) audit re-scope (current Sec3 / OtterSec / Neodyme quotes are sized for ~1.2k LOC USDC-only), (c) cranker rebalance — current cranker holds ~0.05 SOL, can't underwrite SOL escrows. Frozen until post-mainnet. Don't add SOL pricing rows to `BeamCtrlPanel` / Settings / dashboard tiles before the program supports it; UI saying "SOL" while the booking flow ignores it is worse than no SOL at all.
-
-## Competitive context (for orientation, not strategy)
-
-Closest mechanical competitors are **Streamlabs Media Share** + **StreamElements Media Share** + **Tangia** + **Blerp** — all let viewers tip to play YouTube/TikTok clips on stream, default ~10¢/sec. Different mechanic from CASI: clip-only (no upload), all-or-nothing, no time-vested escrow, traditional Stripe-with-take-rate. Solana-native overlap: **stream.gift** (donation-only), **StreamerCoin** (token-based), **Blurt** (Dialect blinks for Twitch). **Sollinked** ($30k Hyperdrive winner) is the closest on-chain pattern — paid email/calendar with USDC escrow, but async + binary-settle. CASI's defensible niche is high-stakes paid takeovers (own image/video on stream for N paid minutes with prorated time-vesting) + open-source primitive, not generic tipping. None of the competitors I checked are open source under a permissive license.
