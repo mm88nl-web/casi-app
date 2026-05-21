@@ -63,9 +63,16 @@ export default function AppearanceSection({
   // Seed the provider from profiles on mount if the server has values.
   // Only runs once — subsequent changes flow the other way (user picks → DB).
   const seededRef = useRef(false);
+  // When the seed calls setSkinId(initialSkinId), the sync effect fires in
+  // the same batch with the OLD skinId (localStorage value). Skip that one
+  // run so we don't write the stale localStorage value back to DB.
+  const skipNextSyncRef = useRef(false);
   useEffect(() => {
     if (seededRef.current) return;
-    if (initialSkinId && initialSkinId !== skinId) setSkinId(initialSkinId);
+    if (initialSkinId && initialSkinId !== skinId) {
+      setSkinId(initialSkinId);
+      skipNextSyncRef.current = true;
+    }
     if (initialInkColor !== undefined && initialInkColor !== inkColor) {
       setInkColor(initialInkColor ?? null);
     }
@@ -80,6 +87,7 @@ export default function AppearanceSection({
   const lastSkinSyncedRef = useRef<string | null>(initialSkinId ?? null);
   useEffect(() => {
     if (!seededRef.current) return;
+    if (skipNextSyncRef.current) { skipNextSyncRef.current = false; return; }
     if (lastSkinSyncedRef.current === skinId) return;
     lastSkinSyncedRef.current = skinId;
     void supabase
