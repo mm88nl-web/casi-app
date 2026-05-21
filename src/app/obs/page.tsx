@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import SlotMedia from '@/components/SlotMedia';
+import { getSkinById, hexToRgbStr } from '@/lib/skins';
 
 function OBSContent() {
   const searchParams = useSearchParams();
@@ -14,12 +15,26 @@ function OBSContent() {
   // their content from booking.message, not overlay_elements.image_url).
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [profileId, setProfileId] = useState<string | null>(null);
+  // Streamer accent colour — derived from their skin/theme so glow + banner
+  // match the streamer's brand instead of the default purple.
+  const [accentRgb, setAccentRgb] = useState('13, 207, 176'); // casi teal fallback
+  const [accentHex, setAccentHex] = useState('#0DCFB0');
   const supabase = useRef(createClient()).current;
 
   useEffect(() => {
     const load = async () => {
-      const { data: prof } = await supabase.from('profiles').select('id').eq('username', username).single();
-      if (prof) setProfileId(prof.id);
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('id, ink_color, theme_color, skin')
+        .eq('username', username)
+        .single();
+      if (prof) {
+        setProfileId(prof.id);
+        const hex = prof.ink_color ?? prof.theme_color ?? getSkinById(prof.skin).ink;
+        const rgb = hexToRgbStr(hex) ?? '13, 207, 176';
+        setAccentHex(hex);
+        setAccentRgb(rgb);
+      }
     };
     load();
   }, [username, supabase]);
@@ -80,19 +95,16 @@ function OBSContent() {
     <div className="w-screen h-screen bg-transparent overflow-hidden">
       <style>{`
         /* Shape mask + one-shot glow + banner marquee.
-           Parity with overlay/page.tsx so streamers using the split-layer
-           OBS URLs (?layer=beams, ?layer=backdrop) see the same visual
-           treatment as viewers on /overlay. Colours are hardcoded to the
-           default accent for now; per-streamer theme integration lives
-           in a future iteration (SkinProvider isn't loaded on /obs). */
-        @keyframes beamGlow    { 0%{box-shadow:0 0 0 rgba(153,69,255,0)} 15%{box-shadow:0 0 42px 8px rgba(153,69,255,0.85)} 100%{box-shadow:0 0 0 rgba(153,69,255,0)} }
+           Accent colour is derived from the streamer's skin/theme at load time
+           so glow and banner edges match their brand colour. */
+        @keyframes beamGlow    { 0%{box-shadow:0 0 0 rgba(${accentRgb},0)} 15%{box-shadow:0 0 42px 8px rgba(${accentRgb},0.85)} 100%{box-shadow:0 0 0 rgba(${accentRgb},0)} }
         @keyframes beamMarquee { from{transform:translateX(100%)} to{transform:translateX(-100%)} }
         .obs-shape-rounded { border-radius: 14px; overflow: hidden; }
         .obs-shape-circle  { clip-path: circle(50%); }
         .obs-shape-hex     { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
         .obs-glow          { animation: beamGlow 3s ease-out 1; will-change: box-shadow; }
-        .obs-banner        { display:flex; align-items:center; width:100%; height:100%; overflow:hidden; background:rgba(0,0,0,0.78); border-top:2px solid rgba(153,69,255,0.4); border-bottom:2px solid rgba(153,69,255,0.4); white-space:nowrap; }
-        .obs-banner-track  { display:inline-block; padding-left:100%; color:#9945FF; font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
+        .obs-banner        { display:flex; align-items:center; width:100%; height:100%; overflow:hidden; background:rgba(0,0,0,0.78); border-top:2px solid rgba(${accentRgb},0.4); border-bottom:2px solid rgba(${accentRgb},0.4); white-space:nowrap; }
+        .obs-banner-track  { display:inline-block; padding-left:100%; color:${accentHex}; font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
       `}</style>
       <div className="relative w-full h-full">
         {elements.map((el) => {

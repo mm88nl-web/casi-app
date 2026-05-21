@@ -55,16 +55,14 @@ export default function SkinProvider({
     if (s.isLight || lightFromOverride) root.setAttribute('data-paper', 'light');
     else                                root.removeAttribute('data-paper');
 
-    // v7 alias layer kept in sync for components that read --casi-* directly.
+    // v7 alias layer — only the values that can't derive from --ink/--paper
+    // via color-mix() in globals.css. Surface/border/text are intentionally
+    // omitted so the globals.css derivations win over stale inline overrides.
     root.style.setProperty('--casi-accent',     ink);
     root.style.setProperty('--casi-accent-rgb', inkRgb);
     root.style.setProperty('--casi-accent2',     s.accent2);
     root.style.setProperty('--casi-accent2-rgb', s.accent2Rgb);
     root.style.setProperty('--casi-bg',          paper);
-    root.style.setProperty('--casi-surface',     s.surface);
-    root.style.setProperty('--casi-border',      s.border);
-    root.style.setProperty('--casi-text',        s.text);
-    root.style.setProperty('--casi-text-muted',  s.textMuted);
   }, [skin, inkColor, paperColor, themeColor]);
 
   return null;

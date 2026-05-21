@@ -6,14 +6,13 @@ import { useUserSkin } from '@/components/UserSkinProvider';
 // Pre-grouped so the picker can render section headers without re-walking
 // the array on every render. Order here drives display order.
 const GROUPS: { id: string; label: string }[] = [
-  { id: 'casi',     label: 'Casi' },
-  { id: 'fresh',    label: 'New' },
+  { id: 'casi',     label: 'Presets' },
   { id: 'platform', label: 'Platforms' },
   { id: 'custom',   label: 'Yours' },
 ];
 
 export default function SkinPicker() {
-  const { skinId, setSkinId } = useUserSkin();
+  const { skinId, setSkinId, inkColor, paperColor } = useUserSkin();
 
   return (
     <div className="flex flex-col gap-4">
@@ -59,44 +58,55 @@ export default function SkinPicker() {
                     aria-pressed={active}
                   >
                     {/* Two-tone swatch — ink on the left, paper on the right.
-                        For Custom we show a little dotted box because the
-                        actual colours come from the streamer's overrides. */}
-                    <span
-                      aria-hidden
-                      className="relative flex shrink-0 overflow-hidden"
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 0,
-                        background: skin.paper,
-                        border: `1px solid ${skin.border}`,
-                        outline: isCustom ? '1px dashed var(--casi-text-faint)' : 'none',
-                        outlineOffset: -3,
-                      }}
-                    >
-                      {!isCustom && (
-                        <>
-                          <span style={{ flex: 1, background: skin.ink }} />
-                          <span style={{ flex: 1, background: skin.paper }} />
-                        </>
-                      )}
-                      {isCustom && (
+                        Custom tile shows the stored custom colours when set,
+                        otherwise a dotted placeholder. */}
+                    {(() => {
+                      const swatchInk   = isCustom ? (inkColor   ?? skin.ink)   : skin.ink;
+                      const swatchPaper = isCustom ? (paperColor ?? skin.paper) : skin.paper;
+                      const hasCustomColors = isCustom && (inkColor || paperColor);
+                      return (
                         <span
-                          className="flex items-center justify-center w-full"
-                          style={{ color: 'var(--casi-text-muted)', fontSize: 14 }}
+                          aria-hidden
+                          className="relative flex shrink-0 overflow-hidden"
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 0,
+                            background: swatchPaper,
+                            border: `1px solid ${skin.border}`,
+                            outline: isCustom && !hasCustomColors ? '1px dashed var(--casi-text-faint)' : 'none',
+                            outlineOffset: -3,
+                          }}
                         >
-                          ＋
+                          {hasCustomColors ? (
+                            <>
+                              <span style={{ flex: 1, background: swatchInk }} />
+                              <span style={{ flex: 1, background: swatchPaper }} />
+                            </>
+                          ) : isCustom ? (
+                            <span
+                              className="flex items-center justify-center w-full"
+                              style={{ color: 'var(--casi-text-muted)', fontSize: 14 }}
+                            >
+                              ＋
+                            </span>
+                          ) : (
+                            <>
+                              <span style={{ flex: 1, background: skin.ink }} />
+                              <span style={{ flex: 1, background: skin.paper }} />
+                            </>
+                          )}
+                          {active && (
+                            <span
+                              className="absolute inset-0 flex items-center justify-center font-bold"
+                              style={{ background: 'rgba(0, 0, 0, 0.55)', color: '#fff', fontSize: 14 }}
+                            >
+                              ✓
+                            </span>
+                          )}
                         </span>
-                      )}
-                      {active && !isCustom && (
-                        <span
-                          className="absolute inset-0 flex items-center justify-center font-bold"
-                          style={{ background: 'rgba(0, 0, 0, 0.55)', color: '#fff', fontSize: 14 }}
-                        >
-                          ✓
-                        </span>
-                      )}
-                    </span>
+                      );
+                    })()}
 
                     <div className="flex flex-col min-w-0">
                       <span

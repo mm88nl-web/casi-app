@@ -3,9 +3,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { DEFAULT_SKIN_ID, getSkinById, type Skin } from '@/lib/skins';
 
-const STORAGE_KEY = 'casi-skin-id';
-const INK_KEY     = 'casi-ink-color';
-const PAPER_KEY   = 'casi-paper-color';
+const STORAGE_KEY   = 'casi-skin-id';
+const INK_KEY       = 'casi-ink-color';
+const PAPER_KEY     = 'casi-paper-color';
+const ACCENT2_KEY   = 'casi-accent2-color';
 // Legacy key — read on mount as a fallback so streamers who set their accent
 // before the rename keep their colour. Removed when the user picks anything.
 const LEGACY_INK_KEY = 'casi-theme-color';
@@ -14,12 +15,15 @@ type UserSkinContextValue = {
   skinId: string;
   skin: Skin;
   setSkinId: (id: string) => void;
-  /** Optional accent override that wins over `skin.ink`. Hex string or null. */
+  /** Ink override — only applied when skinId === 'custom'. */
   inkColor: string | null;
   setInkColor: (color: string | null) => void;
-  /** Optional paper override that wins over `skin.paper`. Hex string or null. */
+  /** Paper override — only applied when skinId === 'custom'. */
   paperColor: string | null;
   setPaperColor: (color: string | null) => void;
+  /** Accent2 override — only applied when skinId === 'custom'. */
+  accent2Color: string | null;
+  setAccent2Color: (color: string | null) => void;
 };
 
 const UserSkinContext = createContext<UserSkinContextValue | null>(null);
@@ -36,9 +40,6 @@ function hexToRgbStr(hex: string): string {
   return `${r},${g},${b}`;
 }
 
-// Detect whether a paper override is light enough to need data-paper="light"
-// for the v9 derived ladder. Threshold copied from globals.css's own
-// classifier — anything brighter than ~50% perceived luminance counts.
 function isPaperLight(hex: string): boolean {
   const clean = hex.replace('#', '');
   if (clean.length !== 6) return false;
@@ -49,40 +50,48 @@ function isPaperLight(hex: string): boolean {
   return luminance > 0.5;
 }
 
-function applySkinToRoot(skin: Skin, inkOverride: string | null, paperOverride: string | null) {
+function applySkinToRoot(
+  skin: Skin,
+  isCustom: boolean,
+  inkOverride: string | null,
+  paperOverride: string | null,
+  accent2Override: string | null,
+) {
   const root = document.documentElement;
-  const useInk   = inkOverride   && /^#[0-9A-Fa-f]{6}$/.test(inkOverride);
-  const usePaper = paperOverride && /^#[0-9A-Fa-f]{6}$/.test(paperOverride);
-  const ink      = useInk   ? inkOverride!   : skin.ink;
-  const inkRgb   = useInk   ? hexToRgbStr(inkOverride!) : skin.accentRgb;
-  const paper    = usePaper ? paperOverride! : skin.paper;
+  const validHex = (s: string | null): s is string => !!s && /^#[0-9A-Fa-f]{6}$/.test(s);
+
+  // Overrides only apply when the Custom skin is active.
+  const useInk     = isCustom && validHex(inkOverride);
+  const usePaper   = isCustom && validHex(paperOverride);
+  const useAccent2 = isCustom && validHex(accent2Override);
+
+  const ink        = useInk     ? inkOverride!     : skin.ink;
+  const inkRgb     = useInk     ? hexToRgbStr(inkOverride!)     : skin.accentRgb;
+  const paper      = usePaper   ? paperOverride!   : skin.paper;
+  const accent2    = useAccent2 ? accent2Override! : skin.accent2;
+  const accent2Rgb = useAccent2 ? hexToRgbStr(accent2Override!) : skin.accent2Rgb;
 
   // v9 roots — globals.css derives the rest of the ladder via color-mix().
   root.style.setProperty('--ink',   ink);
   root.style.setProperty('--paper', paper);
 
-  // Light/dark switch for derived tokens. Skin-level isLight wins; otherwise
-  // a paper override that's actually bright trips the same flag.
   const lightMode = skin.isLight || (usePaper && isPaperLight(paper));
   if (lightMode) root.setAttribute('data-paper', 'light');
   else           root.removeAttribute('data-paper');
 
-  // v7 alias layer kept in sync.
-  root.style.setProperty('--casi-accent',     ink);
-  root.style.setProperty('--casi-accent-rgb', inkRgb);
-  root.style.setProperty('--casi-accent2',     skin.accent2);
-  root.style.setProperty('--casi-accent2-rgb', skin.accent2Rgb);
+  // v7 alias layer — only the values that can't derive from --ink/--paper.
+  root.style.setProperty('--casi-accent',      ink);
+  root.style.setProperty('--casi-accent-rgb',  inkRgb);
+  root.style.setProperty('--casi-accent2',     accent2);
+  root.style.setProperty('--casi-accent2-rgb', accent2Rgb);
   root.style.setProperty('--casi-bg',          paper);
-  root.style.setProperty('--casi-surface',     skin.surface);
-  root.style.setProperty('--casi-border',      skin.border);
-  root.style.setProperty('--casi-text',        skin.text);
-  root.style.setProperty('--casi-text-muted',  skin.textMuted);
 }
 
 export function UserSkinProvider({ children }: { children: ReactNode }) {
-  const [skinId, setSkinIdState]      = useState<string>(DEFAULT_SKIN_ID);
-  const [inkColor, setInkColorState]  = useState<string | null>(null);
-  const [paperColor, setPaperColorState] = useState<string | null>(null);
+  const [skinId,      setSkinIdState]      = useState<string>(DEFAULT_SKIN_ID);
+  const [inkColor,    setInkColorState]    = useState<string | null>(null);
+  const [paperColor,  setPaperColorState]  = useState<string | null>(null);
+  const [accent2Color, setAccent2ColorState] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -93,11 +102,13 @@ export function UserSkinProvider({ children }: { children: ReactNode }) {
     if (storedInk) setInkColorState(storedInk);
     const storedPaper = window.localStorage.getItem(PAPER_KEY);
     if (storedPaper) setPaperColorState(storedPaper);
+    const storedAccent2 = window.localStorage.getItem(ACCENT2_KEY);
+    if (storedAccent2) setAccent2ColorState(storedAccent2);
   }, []);
 
   useEffect(() => {
-    applySkinToRoot(getSkinById(skinId), inkColor, paperColor);
-  }, [skinId, inkColor, paperColor]);
+    applySkinToRoot(getSkinById(skinId), skinId === 'custom', inkColor, paperColor, accent2Color);
+  }, [skinId, inkColor, paperColor, accent2Color]);
 
   const setSkinId = (id: string) => {
     setSkinIdState(id);
@@ -121,6 +132,14 @@ export function UserSkinProvider({ children }: { children: ReactNode }) {
     } catch {}
   };
 
+  const setAccent2Color = (color: string | null) => {
+    setAccent2ColorState(color);
+    try {
+      if (color) window.localStorage.setItem(ACCENT2_KEY, color);
+      else       window.localStorage.removeItem(ACCENT2_KEY);
+    } catch {}
+  };
+
   const value: UserSkinContextValue = {
     skinId,
     skin: getSkinById(skinId),
@@ -129,6 +148,8 @@ export function UserSkinProvider({ children }: { children: ReactNode }) {
     setInkColor,
     paperColor,
     setPaperColor,
+    accent2Color,
+    setAccent2Color,
   };
 
   return <UserSkinContext.Provider value={value}>{children}</UserSkinContext.Provider>;

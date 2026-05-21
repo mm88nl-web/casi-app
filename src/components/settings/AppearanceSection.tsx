@@ -7,47 +7,16 @@ import SkinPicker from '@/components/SkinPicker';
 import { useUserSkin } from '@/components/UserSkinProvider';
 import { getSkinById } from '@/lib/skins';
 
-// Curated quick-pick swatches. The hex input below covers everything else —
-// these are just "good defaults that don't clash with the v9 derived ladder".
-const INK_PRESETS = [
-  '#0DCFB0', // Casi teal (default)
-  '#9146FF', // Twitch purple
-  '#06B6D4', // Cyber cyan
-  '#FF0000', // YouTube red
-  '#4ADE80', // Matrix green
-  '#FF6B35', // Sunset orange
-  '#F472B6', // Rose
-  '#FACC15', // Gold
-  '#E8E8E8', // Mono white
-];
-
-const PAPER_PRESETS = [
-  '#0C0D11', // Casi base (default)
-  '#000000', // True black
-  '#0A0515', // Rose mauve
-  '#050A12', // Cyber navy
-  '#140906', // Sunset deep
-  '#0E0E1A', // Twitch night
-  '#F5F1E8', // Cream (light)
-  '#FAFAFA', // Bright white (light)
-];
-
-const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
 const SAVE_DEBOUNCE_MS = 600;
 
 type Props = {
   supabase: SupabaseClient;
   profileId: string;
-  /** Used by the "↗ Open OBS overlay" preview link. Null hides the link. */
   username: string | null;
-  /** Persisted skin from profiles.skin — used to seed the provider on mount
-   *  so the streamer sees their server-of-record choice, not whatever this
-   *  device had in localStorage. */
   initialSkinId?: string | null;
-  /** Persisted accent override from profiles.ink_color (or legacy theme_color). */
   initialInkColor?: string | null;
-  /** Persisted background override from profiles.paper_color. */
   initialPaperColor?: string | null;
+  initialAccent2Color?: string | null;
 };
 
 export default function AppearanceSection({
@@ -57,29 +26,45 @@ export default function AppearanceSection({
   initialSkinId,
   initialInkColor,
   initialPaperColor,
+  initialAccent2Color,
 }: Props) {
-  const { skinId, setSkinId, inkColor, setInkColor, paperColor, setPaperColor } = useUserSkin();
+  const {
+    skinId, setSkinId,
+    inkColor, setInkColor,
+    paperColor, setPaperColor,
+    accent2Color, setAccent2Color,
+  } = useUserSkin();
 
   // Seed the provider from profiles on mount if the server has values.
-  // Only runs once — subsequent changes flow the other way (user picks → DB).
   const seededRef = useRef(false);
+  const skipNextSyncRef = useRef(false);
   useEffect(() => {
     if (seededRef.current) return;
-    if (initialSkinId && initialSkinId !== skinId) setSkinId(initialSkinId);
+    if (initialSkinId && initialSkinId !== skinId) {
+      setSkinId(initialSkinId);
+      skipNextSyncRef.current = true;
+    }
     if (initialInkColor !== undefined && initialInkColor !== inkColor) {
       setInkColor(initialInkColor ?? null);
     }
     if (initialPaperColor !== undefined && initialPaperColor !== paperColor) {
       setPaperColor(initialPaperColor ?? null);
     }
+    if (initialAccent2Color !== undefined && initialAccent2Color !== accent2Color) {
+      setAccent2Color(initialAccent2Color ?? null);
+    }
     seededRef.current = true;
-  }, [initialSkinId, initialInkColor, initialPaperColor, skinId, inkColor, paperColor, setSkinId, setInkColor, setPaperColor]);
+  }, [
+    initialSkinId, initialInkColor, initialPaperColor, initialAccent2Color,
+    skinId, inkColor, paperColor, accent2Color,
+    setSkinId, setInkColor, setPaperColor, setAccent2Color,
+  ]);
 
-  // Mirror skin changes into profiles.skin so the OBS overlay (separate
-  // browser context, no localStorage access) stays in sync.
+  // Mirror skin changes into profiles.skin.
   const lastSkinSyncedRef = useRef<string | null>(initialSkinId ?? null);
   useEffect(() => {
     if (!seededRef.current) return;
+    if (skipNextSyncRef.current) { skipNextSyncRef.current = false; return; }
     if (lastSkinSyncedRef.current === skinId) return;
     lastSkinSyncedRef.current = skinId;
     void supabase
@@ -91,105 +76,59 @@ export default function AppearanceSection({
       });
   }, [skinId, supabase, profileId]);
 
-  // Debounced ink + paper saves — color picker drag emits many changes.
-  useDebouncedSave(supabase, profileId, 'ink_color',   inkColor,   initialInkColor   ?? null);
-  useDebouncedSave(supabase, profileId, 'paper_color', paperColor, initialPaperColor ?? null);
-
-  const [inkInput, setInkInput] = useState('');
-  const [paperInput, setPaperInput] = useState('');
+  // Debounced saves for custom colour overrides — only fire when Custom skin is active.
+  const isCustom = skinId === 'custom';
+  useDebouncedSave(supabase, profileId, 'ink_color',     inkColor,     initialInkColor     ?? null, isCustom);
+  useDebouncedSave(supabase, profileId, 'paper_color',   paperColor,   initialPaperColor   ?? null, isCustom);
+  useDebouncedSave(supabase, profileId, 'accent2_color', accent2Color, initialAccent2Color ?? null, isCustom);
 
   const skin = getSkinById(skinId);
-  const effectiveInk   = inkColor   ?? skin.ink;
-  const effectivePaper = paperColor ?? skin.paper;
+  const effectiveInk    = inkColor    ?? skin.ink;
+  const effectivePaper  = paperColor  ?? skin.paper;
+  const effectiveAccent2 = accent2Color ?? skin.accent2;
 
   const overlayHref = username ? `/overlay?s=${encodeURIComponent(username)}&mode=obs` : null;
-  const hasOverrides = Boolean(inkColor) || Boolean(paperColor);
 
   return (
     <SettingsSection
       id="appearance"
       title="Appearance"
-      desc="A skin is a preset Ink + Paper pair (ink = brand colour, paper = background). Pick one, then optionally override either colour to fine-tune. Changes save to your account, so every device + your OBS browser source stays in sync."
+      desc="Pick a preset skin or choose Custom to dial in your own brand colour, background, and secondary accent. Changes sync across your devices and OBS browser source."
     >
       {/* ── Skin presets ─────────────────────────────────────────────────── */}
-      <SubHeading title="Skin" hint="curated preset palettes" />
+      <SubHeading title="Skin" />
       <SkinPicker />
 
-      {/* ── Ink (brand accent) ───────────────────────────────────────────── */}
-      <Divider />
-      <SubHeading
-        title="Ink"
-        hint={inkColor ? 'overriding skin ink' : 'using skin ink'}
-      />
-      <PresetSwatchRow
-        presets={INK_PRESETS}
-        active={effectiveInk}
-        overridden={!!inkColor}
-        onPick={(c) => { setInkInput(''); setInkColor(c); }}
-        onReset={() => { setInkInput(''); setInkColor(null); }}
-      />
-      <HexInput
-        value={inkInput || (inkColor ?? '')}
-        placeholder={skin.ink}
-        previewColor={effectiveInk}
-        onChange={(raw) => {
-          const v = raw.startsWith('#') ? raw : `#${raw}`;
-          const trimmed = v.slice(0, 7);
-          setInkInput(trimmed);
-          if (HEX_RE.test(trimmed)) setInkColor(trimmed);
-        }}
-      />
-
-      {/* ── Paper (background) ───────────────────────────────────────────── */}
-      <Divider />
-      <SubHeading
-        title="Paper"
-        hint={paperColor ? 'overriding skin paper' : 'using skin paper'}
-      />
-      <PresetSwatchRow
-        presets={PAPER_PRESETS}
-        active={effectivePaper}
-        overridden={!!paperColor}
-        onPick={(c) => { setPaperInput(''); setPaperColor(c); }}
-        onReset={() => { setPaperInput(''); setPaperColor(null); }}
-      />
-      <HexInput
-        value={paperInput || (paperColor ?? '')}
-        placeholder={skin.paper}
-        previewColor={effectivePaper}
-        onChange={(raw) => {
-          const v = raw.startsWith('#') ? raw : `#${raw}`;
-          const trimmed = v.slice(0, 7);
-          setPaperInput(trimmed);
-          if (HEX_RE.test(trimmed)) setPaperColor(trimmed);
-        }}
-      />
-      <div
-        className="font-mono uppercase"
-        style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--casi-text-faint)', marginTop: 6 }}
-      >
-        Tip: a bright paper colour switches the dashboard to light mode automatically.
-      </div>
-
-      {hasOverrides && (
-        <button
-          type="button"
-          onClick={() => { setInkColor(null); setPaperColor(null); setInkInput(''); setPaperInput(''); }}
-          className="font-mono uppercase"
-          style={{
-            marginTop: 14,
-            padding: '6px 12px',
-            background: 'transparent',
-            border: '1px solid var(--casi-border-2)',
-            color: 'var(--casi-text)',
-            fontSize: 9,
-            letterSpacing: '0.18em',
-            cursor: 'pointer',
-            borderRadius: 0,
-          }}
-        >
-          ↺ Reset both to skin defaults
-        </button>
+      {/* ── Custom colour pickers — only shown when Custom skin is active ── */}
+      {isCustom && (
+        <>
+          <Divider />
+          <SubHeading title="Custom colors" hint="ink · paper · accent 2" />
+          <ColorPickerRow
+            label="Ink"
+            desc="Brand / accent"
+            value={effectiveInk}
+            onChange={setInkColor}
+          />
+          <ColorPickerRow
+            label="Paper"
+            desc="Background"
+            value={effectivePaper}
+            onChange={setPaperColor}
+          />
+          <ColorPickerRow
+            label="Accent 2"
+            desc="Secondary highlight"
+            value={effectiveAccent2}
+            onChange={setAccent2Color}
+          />
+          <div
+            className="font-mono uppercase"
+            style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--casi-text-faint)', marginTop: 4 }}
+          >
+            Tip: a bright Paper switches the dashboard to light mode automatically.
+          </div>
+        </>
       )}
 
       {/* ── Live preview ─────────────────────────────────────────────────── */}
@@ -224,22 +163,29 @@ export default function AppearanceSection({
 
 /* ───────────────────────────────────────────────────────────────────────── */
 
-// Shared debounced single-column writer. Two of these run side-by-side for
-// ink_color and paper_color so a streamer dragging both colour picks doesn't
-// stack two queued writes per stroke.
 function useDebouncedSave(
   supabase: SupabaseClient,
   profileId: string,
-  column: 'ink_color' | 'paper_color',
+  column: 'ink_color' | 'paper_color' | 'accent2_color',
   value: string | null,
   initial: string | null,
+  enabled: boolean,
 ) {
   const lastSyncedRef = useRef<string | null>(initial);
   const seededRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    // Skip first run — that's the seed, not a user edit.
-    if (!seededRef.current) { seededRef.current = true; return; }
+    if (!seededRef.current) {
+      seededRef.current = true;
+      lastSyncedRef.current = value;
+      return;
+    }
+    if (!enabled) {
+      // Not in custom mode — track the current value so re-enabling doesn't
+      // trigger a spurious write for an unchanged value.
+      lastSyncedRef.current = value;
+      return;
+    }
     if (lastSyncedRef.current === value) return;
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
@@ -255,110 +201,85 @@ function useDebouncedSave(
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [value, column, supabase, profileId]);
+  }, [value, column, supabase, profileId, enabled]);
 }
 
-function PresetSwatchRow({
-  presets,
-  active,
-  overridden,
-  onPick,
-  onReset,
-}: {
-  presets: string[];
-  active: string;
-  overridden: boolean;
-  onPick: (color: string) => void;
-  onReset: () => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-1.5" style={{ marginBottom: 12 }}>
-      {presets.map((color) => {
-        const isActive = active.toLowerCase() === color.toLowerCase();
-        return (
-          <button
-            key={color}
-            type="button"
-            title={color}
-            onClick={() => onPick(color)}
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 0,
-              background: color,
-              border: isActive ? `2px solid var(--casi-text)` : '1px solid rgba(255,255,255,0.1)',
-              boxShadow: isActive ? `0 0 0 3px rgba(255,255,255,0.05)` : 'none',
-              cursor: 'pointer',
-            }}
-          />
-        );
-      })}
-      <button
-        type="button"
-        title="Reset to skin default"
-        onClick={onReset}
-        disabled={!overridden}
-        className="font-mono uppercase"
-        style={{
-          padding: '0 12px',
-          height: 28,
-          borderRadius: 0,
-          background: 'transparent',
-          border: '1px solid var(--casi-border-2)',
-          color: overridden ? 'var(--casi-text)' : 'var(--casi-text-dim)',
-          fontSize: 9,
-          letterSpacing: '0.15em',
-          cursor: overridden ? 'pointer' : 'not-allowed',
-          opacity: overridden ? 1 : 0.5,
-        }}
-      >
-        ↺ Reset
-      </button>
-    </div>
-  );
-}
-
-function HexInput({
+function ColorPickerRow({
+  label,
+  desc,
   value,
-  placeholder,
-  previewColor,
   onChange,
 }: {
+  label: string;
+  desc: string;
   value: string;
-  placeholder: string;
-  previewColor: string;
-  onChange: (raw: string) => void;
+  onChange: (hex: string) => void;
 }) {
+  const [textVal, setTextVal] = useState(value);
+  useEffect(() => { setTextVal(value); }, [value]);
+
   return (
-    <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
-      <div
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: 0,
-          background: previewColor,
-          border: '1px solid rgba(255,255,255,0.1)',
-          flexShrink: 0,
-          boxShadow: `0 0 10px ${previewColor}50`,
-        }}
-      />
+    <div className="flex items-center gap-3" style={{ marginBottom: 10 }}>
+      {/* Color swatch — native picker hidden under it */}
+      <div style={{ position: 'relative', width: 36, height: 36, flexShrink: 0, cursor: 'pointer' }}>
+        <div
+          style={{
+            position: 'absolute', inset: 0,
+            background: value,
+            border: '1px solid rgba(255,255,255,0.15)',
+            boxShadow: `0 0 8px ${value}60`,
+          }}
+        />
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => {
+            const hex = e.target.value;
+            onChange(hex);
+            setTextVal(hex);
+          }}
+          style={{
+            position: 'absolute', inset: 0, opacity: 0,
+            width: '100%', height: '100%',
+            cursor: 'pointer', border: 'none', padding: 0,
+          }}
+        />
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--casi-text)', lineHeight: 1.2 }}>
+          {label}
+        </div>
+        <div
+          className="font-mono uppercase"
+          style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--casi-text-dim)', marginTop: 2 }}
+        >
+          {desc}
+        </div>
+      </div>
+
       <input
         type="text"
-        value={value}
-        placeholder={placeholder}
+        value={textVal}
         maxLength={7}
         className="font-mono"
         style={{
-          flex: 1,
-          fontSize: 12,
-          padding: '8px 12px',
+          width: 82,
+          fontSize: 11,
+          padding: '7px 8px',
           borderRadius: 0,
           background: 'var(--casi-bg)',
           border: '1px solid var(--casi-border-2)',
           color: 'var(--casi-text)',
           outline: 'none',
         }}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          const raw = e.target.value;
+          setTextVal(raw);
+          const v = raw.startsWith('#') ? raw : `#${raw}`;
+          if (/^#[0-9A-Fa-f]{6}$/.test(v)) onChange(v);
+        }}
+        onBlur={() => setTextVal(value)}
       />
     </div>
   );
@@ -396,11 +317,6 @@ function Divider() {
   );
 }
 
-/**
- * Cosmetic mock of an "active beam" tile + a chrome strip + a flash row, so
- * the streamer sees ink AND paper effects together (not just the slot tile).
- * Renders with the live --casi-* / v9 vars so changes reflect instantly.
- */
 function PreviewTile() {
   return (
     <div
@@ -442,7 +358,6 @@ function PreviewTile() {
         </span>
       </div>
 
-      {/* canvas-ish area */}
       <div style={{ position: 'relative', height: 110 }}>
         <div
           style={{
