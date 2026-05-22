@@ -114,6 +114,15 @@ export async function POST(req: Request) {
     );
   }
 
+  const { data: streamerProfile } = await supabase
+    .from('profiles')
+    .select('suspended_at')
+    .eq('id', profile_id)
+    .single();
+  if (streamerProfile?.suspended_at) {
+    return NextResponse.json({ error: 'This streamer is unavailable' }, { status: 403 });
+  }
+
   const { data: element } = await supabase
     .from('overlay_elements')
     .select('id, profile_id, price_value, price_unit, max_duration_minutes, shape')

@@ -19,6 +19,7 @@ export type ProfileRow = {
   ink_color: string | null;
   paper_color: string | null;
   accent2_color: string | null;
+  is_admin: boolean;
 };
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';

@@ -626,6 +626,7 @@ function OverlayContent() {
     let cleanup: (()=>void)|undefined;
     const init = async () => {
       const { data: prof } = await supabase.from('profiles').select('*').eq('username', username).single();
+      if (prof?.suspended_at) { setLoading(false); return; }
       setProfile(prof);
       if (prof) {
         const saved = (() => { try { return localStorage.getItem(VIEWER_NAME_KEY)||''; } catch { return ''; } })();

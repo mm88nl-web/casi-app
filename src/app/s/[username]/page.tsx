@@ -12,7 +12,7 @@ import StreamPreview from './_components/StreamPreview';
 import FlashesFeed, { type Flash } from './_components/FlashesFeed';
 import { formatFiat } from '@/lib/currency';
 
-const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, is_live, skin, theme_color, ink_color, paper_color, settlement_currency';
+const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, is_live, skin, theme_color, ink_color, paper_color, settlement_currency, suspended_at';
 const FLASH_COLS = 'id, created_at, viewer_name, status, message, amount_cents, payment_method';
 
 type Profile = {
@@ -42,6 +42,7 @@ type FlashRow = {
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'not-found' }
+  | { kind: 'suspended' }
   | { kind: 'ready'; profile: Profile };
 
 function logTime(createdAt: string): string {
@@ -96,6 +97,10 @@ export default function ViewerBookingPage() {
       if (cancelled) return;
       if (error || !data) {
         setState({ kind: 'not-found' });
+        return;
+      }
+      if ((data as { suspended_at: string | null }).suspended_at) {
+        setState({ kind: 'suspended' });
         return;
       }
       setState({ kind: 'ready', profile: data as Profile });
@@ -161,6 +166,16 @@ export default function ViewerBookingPage() {
     return (
       <StatusScreen>
         No streamer named @{username || '?'}.{' '}
+        <Link href="/" style={{ color: 'var(--casi-accent)', textDecoration: 'none' }}>
+          Browse ↩
+        </Link>
+      </StatusScreen>
+    );
+  }
+  if (state.kind === 'suspended') {
+    return (
+      <StatusScreen>
+        This account is unavailable.{' '}
         <Link href="/" style={{ color: 'var(--casi-accent)', textDecoration: 'none' }}>
           Browse ↩
         </Link>

@@ -109,6 +109,15 @@ export async function POST(req: Request) {
     );
   }
 
+  const { data: streamerProfile } = await supabase
+    .from('profiles')
+    .select('suspended_at')
+    .eq('id', profile_id)
+    .single();
+  if (streamerProfile?.suspended_at) {
+    return NextResponse.json({ error: 'This streamer is unavailable' }, { status: 403 });
+  }
+
   // Verify the slot belongs to the streamer and grab its server-side
   // price/duration so we can ignore client-supplied values that drift.
   const { data: element } = await supabase

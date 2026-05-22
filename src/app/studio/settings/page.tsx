@@ -13,8 +13,9 @@ import PayoutsSection from '@/components/settings/PayoutsSection';
 import AppearanceSection from '@/components/settings/AppearanceSection';
 import ObsSourcesSection from '@/components/settings/ObsSourcesSection';
 import SessionKeySection from '@/components/settings/SessionKeySection';
+import AdminSection from '@/components/settings/AdminSection';
 
-const RAIL: RailGroup[] = [
+const BASE_RAIL: RailGroup[] = [
   {
     title: 'Account',
     items: [{ id: 'profile', label: 'Profile' }],
@@ -33,8 +34,13 @@ const RAIL: RailGroup[] = [
   },
 ];
 
+const ADMIN_RAIL: RailGroup = {
+  title: 'Admin',
+  items: [{ id: 'admin', label: 'Users' }],
+};
+
 const PROFILE_COLS =
-  'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color, ink_color, paper_color, accent2_color';
+  'id, username, display_name, bio, avatar_url, skin, solana_wallet, stripe_account_id, theme_color, ink_color, paper_color, accent2_color, is_admin';
 
 type LoadState =
   | { kind: 'loading' }
@@ -91,6 +97,10 @@ export default function StudioSettingsPage() {
     );
   }
 
+  const rail = state.kind === 'ready' && state.profile.is_admin
+    ? [...BASE_RAIL, ADMIN_RAIL]
+    : BASE_RAIL;
+
   return (
     <main className="min-h-screen" style={{ background: 'var(--paper, var(--casi-bg))', color: 'var(--text, var(--casi-text))' }}>
       <Nav
@@ -108,7 +118,7 @@ export default function StudioSettingsPage() {
         }
       />
 
-      <SettingsLayout rail={RAIL}>
+      <SettingsLayout rail={rail}>
         <ProfileSection supabase={supabase} profile={state.profile} />
         <PayoutsSection
           supabase={supabase}
@@ -130,6 +140,9 @@ export default function StudioSettingsPage() {
           supabase={supabase}
           savedSolanaWallet={state.profile.solana_wallet ?? null}
         />
+        {state.profile.is_admin && (
+          <AdminSection supabase={supabase} myId={state.profile.id} />
+        )}
       </SettingsLayout>
     </main>
   );
