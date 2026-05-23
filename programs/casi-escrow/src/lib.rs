@@ -92,6 +92,7 @@ pub mod casi_escrow {
     pub fn initialize_config(
         ctx: Context<InitializeConfig>,
         max_escrow_amount: u64,
+        min_escrow_amount: u64,
     ) -> Result<()> {
         // Verify that `initializer` is the upgrade authority for this program.
         // ProgramData is bincode-serialized by the BPF Upgradeable Loader:
@@ -130,12 +131,57 @@ pub mod casi_escrow {
         // before this handler runs, preventing a permanent bricked config.
         let accepted_mint = ctx.accounts.accepted_mint.key();
 
+        // Reject Token-2022 mints that have a TransferHook extension configured.
+        // A transfer hook executes arbitrary on-chain code during every
+        // `transfer_checked` CPI in this program (approve_flash, deny_flash,
+        // settle_beam, cancel_*, etc.). A malicious hook could manipulate shared
+        // mutable accounts or drain ATAs it has authority over.
+        //
+        // Classic SPL Token mints are exactly 82 bytes (no room for extensions).
+        // Token-2022 mints are larger; the AccountType byte is at index 82 and
+        // TLV-encoded extensions follow from index 83.
+        //
+        // TLV layout:  [u16 LE type][u16 LE len][len bytes data] ...
+        // TransferHook extension type = 26 (0x001A).
+        // TransferHook data: [authority: 32 B][program_id: 32 B]
+        // All-zero program_id → no hook configured (safe).
+        {
+            let mint_info = ctx.accounts.accepted_mint.to_account_info();
+            let mint_data = mint_info.data.borrow();
+            if mint_data.len() > 82 {
+                const TRANSFER_HOOK_EXT_TYPE: u16 = 26;
+                let tlv = &mint_data[83..]; // skip base (82 B) + AccountType (1 B)
+                let mut pos = 0usize;
+                while pos + 4 <= tlv.len() {
+                    let ext_type = u16::from_le_bytes([tlv[pos], tlv[pos + 1]]);
+                    let ext_len  = u16::from_le_bytes([tlv[pos + 2], tlv[pos + 3]]) as usize;
+                    pos += 4;
+                    if ext_type == TRANSFER_HOOK_EXT_TYPE {
+                        // program_id is at bytes [32..64] of the extension data.
+                        if ext_len >= 64 && pos + 64 <= tlv.len() {
+                            let program_id_bytes: &[u8; 32] = tlv[pos + 32..pos + 64]
+                                .try_into()
+                                .map_err(|_| error!(CasiError::TransferHookNotAllowed))?;
+                            require!(
+                                program_id_bytes == &[0u8; 32],
+                                CasiError::TransferHookNotAllowed
+                            );
+                        }
+                        break;
+                    }
+                    if pos.saturating_add(ext_len) > tlv.len() { break; }
+                    pos += ext_len;
+                }
+            }
+        }
+
         ctx.accounts.config.set_inner(GlobalConfig {
             version:            GLOBAL_CONFIG_VERSION,
             admin:              ctx.accounts.initializer.key(),
             accepted_mint,
             paused:             false,
             max_escrow_amount,
+            min_escrow_amount,
             bump:               ctx.bumps.config,
         });
 
@@ -143,6 +189,7 @@ pub mod casi_escrow {
             admin:              ctx.accounts.initializer.key(),
             accepted_mint:      ctx.accounts.accepted_mint.key(),
             max_escrow_amount,
+            min_escrow_amount,
         });
 
         Ok(())
@@ -163,6 +210,7 @@ pub mod casi_escrow {
         ctx: Context<UpdateConfig>,
         paused: bool,
         max_escrow_amount: u64,
+        min_escrow_amount: u64,
     ) -> Result<()> {
         require!(
             ctx.accounts.config.version == GLOBAL_CONFIG_VERSION,
@@ -171,10 +219,12 @@ pub mod casi_escrow {
 
         ctx.accounts.config.paused             = paused;
         ctx.accounts.config.max_escrow_amount  = max_escrow_amount;
+        ctx.accounts.config.min_escrow_amount  = min_escrow_amount;
 
         emit!(ConfigUpdated {
             paused,
             max_escrow_amount,
+            min_escrow_amount,
         });
 
         Ok(())
@@ -248,6 +298,13 @@ pub mod casi_escrow {
             require!(
                 amount <= ctx.accounts.config.max_escrow_amount,
                 CasiError::AmountExceedsCap
+            );
+        }
+
+        if ctx.accounts.config.min_escrow_amount > 0 {
+            require!(
+                amount >= ctx.accounts.config.min_escrow_amount,
+                CasiError::AmountBelowMin
             );
         }
 
@@ -1094,10 +1151,10 @@ pub struct InitializeEscrow<'info> {
     /// CHECK: Streamer wallet — stored in EscrowState, verified on settle/deny.
     pub streamer: UncheckedAccount<'info>,
 
-    /// Global config is read to enforce: not paused, correct mint, amount cap.
+    /// Global config is read to enforce: not paused, correct mint, amount cap/floor.
     #[account(
         seeds = [CONFIG_SEED],
-        bump  = config.bump,
+        bump,
     )]
     pub config: Account<'info, GlobalConfig>,
 
@@ -1654,6 +1711,11 @@ pub struct GlobalConfig {
     pub paused:             bool,
     /// Per-escrow maximum in token micro-units. 0 = no cap.
     pub max_escrow_amount:  u64,
+    /// Per-escrow minimum in token micro-units. 0 = no floor.
+    /// Set to a value that makes ATA-rent griefing uneconomical
+    /// (e.g. 1_000_000 = 1 USDC at 6 decimals; each deny costs the
+    /// streamer ~0.002 SOL to init the viewer ATA).
+    pub min_escrow_amount:  u64,
     pub bump:               u8,
 }
 
@@ -1727,12 +1789,14 @@ pub struct ConfigInitialized {
     pub admin:             Pubkey,
     pub accepted_mint:     Pubkey,
     pub max_escrow_amount: u64,
+    pub min_escrow_amount: u64,
 }
 
 #[event]
 pub struct ConfigUpdated {
     pub paused:            bool,
     pub max_escrow_amount: u64,
+    pub min_escrow_amount: u64,
 }
 
 #[event]
@@ -1832,4 +1896,8 @@ pub enum CasiError {
     AmountExceedsCap,
     #[msg("Admin address cannot be the zero address")]
     InvalidAdmin,
+    #[msg("Token mint has a TransferHook extension — not accepted by this program")]
+    TransferHookNotAllowed,
+    #[msg("Amount is below the per-escrow minimum set in GlobalConfig")]
+    AmountBelowMin,
 }
