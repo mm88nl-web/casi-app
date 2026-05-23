@@ -8,9 +8,9 @@ const nextConfig: NextConfig = {
       {
         source: '/(.*)',
         headers: [
-          // Browsers must not render this page inside a frame from a different
-          // origin — prevents clickjacking. Redundant with CSP frame-ancestors
-          // but retained for older browsers that don't parse CSP.
+          // Clickjacking: X-Frame-Options for legacy browsers; CSP
+          // frame-ancestors is the modern equivalent and takes precedence in
+          // browsers that support it.
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
 
           // Prevents browsers from MIME-sniffing a response away from the
@@ -63,6 +63,13 @@ const nextConfig: NextConfig = {
 
               // Block plugins (Flash, etc.) entirely.
               "object-src 'none'",
+
+              // Restrict framing to same origin (modern equivalent of
+              // X-Frame-Options: SAMEORIGIN).
+              "frame-ancestors 'self'",
+
+              // Restrict <base href> injection.
+              "base-uri 'self'",
             ].join('; '),
           },
         ],

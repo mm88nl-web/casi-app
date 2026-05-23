@@ -28,19 +28,18 @@ const FREE_FLASH_COOLDOWN_MS = 60_000;
 
 type PaymentMethod = 'stripe' | 'solana' | 'free';
 
-/**
- * Returns the hop closest to our server (last entry in x-forwarded-for).
- * A client CAN prepend x-forwarded-for, so trusting the first entry lets a
- * viewer spoof a fresh IP per request and bypass the free-flash cooldown.
- * Vercel/Cloudflare/nginx all append the real peer as the rightmost value.
- */
 function getClientIp(req: Request): string {
+  // x-real-ip is set by Vercel's edge and cannot be spoofed by clients.
+  // x-forwarded-for[0] (leftmost/first) is the original client in the
+  // standard proxy-chain convention; used as local/dev fallback only.
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
   const fwd = req.headers.get('x-forwarded-for');
   if (fwd) {
-    const last = fwd.split(',').pop()?.trim();
-    if (last) return last;
+    const first = fwd.split(',')[0]?.trim();
+    if (first) return first;
   }
-  return req.headers.get('x-real-ip') || 'unknown';
+  return 'unknown';
 }
 
 function hashIp(ip: string): string {
