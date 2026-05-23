@@ -50,17 +50,27 @@ export async function POST(req: Request) {
 
   // ── Authz: streamer-token OR viewer cancel_token match ──────────────────
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
-  let authorized = false;
+  let streamerAuthorized = false;
+  let viewerAuthorized = false;
 
   if (token) {
     const { data: { user } } = await supabase.auth.getUser(token);
-    if (user && user.id === booking.profile_id) authorized = true;
+    if (user && user.id === booking.profile_id) streamerAuthorized = true;
   }
-  if (!authorized && tokensMatch(claimedToken, booking.cancel_token)) {
-    authorized = true;
+  if (!streamerAuthorized && tokensMatch(claimedToken, booking.cancel_token)) {
+    viewerAuthorized = true;
   }
-  if (!authorized) {
+  if (!streamerAuthorized && !viewerAuthorized) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  // Viewers can only cancel pre-active bookings — voiding a PI on an active
+  // beam would let them watch free and receive a full refund. Streamers may
+  // cancel at any status (early-end flow calls this for active beams).
+  if (viewerAuthorized && booking.status !== 'pending' && booking.status !== 'approved_queued') {
+    return NextResponse.json(
+      { error: 'Beam is already active — contact the streamer to end it early' },
+      { status: 409 },
+    );
   }
   // ────────────────────────────────────────────────────────────────────────
 
