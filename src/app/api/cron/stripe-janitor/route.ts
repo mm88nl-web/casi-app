@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { timingSafeEqual } from 'node:crypto';
 import { stripe } from '@/lib/stripe';
 
 // Vercel Cron calls this with Authorization: Bearer $CRON_SECRET.
@@ -21,8 +22,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Misconfigured' }, { status: 500 });
   }
 
-  const auth = req.headers.get('authorization');
-  if (auth !== `Bearer ${cronSecret}`) {
+  const auth = req.headers.get('authorization') ?? '';
+  const expected = Buffer.from(`Bearer ${cronSecret}`);
+  const actual   = Buffer.from(auth);
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

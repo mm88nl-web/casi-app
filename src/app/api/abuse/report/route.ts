@@ -32,12 +32,14 @@ const MAX_DESCRIPTION_LEN = 4000;
 const HOURLY_LIMIT        = 5;
 
 function getClientIp(req: Request): string {
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
   const fwd = req.headers.get('x-forwarded-for');
   if (fwd) {
-    const last = fwd.split(',').pop()?.trim();
-    if (last) return last;
+    const first = fwd.split(',')[0]?.trim();
+    if (first) return first;
   }
-  return req.headers.get('x-real-ip') || 'unknown';
+  return 'unknown';
 }
 
 function hashIp(ip: string): string {

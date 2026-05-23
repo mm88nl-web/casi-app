@@ -31,6 +31,7 @@
  */
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { timingSafeEqual } from 'node:crypto';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import { SOLANA_RPC, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 import { CasiEscrowClient } from '@/lib/casi-escrow';
@@ -95,8 +96,10 @@ export async function GET(req: Request) {
     logError('solana-reconciler', 'CRON_SECRET not set');
     return NextResponse.json({ error: 'Misconfigured' }, { status: 500 });
   }
-  const auth = req.headers.get('authorization');
-  if (auth !== `Bearer ${cronSecret}`) {
+  const auth = req.headers.get('authorization') ?? '';
+  const expected = Buffer.from(`Bearer ${cronSecret}`);
+  const actual   = Buffer.from(auth);
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

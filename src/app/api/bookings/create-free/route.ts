@@ -139,10 +139,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'This slot is not free — use paid checkout' }, { status: 400 });
   }
 
-  const dur = Math.min(
-    Number(duration_minutes) || 0,
-    Number(element.max_duration_minutes) || Number(duration_minutes) || 0,
-  );
+  const maxDur = Number(element.max_duration_minutes) || 0;
+  if (maxDur <= 0) return NextResponse.json({ error: 'Slot has no duration limit configured' }, { status: 400 });
+  const dur = Math.min(Number(duration_minutes) || 0, maxDur);
   if (dur <= 0) return NextResponse.json({ error: 'Invalid duration' }, { status: 400 });
 
   // Per-streamer rate limit (1/min per viewer key). Re-uses the table that

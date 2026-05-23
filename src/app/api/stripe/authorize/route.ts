@@ -21,6 +21,9 @@ export async function POST(req: Request) {
   if (!booking || bookingError) {
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
+  if (booking.status !== 'pending') {
+    return NextResponse.json({ error: 'Booking is no longer pending', status: booking.status }, { status: 409 });
+  }
 
   // Price is re-read from the element, NEVER from the booking row — viewers
   // can write any price_value/price_unit on insert via RLS, so trusting the

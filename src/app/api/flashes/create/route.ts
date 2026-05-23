@@ -103,8 +103,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 });
   }
 
+  const MAX_FLASH_CENTS = 1_000_000_00; // $1,000,000 — prevents DB integer overflow from uncapped client value
   if (method !== 'free' && (!amount_cents || amount_cents < 100)) {
     return NextResponse.json({ error: 'Minimum flash amount is $1.00' }, { status: 400 });
+  }
+  if (method !== 'free' && amount_cents > MAX_FLASH_CENTS) {
+    return NextResponse.json({ error: 'Flash amount exceeds maximum' }, { status: 400 });
   }
 
   const { data: profile } = await supabase

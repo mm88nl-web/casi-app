@@ -188,9 +188,8 @@ export async function POST(req: Request) {
       profile_id, element_id, viewer_name, duration_minutes: dur,
       price_value, price_unit,
     });
-    const detail = insertErr?.message || insertErr?.code || 'no booking returned';
     return NextResponse.json(
-      { error: `Failed to create booking — ${detail}` },
+      { error: 'Failed to create booking — please try again' },
       { status: 500 },
     );
   }
