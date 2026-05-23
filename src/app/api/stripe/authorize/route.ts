@@ -106,24 +106,26 @@ export async function POST(req: Request) {
     { stripeAccount: profile.stripe_account_id },
   );
 
-  // cancel_token: random secret returned once to the viewer. /api/stripe/cancel
-  // requires this token to match on the viewer branch so viewer_name (which is
-  // publicly readable via bookings_select_public) can no longer authorize
-  // cancellation of arbitrary bookings. Only set if not already present so a
-  // retry of authorize on the same booking doesn't rotate the token out from
-  // under the viewer who stored the original.
-  const cancelToken = randomUUID();
+  // cancel_token is now minted in /api/bookings/create-stripe at insert time,
+  // atomically with the booking row. This eliminates a race where any caller
+  // who knew booking_id could call authorize first and receive the token.
+  //
+  // For the transition period (bookings created before this change) we still
+  // write a fresh token here if the row has none — same idempotent guard as
+  // before. Once all pre-existing rows have expired the fallback path becomes
+  // unreachable dead code, but the .is('cancel_token', null) guard makes it
+  // safe to leave in place.
   const { data: updated } = await supabase
     .from('bookings')
-    .update({ original_amount_cents: amount, cancel_token: cancelToken })
+    .update({ original_amount_cents: amount, cancel_token: randomUUID() })
     .eq('id', booking_id)
     .is('cancel_token', null)
     .select('cancel_token')
     .maybeSingle();
 
-  // If the row already had a token (authorize retried), re-read it so we
-  // return the existing one rather than nothing.
-  let finalToken = updated?.cancel_token ?? cancelToken;
+  // Re-read the existing token if the row already had one (normal case for
+  // new bookings) or if authorize was retried.
+  let finalToken: string | null = updated?.cancel_token ?? null;
   if (!updated) {
     const { data: existing } = await supabase
       .from('bookings')

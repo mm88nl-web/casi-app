@@ -31,7 +31,7 @@
  */
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { validateBannerBooking, sanitizeBookingCustomization } from '@/lib/banner';
 
 const supabase = createClient(
@@ -168,6 +168,13 @@ export async function POST(req: Request) {
     }
   }
 
+  // Mint the cancel_token here, atomically with the row, so the viewer's
+  // browser has it before booking_id is ever exposed. Issuing it in
+  // /api/stripe/authorize (the old path) created a race: any caller who
+  // knew the sequential booking_id could call authorize first and receive
+  // the token before the real viewer.
+  const cancelToken = randomUUID();
+
   const { data: booking, error: insertErr } = await supabase
     .from('bookings')
     .insert({
@@ -185,6 +192,7 @@ export async function POST(req: Request) {
       payment_method: 'stripe',
       is_queued: !!is_queued,
       queue_position: is_queued ? queue_position ?? null : null,
+      cancel_token: cancelToken,
       ...customization,
     })
     .select('id')
@@ -195,5 +203,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
   }
 
-  return NextResponse.json({ booking_id: booking.id });
+  return NextResponse.json({ booking_id: booking.id, cancel_token: cancelToken });
 }

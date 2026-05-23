@@ -1020,6 +1020,10 @@ function OverlayContent() {
       return;
     }
     newBookingId = createJson.booking_id as string;
+    // cancel_token is now minted atomically at create time so it's available
+    // before authorize ever runs — no race window where another caller could
+    // call authorize first and steal the token.
+    if (createJson.cancel_token) rememberBookingToken(newBookingId, createJson.cancel_token);
   } catch (err) {
     console.error('create-stripe fetch failed:', err);
     showNotif('Server error. Please try again.', 'error');
@@ -1035,8 +1039,8 @@ function OverlayContent() {
     });
     const json = await res.json();
     if (json.checkout_url) {
-      // Store the cancel_token BEFORE navigating away — we won't get another
-      // chance once Stripe Checkout takes over the page.
+      // authorize may still return cancel_token for old bookings that were
+      // created before this change; store it as a fallback if not already set.
       if (json.cancel_token) rememberBookingToken(newBookingId, json.cancel_token);
       window.location.href = json.checkout_url;
     } else {
