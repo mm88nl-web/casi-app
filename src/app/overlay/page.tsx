@@ -659,8 +659,12 @@ function OverlayContent() {
           }, 200);
         };
         const channel = supabase.channel(`overlay_${prof.id}`)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'overlay_elements', filter: `profile_id=eq.${prof.id}` }, scheduleReload)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings',         filter: `profile_id=eq.${prof.id}` }, scheduleReload)
+          .on('postgres_changes', { event: '*',      schema: 'public', table: 'overlay_elements', filter: `profile_id=eq.${prof.id}` }, scheduleReload)
+          .on('postgres_changes', { event: '*',      schema: 'public', table: 'bookings',         filter: `profile_id=eq.${prof.id}` }, scheduleReload)
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles',         filter: `id=eq.${prof.id}` }, (payload) => {
+            // Skin / theme changes from settings propagate here without a reload.
+            setProfile((prev: any) => ({ ...prev, ...payload.new }));
+          })
           .subscribe((status) => {
             if (status === 'SUBSCRIBED') bump();
           });
@@ -2561,6 +2565,7 @@ function OverlayContent() {
                     zIndex: el.is_background ? 10 : 50,
                     cursor: clickable ? 'pointer' : 'default',
                     transition: 'all 0.35s cubic-bezier(0.16,1,0.3,1)',
+                    overflow: 'hidden',
                   }}
                 >
                   {isBannerActive ? (
