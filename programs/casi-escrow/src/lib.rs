@@ -15,7 +15,7 @@
 //! (different program ID) owns its own config. CASI ships a reference deployment;
 //! other teams fork and deploy their own copy.
 
-use anchor_lang::prelude::*;
+use anchor_lang::{prelude::*, solana_program::bpf_loader_upgradeable};
 use anchor_spl::{
     associated_token::AssociatedToken,
     token_interface::{
@@ -94,6 +94,29 @@ pub mod casi_escrow {
         accepted_mint: Pubkey,
         max_escrow_amount: u64,
     ) -> Result<()> {
+        // Verify that `initializer` is the upgrade authority for this program.
+        // ProgramData is bincode-serialized by the BPF Upgradeable Loader:
+        //   [0..4]  variant index u32 LE (3 = ProgramData)
+        //   [4..12] slot u64 LE
+        //   [12]    Option tag (1 = Some, 0 = None)
+        //   [13..45] upgrade_authority_address: [u8; 32]  (when tag == 1)
+        // This prevents a front-runner from locking in a rogue accepted_mint
+        // between deploy and the operator's initialize_config call.
+        {
+            let data = ctx.accounts.program_data.data.borrow();
+            require!(data.len() >= 45, CasiError::Unauthorized);
+            let variant = u32::from_le_bytes(
+                data[0..4].try_into().map_err(|_| error!(CasiError::Unauthorized))?,
+            );
+            require!(variant == 3, CasiError::Unauthorized); // 3 = ProgramData
+            require!(data[12] == 1, CasiError::Unauthorized); // Some(_)
+            let authority = Pubkey::from(
+                <[u8; 32]>::try_from(&data[13..45])
+                    .map_err(|_| error!(CasiError::Unauthorized))?,
+            );
+            require!(authority == ctx.accounts.initializer.key(), CasiError::Unauthorized);
+        }
+
         require!(
             accepted_mint != Pubkey::default(),
             CasiError::InvalidMint
@@ -953,7 +976,7 @@ fn pda_close_account<'info>(
         authority:   authority.clone(),
     };
     close_account(
-        CpiContext::new_with_signer(token_program.to_account_info(), accounts),
+        CpiContext::new_with_signer(token_program.to_account_info(), accounts, signer_seeds),
     )
 }
 
@@ -976,6 +999,20 @@ pub struct InitializeConfig<'info> {
         bump,
     )]
     pub config: Account<'info, GlobalConfig>,
+
+    /// This program's ProgramData account, owned by the BPF Upgradeable Loader.
+    /// Required so the instruction handler can verify that `initializer` is the
+    /// current upgrade authority, preventing front-running between deploy and
+    /// the first `initialize_config` call.
+    ///
+    /// CHECK: owner is the BPF Upgradeable Loader; PDA seeds verify it belongs
+    ///        to this program. Upgrade-authority check happens in the handler.
+    #[account(
+        owner = bpf_loader_upgradeable::ID,
+        seeds = [crate::ID.as_ref()],
+        seeds::program = bpf_loader_upgradeable::ID,
+    )]
+    pub program_data: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }
