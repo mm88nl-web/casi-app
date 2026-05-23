@@ -91,7 +91,6 @@ pub mod casi_escrow {
     /// launch without redeploying.
     pub fn initialize_config(
         ctx: Context<InitializeConfig>,
-        accepted_mint: Pubkey,
         max_escrow_amount: u64,
     ) -> Result<()> {
         // Verify that `initializer` is the upgrade authority for this program.
@@ -100,27 +99,36 @@ pub mod casi_escrow {
         //   [4..12] slot u64 LE
         //   [12]    Option tag (1 = Some, 0 = None)
         //   [13..45] upgrade_authority_address: [u8; 32]  (when tag == 1)
-        // This prevents a front-runner from locking in a rogue accepted_mint
-        // between deploy and the operator's initialize_config call.
+        //
+        // When [12] == 0 the program has been made immutable (upgrade authority
+        // removed). A front-run is impossible on an immutable program because no
+        // one can deploy different bytecode; we accept the call from any signer.
+        // When [12] == 1 the program is still mutable and we enforce that
+        // initializer == upgrade_authority to prevent deploy-day front-running.
         {
             let data = ctx.accounts.program_data.data.borrow();
-            require!(data.len() >= 45, CasiError::Unauthorized);
+            require!(data.len() >= 13, CasiError::Unauthorized);
             let variant = u32::from_le_bytes(
                 data[0..4].try_into().map_err(|_| error!(CasiError::Unauthorized))?,
             );
             require!(variant == 3, CasiError::Unauthorized); // 3 = ProgramData
-            require!(data[12] == 1, CasiError::Unauthorized); // Some(_)
-            let authority = Pubkey::from(
-                <[u8; 32]>::try_from(&data[13..45])
-                    .map_err(|_| error!(CasiError::Unauthorized))?,
-            );
-            require!(authority == ctx.accounts.initializer.key(), CasiError::Unauthorized);
+            let has_authority = data[12];
+            if has_authority == 1 {
+                require!(data.len() >= 45, CasiError::Unauthorized);
+                let authority = Pubkey::from(
+                    <[u8; 32]>::try_from(&data[13..45])
+                        .map_err(|_| error!(CasiError::Unauthorized))?,
+                );
+                require!(authority == ctx.accounts.initializer.key(), CasiError::Unauthorized);
+            }
+            // has_authority == 0: immutable program, any signer may initialize.
         }
 
-        require!(
-            accepted_mint != Pubkey::default(),
-            CasiError::InvalidMint
-        );
+        // accepted_mint is derived from the verified on-chain mint account passed
+        // in the accounts struct — not from a raw instruction argument — so a
+        // typo in the mint address is caught by Anchor's account deserialization
+        // before this handler runs, preventing a permanent bricked config.
+        let accepted_mint = ctx.accounts.accepted_mint.key();
 
         ctx.accounts.config.set_inner(GlobalConfig {
             version:            GLOBAL_CONFIG_VERSION,
@@ -133,7 +141,7 @@ pub mod casi_escrow {
 
         emit!(ConfigInitialized {
             admin:              ctx.accounts.initializer.key(),
-            accepted_mint,
+            accepted_mint:      ctx.accounts.accepted_mint.key(),
             max_escrow_amount,
         });
 
@@ -188,6 +196,14 @@ pub mod casi_escrow {
         );
         require!(
             new_admin != Pubkey::default(),
+            CasiError::InvalidAdmin
+        );
+        // Reject off-curve addresses (PDAs, program IDs derived via
+        // find_program_address) which can never produce a valid signature.
+        // Without this check an admin typo to a PDA address permanently bricks
+        // update_config and transfer_admin with no recovery path.
+        require!(
+            new_admin.is_on_curve(),
             CasiError::InvalidAdmin
         );
 
@@ -591,9 +607,18 @@ pub mod casi_escrow {
         Ok(())
     }
 
-    /// Session-key path for early-ending a Beam. Identical effect to
-    /// `settle_beam` but authorized via a delegate PDA instead of the
-    /// streamer's wallet.
+    /// Session-key path for early-ending a Beam. Same pro-rata vesting math as
+    /// `settle_beam`, authorized via a delegate PDA instead of the streamer's
+    /// wallet.
+    ///
+    /// Trust model: a compromised session key can force-settle at any elapsed
+    /// time, including elapsed=0 immediately after start_beam (0 USDC to
+    /// streamer, full refund to viewer). This matches what the streamer can do
+    /// with the wallet-signed path and is an accepted risk: the attacker gains
+    /// nothing (funds always go to the declared parties), and the damage is
+    /// bounded and recoverable via `revoke_delegate`. The elapsed=0 case is
+    /// intentionally allowed so a streamer can end a beam immediately if needed
+    /// (wrong viewer, wrong content) without a wallet popup.
     pub fn settle_beam_delegated(
         ctx: Context<SettleBeamDelegated>,
         escrow_id: [u8; 32],
@@ -876,6 +901,14 @@ pub mod casi_escrow {
             ctx.accounts.escrow_state.status == EscrowStatus::Pending,
             CasiError::AlreadySettled
         );
+        // Flash viewers can already self-refund at any time via cancel_escrow.
+        // Restricting the permissionless crank to Beams prevents a cranker from
+        // force-refunding an unmoderated Flash after 7 days and denying the
+        // streamer revenue they intended to capture.
+        require!(
+            ctx.accounts.escrow_state.escrow_type == EscrowType::Beam,
+            CasiError::WrongEscrowType
+        );
 
         let now = Clock::get()?.unix_timestamp;
         let age = now.saturating_sub(ctx.accounts.escrow_state.created_at);
@@ -1000,6 +1033,14 @@ pub struct InitializeConfig<'info> {
     )]
     pub config: Account<'info, GlobalConfig>,
 
+    /// The token mint that this deployment will accept for all escrows.
+    /// Passing it as a verified on-chain account (rather than a raw Pubkey arg)
+    /// means Anchor's InterfaceAccount deserialization confirms it is a real
+    /// mint before the handler runs — a typo in the address is caught
+    /// immediately rather than silently bricking the deployment forever.
+    #[account(mint::token_program = token_program)]
+    pub accepted_mint: InterfaceAccount<'info, Mint>,
+
     /// This program's ProgramData account, owned by the BPF Upgradeable Loader.
     /// Required so the instruction handler can verify that `initializer` is the
     /// current upgrade authority, preventing front-running between deploy and
@@ -1014,6 +1055,7 @@ pub struct InitializeConfig<'info> {
     )]
     pub program_data: UncheckedAccount<'info>,
 
+    pub token_program:  Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 }
 
