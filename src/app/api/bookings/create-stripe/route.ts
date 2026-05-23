@@ -42,12 +42,14 @@ const supabase = createClient(
 const STRIPE_BOOKING_COOLDOWN_MS = 5_000;
 
 function getClientIp(req: Request): string {
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
   const fwd = req.headers.get('x-forwarded-for');
   if (fwd) {
-    const last = fwd.split(',').pop()?.trim();
-    if (last) return last;
+    const first = fwd.split(',')[0]?.trim();
+    if (first) return first;
   }
-  return req.headers.get('x-real-ip') || 'unknown';
+  return 'unknown';
 }
 
 function hashIp(ip: string): string {
@@ -132,10 +134,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: bannerCheck.error }, { status: 400 });
   }
 
-  const dur = Math.min(
-    Number(duration_minutes) || 0,
-    Number(element.max_duration_minutes) || Number(duration_minutes) || 0,
-  );
+  const maxDur = Number(element.max_duration_minutes) || 0;
+  if (maxDur <= 0) return NextResponse.json({ error: 'Slot has no duration limit configured' }, { status: 400 });
+  const dur = Math.min(Number(duration_minutes) || 0, maxDur);
   if (dur <= 0) return NextResponse.json({ error: 'Invalid duration' }, { status: 400 });
 
   // Stale cleanup: prior pending Stripe rows for this viewer+slot that never
@@ -178,8 +179,8 @@ export async function POST(req: Request) {
       file_type: file_type || null,
       message: message || null,
       duration_minutes: dur,
-      price_value: Number(price_value) || Number(element.price_value) || 0,
-      price_unit: price_unit || element.price_unit,
+      price_value: Number(element.price_value) || 0,
+      price_unit: element.price_unit,
       status: 'pending',
       payment_method: 'stripe',
       is_queued: !!is_queued,
