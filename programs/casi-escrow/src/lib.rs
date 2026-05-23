@@ -9,6 +9,11 @@
 //!   Flash — viewer locks USDC; streamer approves (funds released) or denies (refund).
 //!   Beam  — viewer locks USDC; streamer starts a time-stream; anyone settles with
 //!           integer proration after the duration elapses.
+//!
+//! Generic reusable primitive: the deployer calls `initialize_config` once to set
+//! the accepted mint, per-escrow cap, and admin key. Each independent deployment
+//! (different program ID) owns its own config. CASI ships a reference deployment;
+//! other teams fork and deploy their own copy.
 
 use anchor_lang::prelude::*;
 use anchor_spl::{
@@ -31,15 +36,20 @@ pub const ESCROW_SEED: &[u8] = b"casi-escrow";
 /// PDA seed prefix for per-streamer delegate accounts.
 pub const DELEGATE_SEED: &[u8] = b"casi-delegate";
 
+/// PDA seed for the single global config account (one per deployment).
+pub const CONFIG_SEED: &[u8] = b"casi-config";
+
 /// Current on-chain layout version for EscrowState. Every handler verifies
 /// this; legacy accounts (pre-versioning) fail to deserialize because the
 /// account size changed, and any future account that somehow has a lower
 /// version is rejected explicitly.
 pub const ESCROW_STATE_VERSION: u8 = 1;
 
-/// Current on-chain layout version for StreamerDelegate. Same rationale as
-/// ESCROW_STATE_VERSION — gives us a single-byte migration knob forever.
+/// Current on-chain layout version for StreamerDelegate.
 pub const STREAMER_DELEGATE_VERSION: u8 = 1;
+
+/// Current on-chain layout version for GlobalConfig.
+pub const GLOBAL_CONFIG_VERSION: u8 = 1;
 
 /// Maximum lifetime for a session-key delegate. Caps the damage if a session
 /// key is ever compromised — the streamer can always revoke manually, but an
@@ -62,12 +72,125 @@ pub const PENDING_TIMEOUT_SECS: i64 = 7 * 24 * 60 * 60;
 pub mod casi_escrow {
     use super::*;
 
-    /// Viewer locks USDC into a PDA-owned vault ATA.
+    // -----------------------------------------------------------------------
+    // Global config
+    // -----------------------------------------------------------------------
+
+    /// One-time deployment initializer. Sets the accepted token mint, the
+    /// per-escrow cap, and the admin key. Uses `init` (not `init_if_needed`)
+    /// so it can only succeed once — calling it a second time always fails
+    /// with AccountAlreadyInitialized, preventing re-initialization attacks.
+    ///
+    /// `accepted_mint` is stored but not updatable after init. If a different
+    /// mint is ever required, deploy a new program. Immutability here prevents
+    /// an admin key compromise from switching the mint out from under live
+    /// escrows.
+    ///
+    /// `max_escrow_amount` — 0 means no cap (unlimited). Updatable by admin
+    /// via `update_config` so it can be tightened or loosened for a capped
+    /// launch without redeploying.
+    pub fn initialize_config(
+        ctx: Context<InitializeConfig>,
+        accepted_mint: Pubkey,
+        max_escrow_amount: u64,
+    ) -> Result<()> {
+        require!(
+            accepted_mint != Pubkey::default(),
+            CasiError::InvalidMint
+        );
+
+        ctx.accounts.config.set_inner(GlobalConfig {
+            version:            GLOBAL_CONFIG_VERSION,
+            admin:              ctx.accounts.initializer.key(),
+            accepted_mint,
+            paused:             false,
+            max_escrow_amount,
+            bump:               ctx.bumps.config,
+        });
+
+        emit!(ConfigInitialized {
+            admin:              ctx.accounts.initializer.key(),
+            accepted_mint,
+            max_escrow_amount,
+        });
+
+        Ok(())
+    }
+
+    /// Admin-only: flip the pause flag and/or adjust the per-escrow cap.
+    ///
+    /// Pause only gates `initialize_escrow` — new escrows cannot be created
+    /// while paused. Existing escrows are NOT affected: viewers and streamers
+    /// can always settle, cancel, or approve regardless of the pause state.
+    /// This prevents a pause from trapping funds.
+    ///
+    /// `accepted_mint` is intentionally NOT updatable here. Changing the
+    /// accepted mint after escrows are live could create an inconsistency
+    /// between what was locked (old mint) and what downstream code expects
+    /// (new mint). Deploy a new program instead.
+    pub fn update_config(
+        ctx: Context<UpdateConfig>,
+        paused: bool,
+        max_escrow_amount: u64,
+    ) -> Result<()> {
+        require!(
+            ctx.accounts.config.version == GLOBAL_CONFIG_VERSION,
+            CasiError::UnsupportedVersion
+        );
+
+        ctx.accounts.config.paused             = paused;
+        ctx.accounts.config.max_escrow_amount  = max_escrow_amount;
+
+        emit!(ConfigUpdated {
+            paused,
+            max_escrow_amount,
+        });
+
+        Ok(())
+    }
+
+    /// Admin-only: transfer admin rights to a new key.
+    ///
+    /// Two-step is NOT enforced on-chain — the admin is responsible for
+    /// confirming the new address is correct before calling this. Setting
+    /// admin to `Pubkey::default()` (the zero address) is rejected because
+    /// it would permanently brick `update_config` and `transfer_admin`.
+    pub fn transfer_admin(
+        ctx: Context<TransferAdmin>,
+        new_admin: Pubkey,
+    ) -> Result<()> {
+        require!(
+            ctx.accounts.config.version == GLOBAL_CONFIG_VERSION,
+            CasiError::UnsupportedVersion
+        );
+        require!(
+            new_admin != Pubkey::default(),
+            CasiError::InvalidAdmin
+        );
+
+        ctx.accounts.config.admin = new_admin;
+
+        emit!(AdminTransferred {
+            old_admin: ctx.accounts.admin.key(),
+            new_admin,
+        });
+
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Escrow lifecycle
+    // -----------------------------------------------------------------------
+
+    /// Viewer locks tokens into a PDA-owned vault ATA.
     ///
     /// * `escrow_id`       — 32-byte UUID; used as PDA seed and stored for signing.
-    /// * `amount`          — USDC micro-units (6 decimals; 1 USDC = 1_000_000).
+    /// * `amount`          — token micro-units (e.g. 6 decimals for USDC; 1 USDC = 1_000_000).
     /// * `duration_secs`   — 0 for Flash, > 0 for Beam.
     /// * `escrow_type_val` — 0 = Flash, 1 = Beam.
+    ///
+    /// Gated by GlobalConfig: fails if paused, if the mint doesn't match the
+    /// configured accepted mint, or if the amount exceeds the per-escrow cap.
     pub fn initialize_escrow(
         ctx: Context<InitializeEscrow>,
         escrow_id: [u8; 32],
@@ -75,29 +198,41 @@ pub mod casi_escrow {
         duration_secs: u64,
         escrow_type_val: u8,
     ) -> Result<()> {
+        require!(
+            ctx.accounts.config.version == GLOBAL_CONFIG_VERSION,
+            CasiError::UnsupportedVersion
+        );
+        require!(!ctx.accounts.config.paused, CasiError::ProtocolPaused);
         require!(amount > 0, CasiError::InvalidAmount);
 
+        if ctx.accounts.config.max_escrow_amount > 0 {
+            require!(
+                amount <= ctx.accounts.config.max_escrow_amount,
+                CasiError::AmountExceedsCap
+            );
+        }
+
         let etype = EscrowType::from_u8(escrow_type_val)?;
-        if matches!(etype, EscrowType::Beam) {
-            require!(duration_secs > 0, CasiError::InvalidDuration);
+        match etype {
+            EscrowType::Beam  => require!(duration_secs > 0,  CasiError::InvalidDuration),
+            EscrowType::Flash => require!(duration_secs == 0, CasiError::FlashMustHaveZeroDuration),
         }
 
         ctx.accounts.escrow_state.set_inner(EscrowState {
             escrow_id,
-            viewer: ctx.accounts.viewer.key(),
-            streamer: ctx.accounts.streamer.key(),
-            usdc_mint: ctx.accounts.usdc_mint.key(),
-            total_amount: amount,
+            viewer:          ctx.accounts.viewer.key(),
+            streamer:        ctx.accounts.streamer.key(),
+            usdc_mint:       ctx.accounts.usdc_mint.key(),
+            total_amount:    amount,
             duration_secs,
-            escrow_type: etype,
-            status: EscrowStatus::Pending,
+            escrow_type:     etype,
+            status:          EscrowStatus::Pending,
             start_timestamp: 0,
-            bump: ctx.bumps.escrow_state,
-            version: ESCROW_STATE_VERSION,
-            created_at: Clock::get()?.unix_timestamp,
+            bump:            ctx.bumps.escrow_state,
+            version:         ESCROW_STATE_VERSION,
+            created_at:      Clock::get()?.unix_timestamp,
         });
 
-        // Transfer USDC viewer → vault (transfer_checked requires mint + decimals)
         transfer_tokens(
             &ctx.accounts.viewer_ata,
             &ctx.accounts.vault,
@@ -109,8 +244,8 @@ pub mod casi_escrow {
 
         emit!(EscrowInitialized {
             escrow_id,
-            viewer: ctx.accounts.viewer.key(),
-            streamer: ctx.accounts.streamer.key(),
+            viewer:          ctx.accounts.viewer.key(),
+            streamer:        ctx.accounts.streamer.key(),
             amount,
             escrow_type_val,
         });
@@ -120,9 +255,7 @@ pub mod casi_escrow {
 
     /// Streamer approves a Flash: full amount → streamer ATA.
     /// Vault + EscrowState are closed; rent returned to viewer (the original
-    /// rent payer at `initialize_escrow`). This keeps the SOL cost of using
-    /// the protocol denominated in lamports rather than SOL price, so a
-    /// SOL appreciation doesn't make small-payment escrows unaffordable.
+    /// rent payer at `initialize_escrow`).
     pub fn approve_flash(
         ctx: Context<ApproveFlash>,
         escrow_id: [u8; 32],
@@ -158,7 +291,6 @@ pub mod casi_escrow {
             signer,
         )?;
 
-        // Close vault ATA → SOL rent back to viewer (rent payer at init)
         pda_close_account(
             &ctx.accounts.vault,
             ctx.accounts.viewer.to_account_info(),
@@ -190,6 +322,10 @@ pub mod casi_escrow {
             ctx.accounts.escrow_state.status == EscrowStatus::Pending,
             CasiError::AlreadySettled
         );
+        require!(
+            ctx.accounts.escrow_state.escrow_type == EscrowType::Flash,
+            CasiError::WrongEscrowType
+        );
 
         ctx.accounts.escrow_state.status = EscrowStatus::Cancelled;
 
@@ -199,7 +335,6 @@ pub mod casi_escrow {
         let signer_seeds: &[&[u8]] = &[ESCROW_SEED, escrow_id.as_ref(), &[bump]];
         let signer = &[signer_seeds];
 
-        // Full refund → viewer
         pda_transfer_checked(
             &ctx.accounts.vault,
             &ctx.accounts.viewer_ata,
@@ -210,7 +345,6 @@ pub mod casi_escrow {
             signer,
         )?;
 
-        // Close vault ATA → SOL rent to viewer
         pda_close_account(
             &ctx.accounts.vault,
             ctx.accounts.viewer.to_account_info(),
@@ -305,11 +439,7 @@ pub mod casi_escrow {
 
     /// Session-key path for starting a Beam. Identical effect to `start_beam`
     /// except the signer is a pre-authorized delegate instead of the streamer
-    /// themselves. See the `StreamerDelegate` docs for the trust model. The
-    /// delegate is constrained to call on escrows where the delegate's own
-    /// `streamer` field matches the escrow's `streamer` — so a compromised
-    /// delegate key can only start beams for the streamer who installed it,
-    /// and only until `expires_at` passes.
+    /// themselves.
     pub fn start_beam_delegated(
         ctx: Context<StartBeamDelegated>,
         _escrow_id: [u8; 32],
@@ -350,16 +480,12 @@ pub mod casi_escrow {
         Ok(())
     }
 
-    /// Beam settlement.
+    /// Beam settlement with pro-rata vesting.
     ///
-    /// * Before `duration` elapses: only `streamer` or `viewer` may call — either
-    ///   party can end the stream early and accept the pro-rata split.
-    /// * After `duration` elapses: permissionless (anyone may crank), so funds
-    ///   can always be released even if both parties go offline.
+    /// * Before `duration` elapses: only `streamer` or `viewer` may call.
+    /// * After `duration` elapses: permissionless (anyone may crank).
     ///
     /// Integer proration: vested = total × min(elapsed, duration) / duration.
-    /// Streamer receives the full vested portion; remainder refunded to viewer.
-    /// Vault + EscrowState closed; rent returned to viewer (rent payer at init).
     pub fn settle_beam(
         ctx: Context<SettleBeam>,
         escrow_id: [u8; 32],
@@ -379,8 +505,6 @@ pub mod casi_escrow {
 
         let now      = Clock::get()?.unix_timestamp;
         let start_ts = ctx.accounts.escrow_state.start_timestamp;
-        // Sanity: `now` should never precede `start_ts` on a well-formed chain,
-        // but we clamp to 0 defensively (vesting clock can't run backwards).
         let elapsed  = now.saturating_sub(start_ts).max(0) as u64;
         let duration = ctx.accounts.escrow_state.duration_secs;
         let total    = ctx.accounts.escrow_state.total_amount;
@@ -388,15 +512,12 @@ pub mod casi_escrow {
 
         require!(duration > 0, CasiError::InvalidDuration);
 
-        // Anti-grief: before duration elapses, only the two parties that
-        // consented to this escrow may settle. After duration, permissionless.
+        // Before duration elapses, only the two consenting parties may settle.
         let caller_key = ctx.accounts.caller.key();
         let is_party   = caller_key == ctx.accounts.escrow_state.streamer
                       || caller_key == ctx.accounts.escrow_state.viewer;
         require!(is_party || elapsed >= duration, CasiError::Unauthorized);
 
-        // Integer proration with u128 intermediate to eliminate overflow risk.
-        // worst case: u64::MAX * u64::MAX = u128::MAX / 4, well within u128 range.
         let vested_ticks = elapsed.min(duration);
         let streamer_amt = ((total as u128) * (vested_ticks as u128) / (duration as u128)) as u64;
         let refund       = total.checked_sub(streamer_amt).ok_or(CasiError::MathOverflow)?;
@@ -430,7 +551,6 @@ pub mod casi_escrow {
             )?;
         }
 
-        // Close vault ATA → SOL rent back to viewer (rent payer at init)
         pda_close_account(
             &ctx.accounts.vault,
             ctx.accounts.viewer.to_account_info(),
@@ -449,23 +569,8 @@ pub mod casi_escrow {
     }
 
     /// Session-key path for early-ending a Beam. Identical effect to
-    /// `settle_beam` (pro-rata vest, vault closes, rent to viewer) except
-    /// the authorization comes from a pre-registered session key instead of
-    /// the streamer's own wallet. Extends the scoped-delegation trust model
-    /// to the high-frequency "end early / play next" action.
-    ///
-    /// Authorization is the delegate PDA's constraints:
-    ///   * `delegate.session_key == session.key()` — ephemeral server key.
-    ///   * `delegate.streamer    == escrow.streamer` — per-streamer scope.
-    ///   * `now < delegate.expires_at` — time-bound.
-    ///
-    /// No caller-is-party check: the delegate binding IS the streamer's
-    /// authorization (equivalent to the streamer personally signing).
-    ///
-    /// Fee + ATA-init payer is a separate `cranker` signer: the session key
-    /// has no SOL (Solana rejects "debit before credit" on zero-balance
-    /// accounts), and init_if_needed for `streamer_ata`/`viewer_ata` needs a
-    /// funded payer. Cranker does not appear in the state machine otherwise.
+    /// `settle_beam` but authorized via a delegate PDA instead of the
+    /// streamer's wallet.
     pub fn settle_beam_delegated(
         ctx: Context<SettleBeamDelegated>,
         escrow_id: [u8; 32],
@@ -534,7 +639,6 @@ pub mod casi_escrow {
             )?;
         }
 
-        // Close vault ATA → SOL rent back to viewer (rent payer at init)
         pda_close_account(
             &ctx.accounts.vault,
             ctx.accounts.viewer.to_account_info(),
@@ -552,14 +656,8 @@ pub mod casi_escrow {
         Ok(())
     }
 
-    /// Delegated Flash approval. Same effect as `approve_flash` (full amount →
-    /// streamer ATA, vault + EscrowState closed, rent to viewer), but signed
-    /// by the session key instead of the streamer wallet. Cranker pays fees
-    /// and any ATA-init rent. Vesting math isn't involved — approval moves
-    /// the full balance, so the only attack surface on a compromised session
-    /// key is forcing a capture that would have happened anyway (or forcing
-    /// one for a flash the streamer hadn't reviewed). Bounded, recoverable
-    /// by `revoke_delegate`.
+    /// Delegated Flash approval. Same effect as `approve_flash`, signed by
+    /// the session key.
     pub fn approve_flash_delegated(
         ctx: Context<ApproveFlashDelegated>,
         escrow_id: [u8; 32],
@@ -605,7 +703,6 @@ pub mod casi_escrow {
             signer,
         )?;
 
-        // Close vault ATA → SOL rent back to viewer (rent payer at init)
         pda_close_account(
             &ctx.accounts.vault,
             ctx.accounts.viewer.to_account_info(),
@@ -623,10 +720,8 @@ pub mod casi_escrow {
         Ok(())
     }
 
-    /// Delegated Flash denial. Same effect as `deny_flash` (full refund → viewer
-    /// ATA, vault + EscrowState closed, rent to viewer), signed by the session
-    /// key. Cranker pays fees and any viewer ATA-init rent (almost always the
-    /// viewer already has a USDC ATA since they funded from it).
+    /// Delegated Flash denial. Same effect as `deny_flash`, signed by the
+    /// session key.
     pub fn deny_flash_delegated(
         ctx: Context<DenyFlashDelegated>,
         escrow_id: [u8; 32],
@@ -642,6 +737,10 @@ pub mod casi_escrow {
         require!(
             ctx.accounts.escrow_state.status == EscrowStatus::Pending,
             CasiError::AlreadySettled
+        );
+        require!(
+            ctx.accounts.escrow_state.escrow_type == EscrowType::Flash,
+            CasiError::WrongEscrowType
         );
 
         let now = Clock::get()?.unix_timestamp;
@@ -691,27 +790,7 @@ pub mod casi_escrow {
 
     /// Install or rotate a session-key delegate for a streamer.
     ///
-    /// Trust model:
-    ///   * The delegate PDA is seeded by the streamer's pubkey, so only the
-    ///     streamer can install one for themselves.
-    ///   * `session_key` is an ephemeral pubkey (the server generates a fresh
-    ///     keypair on each install; the secret stays server-side, encrypted).
-    ///   * The delegate can call `start_beam_delegated` (Pending → Active),
-    ///     `settle_beam_delegated` (end an Active beam, pro-rata vest),
-    ///     `approve_flash_delegated` (Pending → Settled, full to streamer),
-    ///     and `deny_flash_delegated` (Pending → Cancelled, full refund to
-    ///     viewer). It CANNOT cancel Pending escrows on the viewer's behalf,
-    ///     move its own rent, or change delegation. Worst-case server
-    ///     compromise is an attacker forcing a flash capture/refund (either
-    ///     way the funds follow the escrow's declared destinations — streamer
-    ///     or viewer) or ending a live beam early. Bounded, recoverable by
-    ///     `revoke_delegate`, never leaks funds to the attacker.
-    ///   * Self-expires after `expires_at`; program caps expiry to
-    ///     `now + MAX_DELEGATE_LIFETIME_SECS`.
-    ///   * Streamer can revoke any time via `revoke_delegate`.
-    ///
-    /// Re-calling overwrites the session_key / expires_at in-place, which is
-    /// how rotation works — no need to revoke-then-install.
+    /// Re-calling overwrites the session_key / expires_at in-place (rotation).
     pub fn set_delegate(
         ctx: Context<SetDelegate>,
         session_key: Pubkey,
@@ -742,8 +821,7 @@ pub mod casi_escrow {
     }
 
     /// Streamer revokes their session-key delegate. The PDA closes and rent
-    /// refunds to the streamer. After this, any in-flight `start_beam_delegated`
-    /// calls from the revoked session key fail (delegate account missing).
+    /// refunds to the streamer.
     pub fn revoke_delegate(ctx: Context<RevokeDelegate>) -> Result<()> {
         require!(
             ctx.accounts.delegate.version == STREAMER_DELEGATE_VERSION,
@@ -756,22 +834,13 @@ pub mod casi_escrow {
     }
 
     // -----------------------------------------------------------------------
-    // Stale-pending permissionless cancel
+    // Permissionless stale-pending cancel
     // -----------------------------------------------------------------------
 
     /// Permissionless refund for a Pending escrow that has sat untouched past
-    /// `PENDING_TIMEOUT_SECS` since creation.
-    ///
-    /// Anyone can crank this. The only effect is a 100% refund to the viewer
-    /// — the same outcome as `cancel_escrow` (viewer-signed), just unlocked
-    /// by the wall clock instead of the viewer's wallet. This protects users
-    /// from USDC being held hostage if the streamer goes offline without
-    /// approving / denying, or if the viewer themselves loses access to their
-    /// wallet.
-    ///
-    /// Safety: the refund destination is forced to `viewer_ata`, and the PDA
-    /// closes to the viewer as `cancel_escrow` does, so a third-party cranker
-    /// cannot redirect funds.
+    /// `PENDING_TIMEOUT_SECS` since creation. Anyone can crank this.
+    /// The refund destination is forced to `viewer_ata` so a cranker cannot
+    /// redirect funds.
     pub fn cancel_stale_pending(
         ctx: Context<CancelStalePending>,
         escrow_id: [u8; 32],
@@ -825,10 +894,9 @@ pub mod casi_escrow {
 }
 
 // ---------------------------------------------------------------------------
-// Shared helpers (mirrors program-examples shared.rs pattern)
+// Shared helpers
 // ---------------------------------------------------------------------------
 
-/// `transfer_checked` from a user-signed ATA (non-PDA).
 fn transfer_tokens<'info>(
     from: &InterfaceAccount<'info, TokenAccount>,
     to: &InterfaceAccount<'info, TokenAccount>,
@@ -850,7 +918,6 @@ fn transfer_tokens<'info>(
     )
 }
 
-/// `transfer_checked` signed by a PDA.
 fn pda_transfer_checked<'info>(
     from: &InterfaceAccount<'info, TokenAccount>,
     to: &InterfaceAccount<'info, TokenAccount>,
@@ -873,7 +940,6 @@ fn pda_transfer_checked<'info>(
     )
 }
 
-/// Close a token account signed by a PDA.
 fn pda_close_account<'info>(
     account: &InterfaceAccount<'info, TokenAccount>,
     destination: AccountInfo<'info>,
@@ -887,13 +953,58 @@ fn pda_close_account<'info>(
         authority:   authority.clone(),
     };
     close_account(
-        CpiContext::new_with_signer(token_program.to_account_info(), accounts, signer_seeds),
+        CpiContext::new_with_signer(token_program.to_account_info(), accounts),
     )
 }
 
 // ---------------------------------------------------------------------------
 // Account Contexts
 // ---------------------------------------------------------------------------
+
+#[derive(Accounts)]
+pub struct InitializeConfig<'info> {
+    #[account(mut)]
+    pub initializer: Signer<'info>,
+
+    /// `init` (not `init_if_needed`) makes this instruction callable exactly
+    /// once. A second call always fails with AccountAlreadyInitialized.
+    #[account(
+        init,
+        payer  = initializer,
+        space  = 8 + GlobalConfig::INIT_SPACE,
+        seeds  = [CONFIG_SEED],
+        bump,
+    )]
+    pub config: Account<'info, GlobalConfig>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateConfig<'info> {
+    pub admin: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds   = [CONFIG_SEED],
+        bump    = config.bump,
+        has_one = admin @ CasiError::Unauthorized,
+    )]
+    pub config: Account<'info, GlobalConfig>,
+}
+
+#[derive(Accounts)]
+pub struct TransferAdmin<'info> {
+    pub admin: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds   = [CONFIG_SEED],
+        bump    = config.bump,
+        has_one = admin @ CasiError::Unauthorized,
+    )]
+    pub config: Account<'info, GlobalConfig>,
+}
 
 #[derive(Accounts)]
 #[instruction(escrow_id: [u8; 32])]
@@ -904,6 +1015,13 @@ pub struct InitializeEscrow<'info> {
     /// CHECK: Streamer wallet — stored in EscrowState, verified on settle/deny.
     pub streamer: UncheckedAccount<'info>,
 
+    /// Global config is read to enforce: not paused, correct mint, amount cap.
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump  = config.bump,
+    )]
+    pub config: Account<'info, GlobalConfig>,
+
     #[account(
         init,
         payer  = viewer,
@@ -913,7 +1031,6 @@ pub struct InitializeEscrow<'info> {
     )]
     pub escrow_state: Account<'info, EscrowState>,
 
-    /// PDA-owned vault ATA — holds viewer's USDC during escrow.
     #[account(
         init,
         payer  = viewer,
@@ -931,7 +1048,13 @@ pub struct InitializeEscrow<'info> {
     )]
     pub viewer_ata: InterfaceAccount<'info, TokenAccount>,
 
-    #[account(mint::token_program = token_program)]
+    /// Must equal `config.accepted_mint`. Enforced in the instruction body
+    /// rather than as an inline constraint so the error is `InvalidMint`
+    /// rather than a generic account mismatch.
+    #[account(
+        mint::token_program = token_program,
+        constraint = usdc_mint.key() == config.accepted_mint @ CasiError::InvalidMint,
+    )]
     pub usdc_mint: InterfaceAccount<'info, Mint>,
 
     pub token_program:            Interface<'info, TokenInterface>,
@@ -946,8 +1069,7 @@ pub struct ApproveFlash<'info> {
     pub streamer: Signer<'info>,
 
     /// CHECK: Receives the vault ATA + EscrowState rent on close. Bound to
-    /// the escrow's `viewer` field via `has_one` below so a malicious
-    /// streamer can't redirect rent to an attacker pubkey.
+    /// the escrow's `viewer` field via `has_one`.
     #[account(mut)]
     pub viewer: UncheckedAccount<'info>,
 
@@ -955,8 +1077,9 @@ pub struct ApproveFlash<'info> {
         mut,
         seeds    = [ESCROW_SEED, escrow_id.as_ref()],
         bump     = escrow_state.bump,
-        has_one  = streamer @ CasiError::Unauthorized,
-        has_one  = viewer   @ CasiError::Unauthorized,
+        has_one  = streamer  @ CasiError::Unauthorized,
+        has_one  = viewer    @ CasiError::Unauthorized,
+        has_one  = usdc_mint @ CasiError::InvalidMint,
         close    = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
@@ -999,8 +1122,9 @@ pub struct DenyFlash<'info> {
         mut,
         seeds   = [ESCROW_SEED, escrow_id.as_ref()],
         bump    = escrow_state.bump,
-        has_one = streamer @ CasiError::Unauthorized,
-        has_one = viewer   @ CasiError::Unauthorized,
+        has_one = streamer  @ CasiError::Unauthorized,
+        has_one = viewer    @ CasiError::Unauthorized,
+        has_one = usdc_mint @ CasiError::InvalidMint,
         close   = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
@@ -1040,7 +1164,8 @@ pub struct CancelEscrow<'info> {
         mut,
         seeds   = [ESCROW_SEED, escrow_id.as_ref()],
         bump    = escrow_state.bump,
-        has_one = viewer @ CasiError::Unauthorized,
+        has_one = viewer    @ CasiError::Unauthorized,
+        has_one = usdc_mint @ CasiError::InvalidMint,
         close   = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
@@ -1100,8 +1225,9 @@ pub struct SettleBeam<'info> {
         mut,
         seeds   = [ESCROW_SEED, escrow_id.as_ref()],
         bump    = escrow_state.bump,
-        has_one = streamer @ CasiError::Unauthorized,
-        has_one = viewer   @ CasiError::Unauthorized,
+        has_one = streamer  @ CasiError::Unauthorized,
+        has_one = viewer    @ CasiError::Unauthorized,
+        has_one = usdc_mint @ CasiError::InvalidMint,
         close   = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
@@ -1175,12 +1301,11 @@ pub struct RevokeDelegate<'info> {
 #[derive(Accounts)]
 #[instruction(_escrow_id: [u8; 32])]
 pub struct StartBeamDelegated<'info> {
-    /// The ephemeral session key (server-held). Must match `delegate.session_key`.
     pub session: Signer<'info>,
 
-    /// CHECK: Identifies the streamer whose delegate this is. Not a signer here;
-    /// constraints below bind this key to both the delegate PDA seed and the
-    /// escrow's own `streamer` field, preventing cross-streamer abuse.
+    /// CHECK: Identifies the streamer whose delegate this is. Constraints
+    /// below bind this key to both the delegate PDA seed and the escrow's
+    /// own `streamer` field, preventing cross-streamer abuse.
     pub streamer: UncheckedAccount<'info>,
 
     #[account(
@@ -1203,23 +1328,16 @@ pub struct StartBeamDelegated<'info> {
 #[derive(Accounts)]
 #[instruction(escrow_id: [u8; 32])]
 pub struct SettleBeamDelegated<'info> {
-    /// The ephemeral session key. Must match `delegate.session_key`.
     pub session: Signer<'info>,
 
-    /// Fee + ATA-init payer. The session key has no SOL; a funded co-signer
-    /// (the server-side "cranker") pays every delegated instruction's rent.
     #[account(mut)]
     pub cranker: Signer<'info>,
 
-    /// CHECK: Receives streamer_amt only. Bound to the escrow's `streamer`
-    /// field via `has_one` below so the delegate cannot redirect funds.
-    /// Must match the streamer stored on the delegate PDA.
+    /// CHECK: Receives streamer_amt. Bound to escrow's `streamer` via `has_one`.
     #[account(mut)]
     pub streamer: SystemAccount<'info>,
 
-    /// CHECK: Receives the vault ATA + EscrowState rent (close = viewer)
-    /// alongside any unvested USDC refund. Bound to the escrow's `viewer`
-    /// field via `has_one` below; cannot be redirected.
+    /// CHECK: Receives refund + rent. Bound to escrow's `viewer` via `has_one`.
     #[account(mut)]
     pub viewer: SystemAccount<'info>,
 
@@ -1235,8 +1353,9 @@ pub struct SettleBeamDelegated<'info> {
         mut,
         seeds   = [ESCROW_SEED, escrow_id.as_ref()],
         bump    = escrow_state.bump,
-        has_one = streamer @ CasiError::Unauthorized,
-        has_one = viewer   @ CasiError::Unauthorized,
+        has_one = streamer  @ CasiError::Unauthorized,
+        has_one = viewer    @ CasiError::Unauthorized,
+        has_one = usdc_mint @ CasiError::InvalidMint,
         close   = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
@@ -1278,23 +1397,16 @@ pub struct SettleBeamDelegated<'info> {
 #[derive(Accounts)]
 #[instruction(escrow_id: [u8; 32])]
 pub struct ApproveFlashDelegated<'info> {
-    /// The ephemeral session key. Must match `delegate.session_key`.
     pub session: Signer<'info>,
 
-    /// Fee + ATA-init payer. The session key has no SOL; cranker co-signs.
     #[account(mut)]
     pub cranker: Signer<'info>,
 
-    /// CHECK: Receives the full escrowed USDC into `streamer_ata`. Bound to
-    /// the escrow's `streamer` field via `has_one` and to the delegate PDA's
-    /// seed via the `delegate` constraint, so a compromised session key
-    /// cannot redirect funds to an attacker-controlled address.
+    /// CHECK: Receives the full escrowed tokens. Bound via `has_one`.
     #[account(mut)]
     pub streamer: SystemAccount<'info>,
 
-    /// CHECK: Receives the vault ATA + EscrowState rent (close = viewer).
-    /// Bound to the escrow's `viewer` field via `has_one` below so a
-    /// compromised session key can't redirect rent to an attacker pubkey.
+    /// CHECK: Receives vault ATA + EscrowState rent. Bound via `has_one`.
     #[account(mut)]
     pub viewer: UncheckedAccount<'info>,
 
@@ -1310,8 +1422,9 @@ pub struct ApproveFlashDelegated<'info> {
         mut,
         seeds    = [ESCROW_SEED, escrow_id.as_ref()],
         bump     = escrow_state.bump,
-        has_one  = streamer @ CasiError::Unauthorized,
-        has_one  = viewer   @ CasiError::Unauthorized,
+        has_one  = streamer  @ CasiError::Unauthorized,
+        has_one  = viewer    @ CasiError::Unauthorized,
+        has_one  = usdc_mint @ CasiError::InvalidMint,
         close    = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
@@ -1344,19 +1457,15 @@ pub struct ApproveFlashDelegated<'info> {
 #[derive(Accounts)]
 #[instruction(escrow_id: [u8; 32])]
 pub struct DenyFlashDelegated<'info> {
-    /// The ephemeral session key. Must match `delegate.session_key`.
     pub session: Signer<'info>,
 
-    /// Fee + ATA-init payer.
     #[account(mut)]
     pub cranker: Signer<'info>,
 
-    /// CHECK: Delegate-PDA seed; bound via the `delegate` constraint. Not a
-    /// funds destination here (deny sends everything back to `viewer`).
+    /// CHECK: Delegate-PDA seed anchor. Not a funds destination.
     pub streamer: SystemAccount<'info>,
 
-    /// CHECK: Refund destination + EscrowState close recipient + vault rent
-    /// recipient. Bound to the escrow's `viewer` field via `has_one`.
+    /// CHECK: Refund + rent destination. Bound via `has_one`.
     #[account(mut)]
     pub viewer: SystemAccount<'info>,
 
@@ -1372,8 +1481,9 @@ pub struct DenyFlashDelegated<'info> {
         mut,
         seeds   = [ESCROW_SEED, escrow_id.as_ref()],
         bump    = escrow_state.bump,
-        has_one = streamer @ CasiError::Unauthorized,
-        has_one = viewer   @ CasiError::Unauthorized,
+        has_one = streamer  @ CasiError::Unauthorized,
+        has_one = viewer    @ CasiError::Unauthorized,
+        has_one = usdc_mint @ CasiError::InvalidMint,
         close   = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
@@ -1406,12 +1516,10 @@ pub struct DenyFlashDelegated<'info> {
 #[derive(Accounts)]
 #[instruction(escrow_id: [u8; 32])]
 pub struct CancelStalePending<'info> {
-    /// Anyone may crank; they pay the tx fee but receive nothing.
     #[account(mut)]
     pub cranker: Signer<'info>,
 
-    /// CHECK: Target of the refund + rent. Bound to the escrow's `viewer`
-    /// field below so a cranker can't redirect funds. Not a signer.
+    /// CHECK: Refund + rent destination. Bound to escrow's `viewer` via `has_one`.
     #[account(mut)]
     pub viewer: UncheckedAccount<'info>,
 
@@ -1419,7 +1527,8 @@ pub struct CancelStalePending<'info> {
         mut,
         seeds   = [ESCROW_SEED, escrow_id.as_ref()],
         bump    = escrow_state.bump,
-        has_one = viewer @ CasiError::Unauthorized,
+        has_one = viewer    @ CasiError::Unauthorized,
+        has_one = usdc_mint @ CasiError::InvalidMint,
         close   = viewer,
     )]
     pub escrow_state: Account<'info, EscrowState>,
@@ -1432,9 +1541,6 @@ pub struct CancelStalePending<'info> {
     )]
     pub vault: InterfaceAccount<'info, TokenAccount>,
 
-    /// Forced to the viewer's ATA for `usdc_mint` — a cranker cannot point
-    /// this anywhere else. `init_if_needed` so a viewer with a closed ATA
-    /// still gets refunded.
     #[account(
         init_if_needed,
         payer  = cranker,
@@ -1456,6 +1562,22 @@ pub struct CancelStalePending<'info> {
 // State
 // ---------------------------------------------------------------------------
 
+/// One global config account per deployment, seeded by CONFIG_SEED.
+/// Initialized once by the deployer; `accepted_mint` is immutable after that.
+#[account]
+#[derive(InitSpace)]
+pub struct GlobalConfig {
+    pub version:            u8,
+    pub admin:              Pubkey,
+    /// The only token mint accepted by `initialize_escrow`. Immutable.
+    pub accepted_mint:      Pubkey,
+    /// When true, `initialize_escrow` is blocked. Existing escrows are unaffected.
+    pub paused:             bool,
+    /// Per-escrow maximum in token micro-units. 0 = no cap.
+    pub max_escrow_amount:  u64,
+    pub bump:               u8,
+}
+
 #[account]
 #[derive(InitSpace)]
 pub struct EscrowState {
@@ -1475,18 +1597,10 @@ pub struct EscrowState {
     pub bump:            u8,             // ← byte offset 162
 
     // ─── v1 additions (appended so the above offsets are preserved).
-    /// Layout version. Must equal ESCROW_STATE_VERSION; handlers reject any
-    /// other value. Gives us a one-byte migration knob for future upgrades.
     pub version:         u8,
-    /// Unix seconds. Stamped by `initialize_escrow` from the slot clock.
-    /// Used by `cancel_stale_pending` to decide when an unacted-on Pending
-    /// escrow is fair game for a permissionless refund.
     pub created_at:      i64,
 }
 
-/// Per-streamer session-key delegate. Seeded by `[DELEGATE_SEED, streamer]`
-/// so there is at most one active delegate per streamer — re-installing
-/// overwrites in place (key rotation).
 #[account]
 #[derive(InitSpace)]
 pub struct StreamerDelegate {
@@ -1530,19 +1644,38 @@ pub enum EscrowStatus {
 // ---------------------------------------------------------------------------
 
 #[event]
+pub struct ConfigInitialized {
+    pub admin:             Pubkey,
+    pub accepted_mint:     Pubkey,
+    pub max_escrow_amount: u64,
+}
+
+#[event]
+pub struct ConfigUpdated {
+    pub paused:            bool,
+    pub max_escrow_amount: u64,
+}
+
+#[event]
+pub struct AdminTransferred {
+    pub old_admin: Pubkey,
+    pub new_admin: Pubkey,
+}
+
+#[event]
 pub struct EscrowInitialized {
-    pub escrow_id:      [u8; 32],
-    pub viewer:         Pubkey,
-    pub streamer:       Pubkey,
-    pub amount:         u64,
+    pub escrow_id:       [u8; 32],
+    pub viewer:          Pubkey,
+    pub streamer:        Pubkey,
+    pub amount:          u64,
     pub escrow_type_val: u8,
 }
 
 #[event]
 pub struct FlashSettled {
-    pub escrow_id:      [u8; 32],
+    pub escrow_id:       [u8; 32],
     pub streamer_amount: u64,
-    pub approved:       bool,
+    pub approved:        bool,
 }
 
 #[event]
@@ -1557,9 +1690,6 @@ pub struct BeamStarted {
     pub escrow_id:       [u8; 32],
     pub streamer:        Pubkey,
     pub start_timestamp: i64,
-    /// True when the caller was a session-key delegate, false when the
-    /// streamer signed directly. Useful for off-chain analytics tracking
-    /// adoption of the delegation flow.
     pub delegated:       bool,
 }
 
@@ -1591,6 +1721,8 @@ pub enum CasiError {
     InvalidAmount,
     #[msg("Duration must be > 0 for Beam escrows")]
     InvalidDuration,
+    #[msg("Flash escrows must have duration_secs == 0")]
+    FlashMustHaveZeroDuration,
     #[msg("Invalid escrow type — expected 0 (Flash) or 1 (Beam)")]
     InvalidEscrowType,
     #[msg("Caller is not the authorized party for this escrow")]
@@ -1613,4 +1745,12 @@ pub enum CasiError {
     DelegateExpired,
     #[msg("Pending escrow has not yet passed the stale timeout")]
     PendingNotStale,
+    #[msg("Protocol is paused — new escrows cannot be created")]
+    ProtocolPaused,
+    #[msg("Token mint does not match the configured accepted mint")]
+    InvalidMint,
+    #[msg("Amount exceeds the per-escrow cap set in GlobalConfig")]
+    AmountExceedsCap,
+    #[msg("Admin address cannot be the zero address")]
+    InvalidAdmin,
 }
