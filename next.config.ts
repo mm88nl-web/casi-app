@@ -8,6 +8,23 @@ const nextConfig: NextConfig = {
       {
         source: '/(.*)',
         headers: [
+          // Browsers must not render this page inside a frame from a different
+          // origin — prevents clickjacking. Redundant with CSP frame-ancestors
+          // but retained for older browsers that don't parse CSP.
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+
+          // Prevents browsers from MIME-sniffing a response away from the
+          // declared Content-Type, blocking drive-by content-type confusion
+          // attacks on uploads served from Supabase Storage.
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+
+          // Send full URL as Referer only to same origin; send only the
+          // origin when crossing origins; send nothing on downgrade to HTTP.
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+
+          // Disable browser features that CASI never uses.
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
+
           {
             key: 'Content-Security-Policy',
             value: [

@@ -38,12 +38,18 @@ const supabase = createClient(
 const SOLANA_BOOKING_COOLDOWN_MS = 5_000;
 
 function getClientIp(req: Request): string {
+  // x-real-ip is set by Vercel to the actual client IP and is most reliable.
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
+  // x-forwarded-for is a comma-separated list; the FIRST entry is the original
+  // client. Taking the last entry risks using a proxy/CDN address which would
+  // bucket all users into the same rate-limit slot.
   const fwd = req.headers.get('x-forwarded-for');
   if (fwd) {
-    const last = fwd.split(',').pop()?.trim();
-    if (last) return last;
+    const first = fwd.split(',')[0]?.trim();
+    if (first) return first;
   }
-  return req.headers.get('x-real-ip') || 'unknown';
+  return 'unknown';
 }
 
 function hashIp(ip: string): string {
@@ -162,8 +168,8 @@ export async function POST(req: Request) {
       file_type: file_type || null,
       message: message || null,
       duration_minutes: dur,
-      price_value: Number(price_value) || Number(element.price_value) || 0,
-      price_unit: price_unit || element.price_unit,
+      price_value: Number(element.price_value) || 0,
+      price_unit: element.price_unit,
       status: 'pending',
       payment_method: 'solana',
       is_queued: !!is_queued,
