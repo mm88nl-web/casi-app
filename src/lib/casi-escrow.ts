@@ -76,6 +76,7 @@ export { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID };
 
 const ESCROW_SEED   = Buffer.from('casi-escrow');
 const DELEGATE_SEED = Buffer.from('casi-delegate');
+const CONFIG_SEED   = Buffer.from('casi-config');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -120,6 +121,13 @@ export function deriveDelegatePda(
     [DELEGATE_SEED, streamer.toBuffer()],
     programId,
   );
+}
+
+/** Derive the single global config PDA for this deployment. */
+export function deriveConfigPda(
+  programId: PublicKey = PROGRAM_ID,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([CONFIG_SEED], programId);
 }
 
 /** Solscan transaction link. */
@@ -341,9 +349,10 @@ export class CasiEscrowClient {
     const usdcMint    = params.usdcMint    ?? this.defaultMint();
     const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
-    const escrowIdBytes = uuidToBytes(escrowId);
-    const [escrowPda]   = deriveEscrowPda(escrowId);
-    const viewer        = this.wallet.publicKey;
+    const escrowIdBytes  = uuidToBytes(escrowId);
+    const [escrowPda]    = deriveEscrowPda(escrowId);
+    const [configPda]    = deriveConfigPda();
+    const viewer         = this.wallet.publicKey;
 
     const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer, false, tokenProgram);
     const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true, tokenProgram);
@@ -363,6 +372,7 @@ export class CasiEscrowClient {
         .accounts({
           viewer,
           streamer,
+          config:               configPda,
           escrowState:          escrowPda,
           vault,
           viewerAta,
@@ -398,9 +408,10 @@ export class CasiEscrowClient {
     const { escrowId, streamer, amountUsdc } = params;
     const usdcMint     = params.usdcMint     ?? this.defaultMint();
     const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
-    const escrowIdBytes = uuidToBytes(escrowId);
-    const [escrowPda]   = deriveEscrowPda(escrowId);
-    const viewer        = this.wallet.publicKey;
+    const escrowIdBytes  = uuidToBytes(escrowId);
+    const [escrowPda]    = deriveEscrowPda(escrowId);
+    const [configPda]    = deriveConfigPda();
+    const viewer         = this.wallet.publicKey;
     const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer,    false, tokenProgram);
     const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
 
@@ -408,6 +419,7 @@ export class CasiEscrowClient {
       .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(0), 0)
       .accounts({
         viewer, streamer,
+        config:  configPda,
         escrowState: escrowPda,
         vault, viewerAta,
         usdcMint, tokenProgram,
@@ -441,9 +453,10 @@ export class CasiEscrowClient {
     }
     const usdcMint     = params.usdcMint     ?? this.defaultMint();
     const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
-    const escrowIdBytes = uuidToBytes(escrowId);
-    const [escrowPda]   = deriveEscrowPda(escrowId);
-    const viewer        = this.wallet.publicKey;
+    const escrowIdBytes  = uuidToBytes(escrowId);
+    const [escrowPda]    = deriveEscrowPda(escrowId);
+    const [configPda]    = deriveConfigPda();
+    const viewer         = this.wallet.publicKey;
     const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer,   false, tokenProgram);
     const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true, tokenProgram);
 
@@ -452,6 +465,7 @@ export class CasiEscrowClient {
       .accounts({
         viewer,
         streamer,
+        config:               configPda,
         escrowState:          escrowPda,
         vault,
         viewerAta,
@@ -567,9 +581,10 @@ export class CasiEscrowClient {
     const usdcMint     = params.usdcMint     ?? this.defaultMint();
     const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
 
-    const escrowIdBytes = uuidToBytes(escrowId);
-    const [escrowPda]   = deriveEscrowPda(escrowId);
-    const viewer        = this.wallet.publicKey;
+    const escrowIdBytes  = uuidToBytes(escrowId);
+    const [escrowPda]    = deriveEscrowPda(escrowId);
+    const [configPda]    = deriveConfigPda();
+    const viewer         = this.wallet.publicKey;
 
     const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer,   false, tokenProgram);
     const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true, tokenProgram);
@@ -579,6 +594,7 @@ export class CasiEscrowClient {
       .accounts({
         viewer,
         streamer,
+        config:               configPda,
         escrowState:          escrowPda,
         vault,
         viewerAta,
@@ -1065,5 +1081,73 @@ export class CasiEscrowClient {
     } catch {
       return null;
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // initialize_config  (deployer one-shot; not called from the browser)
+  // -------------------------------------------------------------------------
+
+  async initializeConfig(params: {
+    acceptedMint:     PublicKey;
+    programData:      PublicKey;
+    maxEscrowAmount:  bigint | number;
+    minEscrowAmount:  bigint | number;
+    tokenProgram?:    PublicKey;
+  }): Promise<{ sig: string; configPda: string; solscanUrl: string }> {
+    const { acceptedMint, programData, maxEscrowAmount, minEscrowAmount } = params;
+    const tokenProgram = params.tokenProgram ?? TOKEN_PROGRAM_ID;
+    const initializer  = this.wallet.publicKey;
+    const [configPda]  = deriveConfigPda();
+
+    const sig = await (this.program.methods as any)
+      .initializeConfig(new BN(maxEscrowAmount.toString()), new BN(minEscrowAmount.toString()))
+      .accounts({
+        initializer,
+        config:        configPda,
+        acceptedMint,
+        programData,
+        tokenProgram,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    return { sig, configPda: configPda.toBase58(), solscanUrl: solscanTxUrl(sig, this.cluster) };
+  }
+
+  // -------------------------------------------------------------------------
+  // update_config  (admin-only)
+  // -------------------------------------------------------------------------
+
+  async updateConfig(params: {
+    paused:          boolean;
+    maxEscrowAmount: bigint | number;
+    minEscrowAmount: bigint | number;
+  }): Promise<{ sig: string; solscanUrl: string }> {
+    const { paused, maxEscrowAmount, minEscrowAmount } = params;
+    const admin      = this.wallet.publicKey;
+    const [configPda] = deriveConfigPda();
+
+    const sig = await (this.program.methods as any)
+      .updateConfig(paused, new BN(maxEscrowAmount.toString()), new BN(minEscrowAmount.toString()))
+      .accounts({ admin, config: configPda })
+      .rpc();
+
+    return { sig, solscanUrl: solscanTxUrl(sig, this.cluster) };
+  }
+
+  // -------------------------------------------------------------------------
+  // transfer_admin  (admin-only)
+  // -------------------------------------------------------------------------
+
+  async transferAdmin(newAdmin: PublicKey): Promise<{ sig: string; solscanUrl: string }> {
+    const admin       = this.wallet.publicKey;
+    const [configPda] = deriveConfigPda();
+
+    const sig = await (this.program.methods as any)
+      .transferAdmin(newAdmin)
+      .accounts({ admin, config: configPda })
+      .rpc();
+
+    return { sig, solscanUrl: solscanTxUrl(sig, this.cluster) };
   }
 }

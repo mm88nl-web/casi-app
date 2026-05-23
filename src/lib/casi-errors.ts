@@ -13,19 +13,26 @@
 
 /** Ordered list — must match `CasiError` variants in lib.rs. */
 export const CASI_ERROR_NAMES = [
-  'InvalidAmount',
-  'InvalidDuration',
-  'InvalidEscrowType',
-  'Unauthorized',
-  'AlreadySettled',
-  'NotActive',
-  'WrongEscrowType',
-  'MathOverflow',
-  'UnsupportedVersion',
-  'InvalidExpiry',
-  'DelegateLifetimeExceedsMax',
-  'DelegateExpired',
-  'PendingNotStale',
+  'InvalidAmount',              // 6000
+  'InvalidDuration',            // 6001
+  'FlashMustHaveZeroDuration',  // 6002
+  'InvalidEscrowType',          // 6003
+  'Unauthorized',               // 6004
+  'AlreadySettled',             // 6005
+  'NotActive',                  // 6006
+  'WrongEscrowType',            // 6007
+  'MathOverflow',               // 6008
+  'UnsupportedVersion',         // 6009
+  'InvalidExpiry',              // 6010
+  'DelegateLifetimeExceedsMax', // 6011
+  'DelegateExpired',            // 6012
+  'PendingNotStale',            // 6013
+  'ProtocolPaused',             // 6014
+  'InvalidMint',                // 6015
+  'AmountExceedsCap',           // 6016
+  'InvalidAdmin',               // 6017
+  'TransferHookNotAllowed',     // 6018
+  'AmountBelowMin',             // 6019
 ] as const;
 
 export type CasiErrorName = (typeof CASI_ERROR_NAMES)[number];
@@ -35,19 +42,26 @@ export const CASI_ERROR_CODE_BASE = 6000;
 
 /** name → friendly copy shown in the spring-animated toast. */
 const FRIENDLY: Record<CasiErrorName, string> = {
-  InvalidAmount:     'Flash amount must be greater than zero.',
-  InvalidDuration:   'Beam duration must be greater than zero.',
-  InvalidEscrowType: 'Unknown escrow type — please refresh and try again.',
-  Unauthorized:      'Only the streamer can approve or deny this flash.',
-  AlreadySettled:    'This flash has already been approved or denied.',
-  NotActive:         'This beam has not started yet.',
-  WrongEscrowType:   'Wrong escrow type for this action.',
-  MathOverflow:      'Transaction amount is out of range — please try a smaller value.',
+  InvalidAmount:             'Flash amount must be greater than zero.',
+  InvalidDuration:           'Beam duration must be greater than zero.',
+  FlashMustHaveZeroDuration: 'Flash escrows must have zero duration.',
+  InvalidEscrowType:         'Unknown escrow type — please refresh and try again.',
+  Unauthorized:              'Only the streamer can approve or deny this flash.',
+  AlreadySettled:            'This flash has already been approved or denied.',
+  NotActive:                 'This beam has not started yet.',
+  WrongEscrowType:           'Wrong escrow type for this action.',
+  MathOverflow:              'Transaction amount is out of range — please try a smaller value.',
   UnsupportedVersion:         'Escrow account format is out of date — please contact support.',
   InvalidExpiry:              'Delegate expiry must be in the future.',
   DelegateLifetimeExceedsMax: 'Delegate lifetime is too long — please choose a shorter window.',
   DelegateExpired:            'Streamer session key has expired — please ask them to refresh it.',
   PendingNotStale:            'This booking is not old enough to cancel permissionlessly yet.',
+  ProtocolPaused:             'The escrow program is paused — new bookings cannot be created right now.',
+  InvalidMint:                'Token mint does not match the configured mint for this program.',
+  AmountExceedsCap:           'Amount exceeds the per-booking cap — please try a smaller value.',
+  InvalidAdmin:               'Invalid admin address.',
+  TransferHookNotAllowed:     'This token mint uses a transfer hook and cannot be used with this program.',
+  AmountBelowMin:             'Amount is below the minimum for this program.',
 };
 
 /**

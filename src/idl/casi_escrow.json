@@ -8,6 +8,148 @@
   },
   "instructions": [
     {
+      "name": "initialize_config",
+      "docs": [
+        "One-time deployment initializer. Sets the accepted token mint, per-escrow",
+        "cap and floor, and the admin key. Uses `init` so it can only succeed once.",
+        "Verifies `initializer` is the upgrade authority (or any signer if the",
+        "program is immutable) to prevent deploy-day front-running."
+      ],
+      "discriminator": [208, 127, 21, 1, 194, 190, 196, 70],
+      "accounts": [
+        {
+          "name": "initializer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 97, 115, 105, 45, 99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "accepted_mint"
+        },
+        {
+          "name": "program_data",
+          "docs": [
+            "This program's ProgramData account. Owner + PDA seeds verified in the",
+            "account constraint; upgrade-authority check happens in the handler."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [166, 191, 52, 148, 132, 181, 35, 24, 108, 120, 217, 34, 110, 64, 53, 34, 229, 98, 113, 141, 245, 194, 98, 13, 70, 170, 232, 113, 62, 180, 214, 238]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [2, 168, 246, 145, 78, 136, 161, 176, 226, 16, 21, 62, 247, 99, 174, 43, 0, 194, 185, 61, 22, 193, 36, 210, 192, 83, 122, 16, 4, 128, 0, 0]
+            }
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "max_escrow_amount",
+          "type": "u64"
+        },
+        {
+          "name": "min_escrow_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "update_config",
+      "docs": [
+        "Admin-only: flip the pause flag and/or adjust the per-escrow cap/floor.",
+        "Pause only blocks new `initialize_escrow` calls; existing escrows are unaffected."
+      ],
+      "discriminator": [29, 158, 252, 191, 10, 83, 219, 99],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 97, 115, 105, 45, 99, 111, 110, 102, 105, 103]
+              }
+            ]
+          },
+          "relations": ["admin"]
+        }
+      ],
+      "args": [
+        {
+          "name": "paused",
+          "type": "bool"
+        },
+        {
+          "name": "max_escrow_amount",
+          "type": "u64"
+        },
+        {
+          "name": "min_escrow_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "transfer_admin",
+      "docs": [
+        "Admin-only: transfer admin rights to a new key. Rejects the zero address",
+        "and off-curve addresses (PDAs) which can never sign."
+      ],
+      "discriminator": [42, 242, 66, 106, 228, 10, 111, 156],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 97, 115, 105, 45, 99, 111, 110, 102, 105, 103]
+              }
+            ]
+          },
+          "relations": ["admin"]
+        }
+      ],
+      "args": [
+        {
+          "name": "new_admin",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "approve_flash",
       "docs": [
         "Streamer approves a Flash: full amount → streamer ATA.",
@@ -1360,6 +1502,17 @@
           "name": "streamer"
         },
         {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 97, 115, 105, 45, 99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
           "name": "escrow_state",
           "writable": true,
           "pda": {
@@ -2461,32 +2614,22 @@
   "accounts": [
     {
       "name": "EscrowState",
-      "discriminator": [
-        19,
-        90,
-        148,
-        111,
-        55,
-        130,
-        229,
-        108
-      ]
+      "discriminator": [19, 90, 148, 111, 55, 130, 229, 108]
+    },
+    {
+      "name": "GlobalConfig",
+      "discriminator": [149, 8, 156, 202, 160, 252, 176, 217]
     },
     {
       "name": "StreamerDelegate",
-      "discriminator": [
-        135,
-        8,
-        165,
-        230,
-        25,
-        130,
-        242,
-        60
-      ]
+      "discriminator": [135, 8, 165, 230, 25, 130, 242, 60]
     }
   ],
   "events": [
+    {
+      "name": "AdminTransferred",
+      "discriminator": [255, 147, 182, 5, 199, 217, 38, 179]
+    },
     {
       "name": "BeamSettled",
       "discriminator": [
@@ -2512,6 +2655,14 @@
         55,
         116
       ]
+    },
+    {
+      "name": "ConfigInitialized",
+      "discriminator": [181, 49, 200, 156, 19, 167, 178, 91]
+    },
+    {
+      "name": "ConfigUpdated",
+      "discriminator": [40, 241, 230, 122, 11, 19, 198, 194]
     },
     {
       "name": "DelegateInstalled",
@@ -2592,61 +2743,112 @@
     },
     {
       "code": 6002,
+      "name": "FlashMustHaveZeroDuration",
+      "msg": "Flash escrows must have duration_secs == 0"
+    },
+    {
+      "code": 6003,
       "name": "InvalidEscrowType",
       "msg": "Invalid escrow type — expected 0 (Flash) or 1 (Beam)"
     },
     {
-      "code": 6003,
+      "code": 6004,
       "name": "Unauthorized",
       "msg": "Caller is not the authorized party for this escrow"
     },
     {
-      "code": 6004,
+      "code": 6005,
       "name": "AlreadySettled",
       "msg": "Escrow is not in Pending status"
     },
     {
-      "code": 6005,
+      "code": 6006,
       "name": "NotActive",
       "msg": "Escrow is not in Active status"
     },
     {
-      "code": 6006,
+      "code": 6007,
       "name": "WrongEscrowType",
       "msg": "This instruction requires a different escrow type"
     },
     {
-      "code": 6007,
+      "code": 6008,
       "name": "MathOverflow",
       "msg": "Arithmetic overflow or underflow"
     },
     {
-      "code": 6008,
+      "code": 6009,
       "name": "UnsupportedVersion",
       "msg": "Account layout version is not supported by this program"
     },
     {
-      "code": 6009,
+      "code": 6010,
       "name": "InvalidExpiry",
       "msg": "Delegate expiry must be in the future"
     },
     {
-      "code": 6010,
+      "code": 6011,
       "name": "DelegateLifetimeExceedsMax",
       "msg": "Delegate expiry exceeds the maximum allowed lifetime"
     },
     {
-      "code": 6011,
+      "code": 6012,
       "name": "DelegateExpired",
       "msg": "Delegate has expired — streamer must re-install"
     },
     {
-      "code": 6012,
+      "code": 6013,
       "name": "PendingNotStale",
       "msg": "Pending escrow has not yet passed the stale timeout"
+    },
+    {
+      "code": 6014,
+      "name": "ProtocolPaused",
+      "msg": "Protocol is paused — new escrows cannot be created"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidMint",
+      "msg": "Token mint does not match the configured accepted mint"
+    },
+    {
+      "code": 6016,
+      "name": "AmountExceedsCap",
+      "msg": "Amount exceeds the per-escrow cap set in GlobalConfig"
+    },
+    {
+      "code": 6017,
+      "name": "InvalidAdmin",
+      "msg": "Admin address cannot be the zero address"
+    },
+    {
+      "code": 6018,
+      "name": "TransferHookNotAllowed",
+      "msg": "Token mint has a TransferHook extension — not accepted by this program"
+    },
+    {
+      "code": 6019,
+      "name": "AmountBelowMin",
+      "msg": "Amount is below the per-escrow minimum set in GlobalConfig"
     }
   ],
   "types": [
+    {
+      "name": "AdminTransferred",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "old_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_admin",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
     {
       "name": "BeamSettled",
       "type": {
@@ -2734,6 +2936,50 @@
           {
             "name": "streamer",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "accepted_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "max_escrow_amount",
+            "type": "u64"
+          },
+          {
+            "name": "min_escrow_amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "max_escrow_amount",
+            "type": "u64"
+          },
+          {
+            "name": "min_escrow_amount",
+            "type": "u64"
           }
         ]
       }
@@ -2904,6 +3150,50 @@
           {
             "name": "approved",
             "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlobalConfig",
+      "docs": [
+        "One global config account per deployment, seeded by CONFIG_SEED.",
+        "Initialized once by the deployer; `accepted_mint` is immutable after that."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "accepted_mint",
+            "docs": ["The only token mint accepted by initialize_escrow. Immutable."],
+            "type": "pubkey"
+          },
+          {
+            "name": "paused",
+            "docs": ["When true, initialize_escrow is blocked. Existing escrows are unaffected."],
+            "type": "bool"
+          },
+          {
+            "name": "max_escrow_amount",
+            "docs": ["Per-escrow maximum in token micro-units. 0 = no cap."],
+            "type": "u64"
+          },
+          {
+            "name": "min_escrow_amount",
+            "docs": ["Per-escrow minimum in token micro-units. 0 = no floor."],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }
