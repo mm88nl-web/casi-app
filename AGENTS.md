@@ -414,32 +414,6 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 - **Don't refactor the Anchor program before the audit.** It's frozen pending external review. Bug fixes only, and only with a clear test demonstrating the bug.
 - **Don't ship new Pro-tier streamer features pre-mainnet.** SaaS upsell is the planned monetization but it's premature — focus is shipping mainnet + onboarding the first cohort.
 
-## Where things stand right now (May 15-16 2026 — pick-up notes)
-
-Live Stripe rail is **shipped and end-to-end exercised** (one €0.50 test booking by the founder, captured + cancelled cleanly through the new floor-handling path). The deploy is on Vercel main. Things in the air for the next session:
-
-**Open product questions, not blocking anything:**
-
-- **Booking-form trust copy** is always-visible under the pay button. Considered making it `localStorage.casi-booking-trust-seen`-gated to show only on a viewer's first booking. Not shipped; deferred for noise-creep audit.
-- **`/studio/settings` Payouts** has a "CASI never holds your money" paragraph that's always visible. Could collapse to a small subtitle once streamers have seen it. Not shipped.
-- **Legacy `/profile/edit`** still works and is reachable but no longer the Stripe return URL. Candidate for redirect-to-`/studio/settings` the way `/admin/settings` already does. Verify free-flashes toggle is in `ProfileSection` first — if not, port it before redirecting.
-- **OBS flashes layer** (`?layer=flashes` as a third Browser Source URL alongside `?layer=beams` + `?layer=backdrop`). Discussed but not shipped. Streamer would add it as a separately-positioned source. Also: `SkinProvider` isn't loaded on `/obs` so glow + banner edges are hardcoded purple `#9945FF` regardless of the streamer's accent. Two small fixes, one possible PR.
-- **Slot chip on the canvas only shows one rail.** A slot priced at €1/hr + 1 USDC/hr displays as just `€1/hr`. Considered a `€1/hr · 1 USDC/hr` dual-rail chip but didn't ship.
-
-**Recently-fixed loose ends to verify in production:**
-
-- `compliance-and-currency` work landed in two PRs (#127 + #128) because of a squash-merge that captured a stale branch state. Self-heal is in place but pay attention if you see another "PR #127 merged but the migration isn't on main" symptom — the GitHub squash-merge can capture the PR's HEAD as recorded at PR creation, not the latest push. Fix is the same: open a follow-up PR with the orphaned commits.
-- Stripe webhook URLs were `casi.gg/...` (apex) and got 307'd to www → events dropped silently. Both webhooks (Connected accounts + Your account) are now on `www.casi.gg`. If a streamer's `payment_intent_id` ever doesn't populate after viewer payment, check this first.
-- BookingForm rail picker landed in PR #136. If a viewer reports "I can only see USDC, no card option" — confirm `profiles.settlement_currency` is populated (gets set on first `/api/stripe/connect/status` hit) AND that the slot has a `prices.<iso>` value (BeamCtrlPanel saves under the streamer's currency key).
-
-**If you're picking this up tomorrow morning, do this in order:**
-
-1. `git pull --ff-only origin main` (latest is around commit `358ab80…` — the floor-hint).
-2. Confirm `npm test` → 75 passing.
-3. Open `https://www.casi.gg/studio/live` in a fresh browser, log in, verify the slot pricing tab shows TWO rate rows (EUR + USDC) — that's the end-state proof multi-currency widened correctly.
-4. Open `https://www.casi.gg/overlay?s=casi` in incognito, click a paid slot, verify the rail picker renders side-by-side cards with per-rail costs.
-5. Skim this AGENTS.md "Stripe live cutover" entry for the full set of files touched if you need to find something.
-
 ## Known compliance + product gaps (not bugs, but on the followup list)
 
 - **No custom SMTP wired in code.** Verification + password-reset emails go through Supabase's default sender, which has terrible deliverability. Configure Resend/Postmark + SPF/DKIM/DMARC on `casi.gg` in the Supabase Dashboard before mainnet.

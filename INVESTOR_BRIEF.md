@@ -1,12 +1,12 @@
 # CASI — Investor Brief
 
-*Last updated 2026-04-17.*
+*Last updated May 2026.*
 
 ## One-liner
 
-CASI is a streamer monetization platform where viewers pay to place things
+CASI is a streamer monetisation platform where viewers pay to place things
 on-stream — text flashes, branded beams, or full-frame backdrops — via credit
-card, crypto, or a free tier the streamer controls.
+card, USDC, or a free tier the streamer controls.
 
 ## The problem
 
@@ -35,22 +35,20 @@ There is no integrated product that offers **in-stream paid placement** with
 
 Each surface is payable via:
 
-- **Stripe** — credit card, manual-capture + Connect transfer, EUR.
-- **Solana USDC** — on-chain escrow via the in-house `casi-escrow` Anchor program.
+- **Stripe Connect** — credit / debit card, multi-currency (EUR, USD, GBP, AUD, CAD, BRL, JPY, SGD). Live on mainnet as of May 2026.
+- **Solana USDC** — on-chain escrow via `casi-escrow` (Apache-2.0 Anchor program). Currently on devnet pending external audit.
 - **Free** — rate-limited; streamer approves all.
 
-Streamers approve/deny flashes and prorate-end beams from a single dashboard.
-Revenue split is currently **100% streamer / 0% platform** on all paid
-surfaces: Stripe uses Connect Direct Charges with a zero `application_fee`,
-and the Anchor program pays the streamer the full vested amount on
-settlement. See "Monetization" below — a commercial model is pending.
+Revenue split is **100% streamer / 0% platform** on all paid surfaces: Stripe
+uses Connect Direct Charges with zero `application_fee`, and the Anchor program
+pays the streamer the full vested amount on settlement.
 
 ## Why it's defensible
 
 1. **On-chain trust primitive.** `casi-escrow` is an Apache-2.0 Anchor program
-   that enforces linear vesting on beams and anti-grief rules (only the two
-   consenting parties can early-settle; after the beam duration anyone can
-   "crank" settlement, guaranteeing liveness). Reusable by any Solana project
+   that enforces linear vesting on beams and anti-grief rules (liveness
+   guaranteed — anyone can crank settlement after the duration; viewer can
+   cancel before activation for 100% refund). Reusable by any Solana project
    that needs trust-minimised time-based payments.
 2. **Three-rail payment architecture.** Most competitors pick a tribe
    (Streamlabs = Stripe, Streamflow = Solana). CASI serves both, which means
@@ -58,150 +56,67 @@ settlement. See "Monetization" below — a commercial model is pending.
 3. **OBS-native.** Bookings appear as transparent browser-source overlays with
    realtime sync + 30-second watchdog auto-reload. Streamers add one URL to
    OBS and never touch it again.
-4. **Streamer dashboard UX.** Drag/resize overlay canvas (react-rnd), booking
-   queue, Stripe Connect onboarding, Solana wallet linking — all in one page.
+4. **Streamer dashboard UX.** Drag/resize overlay canvas, booking queue, Stripe
+   Connect onboarding, Solana wallet linking, session-key delegation (no wallet
+   popup on every approve) — all in one dashboard.
 
-## Current state (technical)
+## Current state (May 2026)
 
-- **Frontend**: Next.js 16 App Router + React 19 + Supabase + Stripe Connect +
-  Solana Wallet Adapter. Deployed on Vercel.
-- **Solana program**: `casi-escrow` (Apache-2.0, ~650 lines Rust, Anchor 0.31.1).
-  Integration tests run against a local validator and cover the audit-
-  sensitive surface: vesting cap, state machine transitions, has_one
-  constraints, anti-grief rules, 100% payout to streamer on settlement.
-- **Test suite**: `programs/casi-escrow/README.md` documents the audit scope
-  and error codes. Every settled state change emits a typed event for off-
-  chain indexers.
-- **Deploy pipeline**: `scripts/setup-devnet.sh` — one-shot Ubuntu bootstrap
-  that installs Rust + Solana CLI + Anchor, builds the program, runs tests,
-  and deploys to devnet.
-- **Payment webhooks**: Helius (Solana) + Stripe, both with signed event
-  validation.
-- **Cron**: GitHub Actions `stripe-janitor` handles overdue captures,
-  queue advancement, storage cleanup.
-
-## Traction / status
-
-- **Product**: complete. Both payment rails work end-to-end in local tests.
-- **Deploy**: blocked on Solana devnet faucet (temporary — all public faucets
-  dry as of 2026-04-17). Once SOL available, devnet deploy is a one-command
-  script. Mainnet deploy is a config flip + fresh program keypair.
-- **Users**: pre-launch. Target first 10 streamers for closed beta once
-  mainnet is live.
-
-## Roadmap
-
-### Next 2 weeks (pre-launch)
-- [ ] Devnet deploy (blocked on faucet recovery) — `./scripts/setup-devnet.sh`
-- [ ] End-to-end smoke: real devnet wallet books flash + beam from `/overlay`,
-      streamer approves from `/admin`, OBS source renders correctly.
-- [ ] Box large account contexts to fix stack-frame warnings in `ApproveFlash`
-      + `SettleBeam` (known fix, ~30 LOC).
-
-### Month 1 — mainnet + closed beta
-- [ ] Mainnet deploy: flip `src/lib/solana-network.ts:NETWORK` to `'mainnet'`,
-      regenerate program keypair, buy Helius paid RPC (public mainnet RPC
-      rate-limits hard), update Vercel env vars.
-- [ ] Onboard 10 closed-beta streamers (warm outreach).
-- [ ] Ship user docs: streamer onboarding guide, viewer flow explainer,
-      OBS setup screencast.
-- [ ] Monitor: Sentry for frontend, Helius webhook failure alerts, Stripe
-      dispute rate.
-
-### Month 2–3 — open beta
-- [ ] Payout UI: streamers see settled earnings per rail, Stripe payout
-      schedule, Solana wallet balance.
-- [ ] Analytics for streamers: conversion funnel (overlay views → bookings),
-      top viewers by spend, slot-level revenue attribution.
-- [ ] Multi-currency: Stripe is currently EUR-hardcoded; add USD + GBP.
-- [ ] Touch-optimised admin canvas (currently desktop-only).
-- [ ] Per-event Helius webhook signatures (currently single shared secret).
-
-### Month 4–6 — growth
-- [ ] Integrations: Twitch chat bot that posts `!flash` commands mapping to
-      CASI booking URLs.
-- [ ] SDK: `@casi/widget` — embeddable overlay for non-OBS use cases (web
-      embeds, custom streaming clients).
-- [ ] Fiat off-ramp: auto-convert Solana USDC → EUR via Circle / Mural for
-      streamers who don't want to manage crypto.
-
-### Year 1 — primitive licensing
-- [ ] Open up `casi-escrow` as a standalone SDK for other use cases (see
-      "Adjacent markets" below). Apache-2.0 license is already in place.
-- [ ] Documentation site: casi-escrow.dev (on-chain design, integration
-      guides, audit report, error codes).
+- **Stripe rail**: live on mainnet. Multi-currency, manual-capture PaymentIntents
+  on streamers' connected accounts, end-to-end tested with real payments.
+- **Solana rail**: devnet with test USDC, full escrow + session-key delegation
+  + daily reconciler cron deployed and running. Mainnet gated on external audit.
+- **Operator**: Terminal Data Solutions (eenmanszaak, KvK 80519687, Netherlands).
+- **Legal**: imprint + privacy policy (GDPR) + terms of service live at `/legal/*`.
+- **Deploy**: Vercel. Domain: `www.casi.gg`.
+- **Tech**: Next.js 16 (App Router), React 19, Supabase, Vercel, Stripe Connect,
+  Solana wallet-adapter, Anchor 0.31.1.
 
 ## Monetization
 
-> **Commercial model: open question.** Platform fees on all paid surfaces
-> are currently **zero** — Stripe Connect Direct Charges pass 100% to the
-> streamer and the Anchor program pays the full settled amount. A separate
-> revenue stream is needed before launch. Candidates:
->
-> - **SaaS subscription tier** — fixed monthly fee for streamers (unlocks
->   higher booking volume, advanced analytics, custom skins, premium
->   overlay templates). `subscriptions` table + `/api/stripe/subscribe` in
->   Stripe Billing mode is the shortest path — rails not yet wired.
-> - **Optional tip surcharge** — viewer-facing toggle ("add 5% to support
->   CASI"); preserves the 100% streamer headline while funding the platform.
-> - **Premium SKUs** — paid custom backdrops, per-stream promoted-placement
->   auctions, multi-streamer collab rooms. Usage-metered rather than a
->   blanket take rate.
-> - **Enterprise / agency plans** — bulk onboarding + dedicated support
->   for talent networks, Twitch partner programs, esports orgs.
->
-> Cost structure is unchanged: Stripe (2.9% + €0.25, paid by the streamer
-> via Connect), Solana RPC (~$200/mo Helius paid), Vercel (~$100/mo),
-> Supabase (~$100/mo). No inventory, no servers.
+**Planned: streamer SaaS subscription tier (~$19/mo Pro).** 100% of every
+booking flows direct viewer → streamer — CASI never holds or skims funds.
+Revenue is planned from a Pro tier unlocking: unlimited slots, custom shapes,
+auto-approve rules engine, analytics, custom branding, outbound webhooks, OBS
+widgets. Same model as Streamlabs Ultra.
+
+The math: 100 Pro streamers × $19/mo = $1,900/mo → audit funded in ~13 months.
+Not yet shipped. Ships after mainnet + first cohort onboarding.
 
 ## Adjacent markets (primitive licensing)
 
-The `casi-escrow` Anchor program is general-purpose. Any use case that wants
-**"pay now, time-based service, fair pro-rata on early exit, guaranteed
-settlement"** can integrate it. Candidates:
+The `casi-escrow` Anchor program is general-purpose for any use case that needs
+"pay now, time-based service, fair pro-rata on early exit, guaranteed liveness":
+live tutoring, pay-per-minute voice/video, GPU/compute rental, freelance
+milestone payments, subscription trials with refund fairness.
 
-- **Live tutoring / consulting platforms** — prepaid sessions with fair refund
-  if cut short.
-- **Pay-per-minute voice/video** — therapy, legal, language learning.
-- **Equipment / storage rental** — pay for 30 days, return early, get the
-  difference back.
-- **Freelance milestone payments** — client locks funds, freelancer starts
-  work (beam.start), either side can end early.
-- **SLA-backed vendor contracts** — prepaid service with downtime refunds
-  via pro-rata settlement.
-- **Subscription services with refund fairness** — cancel day 15 of 30,
-  service keeps half, user refunded half — impossible in Web2, trivial here.
+## Roadmap
 
-The novel bit isn't the streaming application. It's the **beam primitive**:
-linear vesting + two-party anti-grief + permissionless post-duration crank.
-That's a new building block.
-
-## Team + ask
-
-*(fill in based on actual team + raise target — this doc is a template)*
-
-- Founder: full-stack, shipped the product + on-chain program.
-- Raise: seed round to fund 12 months runway for 2 FTEs + audit + growth.
-- Target audit cost: $30–60k (Neodyme, OtterSec, or Ackee).
+1. **Capped mainnet (Solana)** — server-layer caps ($50/beam, $500 per-streamer TVL)
+   while audit is pending. Invites-only cohort. See `capped-mainnet-plan.md`.
+2. **External audit** — `casi-escrow` scoped with Sec3 / OtterSec / Neodyme.
+   Audit budget: ~$25k (Sec3 stated ~$18/LOC for ~1.2k LOC program).
+3. **Pro tier** — after first 50–100 onboarded mainnet streamers. See `pro-tier-plan.md`.
+4. **`@casi/escrow-sdk`** — extract program client into a typed npm package.
 
 ## Risk factors
 
-- **Solana network risk**: outages would pause crypto settlement (Stripe
-  unaffected). Mitigated by fallback to free-tier / Stripe rails per streamer.
+- **Solana network risk**: outages pause crypto settlement (Stripe unaffected).
+  Mitigated by fallback to Stripe / free rails per streamer.
 - **Regulatory**: non-custodial crypto rail (viewer → PDA vault → streamer,
-  platform never takes custody) and zero on-chain platform fee sidestep
-  most VASP classification triggers. A future monetization model that
-  takes a crypto cut would need counsel review before launch.
-- **Competition**: Streamlabs, Streamflow, Super Chat. CASI's angle is the
-  paid-placement UX + on-chain escrow combo. Single-rail competitors don't
-  address the full surface.
-- **Platform dependency**: Stripe Connect onboarding is manual for each
-  streamer. If Stripe de-platforms the business, the Solana rail remains
-  functional independently — which is a point in favor of having both.
+  CASI never takes custody) and zero on-chain platform fee sidestep most VASP
+  classification triggers. Monetization via SaaS subscription, not per-transaction
+  fees, keeps CASI positioned as a software company.
+- **Competition**: Streamlabs, StreamElements, Tangia, Blerp — clip-only, no
+  upload, no time-vested escrow, traditional Stripe-with-take-rate. CASI's angle
+  is the paid-placement UX + on-chain trust combo + 0% take rate. None of the
+  direct competitors are open source under a permissive license.
+- **Platform dependency**: Stripe Connect onboarding is per-streamer. If Stripe
+  de-platforms, the Solana rail remains functional independently.
 
 ## Links
 
-- Public repo: `mm88nl-web/casi-app` (branch `claude/casi-project-summary-zJfeU`)
-- Anchor program: `programs/casi-escrow/` (Apache-2.0)
-- Program README: `programs/casi-escrow/README.md` (audit scope + test coverage)
-- Technical summary: `SUMMARY.md`
+- Public repo: [github.com/mm88nl-web/casi-app](https://github.com/mm88nl-web/casi-app) (Apache-2.0)
+- Live product: [casi.gg](https://www.casi.gg)
+- Anchor program: `programs/casi-escrow/` — `programs/casi-escrow/README.md`
+- Grant draft: `grant-answers.md`

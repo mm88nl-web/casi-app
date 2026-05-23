@@ -49,6 +49,11 @@ Out of scope:
 
 ## Audit status
 
-The `casi-escrow` Anchor program is currently being scoped for an external
-audit. Until the audit is complete, the program runs on Solana **devnet** with
-test USDC; mainnet launch is gated on a clean audit report.
+The `casi-escrow` Anchor program runs on Solana **devnet** with test USDC.
+Mainnet launch on the Solana rail is gated on a clean external audit.
+Audit-firm outreach is in progress; the program is frozen (bug fixes only)
+until the audit completes.
+
+The **Stripe rail is live on mainnet** (EUR/USD/GBP and more) as of May 2026
+and has been exercised with real payments. Stripe Connect Direct Charges and
+manual-capture PaymentIntent logic were security-reviewed before cutover.

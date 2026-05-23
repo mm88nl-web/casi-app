@@ -1,63 +1,107 @@
-# Casi landing handoff
+# casi
 
-Two changes to land the new design in the repo.
+Streamer monetisation platform. Viewers pay to put their image, video, or message on a live stream as an overlay — for a fixed duration, with a guaranteed refund if anything goes wrong.
 
-## 1. Replace `src/app/page.tsx`
+[![CI](https://github.com/mm88nl-web/casi-app/actions/workflows/ci.yml/badge.svg)](https://github.com/mm88nl-web/casi-app/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
-Drop in `design-explorations/handoff/page.tsx` verbatim. Notes:
+**Live at [casi.gg](https://www.casi.gg)** — Stripe rail on mainnet (EUR/USD/GBP/+), Solana USDC on devnet pending audit.
 
-- Imports `CasiMark` + `Wordmark` from `@/components/v9` directly — no
-  `NavBar`, `Marquee`, `Footer`, or `UsdcIcon` (the old strip had all of these).
-- Keeps the real `profiles.is_live` count query. Live stamp only renders
-  when count > 0 so there's no fake "0 live" or "12 live".
-- Pins its own palette via styled-jsx — the visitor's skin preference
-  doesn't reskin the marketing page.
-- Recolors the existing v9 Wordmark/Mark via `:global()` selectors so we
-  reuse the shared mark components, just with the landing's palette.
+---
 
-## 2. Add the "Apothecary" skin in `src/lib/skins.ts`
+## What it does
 
-Insert the entry below into the `SKINS` array, in the `'fresh'` category
-(right after the existing `paper` entry would be the natural slot, since
-it's the only other light skin):
+Streamers run OBS with a CASI browser-source URL. Viewers book a slot on the streamer's overlay, upload media, and pay. The streamer approves; the content appears on stream for the booked duration; payment settles pro-rata when the timer ends. 100% of every booking flows direct viewer → streamer — CASI takes no cut.
 
-```ts
-{
-  id: 'apothecary',
-  name: 'Apothecary',
-  accent:     '#294B3C',       // deep sage — primary ink
-  accentRgb:  '41, 75, 60',
-  accent2:    '#C04830',       // terracotta — secondary action / highlight
-  accent2Rgb: '192, 72, 48',
-  bg:         '#F5E1D2',       // salmon paper
-  surface:    '#EAD3BF',       // slightly darker paper for cards
-  border:     '#D4B89D',       // warm hairline
-  text:       '#221A14',       // deep coffee
-  textMuted:  '#6A574B',
-  ink:        '#294B3C',
-  paper:      '#F5E1D2',
-  isLight:    true,            // flips data-paper="light" on the wrapper
-  category:   'fresh',
-},
+**Three earn surfaces:**
+
+| Surface | Duration | Use case |
+|---------|----------|----------|
+| **Flash** | One-shot | Tips, shoutouts, fan messages |
+| **Beam** | 1–60 min, prorated | Sponsored banners, ad placements |
+| **Backdrop** | 1–60 min, prorated | Full-frame branded backgrounds |
+
+**Two payment rails:**
+
+- **Stripe Connect** — credit / debit card. Direct Charges land on the streamer's connected account. Multi-currency (EUR, USD, GBP, AUD, CAD, BRL, JPY, SGD).
+- **Solana USDC** — on-chain escrow via `casi-escrow` (Apache-2.0 Anchor program). Viewer locks USDC in a PDA vault; either party can settle early with pro-rata split; permissionless liveness cranks after duration.
+
+---
+
+## Tech stack
+
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind
+- **Backend**: Next.js Route Handlers, Supabase (Postgres + RLS + Realtime + Storage), Vercel
+- **Payments**: Stripe Connect (manual-capture PaymentIntents) + Solana Wallet Adapter + `casi-escrow` Anchor program
+- **Webhooks**: Helius (Solana on-chain events), Stripe Connect + platform webhooks
+- **Tests**: `ts-mocha` — `npm test`
+
+---
+
+## Running locally
+
+```bash
+# Install deps
+npm install
+
+# Copy and fill in environment variables
+cp .env.example .env.local   # or set them directly
+
+# Start dev server
+npm run dev
+
+# Type check
+npx tsc --noEmit
+
+# Run tests
+npm test
+
+# Lint
+npm run lint
 ```
 
-That's it. Once both files land:
+**Required env vars**: see `AGENTS.md → Environment variables` for the full list. At minimum you need `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, and `NEXT_PUBLIC_CASI_PROGRAM_ID`.
 
-- `/` shows the new editorial landing
-- Settings → Appearance shows "Apothecary" in the New group, and any
-  streamer who picks it gets a salmon/sage/terracotta studio + profile
+---
 
-## Optional
+## Repo layout
 
-If you want the landing to *follow* the streamer's selected skin instead
-of pinning to Apothecary, delete the three palette overrides in `:root`
-of the styled-jsx block:
-
-```css
---paper: #f5e1d2;
---ink:   #294b3c;
---accent: #c04830;
+```
+src/app/
+  overlay/          OBS browser-source + viewer booking flow
+  studio/           Streamer dashboard (earnings, queue, live canvas)
+  admin/            Legacy streamer dashboard
+  s/[username]/     Public streamer landing page
+  login/            Auth — email + 4 OAuth providers
+  api/              Route Handlers (bookings, stripe, solana, flashes, cron)
+src/lib/
+  casi-escrow.ts    Anchor client wrapper
+  streamer-moderation.ts  Single source of truth for approve/deny/settle
+  currency.ts       Fiat config (symbols, decimals, Stripe min amounts)
+  payment-math.ts   Pro-rata capture math
+programs/casi-escrow/   Anchor program source (Rust)
+supabase/migrations/    SQL migrations
+tests/unit/             Unit tests
 ```
 
-The page will then inherit whatever `--ink` / `--paper` the active skin
-provides, and the highlight bar will use a fallback `--accent2`.
+---
+
+## On-chain program
+
+`casi-escrow` is an Apache-2.0 Anchor program for time-vested USDC escrow. It's designed to be reusable beyond CASI — any use case that needs "pay now, time-based service, fair pro-rata on early exit, guaranteed liveness" can integrate it.
+
+- Program source: [`programs/casi-escrow/`](./programs/casi-escrow/)
+- Program README: [`programs/casi-escrow/README.md`](./programs/casi-escrow/README.md)
+- Current deploy: Solana **devnet**, pending external audit before mainnet
+
+---
+
+## Security
+
+Found a vulnerability? See [SECURITY.md](./SECURITY.md) — please report privately, do not open a public issue.
+
+---
+
+## License
+
+[Apache 2.0](./LICENSE) — Operator: Terminal Data Solutions, Netherlands.
