@@ -8,6 +8,10 @@
  *
  * If NEXT_PUBLIC_TURNSTILE_SITE_KEY is unset, renders nothing and calls
  * onVerify('dev-skip') immediately so local dev doesn't stall.
+ *
+ * Error/expire handling: the widget auto-resets so the user gets a fresh
+ * challenge without needing a page reload (important for Firefox, which
+ * can timeout Turnstile more frequently due to privacy protections).
  */
 import { useEffect, useRef } from 'react';
 
@@ -29,7 +33,6 @@ type TurnstileApi = {
 
 const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
 
-// Use a loose cast to avoid collisions with any third-party window augmentations.
 function getTurnstile(): TurnstileApi | undefined {
   if (typeof window === 'undefined') return undefined;
   return (window as unknown as { turnstile?: TurnstileApi }).turnstile;
@@ -80,13 +83,19 @@ export default function TurnstileWidget({
   theme?: 'light' | 'dark' | 'auto';
   compact?: boolean;
 }) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const widgetIdRef = useRef<string | null>(null);
+  const containerRef  = useRef<HTMLDivElement | null>(null);
+  const widgetIdRef   = useRef<string | null>(null);
+  const onVerifyRef   = useRef(onVerify);
+  const onExpireRef   = useRef(onExpire);
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+
+  // Keep refs current without destabilising the useEffect below.
+  onVerifyRef.current = onVerify;
+  onExpireRef.current = onExpire;
 
   useEffect(() => {
     if (!siteKey) {
-      onVerify('dev-skip');
+      onVerifyRef.current('dev-skip');
       return;
     }
     let cancelled = false;
@@ -95,13 +104,28 @@ export default function TurnstileWidget({
         if (cancelled || !containerRef.current) return;
         const api = getTurnstile();
         if (!api) return;
+
+        const resetWidget = () => {
+          if (widgetIdRef.current) {
+            try { api.reset(widgetIdRef.current); } catch { /* noop */ }
+          }
+        };
+
         const id = api.render(containerRef.current, {
           sitekey: siteKey,
           theme,
           size: compact ? 'compact' : 'normal',
-          callback: (token) => onVerify(token),
-          'expired-callback': () => onExpire?.(),
-          'error-callback': () => onExpire?.(),
+          callback: (token) => onVerifyRef.current(token),
+          // Auto-reset on expire/error so the user gets a fresh challenge
+          // automatically — no page reload needed (Firefox times out more often).
+          'expired-callback': () => {
+            onExpireRef.current?.();
+            resetWidget();
+          },
+          'error-callback': () => {
+            onExpireRef.current?.();
+            resetWidget();
+          },
         });
         widgetIdRef.current = id ?? null;
       })
@@ -113,7 +137,10 @@ export default function TurnstileWidget({
         try { api.remove(widgetIdRef.current); } catch { /* noop */ }
       }
     };
-  }, [siteKey, theme, compact, onVerify, onExpire]);
+  // Only re-render the widget when truly structural props change.
+  // Callbacks are stable via refs above.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteKey, theme, compact]);
 
   if (!siteKey) return null;
   return <div ref={containerRef} style={{ minHeight: compact ? 60 : 65 }} />;

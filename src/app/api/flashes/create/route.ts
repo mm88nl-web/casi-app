@@ -18,6 +18,7 @@ import { createHash } from 'node:crypto';
 import { stripe } from '@/lib/stripe';
 import { moderateText } from '@/lib/content-moderation';
 import { verifyTurnstileToken } from '@/lib/turnstile';
+import { logWarn } from '@/lib/observability';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -127,7 +128,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Free flashes are disabled for this streamer' }, { status: 403 });
     }
     const captcha = await verifyTurnstileToken(turnstile_token, getClientIp(req));
-    if (!captcha.ok) return NextResponse.json({ error: captcha.reason }, { status: 400 });
+    if (!captcha.ok) {
+      logWarn('captcha', `${profile.username ?? profile_id}: ${captcha.reason}`);
+      return NextResponse.json({ error: captcha.reason }, { status: 400 });
+    }
 
     const viewerKey = await resolveViewerKey(req);
     const allowed = await claimFreeFlashSlot(profile_id, viewerKey);

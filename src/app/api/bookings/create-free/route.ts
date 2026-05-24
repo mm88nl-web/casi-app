@@ -20,6 +20,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { moderateText, LIMITS } from '@/lib/content-moderation';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { validateBannerBooking, sanitizeBookingCustomization } from '@/lib/banner';
+import { logWarn } from '@/lib/observability';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -114,7 +115,11 @@ export async function POST(req: Request) {
   }
 
   const captcha = await verifyTurnstileToken(turnstile_token, getClientIp(req));
-  if (!captcha.ok) return NextResponse.json({ error: captcha.reason }, { status: 400 });
+  if (!captcha.ok) {
+    const { data: prof } = await supabase.from('profiles').select('username').eq('id', profile_id).maybeSingle();
+    logWarn('captcha', `${prof?.username ?? profile_id}: ${captcha.reason}`);
+    return NextResponse.json({ error: captcha.reason }, { status: 400 });
+  }
 
   // Re-read the element server-side to verify: (a) it belongs to profile_id,
   // (b) it really is free (price_value = 0), (c) duration is within max.
