@@ -118,11 +118,8 @@
   font-weight: 800;
   font-size: 24px;
   letter-spacing: -0.04em;
-  color: var(--text);
-  font-feature-settings: "ss01";
-}
-.casi-v9-wordmark .casi-v9-dot {
   color: var(--ink);
+  font-feature-settings: "ss01";
 }
 .casi-v9-nav-r {
   display: flex;

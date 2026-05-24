@@ -3,12 +3,10 @@
 import { SKINS } from '@/lib/skins';
 import { useUserSkin } from '@/components/UserSkinProvider';
 
-// Pre-grouped so the picker can render section headers without re-walking
-// the array on every render. Order here drives display order.
 const GROUPS: { id: string; label: string }[] = [
-  { id: 'casi',     label: 'Presets' },
-  { id: 'platform', label: 'Platforms' },
-  { id: 'custom',   label: 'Yours' },
+  { id: 'light',  label: 'Light' },
+  { id: 'dark',   label: 'Dark' },
+  { id: 'custom', label: 'Custom' },
 ];
 
 export default function SkinPicker() {
@@ -129,7 +127,7 @@ export default function SkinPicker() {
                           marginTop: 2,
                         }}
                       >
-                        {isCustom ? 'pick your own' : skin.isLight ? 'light' : skin.ink}
+                        {isCustom ? 'pick your own' : skin.ink}
                       </span>
                     </div>
                   </button>
