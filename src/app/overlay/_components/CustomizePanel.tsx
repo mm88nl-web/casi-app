@@ -262,10 +262,12 @@ export default function CustomizePanel({
                   onPointerUp={onPointerUp}
                   onPointerCancel={onPointerUp}
                   style={{
-                    width: '100%', aspectRatio: shape === 'circle' || shape === 'hex' ? '1 / 1' : '16 / 9',
-                    background: 'var(--casi-bg)',
+                    width: '100%',
+                    aspectRatio: shape === 'circle' || shape === 'hex' ? '1 / 1' : '16 / 9',
+                    maxHeight: 200,
+                    background: '#0d0d0d',
                     border: `1px solid rgba(${accentColorRgb},0.2)`,
-                    borderRadius: 10,
+                    borderRadius: 8,
                     position: 'relative',
                     overflow: 'hidden',
                     cursor: mediaPreviewUrl ? 'grab' : 'default',

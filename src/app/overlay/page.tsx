@@ -2215,11 +2215,13 @@ function OverlayContent() {
         }
         @keyframes bkFadeIn { from { opacity:0; } to { opacity:1; } }
         .bf {
-          position:fixed; top:50%; left:50%;
-          transform:translate(-50%,-50%);
+          position:fixed; top:12px; left:50%;
+          transform:translateX(-50%);
           width:min(600px, calc(100vw - 24px));
-          max-height:calc(100dvh - 48px);
+          max-height:calc(100dvh - 24px);
           overflow-y:auto; overflow-x:hidden;
+          -webkit-overflow-scrolling:touch;
+          overscroll-behavior:contain;
           z-index:500;
           background:var(--surf);
           border:1px solid var(--ink) !important;
@@ -2228,7 +2230,7 @@ function OverlayContent() {
           box-shadow:0 32px 96px rgba(0,0,0,0.75);
           animation:modalIn .2s cubic-bezier(.22,1,.36,1);
         }
-        @keyframes modalIn { from { opacity:0; transform:translate(-50%,-48%); } to { opacity:1; transform:translate(-50%,-50%); } }
+        @keyframes modalIn { from { opacity:0; transform:translateX(-50%) translateY(-6px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
         .bf-hdr {
           display:flex; align-items:center; justify-content:space-between;
           padding:18px 22px; margin-bottom:0; border-bottom:none;
