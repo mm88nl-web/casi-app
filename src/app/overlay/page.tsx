@@ -2082,14 +2082,22 @@ function OverlayContent() {
   if (loading) return null;
   if (!isOBS && !nameConfirmed) return (
     <>
-      <SkinProvider skin={profile?.skin} inkColor={profile?.ink_color ?? profile?.theme_color} paperColor={profile?.paper_color} />
+      <SkinProvider
+        skin={profile?.skin}
+        inkColor={profile?.skin === 'custom' ? (profile?.ink_color ?? profile?.theme_color) : profile?.theme_color}
+        paperColor={profile?.skin === 'custom' ? profile?.paper_color : null}
+      />
       <NameEntryScreen onConfirm={confirmName} tc={tc} />
     </>
   );
 
   return (
     <>
-      <SkinProvider skin={profile?.skin} inkColor={profile?.ink_color ?? profile?.theme_color} paperColor={profile?.paper_color} />
+      <SkinProvider
+        skin={profile?.skin}
+        inkColor={profile?.skin === 'custom' ? (profile?.ink_color ?? profile?.theme_color) : profile?.theme_color}
+        paperColor={profile?.skin === 'custom' ? profile?.paper_color : null}
+      />
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes blink     { 0%,100%{opacity:1} 50%{opacity:.2} }

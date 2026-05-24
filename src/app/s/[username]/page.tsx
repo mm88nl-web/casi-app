@@ -175,8 +175,8 @@ export default function ViewerBookingPage() {
       {/* Inherit the streamer's skin + theme colour — this overrides the user-picked skin for this page. */}
       <SkinProvider
         skin={profile.skin}
-        inkColor={profile.ink_color ?? profile.theme_color}
-        paperColor={profile.paper_color}
+        inkColor={profile.skin === 'custom' ? (profile.ink_color ?? profile.theme_color) : profile.theme_color}
+        paperColor={profile.skin === 'custom' ? profile.paper_color : null}
       />
 
       {/* v7 nav. The live badge moved into StreamerBar (vb-head) since v7
