@@ -2132,6 +2132,7 @@ function OverlayContent() {
         .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid rgba(var(--casi-accent-rgb),0.31); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--casi-text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
 
         .ov-main { max-width:1200px; margin:0 auto; padding:16px 20px 48px; }
+        @media (min-width:900px) { .ov-main { padding:24px 48px 60px; } }
         /* v9 viewer 2-col body — canvas + flashes-feed left, slots/booking right.
            Layout via CSS-grid placement on existing children, no JSX wrapping
            (the canvas div is huge + closes over component state, extracting
