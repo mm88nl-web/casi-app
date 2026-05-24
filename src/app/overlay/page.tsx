@@ -2204,9 +2204,10 @@ function OverlayContent() {
           letter-spacing:0;
         }
 
-        /* ── Booking form — fixed centered modal ──────────────────────────────
-           Lifted out of the grid so it never clips on narrow screens.
-           The .bf-backdrop sits one z-level below and dims the canvas. */
+        /* ── Booking form ──────────────────────────────────────────────────────
+           Mobile (<900px): fixed centered modal with backdrop.
+           Desktop (≥900px): static sidebar in grid-column 2 so the canvas
+           stays fully visible and the live slot preview is always in view. */
         .bf-backdrop {
           position:fixed; inset:0; z-index:499;
           background:rgba(0,0,0,0.55);
@@ -2214,7 +2215,9 @@ function OverlayContent() {
           animation:bkFadeIn .18s ease;
         }
         @keyframes bkFadeIn { from { opacity:0; } to { opacity:1; } }
+        @media (min-width:900px) { .bf-backdrop { display:none; } }
         .bf {
+          /* Mobile: fixed centered modal */
           position:fixed; top:12px; left:50%;
           transform:translateX(-50%);
           width:min(600px, calc(100vw - 24px));
@@ -2231,6 +2234,18 @@ function OverlayContent() {
           animation:modalIn .2s cubic-bezier(.22,1,.36,1);
         }
         @keyframes modalIn { from { opacity:0; transform:translateX(-50%) translateY(-6px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+        @media (min-width:900px) {
+          /* Desktop: static sidebar — canvas stays visible on the left */
+          .bf {
+            position:static; top:auto; left:auto;
+            transform:none; width:auto;
+            max-height:none; overflow:visible;
+            box-shadow:none;
+            animation:slideInV9 .2s ease;
+          }
+          .ov-main.ov-v9 > .bf { grid-column:2; grid-row:2 / span 2; margin-top:0; align-self:start; }
+        }
+        @keyframes slideInV9 { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
         .bf-hdr {
           display:flex; align-items:center; justify-content:space-between;
           padding:18px 22px; margin-bottom:0; border-bottom:none;
@@ -2253,8 +2268,8 @@ function OverlayContent() {
         }
         .bf-x:hover { opacity:1; color:var(--on-ink); }
         .bf-grid {
-          display:grid; grid-template-columns:1fr 1fr; gap:20px;
-          padding:22px;
+          display:grid; grid-template-columns:1fr; gap:16px;
+          padding:20px 22px;
         }
         .bf-lbl {
           font-family:var(--M); font-size:10px; font-weight:700; color:var(--text-3);
@@ -2326,7 +2341,7 @@ function OverlayContent() {
         @media (max-width:640px) {
           .ov-nav { padding:0 16px; }
           .ov-main { padding:12px 14px 60px; }
-          .bf-grid { grid-template-columns:1fr; padding:18px; }
+          .bf-grid { padding:16px; }
           .bf-footer { flex-direction:column; align-items:stretch; padding:18px; }
           .bf-sub { width:100%; text-align:center; }
           .slots-grid { grid-template-columns:1fr; }
