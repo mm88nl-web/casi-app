@@ -2144,13 +2144,11 @@ function OverlayContent() {
         .ov-main.ov-v9 > .stream-canvas { grid-column: 1; grid-row: 2; margin-bottom: 0; }
         .ov-main.ov-v9 > .ov-browse-link { grid-column: 1; grid-row: 3; }
         .ov-main.ov-v9 > .slots-sec { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
-        .ov-main.ov-v9 > .bf { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
         @media (max-width:900px) {
           .ov-main.ov-v9 { grid-template-columns: 1fr; }
           .ov-main.ov-v9 > .stream-canvas,
           .ov-main.ov-v9 > .ov-browse-link,
-          .ov-main.ov-v9 > .slots-sec,
-          .ov-main.ov-v9 > .bf { grid-column: 1; grid-row: auto; }
+          .ov-main.ov-v9 > .slots-sec { grid-column: 1; grid-row: auto; }
         }
         .ov-browse-link {
           background: none; border: none; padding: 14px 0 0; cursor: pointer;
@@ -2206,16 +2204,31 @@ function OverlayContent() {
           letter-spacing:0;
         }
 
-        /* ── Booking form — v9 ── sharp panel with inverted ink-on-paper
-           header, big editorial cost numerals, segmented duration presets. */
-        .bf {
-          background:var(--surf);
-          border:1px solid var(--ink) !important;  /* override inline border={…} from BookingForm */
-          border-radius:0;
-          padding:0; margin-top:16px;
-          overflow:hidden; animation:slideDownV9 .2s ease;
+        /* ── Booking form — fixed centered modal ──────────────────────────────
+           Lifted out of the grid so it never clips on narrow screens.
+           The .bf-backdrop sits one z-level below and dims the canvas. */
+        .bf-backdrop {
+          position:fixed; inset:0; z-index:499;
+          background:rgba(0,0,0,0.55);
+          backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+          animation:bkFadeIn .18s ease;
         }
-        @keyframes slideDownV9 { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:none; } }
+        @keyframes bkFadeIn { from { opacity:0; } to { opacity:1; } }
+        .bf {
+          position:fixed; top:50%; left:50%;
+          transform:translate(-50%,-50%);
+          width:min(600px, calc(100vw - 24px));
+          max-height:calc(100dvh - 48px);
+          overflow-y:auto; overflow-x:hidden;
+          z-index:500;
+          background:var(--surf);
+          border:1px solid var(--ink) !important;
+          border-radius:0;
+          padding:0;
+          box-shadow:0 32px 96px rgba(0,0,0,0.75);
+          animation:modalIn .2s cubic-bezier(.22,1,.36,1);
+        }
+        @keyframes modalIn { from { opacity:0; transform:translate(-50%,-48%); } to { opacity:1; transform:translate(-50%,-50%); } }
         .bf-hdr {
           display:flex; align-items:center; justify-content:space-between;
           padding:18px 22px; margin-bottom:0; border-bottom:none;
@@ -2799,7 +2812,10 @@ function OverlayContent() {
             </button>
           )}
 
-          {/* BOOKING FORM */}
+          {/* BOOKING FORM — fixed modal + backdrop */}
+          {!isOBS && selectedSlot && (
+            <div className="bf-backdrop" onClick={closeSlot} aria-hidden />
+          )}
           {!isOBS && selectedSlot && (
             <BookingForm
               slot={selectedSlot}
