@@ -148,7 +148,7 @@ export default function CustomizePanel({
       el.removeEventListener('touchmove', handleTouchMove);
       el.removeEventListener('touchend', handleTouchEnd);
     };
-  }, []); // stable via refs
+  }, [open]); // re-attach when panel opens (dragRef.current is null while closed)
 
   const fontDef   = BANNER_FONT_PX_RANGE.default;
   const speedDef  = BANNER_SPEED_SECS_RANGE.default;
@@ -157,6 +157,12 @@ export default function CustomizePanel({
   const resetBanner = () => { onBannerFontPxChange(fontDef); onBannerSpeedSecsChange(speedDef); };
 
   const previewMaskCss = SHAPE_CSS[shape ?? 'rect'] ?? 'none';
+
+  // Mirror the stream's objectFit logic: contain by default so the whole image
+  // is visible; switch to cover once the user has started panning / zooming.
+  const hasCustomCrop = mediaOffsetX !== offsetDef || mediaOffsetY !== offsetDef || mediaZoom !== zoomDef;
+  const previewObjectFit: 'cover' | 'contain' =
+    (shape === 'circle' || shape === 'hex' || hasCustomCrop) ? 'cover' : 'contain';
 
   // Shared segment-button style factory.
   const segBtn = (active: boolean, isLast: boolean): React.CSSProperties => ({
@@ -281,13 +287,13 @@ export default function CustomizePanel({
                         <video
                           src={mediaPreviewUrl}
                           autoPlay muted loop playsInline
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: `${mediaOffsetX}% ${mediaOffsetY}%`, transform: `scale(${mediaZoom})`, pointerEvents: 'none' }}
+                          style={{ width: '100%', height: '100%', objectFit: previewObjectFit, objectPosition: `${mediaOffsetX}% ${mediaOffsetY}%`, transform: `scale(${mediaZoom})`, pointerEvents: 'none' }}
                         />
                       ) : (
                         <img
                           src={mediaPreviewUrl}
                           alt=""
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: `${mediaOffsetX}% ${mediaOffsetY}%`, transform: `scale(${mediaZoom})`, pointerEvents: 'none' }}
+                          style={{ width: '100%', height: '100%', objectFit: previewObjectFit, objectPosition: `${mediaOffsetX}% ${mediaOffsetY}%`, transform: `scale(${mediaZoom})`, pointerEvents: 'none' }}
                         />
                       )}
                     </div>

@@ -2151,13 +2151,28 @@ function OverlayContent() {
           .ov-main.ov-v9 > .slots-sec { grid-column: 1; grid-row: auto; }
         }
         .ov-browse-link {
-          background: none; border: none; padding: 14px 0 0; cursor: pointer;
+          display: flex; align-items: center; gap: 10px;
+          width: 100%; text-align: left; margin-top: 8px;
+          padding: 11px 16px;
+          background: var(--surf, var(--casi-surface));
+          border: 1px solid var(--line, var(--casi-border));
+          border-radius: 10px; cursor: pointer;
           font-family: var(--M), var(--font-casi-mono), monospace;
-          font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
-          color: var(--text-3, var(--casi-text-muted)); text-align: left;
-          transition: color 0.14s;
+          font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+          color: var(--text-3, var(--casi-text-muted));
+          transition: border-color 0.15s, background 0.15s, color 0.15s;
         }
-        .ov-browse-link:hover { color: var(--ink, var(--casi-accent)); }
+        .ov-browse-link::before {
+          content: "⊞"; font-size: 15px; font-style: normal;
+          color: var(--ink-40, rgba(13,207,176,0.4));
+          transition: color 0.15s;
+        }
+        .ov-browse-link:hover {
+          border-color: var(--ink-40, rgba(13,207,176,0.4));
+          background: var(--ink-04, rgba(13,207,176,0.04));
+          color: var(--ink, var(--casi-accent));
+        }
+        .ov-browse-link:hover::before { color: var(--ink, var(--casi-accent)); }
 
         .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
         .my-beams-lbl { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; }
@@ -2183,7 +2198,7 @@ function OverlayContent() {
         .slot-card {
           display:flex; align-items:center; gap:14px;
           padding:14px 16px; background:var(--surf);
-          border:1px solid var(--line); border-radius:0;
+          border:1px solid var(--line); border-radius:10px;
           cursor:pointer; text-align:left; width:100%; font:inherit; color:inherit;
           transition:border-color .15s, background .15s;
         }
@@ -2228,7 +2243,7 @@ function OverlayContent() {
           z-index:500;
           background:var(--surf);
           border:1px solid var(--ink) !important;
-          border-radius:0;
+          border-radius:14px;
           padding:0;
           box-shadow:0 32px 96px rgba(0,0,0,0.75);
           animation:modalIn .2s cubic-bezier(.22,1,.36,1);
@@ -2239,7 +2254,7 @@ function OverlayContent() {
           .bf {
             position:static; top:auto; left:auto;
             transform:none; width:auto;
-            max-height:none; overflow:visible;
+            max-height:none; overflow:hidden;
             box-shadow:none;
             animation:slideInV9 .2s ease;
           }
@@ -2250,6 +2265,7 @@ function OverlayContent() {
           display:flex; align-items:center; justify-content:space-between;
           padding:18px 22px; margin-bottom:0; border-bottom:none;
           background:var(--ink); color:var(--on-ink);
+          border-radius:13px 13px 0 0;
         }
         .bf-type {
           font-family:var(--H); font-weight:700; font-size:15px; letter-spacing:-0.015em;
@@ -2280,7 +2296,7 @@ function OverlayContent() {
         .bf-lbl::before { content:""; display:block; width:14px; height:1.5px; background:var(--ink); }
         .bf-inp {
           width:100%; background:var(--paper);
-          border:1px solid var(--line-2); border-radius:0;
+          border:1px solid var(--line-2); border-radius:8px;
           padding:11px 14px; font-size:13.5px; color:var(--text); outline:none;
           font-family:var(--B); transition:border-color .14s;
         }
@@ -2314,6 +2330,7 @@ function OverlayContent() {
           border-top:1.5px solid var(--ink);
           background:var(--paper);
           gap:12px;
+          border-radius:0 0 13px 13px;
         }
         .bf-cost-lbl {
           font-family:var(--H); font-weight:800; font-size:13px;
@@ -2327,7 +2344,7 @@ function OverlayContent() {
         .bf-sub {
           font-family:var(--M); font-weight:700; font-size:12px;
           letter-spacing:0.16em; text-transform:uppercase;
-          padding:15px 18px; border:1px solid var(--ink); border-radius:0;
+          padding:15px 18px; border:1px solid var(--ink); border-radius:8px;
           background:var(--ink); color:var(--on-ink);
           cursor:pointer; transition:transform .14s, filter .14s;
           white-space:nowrap;
