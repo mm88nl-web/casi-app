@@ -2220,9 +2220,9 @@ function OverlayContent() {
         }
 
         /* ── Booking form ──────────────────────────────────────────────────────
-           Mobile (<900px): fixed centered modal with backdrop.
-           Desktop (≥900px): static sidebar in grid-column 2 so the canvas
-           stays fully visible and the live slot preview is always in view. */
+           Mobile (<900px): bottom sheet — anchors to the bottom of the viewport,
+           slides up, capped at 87dvh so the canvas is always partially visible.
+           Desktop (≥900px): static sidebar in grid-column 2. */
         .bf-backdrop {
           position:fixed; inset:0; z-index:499;
           background:rgba(0,0,0,0.55);
@@ -2232,32 +2232,42 @@ function OverlayContent() {
         @keyframes bkFadeIn { from { opacity:0; } to { opacity:1; } }
         @media (min-width:900px) { .bf-backdrop { display:none; } }
         .bf {
-          /* Mobile: fixed centered modal */
-          position:fixed; top:12px; left:50%;
-          transform:translateX(-50%);
-          width:min(600px, calc(100vw - 24px));
-          max-height:calc(100dvh - 24px);
+          /* Mobile: bottom sheet */
+          position:fixed; bottom:0; left:0; right:0; top:auto;
+          width:100%;
+          max-height:87dvh;
           overflow-y:auto; overflow-x:hidden;
           -webkit-overflow-scrolling:touch;
           overscroll-behavior:contain;
           z-index:500;
           background:var(--surf);
           border:1px solid var(--ink) !important;
-          border-radius:14px;
+          border-bottom:none !important;
+          border-radius:16px 16px 0 0;
           padding:0;
-          box-shadow:0 32px 96px rgba(0,0,0,0.75);
-          animation:modalIn .2s cubic-bezier(.22,1,.36,1);
+          box-shadow:0 -8px 48px rgba(0,0,0,0.65);
+          animation:modalIn .28s cubic-bezier(.22,1,.36,1);
         }
-        @keyframes modalIn { from { opacity:0; transform:translateX(-50%) translateY(-6px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+        /* drag-handle pill */
+        .bf::before {
+          content:''; display:block;
+          width:36px; height:3px;
+          background:var(--line-2, rgba(255,255,255,0.18));
+          border-radius:2px;
+          margin:10px auto 0;
+        }
+        @keyframes modalIn { from { transform:translateY(100%); opacity:0; } to { transform:translateY(0); opacity:1; } }
         @media (min-width:900px) {
           /* Desktop: static sidebar — canvas stays visible on the left */
           .bf {
-            position:static; top:auto; left:auto;
-            transform:none; width:auto;
-            max-height:none; overflow:hidden;
+            position:static; bottom:auto; left:auto; right:auto;
+            width:auto; max-height:none; overflow:hidden;
+            border-radius:14px;
+            border-bottom:1px solid var(--ink) !important;
             box-shadow:none;
             animation:slideInV9 .2s ease;
           }
+          .bf::before { display:none; }
           .ov-main.ov-v9 > .bf { grid-column:2; grid-row:2 / span 2; margin-top:0; align-self:start; }
         }
         @keyframes slideInV9 { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
@@ -2330,8 +2340,8 @@ function OverlayContent() {
           border-top:1.5px solid var(--ink);
           background:var(--paper);
           gap:12px;
-          border-radius:0 0 13px 13px;
         }
+        @media (min-width:900px) { .bf-footer { border-radius:0 0 13px 13px; } }
         .bf-cost-lbl {
           font-family:var(--H); font-weight:800; font-size:13px;
           text-transform:uppercase; letter-spacing:0.16em; color:var(--text);
