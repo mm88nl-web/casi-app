@@ -2084,7 +2084,7 @@ function OverlayContent() {
     <>
       <SkinProvider
         skin={profile?.skin}
-        inkColor={profile?.skin === 'custom' ? profile?.ink_color : null}
+        inkColor={profile?.skin === 'custom' ? (profile?.ink_color ?? profile?.theme_color) : null}
         paperColor={profile?.skin === 'custom' ? profile?.paper_color : null}
       />
       <NameEntryScreen onConfirm={confirmName} tc={tc} />
@@ -2095,7 +2095,7 @@ function OverlayContent() {
     <>
       <SkinProvider
         skin={profile?.skin}
-        inkColor={profile?.skin === 'custom' ? profile?.ink_color : null}
+        inkColor={profile?.skin === 'custom' ? (profile?.ink_color ?? profile?.theme_color) : null}
         paperColor={profile?.skin === 'custom' ? profile?.paper_color : null}
       />
       <style>{`
