@@ -2221,21 +2221,24 @@ function OverlayContent() {
 
         /* ── Booking form ──────────────────────────────────────────────────────
            Mobile (<900px): bottom sheet — anchors to the bottom of the viewport,
-           slides up, capped at 87dvh so the canvas is always partially visible.
+           slides up from the bottom. Capped at 65dvh so the canvas (16:9 +
+           nav ≈ 250-270px on typical phones) is fully visible and clear above.
            Desktop (≥900px): static sidebar in grid-column 2. */
         .bf-backdrop {
           position:fixed; inset:0; z-index:499;
-          background:rgba(0,0,0,0.55);
-          backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+          /* Transparent — just a tap-to-dismiss target. The canvas stays
+             fully visible above the sheet so viewers can see their preview. */
+          background:rgba(0,0,0,0.08);
           animation:bkFadeIn .18s ease;
         }
         @keyframes bkFadeIn { from { opacity:0; } to { opacity:1; } }
         @media (min-width:900px) { .bf-backdrop { display:none; } }
         .bf {
-          /* Mobile: bottom sheet */
+          /* Mobile: bottom sheet capped at 65dvh — leaves room for the full
+             canvas (≈210-230px) plus the nav bar above the sheet */
           position:fixed; bottom:0; left:0; right:0; top:auto;
           width:100%;
-          max-height:87dvh;
+          max-height:65dvh;
           overflow-y:auto; overflow-x:hidden;
           -webkit-overflow-scrolling:touch;
           overscroll-behavior:contain;
