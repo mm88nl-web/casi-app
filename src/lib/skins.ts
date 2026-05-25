@@ -243,7 +243,7 @@ export const SKINS: Skin[] = [
 ];
 
 export function getSkinById(id: string | null | undefined): Skin {
-  return SKINS.find(s => s.id === id) ?? SKINS[0];
+  return SKINS.find(s => s.id === id) ?? SKINS.find(s => s.id === DEFAULT_SKIN_ID) ?? SKINS[0];
 }
 
 /** Parse a 6-digit hex colour into "R, G, B" channel string. */
