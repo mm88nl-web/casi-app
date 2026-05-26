@@ -2156,7 +2156,8 @@ function OverlayContent() {
           .ov-main.ov-v9 { grid-template-columns: 1fr; }
           .ov-main.ov-v9 > .stream-canvas,
           .ov-main.ov-v9 > .ov-browse-link,
-          .ov-main.ov-v9 > .slots-sec { grid-column: 1; grid-row: auto; }
+          .ov-main.ov-v9 > .slots-sec,
+          .ov-main.ov-v9 > .bf-wrapper { grid-column: 1; grid-row: auto; }
         }
         .ov-browse-link {
           display: flex; align-items: center; gap: 10px;
@@ -2254,7 +2255,7 @@ function OverlayContent() {
             margin-top:0;
             animation:slideInV9 .2s ease;
           }
-          .ov-main.ov-v9 > .bf { grid-column:2; grid-row:2 / span 2; margin-top:0; align-self:start; }
+          .ov-main.ov-v9 > .bf-wrapper { grid-column:2; grid-row:2 / span 2; margin-top:0; align-self:start; }
         }
         @keyframes slideInV9 { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
         .bf-hdr {
@@ -2844,7 +2845,7 @@ function OverlayContent() {
 
           {/* BOOKING FORM — inline below canvas on mobile, sidebar on desktop */}
           {!isOBS && selectedSlot && (
-            <div ref={bookingFormRef}>
+            <div ref={bookingFormRef} className="bf-wrapper">
             <BookingForm
               slot={selectedSlot}
               accentColor={accentColor}
