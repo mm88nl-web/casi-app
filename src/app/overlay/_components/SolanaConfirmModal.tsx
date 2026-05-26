@@ -49,7 +49,7 @@ export default function SolanaConfirmModal({
     : null;
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:"var(--font-casi-mono),monospace" }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:"var(--font-casi-mono),monospace" }}>
       <div style={{ background:'var(--casi-surface,#0d0d0d)', border:'1px solid rgba(var(--casi-accent-rgb),0.35)', borderRadius:16, padding:28, width:'100%', maxWidth:380 }}>
         <div style={{ fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'var(--casi-accent)', marginBottom:16 }}>Confirm your beam slot</div>
 

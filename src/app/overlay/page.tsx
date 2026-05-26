@@ -1395,13 +1395,6 @@ function OverlayContent() {
         }
         throw new Error('No wallet send method available');
       })();
-      // Swallow rejections so the unawaited promise doesn't crash the
-      // app — the poll path will still resolve via the chain if the
-      // wallet actually submitted.
-      walletSendPromise.catch((err) => {
-        console.warn('[bookSlot] wallet send promise rejected (poll continues):', err);
-      });
-
       const POLL_INTERVAL_MS = 2_000;
       const POLL_TIMEOUT_MS  = 90_000;
       const pollPromise: Promise<SendOutcome> = (async () => {
@@ -1417,7 +1410,20 @@ function OverlayContent() {
         throw new Error('rpc_confirmation_timeout');
       })();
 
-      const result = await Promise.race([walletSendPromise, pollPromise]);
+      // Wrap walletSendPromise so non-user-rejection wallet errors (e.g. Phantom
+      // "Unexpected error") don't kill the race — the PDA poll is the source of
+      // truth and may still confirm even when the wallet throws.
+      const walletSendSafe: Promise<SendOutcome> = walletSendPromise.then(
+        v => v,
+        async (e) => {
+          const { isUserRejection } = await import('@/lib/casi-errors');
+          if (isUserRejection(e)) throw e; // user rejected — propagate to deny the booking
+          console.warn('[bookSlot] wallet rejected (non-user), poll continues:', e);
+          return new Promise<SendOutcome>(() => {}); // never resolves — let poll win
+        },
+      );
+
+      const result = await Promise.race([walletSendSafe, pollPromise]);
       const sig = result.sig;
 
       // Persist on-chain state so the admin settle/cancel flows can rebuild
