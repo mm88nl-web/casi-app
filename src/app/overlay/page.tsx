@@ -880,7 +880,9 @@ function OverlayContent() {
     setBannerFontPx(28); setBannerSpeedSecs(20);
     setMediaOffsetX(50); setMediaOffsetY(50); setMediaZoom(1);
     const maxDur = el.max_duration_minutes;
-    const defaultSec = maxDur ? Math.min(60, maxDur * 60) : 60;
+    const minDur = el.min_duration_minutes;
+    const minSec = minDur ? minDur * 60 : 30;
+    const defaultSec = maxDur ? Math.min(Math.max(60, minSec), maxDur * 60) : Math.max(60, minSec);
     setDurationSeconds(defaultSec);
     if (extend) {
       const myBooking = getMyBookingForSlot(el.id);
@@ -900,7 +902,8 @@ function OverlayContent() {
   };
   const setDurationSecsClamped = (secs: number) => {
     const maxSecs = selectedSlot?.max_duration_minutes ? selectedSlot.max_duration_minutes * 60 : Infinity;
-    setDurationSeconds(Math.max(30, Math.min(secs, maxSecs)));
+    const minSecs = selectedSlot?.min_duration_minutes ? selectedSlot.min_duration_minutes * 60 : 30;
+    setDurationSeconds(Math.max(minSecs, Math.min(secs, maxSecs)));
   };
 
   const submitBooking = async () => {
@@ -2055,11 +2058,13 @@ function OverlayContent() {
   // True when the viewer has the content needed to submit a booking.
   // Banner slots use the scrolling message as their content (media is
   // optional). Every other shape requires a valid image/video.
-  const canSubmit = selectedSlot?.shape === 'banner'
+  const minDurSecs = selectedSlot?.min_duration_minutes ? selectedSlot.min_duration_minutes * 60 : 0;
+  const meetsMinDuration = minDurSecs === 0 || durationSeconds >= minDurSecs;
+  const canSubmit = meetsMinDuration && (selectedSlot?.shape === 'banner'
     ? message.trim().length > 0 && message.length <= BANNER_MAX_MESSAGE
     : uploadMode === 'upload'
       ? !!uploadedUrl
-      : (!!imageUrl && imageUrl.startsWith('https://') && imageValid);
+      : (!!imageUrl && imageUrl.startsWith('https://') && imageValid));
 
   // For booking form accent: extend=yellow, queue/rent=skin accent
   const accentColor    = isExtend ? '#eab308' : tc;
@@ -2871,6 +2876,7 @@ function OverlayContent() {
               getUrlFileType={getUrlFileType}
               durationSeconds={durationSeconds}
               onDurationChange={setDurationSecsClamped}
+              minDurationSeconds={minDurSecs}
               message={message}
               onMessageChange={setMessage}
               estimatedCost={estimatedCost}

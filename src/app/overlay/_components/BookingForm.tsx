@@ -51,6 +51,7 @@ type Props = {
   // Duration
   durationSeconds: number;
   onDurationChange: (secs: number) => void;
+  minDurationSeconds: number;
 
   // Message
   message: string;
@@ -102,7 +103,7 @@ export default function BookingForm(props: Props) {
     uploadMode, onUploadModeChange,
     uploadedUrl, uploadedFileType, uploading, onFileSelect, onRemoveUpload,
     imageUrl, imageValid, onImageUrlChange, onImageValidChange, getUrlFileType,
-    durationSeconds, onDurationChange,
+    durationSeconds, onDurationChange, minDurationSeconds,
     message, onMessageChange,
     estimatedCost, streamerCurrency, walletConnected, usdcBalance,
     activeBookings, approvedQueuedBookings,
@@ -410,6 +411,11 @@ export default function BookingForm(props: Props) {
               />
               <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: '#555' }}>min</span>
             </div>
+            {minDurationSeconds > 0 && durationSeconds < minDurationSeconds && (
+              <p style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: '#f87171', letterSpacing: '0.08em', marginTop: 6 }}>
+                Min {Math.ceil(minDurationSeconds / 60)} min required
+              </p>
+            )}
           </div>
 
           <div>

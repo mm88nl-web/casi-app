@@ -125,7 +125,7 @@ export async function POST(req: Request) {
   // (b) it really is free (price_value = 0), (c) duration is within max.
   const { data: element } = await supabase
     .from('overlay_elements')
-    .select('id, profile_id, price_value, price_unit, max_duration_minutes, shape')
+    .select('id, profile_id, price_value, price_unit, max_duration_minutes, min_duration_minutes, shape')
     .eq('id', element_id)
     .single();
 
@@ -148,6 +148,10 @@ export async function POST(req: Request) {
   if (maxDur <= 0) return NextResponse.json({ error: 'Slot has no duration limit configured' }, { status: 400 });
   const dur = Math.min(Number(duration_minutes) || 0, maxDur);
   if (dur <= 0) return NextResponse.json({ error: 'Invalid duration' }, { status: 400 });
+  const minDur = Number(element.min_duration_minutes) || 0;
+  if (minDur > 0 && dur < minDur) {
+    return NextResponse.json({ error: `Minimum booking duration is ${minDur} minutes` }, { status: 400 });
+  }
 
   // Per-streamer rate limit (1/min per viewer key). Re-uses the table that
   // already exists for free flashes.

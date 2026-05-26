@@ -119,7 +119,7 @@ export async function POST(req: Request) {
   // price/duration so we can ignore client-supplied values that drift.
   const { data: element } = await supabase
     .from('overlay_elements')
-    .select('id, profile_id, price_value, price_unit, max_duration_minutes, shape')
+    .select('id, profile_id, price_value, price_unit, max_duration_minutes, min_duration_minutes, shape')
     .eq('id', element_id)
     .single();
 
@@ -139,6 +139,10 @@ export async function POST(req: Request) {
   if (maxDur <= 0) return NextResponse.json({ error: 'Slot has no duration limit configured' }, { status: 400 });
   const dur = Math.min(Number(duration_minutes) || 0, maxDur);
   if (dur <= 0) return NextResponse.json({ error: 'Invalid duration' }, { status: 400 });
+  const minDur = Number(element.min_duration_minutes) || 0;
+  if (minDur > 0 && dur < minDur) {
+    return NextResponse.json({ error: `Minimum booking duration is ${minDur} minutes` }, { status: 400 });
+  }
 
   // Stale cleanup: deny prior pending Solana bookings for this viewer_name
   // on this slot that never got an escrow_pda. Bounded by the per-IP rate
