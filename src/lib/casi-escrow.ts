@@ -1150,4 +1150,31 @@ export class CasiEscrowClient {
 
     return { sig, solscanUrl: solscanTxUrl(sig, this.cluster) };
   }
+
+  /** Read-only: fetch the on-chain GlobalConfig. Returns null if the config
+   *  account doesn't exist yet (program not initialised on this cluster). */
+  async fetchGlobalConfig(): Promise<{
+    paused:           boolean;
+    maxEscrowAmount:  bigint;
+    minEscrowAmount:  bigint;
+    acceptedMint:     string;
+  } | null> {
+    const [configPda] = deriveConfigPda();
+    const conn = (this.program.provider as AnchorProvider).connection;
+    const info = await conn.getAccountInfo(configPda);
+    if (!info) return null;
+    // Layout (after 8-byte Anchor discriminator):
+    //   u8  version        offset 8
+    //   [u8;32] admin      offset 9
+    //   [u8;32] mint       offset 41
+    //   bool paused        offset 73
+    //   u64 max_escrow     offset 74
+    //   u64 min_escrow     offset 82
+    const d = info.data;
+    const paused          = d[73] !== 0;
+    const maxEscrowAmount = d.readBigUInt64LE(74);
+    const minEscrowAmount = d.readBigUInt64LE(82);
+    const acceptedMint    = new PublicKey(d.slice(41, 73)).toBase58();
+    return { paused, maxEscrowAmount, minEscrowAmount, acceptedMint };
+  }
 }

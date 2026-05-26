@@ -1228,6 +1228,39 @@ function OverlayContent() {
         setSubmitting(false);
         return;
       }
+      // GlobalConfig min_escrow_amount check. Fetch the config to get the
+      // on-chain floor before Phantom's wallet popup so we can show a clear
+      // message instead of letting simulation fail with "Unexpected error".
+      const amountUsdcMicroPreflight = Math.round(totalUsdc * 10 ** usdcDecimals);
+      try {
+        const { CasiEscrowClient: EscrowClientPreflight } = await import('@/lib/casi-escrow');
+        const preflightAnchorWallet = {
+          publicKey: effectivePublicKey,
+          signTransaction: async () => { throw new Error('preflight'); },
+          signAllTransactions: async () => { throw new Error('preflight'); },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any;
+        const preflightClient = new EscrowClientPreflight(connection, preflightAnchorWallet, WALLET_ADAPTER_CLUSTER);
+        const config = await preflightClient.fetchGlobalConfig();
+        if (config) {
+          if (config.paused) {
+            showNotif('The CASI escrow program is currently paused — USDC bookings are temporarily unavailable.', 'denied');
+            await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
+            setSubmitting(false);
+            return;
+          }
+          if (config.minEscrowAmount > BigInt(0) && BigInt(amountUsdcMicroPreflight) < config.minEscrowAmount) {
+            const minUsdc = (Number(config.minEscrowAmount) / 1e6).toFixed(2);
+            showNotif(`Minimum booking value is ${minUsdc} USDC — increase the duration or check the slot's per-minute price.`, 'denied');
+            await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
+            setSubmitting(false);
+            return;
+          }
+        }
+      } catch {
+        // Non-fatal — if the config fetch fails, let the tx proceed and Phantom
+        // will catch the simulation failure as before.
+      }
       console.log('[solana] pre-flight passed — SOL:', (solLamports / 1e9).toFixed(4), 'USDC:', usdcBalance);
       // ──────────────────────────────────────────────────────────────────────
 
