@@ -2576,7 +2576,8 @@ function OverlayContent() {
               // locked, or another slot's form is already open (one at a
               // time). Extend / Join queue / Book all route through the
               // same openSlot call with different modes.
-              const clickable = !isOBS && !isLocked && !myBookingForSlot && !selectedSlot;
+              const isConfigured = Number(el.max_duration_minutes) > 0;
+              const clickable = !isOBS && !isLocked && !myBookingForSlot && !selectedSlot && isConfigured;
               const handleSlotClick = clickable ? () => openSlot(el, isOccupied) : undefined;
               const isSelectedHere = selectedSlot?.id === el.id;
 

@@ -50,18 +50,20 @@ export default function SlotsList({
           const queueCount       = queueCounts[el.id] || 0;
           const myBookingForSlot = getMyBookingForSlot(el.id);
           const isLocked         = !!el.locked;
+          const isConfigured     = Number(el.max_duration_minutes) > 0;
+          const isDisabled       = !!myBookingForSlot || isLocked || !isConfigured;
           const isFree           = Number(el.price_value) === 0;
-          const priceColor       = isLocked ? '#555' : myBookingForSlot ? '#555' : isFree ? '#4ade80' : tc;
+          const priceColor       = isDisabled ? '#555' : isFree ? '#4ade80' : tc;
 
           return (
             <button
               key={el.id}
-              className={`slot-card ${myBookingForSlot || isLocked ? 's-disabled' : ''}`}
+              className={`slot-card ${isDisabled ? 's-disabled' : ''}`}
               style={{
-                borderColor: isFree ? 'rgba(74,222,128,0.22)' : isOccupied && !myBookingForSlot && !isLocked ? `rgba(${tcRgb},0.14)` : !myBookingForSlot && !isLocked ? `rgba(${tcRgb},0.09)` : undefined,
+                borderColor: isFree && !isDisabled ? 'rgba(74,222,128,0.22)' : isOccupied && !isDisabled ? `rgba(${tcRgb},0.14)` : !isDisabled ? `rgba(${tcRgb},0.09)` : undefined,
                 position: 'relative',
               }}
-              onClick={() => !myBookingForSlot && !isLocked && onOpenSlot(el, isOccupied)}
+              onClick={() => !isDisabled && onOpenSlot(el, isOccupied)}
             >
               {isFree && !isLocked && (
                 <span style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(74,222,128,0.14)', border: '1px solid rgba(74,222,128,0.4)', color: '#4ade80', fontFamily: "var(--font-casi-mono), monospace", fontSize: 8, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 4, pointerEvents: 'none' }}>
@@ -75,7 +77,9 @@ export default function SlotsList({
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="s-type">
-                  {isLocked
+                  {!isConfigured
+                    ? 'Not ready'
+                    : isLocked
                     ? 'Locked'
                     : myBookingForSlot
                     ? String(myBookingForSlot.status || 'pending').replace('_', ' ')
