@@ -32,7 +32,7 @@ function LockClosedIcon() {
 
 export type LayerItem = {
   id: string;
-  shape: 'rect' | 'rounded' | 'circle' | 'hex' | 'banner' | null;
+  shape: 'rect' | 'rounded' | 'circle' | 'hex' | 'custom' | 'banner' | 'backdrop' | null;
   label: string;
   /** e.g. "$5/min · idle" or "$8/min · LIVE 4:21" */
   meta: string;

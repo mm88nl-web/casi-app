@@ -348,8 +348,7 @@ function QueueThumb({
     return <div style={baseTile} aria-hidden />;
   }
   const clipPath =
-    shape === 'circle' ? 'circle(50%)' :
-    shape === 'hex' ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' :
+    shape === 'circle' || shape === 'custom' ? 'circle(50%)' :
     undefined;
   return (
     <div style={{ ...baseTile, background: 'var(--casi-bg)' }}>
@@ -443,8 +442,7 @@ function AiringThumb({
   }
 
   const clipPath =
-    shape === 'circle' ? 'circle(50%)' :
-    shape === 'hex' ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' :
+    shape === 'circle' || shape === 'custom' ? 'circle(50%)' :
     undefined;
   const borderRadius =
     shape === 'rounded' ? 8 :
@@ -456,7 +454,7 @@ function AiringThumb({
     <div
       style={{
         ...baseTile,
-        borderRadius: shape === 'circle' || shape === 'hex' ? 0 : borderRadius,
+        borderRadius: shape === 'circle' || shape === 'custom' ? 0 : borderRadius,
         background: 'var(--casi-bg)',
       }}
     >

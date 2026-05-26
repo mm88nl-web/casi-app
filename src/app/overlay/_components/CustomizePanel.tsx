@@ -36,9 +36,8 @@ const SHAPE_CSS: Record<string, string> = {
   rect:    'none',
   rounded: 'inset(0 round 14px)',
   circle:  'circle(50%)',
-  // hex and custom are handled via SVG clipPath on the actual canvas;
+  // custom is handled via SVG clipPath on the actual canvas;
   // the preview panel falls back to circle for simplicity.
-  hex:     'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)',
   custom:  'circle(50%)',
 };
 
@@ -165,7 +164,7 @@ export default function CustomizePanel({
   // is visible; switch to cover once the user has started panning / zooming.
   const hasCustomCrop = mediaOffsetX !== offsetDef || mediaOffsetY !== offsetDef || mediaZoom !== zoomDef;
   const previewObjectFit: 'cover' | 'contain' =
-    (shape === 'circle' || shape === 'hex' || shape === 'custom' || hasCustomCrop) ? 'cover' : 'contain';
+    (shape === 'circle' || shape === 'custom' || hasCustomCrop) ? 'cover' : 'contain';
 
   // Shared segment-button style factory.
   const segBtn = (active: boolean, isLast: boolean): React.CSSProperties => ({
@@ -272,7 +271,7 @@ export default function CustomizePanel({
                   onPointerCancel={onPointerUp}
                   style={{
                     width: '100%',
-                    aspectRatio: shape === 'circle' || shape === 'hex' || shape === 'custom' ? '1 / 1' : '16 / 9',
+                    aspectRatio: shape === 'circle' || shape === 'custom' ? '1 / 1' : '16 / 9',
                     maxHeight: 200,
                     background: '#0d0d0d',
                     border: `1px solid rgba(${accentColorRgb},0.2)`,
