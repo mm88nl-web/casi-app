@@ -146,6 +146,7 @@ function OverlayContent() {
   // Without this guard the effect fires on page load because Wallet Standard
   // registers Phantom into `wallet` automatically, causing an instant popup.
   const userInitiatedConnect = useRef(false);
+  const bookingFormRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (wallet && !connected && !connecting && userInitiatedConnect.current) {
       userInitiatedConnect.current = false;
@@ -884,6 +885,13 @@ function OverlayContent() {
     if (extend) {
       const myBooking = getMyBookingForSlot(el.id);
       if (myBooking?.image_url) { setImageUrl(myBooking.image_url); setImageValid(true); }
+    }
+    // On mobile the form is in-flow below the canvas — scroll to it so the
+    // viewer doesn't have to manually scroll down to find it.
+    if (window.innerWidth < 900) {
+      setTimeout(() => {
+        bookingFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
     }
   };
   const closeSlot = () => {
@@ -2220,57 +2228,32 @@ function OverlayContent() {
         }
 
         /* ── Booking form ──────────────────────────────────────────────────────
-           Mobile (<900px): bottom sheet — anchors to the bottom of the viewport,
-           slides up from the bottom. Capped at 65dvh so the canvas (16:9 +
-           nav ≈ 250-270px on typical phones) is fully visible and clear above.
+           Mobile (<900px): inline block in document flow, below the canvas.
+           Canvas is never obscured — banners at the bottom of the stream stay
+           visible. User scrolls down to fill in the form.
            Desktop (≥900px): static sidebar in grid-column 2. */
-        .bf-backdrop {
-          position:fixed; inset:0; z-index:499;
-          /* Transparent — just a tap-to-dismiss target. The canvas stays
-             fully visible above the sheet so viewers can see their preview. */
-          background:rgba(0,0,0,0.08);
-          animation:bkFadeIn .18s ease;
-        }
-        @keyframes bkFadeIn { from { opacity:0; } to { opacity:1; } }
-        @media (min-width:900px) { .bf-backdrop { display:none; } }
+        .bf-backdrop { display:none; }
         .bf {
-          /* Mobile: bottom sheet capped at 65dvh — leaves room for the full
-             canvas (≈210-230px) plus the nav bar above the sheet */
-          position:fixed; bottom:0; left:0; right:0; top:auto;
+          /* Mobile: in-flow below the canvas */
+          position:static;
           width:100%;
-          max-height:65dvh;
-          overflow-y:auto; overflow-x:hidden;
-          -webkit-overflow-scrolling:touch;
-          overscroll-behavior:contain;
-          z-index:500;
           background:var(--surf);
           border:1px solid var(--ink) !important;
-          border-bottom:none !important;
-          border-radius:16px 16px 0 0;
+          border-radius:14px;
           padding:0;
-          box-shadow:0 -8px 48px rgba(0,0,0,0.65);
+          margin-top:12px;
           animation:modalIn .28s cubic-bezier(.22,1,.36,1);
         }
-        /* drag-handle pill */
-        .bf::before {
-          content:''; display:block;
-          width:36px; height:3px;
-          background:var(--line-2, rgba(255,255,255,0.18));
-          border-radius:2px;
-          margin:10px auto 0;
-        }
-        @keyframes modalIn { from { transform:translateY(100%); opacity:0; } to { transform:translateY(0); opacity:1; } }
+        .bf::before { display:none; }
+        @keyframes modalIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
         @media (min-width:900px) {
           /* Desktop: static sidebar — canvas stays visible on the left */
           .bf {
-            position:static; bottom:auto; left:auto; right:auto;
-            width:auto; max-height:none; overflow:hidden;
             border-radius:14px;
             border-bottom:1px solid var(--ink) !important;
-            box-shadow:none;
+            margin-top:0;
             animation:slideInV9 .2s ease;
           }
-          .bf::before { display:none; }
           .ov-main.ov-v9 > .bf { grid-column:2; grid-row:2 / span 2; margin-top:0; align-self:start; }
         }
         @keyframes slideInV9 { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
@@ -2859,11 +2842,9 @@ function OverlayContent() {
             </button>
           )}
 
-          {/* BOOKING FORM — fixed modal + backdrop */}
+          {/* BOOKING FORM — inline below canvas on mobile, sidebar on desktop */}
           {!isOBS && selectedSlot && (
-            <div className="bf-backdrop" onClick={closeSlot} aria-hidden />
-          )}
-          {!isOBS && selectedSlot && (
+            <div ref={bookingFormRef}>
             <BookingForm
               slot={selectedSlot}
               accentColor={accentColor}
@@ -2922,6 +2903,7 @@ function OverlayContent() {
                 }
               }}
             />
+            </div>
           )}
 
           {/* SLOTS LIST */}
