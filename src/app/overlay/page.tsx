@@ -2181,7 +2181,7 @@ function OverlayContent() {
         .cancel-btn { background:none; border:none; font-family:var(--font-casi-mono),monospace; font-size:9px; color:rgba(248,113,113,0.5); cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:color .2s; padding:0; margin-left:4px; }
         .cancel-btn:hover { color:#f87171; }
 
-        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:var(--casi-bg); position:relative; overflow:hidden; margin-bottom:10px; }
+        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:#0a0a0a; position:relative; overflow:hidden; margin-bottom:10px; }
 
         /* ── Slot list — v9 ── sharp borders, ink accent on hover/select,
            48px square thumb that adopts the slot shape via .s-thumb-* helpers
