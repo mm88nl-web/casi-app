@@ -101,6 +101,23 @@ export default function RootLayout({
       lang="en"
       className={`${sans.variable} ${display.variable} ${mono.variable} ${serif.variable} h-full antialiased`}
     >
+      {/* Anti-FOUC: apply stored skin before first paint so the CSS :root dark
+          defaults never flash. Runs synchronously during HTML parsing in the
+          browser; fails silently during SSR (no window/localStorage there). */}
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{
+var S={'casi-light':['#294b3c','#f5e1d2'],'casi-dark':['#0DCFB0','#0C0D11'],'twitch':['#9146FF','#0e0e1a'],'kick':['#53FC18','#0a1a0a'],'mono':['#E8E8E8','#0a0a0a'],'apothecary':['#C8A45C','#0F0C07'],'onlyfans':['#00AFF0','#0A1420'],'rose':['#BE185D','#FDF2F8'],'snow':['#2563EB','#F0F5FF'],'amber':['#B45309','#FFFBEB'],'youtube':['#FF0000','#FFF8F8']};
+var id=localStorage.getItem('casi-skin-id')||'casi-light';
+var sk=S[id]||S['casi-light'];
+var ink=id==='custom'?(localStorage.getItem('casi-ink-color')||localStorage.getItem('casi-theme-color')||sk[0]):sk[0];
+var paper=id==='custom'?(localStorage.getItem('casi-paper-color')||sk[1]):sk[1];
+var r=document.documentElement;
+r.style.setProperty('--ink',ink);r.style.setProperty('--paper',paper);
+r.style.setProperty('--casi-accent',ink);r.style.setProperty('--casi-bg',paper);
+var c=paper.replace('#','');
+if(c.length===6){var l=.2126*(parseInt(c.slice(0,2),16)/255)+.7152*(parseInt(c.slice(2,4),16)/255)+.0722*(parseInt(c.slice(4,6),16)/255);if(l>.5)r.setAttribute('data-paper','light');}
+}catch(e){}})();` }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <Providers>
             <ClientErrorReporter />

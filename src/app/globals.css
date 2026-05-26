@@ -4,8 +4,8 @@
    v9 TWO-COLOR SYSTEM
    ───────────────────────────────────────────────────────────────────────
    Everything theming-related derives from two roots:
-     --ink   accent / brand color (defaults to Casi teal #0DCFB0)
-     --paper page background     (defaults to near-black #0B0B0C)
+     --ink   accent / brand color (matches DEFAULT_SKIN_ID = casi-light)
+     --paper page background     (matches DEFAULT_SKIN_ID = casi-light)
    Skin/user providers only need to set those two — the rest of the ladder
    (ink tints, surfaces, lines, text scale, on-ink) falls out of color-mix.
    v7 tokens (--casi-accent, --casi-bg, …) are aliased onto v9 so existing
@@ -16,8 +16,11 @@
   --foreground: #171717;
 
   /* ── v9 roots: the only colors that matter ── */
-  --ink:   #0DCFB0;
-  --paper: #0B0B0C;
+  /* Match DEFAULT_SKIN_ID ('casi-light') so SSR and no-JS renders are light.
+     The anti-FOUC script in layout.tsx overwrites these before first paint
+     for users with a stored skin preference. */
+  --ink:   #294b3c;
+  --paper: #f5e1d2;
 
   /* Derived — tints of ink against paper */
   --ink-04: color-mix(in oklab, var(--ink) 4%,  var(--paper));
