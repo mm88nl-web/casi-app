@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 
-export type SlotShape = 'rect' | 'rounded' | 'circle' | 'hex' | 'banner' | 'backdrop';
+export type SlotShape = 'rect' | 'circle' | 'custom' | 'banner' | 'backdrop';
 export type SlotState = 'idle' | 'selected' | 'in-use';
 
 type SlotCardProps = {
@@ -21,9 +21,8 @@ type SlotCardProps = {
 
 const DEFAULT_GLYPH: Record<SlotShape, string> = {
   rect: '▶',
-  rounded: '▢',
   circle: '●',
-  hex: '✦',
+  custom: '✦',
   banner: '▰▰▰',
   backdrop: '🖼',
 };
@@ -68,11 +67,9 @@ export default function SlotCard({
       base.background = 'rgba(20, 241, 149, 0.05)';
       base.color = '#14F195';
     }
-    if (shape === 'hex') {
-      base.clipPath = 'polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)';
-      base.border = 'none';
-      base.background = occupied ? 'rgba(20, 241, 149, 0.07)' : 'rgba(var(--casi-accent-rgb), 0.07)';
-    } else if (shape === 'circle') {
+    if (shape === 'circle') {
+      base.borderRadius = '50%';
+    } else if (shape === 'custom') {
       base.borderRadius = '50%';
     } else if (shape === 'banner') {
       base.width = '80px';
@@ -80,8 +77,6 @@ export default function SlotCard({
       base.borderRadius = '4px';
       base.fontSize = '8px';
       base.letterSpacing = '1px';
-    } else if (shape === 'rounded') {
-      base.borderRadius = '12px';
     }
     return base;
   })();

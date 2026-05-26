@@ -175,14 +175,14 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
   }, [supabase]);
 
   // Shape-change autosnap — same semantics as admin/page.tsx:
-  //  - circle/hex → 9:16 pixel-square based on current height
+  //  - circle/custom → 9:16 pixel-square based on current height
   //  - banner → full-width bottom strip
   //  - backdrop → full-canvas, demotes prior backdrop so at most one is_background row exists
-  const handleUpdateShape = useCallback(async (id: string, shape: string) => {
+  const handleUpdateShape = useCallback(async (id: string, shape: string, extra?: { corner_radius?: number; clip_path_svg?: string | null }) => {
     const el = elements.find((e) => e.id === id);
     if (!el) return;
-    const patch: Record<string, unknown> = { shape };
-    if (shape === 'circle' || shape === 'hex') {
+    const patch: Record<string, unknown> = { shape, ...(extra ?? {}) };
+    if (shape === 'circle' || shape === 'custom') {
       patch.width = Math.round(Number(el.height) * 9 / 16 * 100) / 100;
     } else if (shape === 'banner') {
       patch.width = 100; patch.height = 8; patch.pos_x = 0; patch.pos_y = 92; patch.is_background = false;
@@ -351,16 +351,28 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
         }}
       >
         <div className="casi-v9-canvas-grid-overlay" aria-hidden />
+        {/* SVG clipPath defs for custom-shaped slots */}
+        {elements.some(el => el.shape === 'custom' && el.clip_path_svg) && (
+          <svg width="0" height="0" style={{ position: 'absolute', overflow: 'visible', pointerEvents: 'none' }}>
+            <defs>
+              {elements.filter(el => el.shape === 'custom' && el.clip_path_svg).map(el => (
+                <clipPath key={el.id} id={`studio-clip-${el.id}`} clipPathUnits="objectBoundingBox">
+                  <path d={el.clip_path_svg} />
+                </clipPath>
+              ))}
+            </defs>
+          </svg>
+        )}
         {dimensions.width > 0 && elements.map((el) => {
           const isSelected = selectedSlotId === el.id;
           const state = slotState[el.id]; // 'active' | 'queued' | undefined
           const isActive = state === 'active';
-          // Circle and hex shapes need a pixel-square box or the clip-path
-          // collapses to an oval / flattened hex. The autosnap on shape
+          // Circle and custom shapes need a pixel-square box or the clip-path
+          // collapses to an oval / distorted shape. The autosnap on shape
           // change + onResizeStop keep stored dims in ratio, but legacy
           // rows or partial saves can drift — clamp here so the rendered
           // box is always square regardless of what's in the DB.
-          const isSquareShape = el.shape === 'circle' || el.shape === 'hex';
+          const isSquareShape = el.shape === 'circle' || el.shape === 'custom';
           const renderedWidthPx = el.is_background
             ? dimensions.width
             : isSquareShape
@@ -406,13 +418,13 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
               onResizeStop={(_e, _dir, ref, _delta, pos) => {
                 const heightPct = (ref.offsetHeight / dimensions.height) * 100;
                 let widthPct = (ref.offsetWidth / dimensions.width) * 100;
-                // Circle and hex need a pixel-square rendered box or the
-                // clipPath turns the shape into an ellipse / flattened hex.
+                // Circle and custom shapes need a pixel-square rendered box or
+                // the clipPath turns the shape into an ellipse / distorted form.
                 // Canvas is 16:9, so pixel-square == widthPct = heightPct × 9/16.
                 // Same rule handleUpdateShape uses on shape change — apply
                 // again on every resize so the streamer can't drift the slot
                 // out of ratio.
-                if (el.shape === 'circle' || el.shape === 'hex') {
+                if (el.shape === 'circle' || el.shape === 'custom') {
                   widthPct = Math.round(heightPct * 9 / 16 * 100) / 100;
                 }
                 updateLayer(el.id, {
@@ -441,7 +453,8 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
                         : isActive
                           ? '2px solid var(--casi-accent2)'
                           : '1.5px solid rgba(var(--casi-accent-rgb),0.3)',
-                    borderRadius: el.is_background ? 0 : el.shape === 'rounded' ? 14 : 6,
+                    borderRadius: el.is_background ? 0 : (el.shape === 'circle' || el.shape === 'custom') ? 0 : Math.max(6, el.corner_radius ?? 0),
+                    overflow: 'hidden',
                     opacity: el.locked ? 0.7 : 1,
                     // Persistent soft glow on live slots so the streamer sees
                     // at a glance which of their slots is airing content. The
@@ -452,7 +465,7 @@ export default function StudioLiveEditor({ supabase, profileId, username, stripe
                       : undefined,
                     clipPath:
                       el.shape === 'circle' ? 'circle(50%)'
-                      : el.shape === 'hex' ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)'
+                      : el.shape === 'custom' && el.clip_path_svg ? `url(#studio-clip-${el.id})`
                       : undefined,
                   }}
                 >

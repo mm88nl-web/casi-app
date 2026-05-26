@@ -16,12 +16,11 @@ export const BANNER_MAX_MESSAGE = 160;
  * pill list — if a preset is added here, it shows up in both surfaces.
  */
 export const SHAPE_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
-  { id: 'rect',     label: 'Rect'     },
-  { id: 'rounded',  label: 'Rounded'  },
-  { id: 'circle',   label: 'Circle'   },
-  { id: 'hex',      label: 'Hex'      },
-  { id: 'banner',   label: 'Banner'   },
-  { id: 'backdrop', label: 'Backdrop' },
+  { id: 'rect',     label: 'Rectangle' },
+  { id: 'circle',   label: 'Circle'    },
+  { id: 'custom',   label: 'Custom'    },
+  { id: 'banner',   label: 'Banner'    },
+  { id: 'backdrop', label: 'Backdrop'  },
 ];
 
 /**

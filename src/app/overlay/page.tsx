@@ -2112,9 +2112,7 @@ function OverlayContent() {
            Infinite loop within the beam's duration. Container clips, track is
            inline-block so its width depends on content length. */
         @keyframes beamMarquee { from{transform:translateX(100%)} to{transform:translateX(-100%)} }
-        .beam-shape-rounded { border-radius: 14px; overflow: hidden; }
         .beam-shape-circle  { clip-path: circle(50%); }
-        .beam-shape-hex     { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
         .beam-glow          { animation: beamGlow 3s ease-out 1; will-change: box-shadow; }
         .beam-banner        { display:flex; align-items:center; width:100%; height:100%; overflow:hidden; background:rgba(0,0,0,0.78); border-top:2px solid rgba(var(--casi-accent-rgb),0.4); border-bottom:2px solid rgba(var(--casi-accent-rgb),0.4); white-space:nowrap; }
         .beam-banner-track  { display:inline-block; padding-left:100%; color:var(--casi-accent); font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
@@ -2537,6 +2535,18 @@ function OverlayContent() {
                 alt=""
               />
             )}
+            {/* SVG clipPath defs for custom-shaped slots */}
+            {elements.some((el: any) => el.shape === 'custom' && el.clip_path_svg) && (
+              <svg width="0" height="0" style={{ position: 'absolute', overflow: 'visible', pointerEvents: 'none' }}>
+                <defs>
+                  {elements.filter((el: any) => el.shape === 'custom' && el.clip_path_svg).map((el: any) => (
+                    <clipPath key={el.id} id={`beam-clip-${el.id}`} clipPathUnits="objectBoundingBox">
+                      <path d={el.clip_path_svg} />
+                    </clipPath>
+                  ))}
+                </defs>
+              </svg>
+            )}
             {elements.map((el: any) => {
               const activeBooking   = getActiveBookingForSlot(el.id);
               const isOccupied      = !!activeBooking;
@@ -2573,11 +2583,9 @@ function OverlayContent() {
               // animation plays fresh. Key stays stable while a single beam
               // is live, then changes on the next one.
               const mediaKey = `${el.id}-${activeBooking?.id ?? 'none'}`;
-              const shapeClass =
-                el.shape === 'rounded' ? 'beam-shape-rounded' :
-                el.shape === 'circle'  ? 'beam-shape-circle'  :
-                el.shape === 'hex'     ? 'beam-shape-hex'     :
-                '';
+              const shapeClass = el.shape === 'circle' ? 'beam-shape-circle' : '';
+              const cornerR = (el.shape === 'rect' || el.shape === 'rounded') ? (el.corner_radius ?? (el.shape === 'rounded' ? 14 : 0)) : 0;
+              const customClip = el.shape === 'custom' && el.clip_path_svg ? { clipPath: `url(#beam-clip-${el.id})` } : {};
               const glowClass = isOccupied && (el.glow_on_start ?? true) && !el.is_background ? 'beam-glow' : '';
 
               // Banner slots render the viewer's message as a scrolling
@@ -2613,7 +2621,7 @@ function OverlayContent() {
               // also cover. Other shapes stay `contain` (preserving the
               // viewer's aspect ratio) UNLESS they've customized — that
               // signals intentional cropping.
-              const useCover = el.is_background || el.shape === 'circle' || el.shape === 'hex' || hasCustomCrop;
+              const useCover = el.is_background || el.shape === 'circle' || el.shape === 'custom' || hasCustomCrop;
               const objectFitCss: 'cover' | 'contain' = useCover ? 'cover' : 'contain';
               const mediaInlineStyle: React.CSSProperties = {
                 width: '100%', height: '100%',
@@ -2635,6 +2643,7 @@ function OverlayContent() {
                     cursor: clickable ? 'pointer' : 'default',
                     transition: 'all 0.35s cubic-bezier(0.16,1,0.3,1)',
                     overflow: 'hidden',
+                    borderRadius: cornerR > 0 ? `${cornerR}px` : undefined,
                   }}
                 >
                   {isBannerActive ? (
@@ -2645,7 +2654,7 @@ function OverlayContent() {
                       >{activeBooking.message}</span>
                     </div>
                   ) : displayImage ? (
-                    <div key={mediaKey} className={`${shapeClass} ${glowClass}`.trim()} style={{ position:'relative', width:'100%', height:'100%' }}>
+                    <div key={mediaKey} className={`${shapeClass} ${glowClass}`.trim()} style={{ position:'relative', width:'100%', height:'100%', ...customClip }}>
                       {/* Backdrop fills (cover, crop as needed). Shape-able
                           beams use cover when they're masked (circle/hex)
                           or when the viewer customized the crop; otherwise

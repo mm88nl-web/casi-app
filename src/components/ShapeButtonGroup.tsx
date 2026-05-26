@@ -3,12 +3,11 @@
 import type { SlotShape } from '@/components/SlotCard';
 
 const ALL_SHAPES: { id: SlotShape; label: string }[] = [
-  { id: 'rect', label: 'Rect' },
-  { id: 'rounded', label: 'Rounded' },
-  { id: 'circle', label: 'Circle' },
-  { id: 'hex', label: 'Hex' },
-  { id: 'banner', label: 'Banner' },
-  { id: 'backdrop', label: 'Backdrop' },
+  { id: 'rect',     label: 'Rectangle' },
+  { id: 'circle',   label: 'Circle'    },
+  { id: 'custom',   label: 'Custom'    },
+  { id: 'banner',   label: 'Banner'    },
+  { id: 'backdrop', label: 'Backdrop'  },
 ];
 
 type ShapeButtonGroupProps = {

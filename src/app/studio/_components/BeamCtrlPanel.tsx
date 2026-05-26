@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import SlotMedia from '@/components/SlotMedia';
 import UsdcIcon from '@/components/icons/UsdcIcon';
-import { SHAPE_OPTIONS } from '@/lib/banner';
 import { getFiatConfig, fiatSymbol, stripeMinAmount, toStripeAmount } from '@/lib/currency';
+import ShapePresetsPanel from './ShapePresetsPanel';
 import { formatTime, getSecondsRemaining } from './time';
 
 type Tab = 'properties' | 'pricing' | 'behavior';
@@ -91,7 +91,7 @@ export default function BeamCtrlPanel({
   deleteLayer: (id: string) => void;
   kickBeam: (booking: any) => void;
   onDone: () => void;
-  onUpdateShape?: (id: string, shape: string) => void;
+  onUpdateShape?: (id: string, shape: string, extra?: { corner_radius?: number; clip_path_svg?: string | null }) => void;
   onUpdateGlow?: (id: string, glow: boolean) => void;
   /** Stripe Connect's default currency (lowercase ISO-4217) for this
    *  streamer. Drives the Stripe row on the slot Pricing tab — the rate
@@ -243,25 +243,84 @@ export default function BeamCtrlPanel({
         </button>
       </div>
 
-      {/* Properties — Shape pills */}
-      {tab === 'properties' && onUpdateShape && (
+      {/* Properties — two-level slot type + shape hierarchy */}
+      {tab === 'properties' && (
         <div className="casi-v9-cp-pane">
-          <div className="casi-v9-cp-lbl">Shape</div>
-          <div className="casi-v9-shape-btns">
-            {SHAPE_OPTIONS.map((s) => {
-              const active = (el.shape || 'rect') === s.id;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => onUpdateShape(el.id, s.id)}
-                  className={`casi-v9-shape-b${active ? ' casi-v9-on' : ''}`}
-                >
-                  {s.label}
-                </button>
-              );
-            })}
-          </div>
+          {/* Level 1: Slot type */}
+          <div className="casi-v9-cp-lbl">Slot type</div>
+          {(() => {
+            const slotType: 'media' | 'banner' | 'backdrop' =
+              el.shape === 'banner' ? 'banner' :
+              el.shape === 'backdrop' ? 'backdrop' : 'media';
+            const mediaShape: string = slotType === 'media' ? (el.shape || 'rect') : 'rect';
+
+            return (
+              <>
+                <div className="casi-v9-shape-btns">
+                  {([
+                    { type: 'media',    label: 'Image / Video', shape: 'rect'     },
+                    { type: 'banner',   label: 'Banner',        shape: 'banner'   },
+                    { type: 'backdrop', label: 'Backdrop',      shape: 'backdrop' },
+                  ] as const).map(({ type, label, shape }) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => { if (slotType !== type) onUpdateShape?.(el.id, shape); }}
+                      className={`casi-v9-shape-b${slotType === type ? ' casi-v9-on' : ''}`}
+                    >{label}</button>
+                  ))}
+                </div>
+
+                {/* Level 2: Shape (Image/Video only) */}
+                {slotType === 'media' && onUpdateShape && (
+                  <>
+                    <div className="casi-v9-cp-lbl" style={{ marginTop: 10 }}>Shape</div>
+                    <div className="casi-v9-shape-btns">
+                      {([
+                        { id: 'rect',   label: 'Rectangle' },
+                        { id: 'circle', label: 'Circle'    },
+                        { id: 'custom', label: 'Custom'    },
+                      ] as const).map(({ id, label }) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => onUpdateShape(el.id, id)}
+                          className={`casi-v9-shape-b${mediaShape === id ? ' casi-v9-on' : ''}`}
+                        >{label}</button>
+                      ))}
+                    </div>
+
+                    {/* Corner radius slider (Rectangle only) */}
+                    {mediaShape === 'rect' && (
+                      <div className="casi-v9-cp-row" style={{ marginTop: 8 }}>
+                        <span className="casi-v9-cp-lbl">Corners</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={50}
+                          step={1}
+                          value={el.corner_radius ?? 0}
+                          onChange={(e) => updateLayer(el.id, { corner_radius: Number(e.target.value) })}
+                          style={{ flex: 1, accentColor: 'var(--ink)' }}
+                        />
+                        <span style={{ fontSize: 11, color: 'var(--text-3)', minWidth: 28, textAlign: 'right', fontFamily: 'var(--M)' }}>
+                          {el.corner_radius ?? 0}px
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Preset picker (Custom only) */}
+                    {mediaShape === 'custom' && (
+                      <ShapePresetsPanel
+                        selectedPath={el.clip_path_svg ?? null}
+                        onSelect={(path) => updateLayer(el.id, { clip_path_svg: path })}
+                      />
+                    )}
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 

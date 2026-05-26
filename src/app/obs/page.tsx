@@ -101,22 +101,30 @@ function OBSContent() {
            so glow and banner edges match their brand colour. */
         @keyframes beamGlow    { 0%{box-shadow:0 0 0 rgba(${accentRgb},0)} 15%{box-shadow:0 0 42px 8px rgba(${accentRgb},0.85)} 100%{box-shadow:0 0 0 rgba(${accentRgb},0)} }
         @keyframes beamMarquee { from{transform:translateX(100%)} to{transform:translateX(-100%)} }
-        .obs-shape-rounded { border-radius: 14px; overflow: hidden; }
         .obs-shape-circle  { clip-path: circle(50%); }
-        .obs-shape-hex     { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
         .obs-glow          { animation: beamGlow 3s ease-out 1; will-change: box-shadow; }
         .obs-banner        { display:flex; align-items:center; width:100%; height:100%; overflow:hidden; background:rgba(0,0,0,0.78); border-top:2px solid rgba(${accentRgb},0.4); border-bottom:2px solid rgba(${accentRgb},0.4); white-space:nowrap; }
         .obs-banner-track  { display:inline-block; padding-left:100%; color:${accentHex}; font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
       `}</style>
       <div className="relative w-full h-full">
+        {/* SVG clipPath defs for custom shapes */}
+        {elements.some(el => el.shape === 'custom' && el.clip_path_svg) && (
+          <svg width="0" height="0" style={{ position: 'absolute', overflow: 'visible', pointerEvents: 'none' }}>
+            <defs>
+              {elements.filter(el => el.shape === 'custom' && el.clip_path_svg).map(el => (
+                <clipPath key={el.id} id={`obs-clip-${el.id}`} clipPathUnits="objectBoundingBox">
+                  <path d={el.clip_path_svg} />
+                </clipPath>
+              ))}
+            </defs>
+          </svg>
+        )}
         {elements.map((el) => {
           const active = getActive(el.id);
           const isBannerActive = el.shape === 'banner' && !!active?.message;
-          const shapeClass =
-            el.shape === 'rounded' ? 'obs-shape-rounded' :
-            el.shape === 'circle'  ? 'obs-shape-circle'  :
-            el.shape === 'hex'     ? 'obs-shape-hex'     :
-            '';
+          const shapeClass = el.shape === 'circle' ? 'obs-shape-circle' : '';
+          const cornerR = (el.shape === 'rect' || el.shape === 'rounded') ? (el.shape === 'rounded' ? 14 : (el.corner_radius ?? 0)) : 0;
+          const customClip = el.shape === 'custom' && el.clip_path_svg ? { clipPath: `url(#obs-clip-${el.id})` } : {};
           const glowClass = !!active && (el.glow_on_start ?? true) && !el.is_background ? 'obs-glow' : '';
           // Keyed on the active booking so each fresh beam re-mounts and
           // the glow animation plays from zero. Matches /overlay behaviour.
@@ -153,7 +161,7 @@ function OBSContent() {
           const offY = Number(active?.media_offset_y ?? 50);
           const zoom = Number(active?.media_zoom     ?? 1);
           const hasCustomCrop = offX !== 50 || offY !== 50 || zoom !== 1;
-          const useCover = el.is_background || el.shape === 'circle' || el.shape === 'hex' || hasCustomCrop;
+          const useCover = el.is_background || el.shape === 'circle' || el.shape === 'custom' || hasCustomCrop;
 
           return (
             <div key={el.id} style={{
@@ -163,11 +171,13 @@ function OBSContent() {
               zIndex: el.is_background ? 10 : 50,
               transition: 'all 0.5s cubic-bezier(0.16,1,0.3,1)',
               willChange: 'transform',
+              overflow: 'hidden',
+              borderRadius: cornerR > 0 ? `${cornerR}px` : undefined,
             }}>
               <div
                 key={mediaKey}
                 className={`${shapeClass} ${glowClass}`.trim()}
-                style={{ width: '100%', height: '100%' }}
+                style={{ width: '100%', height: '100%', ...customClip }}
               >
                 <SlotMedia
                   src={el.image_url}
