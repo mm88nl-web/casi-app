@@ -30,7 +30,9 @@ function OBSContent() {
         .single();
       if (prof) {
         setProfileId(prof.id);
-        const hex = prof.ink_color ?? prof.theme_color ?? getSkinById(prof.skin).ink;
+        const hex = prof.skin === 'custom'
+          ? (prof.ink_color ?? prof.theme_color ?? getSkinById(prof.skin).ink)
+          : getSkinById(prof.skin).ink;
         const rgb = hexToRgbStr(hex) ?? '13, 207, 176';
         setAccentHex(hex);
         setAccentRgb(rgb);

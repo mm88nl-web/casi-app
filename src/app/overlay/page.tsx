@@ -2084,7 +2084,7 @@ function OverlayContent() {
     <>
       <SkinProvider
         skin={profile?.skin}
-        inkColor={profile?.skin === 'custom' ? profile?.ink_color : null}
+        inkColor={profile?.skin === 'custom' ? (profile?.ink_color ?? profile?.theme_color) : null}
         paperColor={profile?.skin === 'custom' ? profile?.paper_color : null}
       />
       <NameEntryScreen onConfirm={confirmName} tc={tc} />
@@ -2095,7 +2095,7 @@ function OverlayContent() {
     <>
       <SkinProvider
         skin={profile?.skin}
-        inkColor={profile?.skin === 'custom' ? profile?.ink_color : null}
+        inkColor={profile?.skin === 'custom' ? (profile?.ink_color ?? profile?.theme_color) : null}
         paperColor={profile?.skin === 'custom' ? profile?.paper_color : null}
       />
       <style>{`
@@ -2132,6 +2132,7 @@ function OverlayContent() {
         .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid rgba(var(--casi-accent-rgb),0.31); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--casi-text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
 
         .ov-main { max-width:1200px; margin:0 auto; padding:16px 20px 48px; }
+        @media (min-width:900px) { .ov-main { padding:24px 48px 60px; } }
         /* v9 viewer 2-col body — canvas + flashes-feed left, slots/booking right.
            Layout via CSS-grid placement on existing children, no JSX wrapping
            (the canvas div is huge + closes over component state, extracting
@@ -2143,22 +2144,35 @@ function OverlayContent() {
         .ov-main.ov-v9 > .stream-canvas { grid-column: 1; grid-row: 2; margin-bottom: 0; }
         .ov-main.ov-v9 > .ov-browse-link { grid-column: 1; grid-row: 3; }
         .ov-main.ov-v9 > .slots-sec { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
-        .ov-main.ov-v9 > .bf { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
         @media (max-width:900px) {
           .ov-main.ov-v9 { grid-template-columns: 1fr; }
           .ov-main.ov-v9 > .stream-canvas,
           .ov-main.ov-v9 > .ov-browse-link,
-          .ov-main.ov-v9 > .slots-sec,
-          .ov-main.ov-v9 > .bf { grid-column: 1; grid-row: auto; }
+          .ov-main.ov-v9 > .slots-sec { grid-column: 1; grid-row: auto; }
         }
         .ov-browse-link {
-          background: none; border: none; padding: 14px 0 0; cursor: pointer;
+          display: flex; align-items: center; gap: 10px;
+          width: 100%; text-align: left; margin-top: 8px;
+          padding: 11px 16px;
+          background: var(--surf, var(--casi-surface));
+          border: 1px solid var(--line, var(--casi-border));
+          border-radius: 10px; cursor: pointer;
           font-family: var(--M), var(--font-casi-mono), monospace;
-          font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
-          color: var(--text-3, var(--casi-text-muted)); text-align: left;
-          transition: color 0.14s;
+          font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+          color: var(--text-3, var(--casi-text-muted));
+          transition: border-color 0.15s, background 0.15s, color 0.15s;
         }
-        .ov-browse-link:hover { color: var(--ink, var(--casi-accent)); }
+        .ov-browse-link::before {
+          content: "⊞"; font-size: 15px; font-style: normal;
+          color: var(--ink-40, rgba(13,207,176,0.4));
+          transition: color 0.15s;
+        }
+        .ov-browse-link:hover {
+          border-color: var(--ink-40, rgba(13,207,176,0.4));
+          background: var(--ink-04, rgba(13,207,176,0.04));
+          color: var(--ink, var(--casi-accent));
+        }
+        .ov-browse-link:hover::before { color: var(--ink, var(--casi-accent)); }
 
         .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
         .my-beams-lbl { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; }
@@ -2167,7 +2181,7 @@ function OverlayContent() {
         .cancel-btn { background:none; border:none; font-family:var(--font-casi-mono),monospace; font-size:9px; color:rgba(248,113,113,0.5); cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:color .2s; padding:0; margin-left:4px; }
         .cancel-btn:hover { color:#f87171; }
 
-        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:var(--casi-bg); position:relative; overflow:hidden; margin-bottom:10px; }
+        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:#0a0a0a; position:relative; overflow:hidden; margin-bottom:10px; }
 
         /* ── Slot list — v9 ── sharp borders, ink accent on hover/select,
            48px square thumb that adopts the slot shape via .s-thumb-* helpers
@@ -2184,7 +2198,7 @@ function OverlayContent() {
         .slot-card {
           display:flex; align-items:center; gap:14px;
           padding:14px 16px; background:var(--surf);
-          border:1px solid var(--line); border-radius:0;
+          border:1px solid var(--line); border-radius:10px;
           cursor:pointer; text-align:left; width:100%; font:inherit; color:inherit;
           transition:border-color .15s, background .15s;
         }
@@ -2205,20 +2219,66 @@ function OverlayContent() {
           letter-spacing:0;
         }
 
-        /* ── Booking form — v9 ── sharp panel with inverted ink-on-paper
-           header, big editorial cost numerals, segmented duration presets. */
-        .bf {
-          background:var(--surf);
-          border:1px solid var(--ink) !important;  /* override inline border={…} from BookingForm */
-          border-radius:0;
-          padding:0; margin-top:16px;
-          overflow:hidden; animation:slideDownV9 .2s ease;
+        /* ── Booking form ──────────────────────────────────────────────────────
+           Mobile (<900px): bottom sheet — anchors to the bottom of the viewport,
+           slides up from the bottom. Capped at 65dvh so the canvas (16:9 +
+           nav ≈ 250-270px on typical phones) is fully visible and clear above.
+           Desktop (≥900px): static sidebar in grid-column 2. */
+        .bf-backdrop {
+          position:fixed; inset:0; z-index:499;
+          /* Transparent — just a tap-to-dismiss target. The canvas stays
+             fully visible above the sheet so viewers can see their preview. */
+          background:rgba(0,0,0,0.08);
+          animation:bkFadeIn .18s ease;
         }
-        @keyframes slideDownV9 { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:none; } }
+        @keyframes bkFadeIn { from { opacity:0; } to { opacity:1; } }
+        @media (min-width:900px) { .bf-backdrop { display:none; } }
+        .bf {
+          /* Mobile: bottom sheet capped at 65dvh — leaves room for the full
+             canvas (≈210-230px) plus the nav bar above the sheet */
+          position:fixed; bottom:0; left:0; right:0; top:auto;
+          width:100%;
+          max-height:65dvh;
+          overflow-y:auto; overflow-x:hidden;
+          -webkit-overflow-scrolling:touch;
+          overscroll-behavior:contain;
+          z-index:500;
+          background:var(--surf);
+          border:1px solid var(--ink) !important;
+          border-bottom:none !important;
+          border-radius:16px 16px 0 0;
+          padding:0;
+          box-shadow:0 -8px 48px rgba(0,0,0,0.65);
+          animation:modalIn .28s cubic-bezier(.22,1,.36,1);
+        }
+        /* drag-handle pill */
+        .bf::before {
+          content:''; display:block;
+          width:36px; height:3px;
+          background:var(--line-2, rgba(255,255,255,0.18));
+          border-radius:2px;
+          margin:10px auto 0;
+        }
+        @keyframes modalIn { from { transform:translateY(100%); opacity:0; } to { transform:translateY(0); opacity:1; } }
+        @media (min-width:900px) {
+          /* Desktop: static sidebar — canvas stays visible on the left */
+          .bf {
+            position:static; bottom:auto; left:auto; right:auto;
+            width:auto; max-height:none; overflow:hidden;
+            border-radius:14px;
+            border-bottom:1px solid var(--ink) !important;
+            box-shadow:none;
+            animation:slideInV9 .2s ease;
+          }
+          .bf::before { display:none; }
+          .ov-main.ov-v9 > .bf { grid-column:2; grid-row:2 / span 2; margin-top:0; align-self:start; }
+        }
+        @keyframes slideInV9 { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
         .bf-hdr {
           display:flex; align-items:center; justify-content:space-between;
           padding:18px 22px; margin-bottom:0; border-bottom:none;
           background:var(--ink); color:var(--on-ink);
+          border-radius:13px 13px 0 0;
         }
         .bf-type {
           font-family:var(--H); font-weight:700; font-size:15px; letter-spacing:-0.015em;
@@ -2237,8 +2297,8 @@ function OverlayContent() {
         }
         .bf-x:hover { opacity:1; color:var(--on-ink); }
         .bf-grid {
-          display:grid; grid-template-columns:1fr 1fr; gap:20px;
-          padding:22px;
+          display:grid; grid-template-columns:1fr; gap:16px;
+          padding:20px 22px;
         }
         .bf-lbl {
           font-family:var(--M); font-size:10px; font-weight:700; color:var(--text-3);
@@ -2249,7 +2309,7 @@ function OverlayContent() {
         .bf-lbl::before { content:""; display:block; width:14px; height:1.5px; background:var(--ink); }
         .bf-inp {
           width:100%; background:var(--paper);
-          border:1px solid var(--line-2); border-radius:0;
+          border:1px solid var(--line-2); border-radius:8px;
           padding:11px 14px; font-size:13.5px; color:var(--text); outline:none;
           font-family:var(--B); transition:border-color .14s;
         }
@@ -2284,6 +2344,7 @@ function OverlayContent() {
           background:var(--paper);
           gap:12px;
         }
+        @media (min-width:900px) { .bf-footer { border-radius:0 0 13px 13px; } }
         .bf-cost-lbl {
           font-family:var(--H); font-weight:800; font-size:13px;
           text-transform:uppercase; letter-spacing:0.16em; color:var(--text);
@@ -2296,7 +2357,7 @@ function OverlayContent() {
         .bf-sub {
           font-family:var(--M); font-weight:700; font-size:12px;
           letter-spacing:0.16em; text-transform:uppercase;
-          padding:15px 18px; border:1px solid var(--ink); border-radius:0;
+          padding:15px 18px; border:1px solid var(--ink); border-radius:8px;
           background:var(--ink); color:var(--on-ink);
           cursor:pointer; transition:transform .14s, filter .14s;
           white-space:nowrap;
@@ -2310,7 +2371,7 @@ function OverlayContent() {
         @media (max-width:640px) {
           .ov-nav { padding:0 16px; }
           .ov-main { padding:12px 14px 60px; }
-          .bf-grid { grid-template-columns:1fr; padding:18px; }
+          .bf-grid { padding:16px; }
           .bf-footer { flex-direction:column; align-items:stretch; padding:18px; }
           .bf-sub { width:100%; text-align:center; }
           .slots-grid { grid-template-columns:1fr; }
@@ -2798,7 +2859,10 @@ function OverlayContent() {
             </button>
           )}
 
-          {/* BOOKING FORM */}
+          {/* BOOKING FORM — fixed modal + backdrop */}
+          {!isOBS && selectedSlot && (
+            <div className="bf-backdrop" onClick={closeSlot} aria-hidden />
+          )}
           {!isOBS && selectedSlot && (
             <BookingForm
               slot={selectedSlot}

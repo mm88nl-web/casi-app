@@ -77,7 +77,7 @@ export default function DevBanner() {
         <Separator />
         <span>Running on Solana devnet</span>
         <Separator />
-        <span>No real funds involved</span>
+        <span>Stripe live · Solana on devnet</span>
         <Separator />
         <span className="hidden sm:inline">Smart contract audit in progress</span>
         <button
@@ -129,8 +129,9 @@ export default function DevBanner() {
           }}
         >
           Casi runs on Solana&apos;s devnet while the smart contract goes through audit. USDC
-          balances shown are test tokens — no real money moves. Stripe is in test mode. When we
-          flip to mainnet this banner disappears and all flows use real funds.
+          balances shown are test tokens — crypto payments are not yet real. Stripe card payments
+          are live and use real money. When the Solana program launches on mainnet this banner
+          disappears.
         </div>
       ) : null}
     </div>
