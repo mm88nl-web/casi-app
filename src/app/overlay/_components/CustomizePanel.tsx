@@ -61,7 +61,7 @@ export default function CustomizePanel({
   mediaZoom, onMediaZoomChange,
 }: Props) {
   const isBanner = shape === 'banner';
-  const isShapedMedia = shape === 'rect' || shape === 'rounded' || shape === 'circle' || shape === 'hex' || shape == null;
+  const isShapedMedia = shape === 'rect' || shape === 'rounded' || shape === 'circle' || shape === 'hex' || shape === 'custom' || shape == null;
 
   // Backdrop slots cover the full canvas — there's nothing to pan/zoom
   // and no banner text. Hide the panel entirely so we don't surface
