@@ -39,8 +39,9 @@ const RPC               = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.dev
 // ── dynamic imports (avoids TS/ESM issues) ──────────────────────────────────
 const { Connection, PublicKey, Keypair, SystemProgram } =
   await import('@solana/web3.js');
-const { Program, AnchorProvider, setProvider, BN } =
+const { Program, AnchorProvider, setProvider, default: _anchorDefault } =
   await import('@coral-xyz/anchor');
+const BN = _anchorDefault.BN;
 
 // ── load keypair ─────────────────────────────────────────────────────────────
 let adminKp;
