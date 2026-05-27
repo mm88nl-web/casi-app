@@ -1109,6 +1109,7 @@ pub struct InitializeConfig<'info> {
         owner = bpf_loader_upgradeable::ID,
         seeds = [crate::ID.as_ref()],
         seeds::program = bpf_loader_upgradeable::ID,
+        bump,
     )]
     pub program_data: UncheckedAccount<'info>,
 
