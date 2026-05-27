@@ -1160,6 +1160,8 @@ function OverlayContent() {
     let pathTaken: 'unknown' | 'phantom_native' | 'wallet_adapter' = 'unknown';
     let phantomProviderDetected = false;
     let inferredFromPoll = false;
+    let walletErrMsg: string | null = null;
+    let walletErrLogs: string[] | null = null;
 
     try {
       const { Connection, PublicKey } = await import('@solana/web3.js');
@@ -1423,7 +1425,13 @@ function OverlayContent() {
         async (e) => {
           const { isUserRejection } = await import('@/lib/casi-errors');
           if (isUserRejection(e)) throw e; // user rejected — propagate to deny the booking
-          console.warn('[bookSlot] wallet rejected (non-user), poll continues:', e);
+          // Capture for the error report — Phantom/Anchor may include transaction
+          // logs on the error object that identify the specific on-chain failure.
+          walletErrMsg  = (e as Error)?.message ?? String(e);
+          walletErrLogs = Array.isArray((e as { logs?: unknown })?.logs)
+            ? ((e as { logs: unknown[] }).logs as string[])
+            : null;
+          console.warn('[bookSlot] wallet rejected (non-user), poll continues:', e, 'logs:', walletErrLogs);
           return new Promise<SendOutcome>(() => {}); // never resolves — let poll win
         },
       );
@@ -1567,6 +1575,8 @@ function OverlayContent() {
         phantom_provider_detected: phantomProviderDetected,
         inferred_from_poll: inferredFromPoll,
         wallet_adapter_name: wallet?.adapter?.name ?? null,
+        wallet_error: walletErrMsg,
+        wallet_logs: walletErrLogs,
       });
       setTxStatus('error'); setTxError(userMsg);
       showNotif(userMsg, 'error');
