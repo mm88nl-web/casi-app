@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { SOLANA_RPC } from '@/lib/solana-network';
 import { deriveConfigPda, PROGRAM_ID } from '@/lib/casi-escrow';
+import { loadCrankerKeypair } from '@/lib/cranker-keypair';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +42,12 @@ export async function GET() {
       }
     }
 
+    // Check if the cranker (already in Vercel) is the upgrade authority —
+    // if yes, no extra env var needed; the admin route can reuse it.
+    const cranker = loadCrankerKeypair('config-status');
+    const crankerPubkey = cranker?.publicKey.toBase58() ?? null;
+    const crankerIsAuthority = !!crankerPubkey && crankerPubkey === upgradeAuthority;
+
     return NextResponse.json({
       ok: true,
       program_id: PROGRAM_ID.toBase58(),
@@ -48,9 +55,13 @@ export async function GET() {
       program_exists: programExists,
       config_initialized: configExists,
       upgrade_authority: upgradeAuthority,
+      cranker_pubkey: crankerPubkey,
+      cranker_is_authority: crankerIsAuthority,
       diagnosis: configExists
         ? 'Config is initialized — booking failures have a different cause.'
-        : 'Config NOT initialized. Run: node scripts/init-escrow-config.mjs',
+        : crankerIsAuthority
+          ? 'Config NOT initialized. SOLANA_CRANKER_KEYPAIR IS the upgrade authority — call POST /api/admin/init-escrow-config (no extra env var needed, set SOLANA_DEPLOYER_KEYPAIR=same value as SOLANA_CRANKER_KEYPAIR).'
+          : 'Config NOT initialized. Add SOLANA_DEPLOYER_KEYPAIR to Vercel (keypair for ' + upgradeAuthority + ') then POST /api/admin/init-escrow-config.',
     });
   } catch (err) {
     return NextResponse.json(
