@@ -1396,7 +1396,12 @@ function OverlayContent() {
         throw new Error('No wallet send method available');
       })();
       const POLL_INTERVAL_MS = 2_000;
-      const POLL_TIMEOUT_MS  = 90_000;
+      // 25s here + 30s catch-block probe = 55s total window for a tx to
+      // surface before we surface an error. The catch probe is the real
+      // safety net; the in-race poll only covers the wallet-submitted-but-
+      // didn't-return-a-sig window. Kept shorter so wallet errors don't
+      // leave the modal frozen for 90s.
+      const POLL_TIMEOUT_MS  = 25_000;
       const pollPromise: Promise<SendOutcome> = (async () => {
         const start = Date.now();
         while (Date.now() - start < POLL_TIMEOUT_MS) {
