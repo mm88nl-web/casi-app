@@ -2268,6 +2268,7 @@ function OverlayContent() {
           animation:slideInV9 .25s ease;
         }
         @keyframes slideInV9 { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+        @keyframes slotGlow { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
         .bf-hdr {
           display:flex; align-items:center; justify-content:space-between;
           padding:18px 22px; margin-bottom:0; border-bottom:none;
@@ -2593,13 +2594,12 @@ function OverlayContent() {
               // no booking is active (just show the empty placeholder).
               const isBannerActive = el.shape === 'banner' && isOccupied && !!activeBooking?.message;
 
-              // The slot itself is the click target — tapping an open beam
-              // (or a queued occupied one) opens the booking form. Disabled
-              // when the viewer already has a booking here, the slot is
-              // locked, or another slot's form is already open (one at a
-              // time). Extend / Join queue / Book all route through the
-              // same openSlot call with different modes.
-              const clickable = !isOBS && !isLocked && !myBookingForSlot && !selectedSlot;
+              // Clicking a slot opens the booking form for it. Allowed on any
+              // non-locked, non-my-booking slot — including when another slot's
+              // form is already open (tapping a different slot switches the form
+              // to that slot; clicking the currently selected one does nothing
+              // so the viewer uses the ✕ button to close).
+              const clickable = !isOBS && !isLocked && !myBookingForSlot && (!selectedSlot || selectedSlot.id !== el.id);
               const handleSlotClick = clickable ? () => openSlot(el, isOccupied) : undefined;
               const isSelectedHere = selectedSlot?.id === el.id;
 
@@ -2733,11 +2733,10 @@ function OverlayContent() {
                     </div>
                   )}
 
-                  {/* Selection outline — mirrors the admin studio's selection
-                      glow so the booking-form modal below has a clear visual
-                      anchor back to the slot that triggered it. */}
+                  {/* Selection outline — bright multi-layer glow so it's
+                      unmissable at small slot sizes on a dark canvas. */}
                   {isSelectedHere && !isOBS && (
-                    <div style={{ position:'absolute', inset:-3, borderRadius:10, border:`2px solid ${accentColor}`, boxShadow:`0 0 0 4px rgba(${accentColorRgb},0.15)`, pointerEvents:'none', zIndex:15 }} />
+                    <div style={{ position:'absolute', inset:-4, borderRadius:10, border:`3px solid ${accentColor}`, boxShadow:`0 0 0 2px rgba(${accentColorRgb},0.35), 0 0 22px rgba(${accentColorRgb},0.55), inset 0 0 8px rgba(${accentColorRgb},0.12)`, pointerEvents:'none', zIndex:15, animation:'slotGlow 2s ease-in-out infinite' }} />
                   )}
 
                   {/* Price badge — corner-mounted inside the slot (bottom-

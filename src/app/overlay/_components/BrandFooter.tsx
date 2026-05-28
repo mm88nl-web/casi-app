@@ -3,13 +3,14 @@ import { CasiMark } from '@/components/v9';
 export default function BrandFooter() {
   return (
     <div style={{
-      marginTop: 32,
+      marginTop: 24,
+      marginBottom: 8,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      opacity: 0.35,
+      color: 'var(--ink)',
     }}>
-      <CasiMark width={32} height={16} className="" />
+      <CasiMark width={56} height={28} className="" />
     </div>
   );
 }
