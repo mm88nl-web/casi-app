@@ -24,31 +24,7 @@ export default function BrandFooter() {
         casi.
       </span>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span
-          style={{
-            fontFamily: 'var(--M), var(--font-casi-mono), monospace',
-            fontSize: 9,
-            letterSpacing: '0.16em',
-            textTransform: 'uppercase',
-            color: 'var(--text-4, rgba(255,255,255,0.18))',
-          }}
-        >
-          crypto on
-        </span>
-        <SolanaIcon size={10} />
-        <span
-          style={{
-            fontFamily: 'var(--M), var(--font-casi-mono), monospace',
-            fontSize: 9,
-            letterSpacing: '0.16em',
-            textTransform: 'uppercase',
-            color: 'var(--text-4, rgba(255,255,255,0.18))',
-          }}
-        >
-          Solana
-        </span>
-      </div>
+      <SolanaIcon size={14} />
     </footer>
   );
 }
