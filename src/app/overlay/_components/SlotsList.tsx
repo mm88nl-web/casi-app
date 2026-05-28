@@ -3,6 +3,13 @@
 import SlotMedia from '@/components/SlotMedia';
 import { formatSlotPrice } from '@/lib/slot-pricing';
 
+function fmtMaxDur(min: number): string {
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
 type SlotElement = {
   id: string;
   price_value: number | string;
@@ -87,7 +94,7 @@ export default function SlotsList({
                 </div>
                 <div className="s-price" style={{ color: priceColor }}>
                   {isFree ? 'Free' : formatSlotPrice(el).label}
-                  {el.max_duration_minutes ? ` · max ${el.max_duration_minutes}m` : ''}
+                  {el.max_duration_minutes ? ` · max ${fmtMaxDur(el.max_duration_minutes)}` : ''}
                 </div>
               </div>
             </button>

@@ -56,7 +56,12 @@ const BOOKING_PAGE_LIMIT = 200;
 // realistic streamer moderation latency without trailing stale history.
 const STRIPE_DENIED_WINDOW_MS = 10 * 60 * 1000;
 
-
+function fmtMaxDur(min: number): string {
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
 
 function OverlayContent() {
   const searchParams = useSearchParams();
@@ -2200,7 +2205,7 @@ function OverlayContent() {
         .cancel-btn { background:none; border:none; font-family:var(--font-casi-mono),monospace; font-size:9px; color:rgba(248,113,113,0.5); cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:color .2s; padding:0; margin-left:4px; }
         .cancel-btn:hover { color:#f87171; }
 
-        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:#0a0a0a; position:relative; overflow:hidden; margin-bottom:10px; }
+        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:#0a0a0a; position:relative; overflow:hidden; margin-bottom:10px; --line: rgba(255,255,255,0.06); }
 
         /* ── Slot list — v9 ── sharp borders, ink accent on hover/select,
            48px square thumb that adopts the slot shape via .s-thumb-* helpers
@@ -2548,6 +2553,7 @@ function OverlayContent() {
 
           {/* STREAM CANVAS */}
           <div className={isOBS ? '' : 'stream-canvas'} style={isOBS ? { position:'relative', width:'100vw', height:'100vh' } : {}}>
+            {!isOBS && <div className="casi-v9-canvas-grid-overlay" aria-hidden />}
             {/* Silhouette preview background — visible to viewers while booking, never in OBS */}
             {!isOBS && selectedSlot && profile?.preview_background_url && (
               <img
@@ -2743,7 +2749,7 @@ function OverlayContent() {
                           maxWidth: '90%',
                         }}
                       >
-                        <span style={{ fontSize: el.is_background ? 18 : 14, marginBottom: isOccupied ? 3 : 0 }}>
+                        <span style={{ fontSize: el.is_background ? 18 : 14, marginBottom: isOccupied ? 3 : 0, color: 'rgba(255,255,255,0.9)' }}>
                           {isLocked ? '🔒' : isOccupied ? (el.shape==='banner' ? '▰' : '') : el.is_background ? '🖼' : el.shape==='banner' ? '▰' : '✦'}
                         </span>
                         {isOccupied && (
@@ -2788,7 +2794,7 @@ function OverlayContent() {
                       }}
                     >
                       {p.rail === 'free' ? '★ Free' : p.label}
-                      {el.max_duration_minutes && <span style={{ color:'#555', marginLeft: 6, fontSize: 9 }}>· max {el.max_duration_minutes}m</span>}
+                      {el.max_duration_minutes && <span style={{ color:'rgba(255,255,255,0.35)', marginLeft: 6, fontSize: 9 }}>· max {fmtMaxDur(el.max_duration_minutes)}</span>}
                     </div>
                     );
                   })()}
