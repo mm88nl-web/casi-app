@@ -170,6 +170,7 @@ function OverlayContent() {
   const viewerWalletRef = useRef<string | null>(null);
   const lastRealtimeEventAt = useRef(Date.now());
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const bookingColRef = useRef<HTMLDivElement | null>(null);
 
   // Theme color tokens — CSS vars, set by SkinProvider
   const tc    = 'var(--casi-accent)';
@@ -178,6 +179,17 @@ function OverlayContent() {
   useEffect(() => {
     if (!isOBS && !username) window.location.href = '/search';
   }, [username, isOBS]);
+
+  // When a slot is selected, scroll so the booking form is visible just
+  // below the sticky nav. The form is in normal document flow below the
+  // canvas — no fixed bottom-sheet on mobile.
+  useEffect(() => {
+    if (!selectedSlot || isOBS || !bookingColRef.current) return;
+    const el = bookingColRef.current;
+    const rect = el.getBoundingClientRect();
+    const NAV = 56;
+    window.scrollTo({ top: Math.max(0, window.scrollY + rect.top - NAV - 8), behavior: 'smooth' });
+  }, [selectedSlot, isOBS]);
 
   // Phantom Connect return handler. When the page loads with our
   // phantom_action query param set, Phantom has bounced the user back from
@@ -884,10 +896,7 @@ function OverlayContent() {
       const myBooking = getMyBookingForSlot(el.id);
       if (myBooking?.image_url) { setImageUrl(myBooking.image_url); setImageValid(true); }
     }
-    // On mobile the slots list is below the canvas, so the user has likely
-    // scrolled down. Scroll the canvas into view so it peeks above the
-    // bottom-sheet form — the preview is the reason to open a slot at all.
-    canvasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Scroll is handled by the useEffect that watches selectedSlot.
   };
   const closeSlot = () => {
     setSelectedSlot(null); setIsExtend(false);
@@ -2155,9 +2164,7 @@ function OverlayContent() {
 
         /* ov-layout: 2-col grid wrapper (desktop only). Separates canvas/feeds
            (left col, <main>) from slots/booking (right col, .ov-booking-col).
-           Keeping the booking form OUTSIDE the grid container fixes a Chrome
-           Android bug where position:fixed inside display:grid doesn't escape
-           the grid flow — form was appearing in-flow instead of as a bottom sheet. */
+           On mobile the two cols stack vertically: canvas above, form below. */
         .ov-layout { max-width:1280px; margin:0 auto; }
         .ov-main { padding:16px 20px 32px; }
         /* On mobile, the booking column (slots or form) sits below the canvas. */
@@ -2244,57 +2251,17 @@ function OverlayContent() {
         }
 
         /* ── Booking form ──────────────────────────────────────────────────────
-           Mobile (<900px): bottom sheet — anchors to the bottom of the viewport,
-           slides up from the bottom. Capped at 65dvh so the canvas (16:9 +
-           nav ≈ 250-270px on typical phones) is fully visible and clear above.
-           Desktop (≥900px): static sidebar in grid-column 2. */
-        .bf-backdrop {
-          position:fixed; inset:0; z-index:499;
-          /* Transparent — just a tap-to-dismiss target. The canvas stays
-             fully visible above the sheet so viewers can see their preview. */
-          background:rgba(0,0,0,0.08);
-          animation:bkFadeIn .18s ease;
-        }
-        @keyframes bkFadeIn { from { opacity:0; } to { opacity:1; } }
-        @media (min-width:900px) { .bf-backdrop { display:none; } }
+           In-flow card on all viewports — slides in below the canvas when a
+           slot is selected. Desktop (≥900px): static sidebar in grid-column 2. */
         .bf {
-          /* Mobile: bottom sheet capped at 65dvh — leaves room for the full
-             canvas (≈210-230px) plus the nav bar above the sheet */
-          position:fixed; bottom:0; left:0; right:0; top:auto;
+          position:static;
           width:100%;
-          max-height:65dvh;
-          overflow-y:auto; overflow-x:hidden;
-          -webkit-overflow-scrolling:touch;
-          overscroll-behavior:contain;
-          z-index:500;
-          background:var(--surf);
+          overflow:hidden;
+          border-radius:14px;
           border:1px solid var(--ink) !important;
-          border-bottom:none !important;
-          border-radius:16px 16px 0 0;
+          background:var(--surf);
           padding:0;
-          box-shadow:0 -8px 48px rgba(0,0,0,0.65);
-          animation:modalIn .28s cubic-bezier(.22,1,.36,1);
-        }
-        /* drag-handle pill */
-        .bf::before {
-          content:''; display:block;
-          width:36px; height:3px;
-          background:var(--line-2, rgba(255,255,255,0.18));
-          border-radius:2px;
-          margin:10px auto 0;
-        }
-        @keyframes modalIn { from { transform:translateY(100%); opacity:0; } to { transform:translateY(0); opacity:1; } }
-        @media (min-width:900px) {
-          /* Desktop: static sidebar — canvas stays visible on the left */
-          .bf {
-            position:static; bottom:auto; left:auto; right:auto;
-            width:auto; max-height:none; overflow:hidden;
-            border-radius:14px;
-            border-bottom:1px solid var(--ink) !important;
-            box-shadow:none;
-            animation:slideInV9 .2s ease;
-          }
-          .bf::before { display:none; }
+          animation:slideInV9 .25s ease;
         }
         @keyframes slideInV9 { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
         .bf-hdr {
@@ -2946,12 +2913,10 @@ function OverlayContent() {
           {!isOBS && <BrandFooter />}
         </main>
 
-        {/* BOOKING COLUMN — slots list (no selection) OR form+backdrop
-            (slot selected). Lives OUTSIDE <main> so position:fixed on the
-            booking form escapes any grid-container context (Chrome Android
-            had a bug where fixed inside display:grid stayed in-flow). */}
+        {/* BOOKING COLUMN — slots list (no selection) OR form (slot selected).
+            In-flow below the canvas on mobile; sidebar on desktop ≥900px. */}
         {!isOBS && (
-          <div className="ov-booking-col">
+          <div className="ov-booking-col" ref={bookingColRef}>
             {/* Slots list — shown when no slot selected */}
             {!selectedSlot && (
               <SlotsList
@@ -2965,10 +2930,7 @@ function OverlayContent() {
               />
             )}
 
-            {/* Booking form + tap-to-dismiss backdrop */}
-            {selectedSlot && (
-              <div className="bf-backdrop" onClick={closeSlot} aria-hidden />
-            )}
+            {/* Booking form — in-flow card, no fixed overlay */}
             {selectedSlot && (
               <BookingForm
                 slot={selectedSlot}
