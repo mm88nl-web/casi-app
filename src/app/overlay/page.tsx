@@ -2635,18 +2635,18 @@ function OverlayContent() {
               const cOffX     = isSelectedHere ? mediaOffsetX    : Number(activeBooking?.media_offset_x    ?? 50);
               const cOffY     = isSelectedHere ? mediaOffsetY    : Number(activeBooking?.media_offset_y    ?? 50);
               const cZoom     = isSelectedHere ? mediaZoom       : Number(activeBooking?.media_zoom        ?? 1);
-              const hasCustomCrop = cOffX !== 50 || cOffY !== 50 || cZoom !== 1;
-              // circle/hex masks only look right with `cover` — letterbox
-              // would leave empty wedges inside the clip-path. Backdrops
-              // also cover. Other shapes stay `contain` (preserving the
-              // viewer's aspect ratio) UNLESS they've customized — that
-              // signals intentional cropping.
-              const useCover = el.is_background || el.shape === 'circle' || el.shape === 'custom' || hasCustomCrop;
-              const objectFitCss: 'cover' | 'contain' = useCover ? 'cover' : 'contain';
+              // circle/hex masks and backdrops always use cover. Regular beams
+              // default to contain (shows the whole image) and switch to cover
+              // once the viewer zooms in — at that point transform-origin controls
+              // which part of the image stays centred.
+              const objectFitCss: 'cover' | 'contain' = (el.is_background || el.shape === 'circle' || el.shape === 'custom' || cZoom > 1) ? 'cover' : 'contain';
               const mediaInlineStyle: React.CSSProperties = {
                 width: '100%', height: '100%',
                 objectFit: objectFitCss,
-                objectPosition: `${cOffX}% ${cOffY}%`,
+                // Pan is encoded as the transform-origin so scale() always zooms
+                // into the chosen point. objectPosition is NOT used — combining it
+                // with scale() produces a double-offset that breaks the pan.
+                transformOrigin: `${cOffX}% ${cOffY}%`,
                 transform: cZoom !== 1 ? `scale(${cZoom})` : undefined,
                 pointerEvents: 'none',
               };
