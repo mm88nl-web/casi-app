@@ -2192,28 +2192,21 @@ function OverlayContent() {
           .ov-layout.ov-v9 > .ov-booking-col { grid-column:2; align-self:start; padding:0; }
         }
         .ov-browse-link {
-          display: flex; align-items: center; gap: 10px;
-          width: 100%; text-align: left; margin-top: 8px;
-          padding: 11px 16px;
-          background: var(--surf, var(--casi-surface));
-          border: 1px solid var(--line, var(--casi-border));
-          border-radius: 10px; cursor: pointer;
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+          width: 100%; margin-top: 12px;
+          padding: 10px 16px;
+          background: transparent;
+          border: 1px solid var(--line-2, rgba(255,255,255,0.08));
+          border-radius: 8px; cursor: pointer;
           font-family: var(--M), var(--font-casi-mono), monospace;
-          font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
-          color: var(--text-3, var(--casi-text-muted));
-          transition: border-color 0.15s, background 0.15s, color 0.15s;
-        }
-        .ov-browse-link::before {
-          content: "⊞"; font-size: 15px; font-style: normal;
-          color: var(--ink-40, rgba(13,207,176,0.4));
-          transition: color 0.15s;
+          font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+          color: var(--text-4, rgba(255,255,255,0.22));
+          transition: border-color 0.15s, color 0.15s;
         }
         .ov-browse-link:hover {
-          border-color: var(--ink-40, rgba(13,207,176,0.4));
-          background: var(--ink-04, rgba(13,207,176,0.04));
-          color: var(--ink, var(--casi-accent));
+          border-color: var(--ink-22, rgba(13,207,176,0.22));
+          color: var(--text-3, rgba(255,255,255,0.45));
         }
-        .ov-browse-link:hover::before { color: var(--ink, var(--casi-accent)); }
 
         .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
         .my-beams-lbl { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; }
@@ -2869,7 +2862,7 @@ function OverlayContent() {
               className="ov-browse-link"
               onClick={() => setShowBrowseModal(true)}
             >
-              Browse other streams →
+              Browse streams
             </button>
           )}
 

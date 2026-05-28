@@ -1,30 +1,15 @@
-import SolanaIcon from '@/components/icons/SolanaIcon';
+import { CasiMark } from '@/components/v9';
 
 export default function BrandFooter() {
   return (
-    <footer
-      style={{
-        marginTop: 48,
-        padding: '14px 0',
-        borderTop: '1px solid var(--line, rgba(255,255,255,0.06))',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}
-    >
-      <span
-        style={{
-          fontFamily: 'var(--M), var(--font-casi-mono), monospace',
-          fontSize: 9,
-          letterSpacing: '0.22em',
-          textTransform: 'uppercase',
-          color: 'var(--text-4, rgba(255,255,255,0.18))',
-        }}
-      >
-        casi.
-      </span>
-
-      <SolanaIcon size={14} />
-    </footer>
+    <div style={{
+      marginTop: 32,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      opacity: 0.35,
+    }}>
+      <CasiMark width={32} height={16} className="" />
+    </div>
   );
 }
