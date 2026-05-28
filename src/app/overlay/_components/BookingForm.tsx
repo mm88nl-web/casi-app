@@ -1,6 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+
+function fmtMaxDur(min: number): string {
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
 import { BANNER_MAX_MESSAGE } from '@/lib/banner';
 import TurnstileWidget from '@/components/TurnstileWidget';
 import UsdcIcon from '@/components/icons/UsdcIcon';
@@ -361,7 +368,7 @@ export default function BookingForm(props: Props) {
 
         <div>
           <div style={{ marginBottom: 14 }}>
-            <label className="bf-lbl">Duration{maxSecs ? ` — max ${slot.max_duration_minutes}m` : ''}</label>
+            <label className="bf-lbl">Duration{maxSecs && slot.max_duration_minutes ? ` — max ${fmtMaxDur(slot.max_duration_minutes)}` : ''}</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <button
                 onClick={() => onDurationChange(durationSeconds - 5)}

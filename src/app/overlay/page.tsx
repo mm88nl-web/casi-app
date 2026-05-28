@@ -56,13 +56,6 @@ const BOOKING_PAGE_LIMIT = 200;
 // realistic streamer moderation latency without trailing stale history.
 const STRIPE_DENIED_WINDOW_MS = 10 * 60 * 1000;
 
-function fmtMaxDur(min: number): string {
-  if (min < 60) return `${min}m`;
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return m === 0 ? `${h}h` : `${h}h ${m}m`;
-}
-
 function OverlayContent() {
   const searchParams = useSearchParams();
   const username = searchParams.get('s') || '';
@@ -2794,7 +2787,6 @@ function OverlayContent() {
                       }}
                     >
                       {p.rail === 'free' ? '★ Free' : p.label}
-                      {el.max_duration_minutes && <span style={{ color:'rgba(255,255,255,0.35)', marginLeft: 6, fontSize: 9 }}>· max {fmtMaxDur(el.max_duration_minutes)}</span>}
                     </div>
                     );
                   })()}
