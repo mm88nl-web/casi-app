@@ -169,6 +169,7 @@ function OverlayContent() {
   // the loadData callback on every wallet change.
   const viewerWalletRef = useRef<string | null>(null);
   const lastRealtimeEventAt = useRef(Date.now());
+  const canvasRef = useRef<HTMLDivElement | null>(null);
 
   // Theme color tokens — CSS vars, set by SkinProvider
   const tc    = 'var(--casi-accent)';
@@ -883,6 +884,10 @@ function OverlayContent() {
       const myBooking = getMyBookingForSlot(el.id);
       if (myBooking?.image_url) { setImageUrl(myBooking.image_url); setImageValid(true); }
     }
+    // On mobile the slots list is below the canvas, so the user has likely
+    // scrolled down. Scroll the canvas into view so it peeks above the
+    // bottom-sheet form — the preview is the reason to open a slot at all.
+    canvasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   const closeSlot = () => {
     setSelectedSlot(null); setIsExtend(false);
@@ -2198,7 +2203,7 @@ function OverlayContent() {
         .cancel-btn { background:none; border:none; font-family:var(--font-casi-mono),monospace; font-size:9px; color:rgba(248,113,113,0.5); cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:color .2s; padding:0; margin-left:4px; }
         .cancel-btn:hover { color:#f87171; }
 
-        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:#0a0a0a; position:relative; overflow:hidden; margin-bottom:10px; --line: rgba(255,255,255,0.06); }
+        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:#0a0a0a; position:relative; z-index:0; overflow:hidden; margin-bottom:10px; --line: rgba(255,255,255,0.06); }
 
         /* ── Slot list — v9 ── sharp borders, ink accent on hover/select,
            48px square thumb that adopts the slot shape via .s-thumb-* helpers
@@ -2545,7 +2550,7 @@ function OverlayContent() {
           )}
 
           {/* STREAM CANVAS */}
-          <div className={isOBS ? '' : 'stream-canvas'} style={isOBS ? { position:'relative', width:'100vw', height:'100vh' } : {}}>
+          <div ref={canvasRef} className={isOBS ? '' : 'stream-canvas'} style={isOBS ? { position:'relative', width:'100vw', height:'100vh' } : {}}>
             {!isOBS && <div className="casi-v9-canvas-grid-overlay" aria-hidden />}
             {/* Silhouette preview background — visible to viewers while booking, never in OBS */}
             {!isOBS && selectedSlot && profile?.preview_background_url && (
