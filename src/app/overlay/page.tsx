@@ -2153,24 +2153,25 @@ function OverlayContent() {
         .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:#888; }
         .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid rgba(var(--casi-accent-rgb),0.31); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--casi-text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
 
-        .ov-main { max-width:1200px; margin:0 auto; padding:16px 20px 48px; }
-        @media (min-width:900px) { .ov-main { padding:24px 48px 60px; } }
-        /* v9 viewer 2-col body — canvas + flashes-feed left, slots/booking right.
-           Layout via CSS-grid placement on existing children, no JSX wrapping
-           (the canvas div is huge + closes over component state, extracting
-           it is fragile). MyBeams + StuckFlashes + FlashPanel span both cols
-           via .ov-full-row; canvas/feed sit in col 1, slots/booking in col 2.
-           In OBS mode .ov-v9 is not applied so the grid never engages. */
-        .ov-main.ov-v9 { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 24px 32px; align-items: start; max-width: 1280px; }
-        .ov-main.ov-v9 > .ov-full-row { grid-column: 1 / -1; }
-        .ov-main.ov-v9 > .stream-canvas { grid-column: 1; grid-row: 2; margin-bottom: 0; }
-        .ov-main.ov-v9 > .ov-browse-link { grid-column: 1; grid-row: 3; }
-        .ov-main.ov-v9 > .slots-sec { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; align-self: start; }
-        @media (max-width:900px) {
-          .ov-main.ov-v9 { grid-template-columns: 1fr; }
-          .ov-main.ov-v9 > .stream-canvas,
-          .ov-main.ov-v9 > .ov-browse-link,
-          .ov-main.ov-v9 > .slots-sec { grid-column: 1; grid-row: auto; }
+        /* ov-layout: 2-col grid wrapper (desktop only). Separates canvas/feeds
+           (left col, <main>) from slots/booking (right col, .ov-booking-col).
+           Keeping the booking form OUTSIDE the grid container fixes a Chrome
+           Android bug where position:fixed inside display:grid doesn't escape
+           the grid flow — form was appearing in-flow instead of as a bottom sheet. */
+        .ov-layout { max-width:1280px; margin:0 auto; }
+        .ov-main { padding:16px 20px 32px; }
+        /* On mobile, the booking column (slots or form) sits below the canvas. */
+        .ov-booking-col { padding:0 20px 48px; }
+        @media (min-width:900px) {
+          .ov-layout.ov-v9 {
+            display:grid;
+            grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);
+            gap:24px 32px;
+            align-items:start;
+            padding:24px 48px 60px;
+          }
+          .ov-layout.ov-v9 > .ov-main { grid-column:1; padding:0; }
+          .ov-layout.ov-v9 > .ov-booking-col { grid-column:2; align-self:start; padding:0; }
         }
         .ov-browse-link {
           display: flex; align-items: center; gap: 10px;
@@ -2209,7 +2210,8 @@ function OverlayContent() {
            48px square thumb that adopts the slot shape via .s-thumb-* helpers
            applied by SlotsList.tsx (none today, so it stays a square — fine
            visually, the type text already conveys shape). */
-        .slots-sec { margin-top:24px; }
+        .slots-sec { margin-top:0; }
+        @media (max-width:899px) { .slots-sec { margin-top:16px; } }
         .slots-lbl {
           font-family:var(--M); font-size:11px; font-weight:600; color:var(--text-3);
           text-transform:uppercase; letter-spacing:0.16em; margin-bottom:14px;
@@ -2293,7 +2295,6 @@ function OverlayContent() {
             animation:slideInV9 .2s ease;
           }
           .bf::before { display:none; }
-          .ov-main.ov-v9 > .bf { grid-column:2; grid-row:2 / span 2; margin-top:0; align-self:start; }
         }
         @keyframes slideInV9 { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
         .bf-hdr {
@@ -2392,7 +2393,8 @@ function OverlayContent() {
 
         @media (max-width:640px) {
           .ov-nav { padding:0 16px; }
-          .ov-main { padding:12px 14px 60px; }
+          .ov-main { padding:12px 14px 32px; }
+          .ov-booking-col { padding:0 14px 60px; }
           .bf-grid { padding:16px; }
           .bf-footer { flex-direction:column; align-items:stretch; padding:18px; }
           .bf-sub { width:100%; text-align:center; }
@@ -2490,7 +2492,8 @@ function OverlayContent() {
           </div>
         )}
 
-        <main className={isOBS ? '' : 'ov-main ov-v9'}>
+        <div className={isOBS ? '' : 'ov-layout ov-v9'}>
+        <main className={isOBS ? '' : 'ov-main'}>
 
           {/* MY BEAMS */}
           {!isOBS && !selectedSlot && (
@@ -2892,84 +2895,6 @@ function OverlayContent() {
             </button>
           )}
 
-          {/* BOOKING FORM — fixed modal + backdrop */}
-          {!isOBS && selectedSlot && (
-            <div className="bf-backdrop" onClick={closeSlot} aria-hidden />
-          )}
-          {!isOBS && selectedSlot && (
-            <BookingForm
-              slot={selectedSlot}
-              accentColor={accentColor}
-              accentColorRgb={accentColorRgb}
-              tcRgb={tcRgb}
-              isExtend={isExtend}
-              isQueue={isQueue}
-              savedViewerName={savedViewerName ?? ''}
-              onChangeNameClick={() => setShowChangeName(true)}
-              onClose={closeSlot}
-              uploadMode={uploadMode}
-              onUploadModeChange={setUploadMode}
-              uploadedUrl={uploadedUrl}
-              uploadedFileType={uploadedFileType}
-              uploading={uploading}
-              onFileSelect={handleFileSelect}
-              onRemoveUpload={() => { setUploadedUrl(null); setUploadedPath(null); setUploadedFileType(null); }}
-              imageUrl={imageUrl}
-              imageValid={imageValid}
-              onImageUrlChange={setImageUrl}
-              onImageValidChange={setImageValid}
-              getUrlFileType={getUrlFileType}
-              durationSeconds={durationSeconds}
-              onDurationChange={setDurationSecsClamped}
-              message={message}
-              onMessageChange={setMessage}
-              estimatedCost={estimatedCost}
-              streamerCurrency={profile?.settlement_currency ?? null}
-              walletConnected={connected || hasPhantomConnectSession}
-              usdcBalance={usdcBalance}
-              activeBookings={activeBookings}
-              approvedQueuedBookings={approvedQueuedBookings}
-              turnstileToken={turnstileToken}
-              onTurnstileVerify={onTurnstileVerify}
-              onTurnstileExpire={onTurnstileExpire}
-              customizeOpen={customizeOpen}
-              onCustomizeToggle={() => setCustomizeOpen(o => !o)}
-              bannerFontPx={bannerFontPx}
-              onBannerFontPxChange={setBannerFontPx}
-              bannerSpeedSecs={bannerSpeedSecs}
-              onBannerSpeedSecsChange={setBannerSpeedSecs}
-              mediaOffsetX={mediaOffsetX}
-              mediaOffsetY={mediaOffsetY}
-              onMediaOffsetChange={onMediaOffsetChange}
-              mediaZoom={mediaZoom}
-              onMediaZoomChange={setMediaZoom}
-              canSubmit={canSubmit}
-              submitting={submitting}
-              connecting={connecting}
-              onStripeSubmit={submitBooking}
-              onSolanaPay={() => {
-                if (!connected && !hasPhantomConnectSession) {
-                  openWalletModal();
-                } else {
-                  setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
-                }
-              }}
-            />
-          )}
-
-          {/* SLOTS LIST */}
-          {!isOBS && !selectedSlot && (
-            <SlotsList
-              elements={elements}
-              tc={tc}
-              tcRgb={tcRgb}
-              queueCounts={queueCounts}
-              getActiveBookingForSlot={getActiveBookingForSlot}
-              getMyBookingForSlot={getMyBookingForSlot}
-              onOpenSlot={openSlot}
-            />
-          )}
-
           {/* Flash feed + composer. FlashPanel is the single "chat-box-but-
               for-flashes" surface: renders approved flashes chat-style AND
               embeds the SendFlashSection composer inline. No separate
@@ -3020,6 +2945,93 @@ function OverlayContent() {
 
           {!isOBS && <BrandFooter />}
         </main>
+
+        {/* BOOKING COLUMN — slots list (no selection) OR form+backdrop
+            (slot selected). Lives OUTSIDE <main> so position:fixed on the
+            booking form escapes any grid-container context (Chrome Android
+            had a bug where fixed inside display:grid stayed in-flow). */}
+        {!isOBS && (
+          <div className="ov-booking-col">
+            {/* Slots list — shown when no slot selected */}
+            {!selectedSlot && (
+              <SlotsList
+                elements={elements}
+                tc={tc}
+                tcRgb={tcRgb}
+                queueCounts={queueCounts}
+                getActiveBookingForSlot={getActiveBookingForSlot}
+                getMyBookingForSlot={getMyBookingForSlot}
+                onOpenSlot={openSlot}
+              />
+            )}
+
+            {/* Booking form + tap-to-dismiss backdrop */}
+            {selectedSlot && (
+              <div className="bf-backdrop" onClick={closeSlot} aria-hidden />
+            )}
+            {selectedSlot && (
+              <BookingForm
+                slot={selectedSlot}
+                accentColor={accentColor}
+                accentColorRgb={accentColorRgb}
+                tcRgb={tcRgb}
+                isExtend={isExtend}
+                isQueue={isQueue}
+                savedViewerName={savedViewerName ?? ''}
+                onChangeNameClick={() => setShowChangeName(true)}
+                onClose={closeSlot}
+                uploadMode={uploadMode}
+                onUploadModeChange={setUploadMode}
+                uploadedUrl={uploadedUrl}
+                uploadedFileType={uploadedFileType}
+                uploading={uploading}
+                onFileSelect={handleFileSelect}
+                onRemoveUpload={() => { setUploadedUrl(null); setUploadedPath(null); setUploadedFileType(null); }}
+                imageUrl={imageUrl}
+                imageValid={imageValid}
+                onImageUrlChange={setImageUrl}
+                onImageValidChange={setImageValid}
+                getUrlFileType={getUrlFileType}
+                durationSeconds={durationSeconds}
+                onDurationChange={setDurationSecsClamped}
+                message={message}
+                onMessageChange={setMessage}
+                estimatedCost={estimatedCost}
+                streamerCurrency={profile?.settlement_currency ?? null}
+                walletConnected={connected || hasPhantomConnectSession}
+                usdcBalance={usdcBalance}
+                activeBookings={activeBookings}
+                approvedQueuedBookings={approvedQueuedBookings}
+                turnstileToken={turnstileToken}
+                onTurnstileVerify={onTurnstileVerify}
+                onTurnstileExpire={onTurnstileExpire}
+                customizeOpen={customizeOpen}
+                onCustomizeToggle={() => setCustomizeOpen(o => !o)}
+                bannerFontPx={bannerFontPx}
+                onBannerFontPxChange={setBannerFontPx}
+                bannerSpeedSecs={bannerSpeedSecs}
+                onBannerSpeedSecsChange={setBannerSpeedSecs}
+                mediaOffsetX={mediaOffsetX}
+                mediaOffsetY={mediaOffsetY}
+                onMediaOffsetChange={onMediaOffsetChange}
+                mediaZoom={mediaZoom}
+                onMediaZoomChange={setMediaZoom}
+                canSubmit={canSubmit}
+                submitting={submitting}
+                connecting={connecting}
+                onStripeSubmit={submitBooking}
+                onSolanaPay={() => {
+                  if (!connected && !hasPhantomConnectSession) {
+                    openWalletModal();
+                  } else {
+                    setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
+                  }
+                }}
+              />
+            )}
+          </div>
+        )}
+        </div>{/* /ov-layout */}
       </div>
 
       <BrowseStreamersModal open={showBrowseModal} onClose={() => setShowBrowseModal(false)} />
