@@ -191,6 +191,17 @@ function OverlayContent() {
     window.scrollTo({ top: Math.max(0, window.scrollY + rect.top - NAV - 8), behavior: 'smooth' });
   }, [selectedSlot, isOBS]);
 
+  // Auto-open the customize panel the moment the viewer has media ready.
+  // It's now positioned right after the upload section, so the image
+  // preview appears immediately without any extra scrolling or tapping.
+  useEffect(() => {
+    if (!selectedSlot) return;
+    const hasMedia =
+      (uploadMode === 'upload' && !!uploadedUrl) ||
+      (uploadMode === 'url' && imageValid && !!imageUrl);
+    if (hasMedia && !customizeOpen) setCustomizeOpen(true);
+  }, [uploadedUrl, imageValid, imageUrl, uploadMode, selectedSlot]);
+
   // Phantom Connect return handler. When the page loads with our
   // phantom_action query param set, Phantom has bounced the user back from
   // a connect or sign deeplink — parse the encrypted response, finalize

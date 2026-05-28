@@ -347,6 +347,31 @@ export default function BookingForm(props: Props) {
             )}
           </div>
 
+          {/* Customize panel sits right under the media upload so the viewer
+              gets immediate visual feedback after adding media — no scrolling
+              required. auto-opens from page.tsx when media becomes ready. */}
+          {slot.shape !== 'backdrop' && (
+            <CustomizePanel
+              shape={slot.shape}
+              open={customizeOpen}
+              onToggle={onCustomizeToggle}
+              accentColor={accentColor}
+              accentColorRgb={accentColorRgb}
+              message={message}
+              bannerFontPx={bannerFontPx}
+              onBannerFontPxChange={onBannerFontPxChange}
+              bannerSpeedSecs={bannerSpeedSecs}
+              onBannerSpeedSecsChange={onBannerSpeedSecsChange}
+              mediaPreviewUrl={customizePreviewUrl}
+              mediaPreviewFileType={customizePreviewFileType}
+              mediaOffsetX={mediaOffsetX}
+              mediaOffsetY={mediaOffsetY}
+              onMediaOffsetChange={onMediaOffsetChange}
+              mediaZoom={mediaZoom}
+              onMediaZoomChange={onMediaZoomChange}
+            />
+          )}
+
           <div>
             <label className="bf-lbl">Viewing as</label>
             <div className="casi-v9-viewing-as">
@@ -466,25 +491,6 @@ export default function BookingForm(props: Props) {
         </div>
       </div>
 
-      <CustomizePanel
-        shape={slot.shape}
-        open={customizeOpen}
-        onToggle={onCustomizeToggle}
-        accentColor={accentColor}
-        accentColorRgb={accentColorRgb}
-        message={message}
-        bannerFontPx={bannerFontPx}
-        onBannerFontPxChange={onBannerFontPxChange}
-        bannerSpeedSecs={bannerSpeedSecs}
-        onBannerSpeedSecsChange={onBannerSpeedSecsChange}
-        mediaPreviewUrl={customizePreviewUrl}
-        mediaPreviewFileType={customizePreviewFileType}
-        mediaOffsetX={mediaOffsetX}
-        mediaOffsetY={mediaOffsetY}
-        onMediaOffsetChange={onMediaOffsetChange}
-        mediaZoom={mediaZoom}
-        onMediaZoomChange={onMediaZoomChange}
-      />
 
       {/* Rail picker + cost summary. Replaces the prior USDC-only preview
           box, which only spoke to one of the three rails and silently
