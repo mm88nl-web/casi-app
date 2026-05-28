@@ -2873,51 +2873,13 @@ function OverlayContent() {
               a slot booking form is open so the two modals don't fight for
               focus. Rail gating is handled inside FlashPanel via
               streamerProfile. */}
-          {/* Stuck-flash recovery — only renders when this viewer (by name
-              or wallet) has pending Solana flashes with a live escrow_pda
-              that haven't been moderated. Lets the viewer reclaim their
-              USDC without waiting on the streamer to act. Hidden in OBS
-              mode (this is viewer chrome, not stream content). */}
-          {!isOBS && !selectedSlot && (
-            <div className="ov-full-row">
-              <StuckFlashesPanel
-                flashes={myStuckFlashes}
-                reclaimingId={reclaimingFlash}
-                onReclaim={reclaimFlashEscrow}
-              />
-            </div>
-          )}
-
-          {!isOBS && profile?.id && !selectedSlot && (
-            <div className="ov-full-row" style={{ marginTop:24 }}>
-              <FlashPanel
-                profileId={profile.id}
-                viewerName={savedViewerName || null}
-                streamerProfile={profile}
-                username={username}
-                showNotif={showNotif}
-              />
-            </div>
-          )}
-
-          {/* Viewer's today-scoped activity log on this streamer — beams +
-              flashes merged, persistent Solscan link per row, running spend
-              total at the bottom. Sits under everything else so the viewer
-              has the in-progress / send-a-flash surfaces above the fold and
-              the receipts at the bottom. Hidden on OBS browser-source mode
-              (this is viewer chrome, not stream content) and when no rows
-              exist (the component itself early-returns). */}
-          {!isOBS && !selectedSlot && username && (
-            <div className="ov-full-row" style={{ marginTop:24 }}>
-              <MyTransactionsSection rows={myHistory} username={username} />
-            </div>
-          )}
-
           {!isOBS && <BrandFooter />}
         </main>
 
-        {/* BOOKING COLUMN — slots list (no selection) OR form (slot selected).
-            In-flow below the canvas on mobile; sidebar on desktop ≥900px. */}
+        {/* BOOKING COLUMN — slots list (no selection) OR form (slot selected),
+            then flash feed + activity history below. All three stack on mobile
+            so the order is: slots → flashes → history (most-recent last).
+            On desktop ≥900px this is the right sidebar column. */}
         {!isOBS && (
           <div className="ov-booking-col" ref={bookingColRef}>
             {/* Slots list — shown when no slot selected */}
@@ -2993,6 +2955,35 @@ function OverlayContent() {
                   }
                 }}
               />
+            )}
+
+            {/* Stuck-flash recovery chips */}
+            {!selectedSlot && (
+              <StuckFlashesPanel
+                flashes={myStuckFlashes}
+                reclaimingId={reclaimingFlash}
+                onReclaim={reclaimFlashEscrow}
+              />
+            )}
+
+            {/* Flash feed + composer */}
+            {profile?.id && !selectedSlot && (
+              <div style={{ marginTop: 24 }}>
+                <FlashPanel
+                  profileId={profile.id}
+                  viewerName={savedViewerName || null}
+                  streamerProfile={profile}
+                  username={username}
+                  showNotif={showNotif}
+                />
+              </div>
+            )}
+
+            {/* Activity history — always last */}
+            {!selectedSlot && username && (
+              <div style={{ marginTop: 24 }}>
+                <MyTransactionsSection rows={myHistory} username={username} />
+              </div>
             )}
           </div>
         )}
