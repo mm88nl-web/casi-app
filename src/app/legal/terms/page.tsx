@@ -4,7 +4,7 @@ export default function TermsPage() {
   return (
     <>
       <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Terms of Service</h1>
-      <p style={{ color: '#a1a1aa', fontSize: 13, marginBottom: 32 }}>Last updated: 15 May 2026 · v1.0.</p>
+      <p style={{ color: 'var(--casi-text-muted)', fontSize: 13, marginBottom: 32 }}>Last updated: 15 May 2026 · v1.0.</p>
 
       <h2 style={h2}>1. Who we are</h2>
       <p>
@@ -66,4 +66,4 @@ export default function TermsPage() {
 }
 
 const h2 = { fontSize: 18, fontWeight: 700, marginTop: 28, marginBottom: 8 } as const;
-const a  = { color: '#a78bfa', textDecoration: 'underline' } as const;
+const a  = { color: 'var(--casi-accent)', textDecoration: 'underline' } as const;

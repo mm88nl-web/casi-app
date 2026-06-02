@@ -4,7 +4,7 @@ export default function AupPage() {
   return (
     <>
       <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Acceptable Use Policy</h1>
-      <p style={{ color: '#a1a1aa', fontSize: 13, marginBottom: 32 }}>Last updated: 17 April 2026 · Draft v0.1 — pending legal review.</p>
+      <p style={{ color: 'var(--casi-text-muted)', fontSize: 13, marginBottom: 32 }}>Last updated: 17 April 2026 · Draft v0.1 — pending legal review.</p>
 
       <p>This policy applies to everyone who uses casi — streamers, viewers, and tippers. Violations can result in Content removal, account suspension, loss of funds held in pending state, and referral to law enforcement where required by law.</p>
 
@@ -44,4 +44,4 @@ export default function AupPage() {
 
 const h2 = { fontSize: 18, fontWeight: 700, marginTop: 28, marginBottom: 8 } as const;
 const ul = { paddingLeft: 22, marginBottom: 12 } as const;
-const a  = { color: '#a78bfa', textDecoration: 'underline' } as const;
+const a  = { color: 'var(--casi-accent)', textDecoration: 'underline' } as const;

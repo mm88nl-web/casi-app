@@ -4,7 +4,7 @@ export default function ImprintPage() {
   return (
     <>
       <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Imprint</h1>
-      <p style={{ color: '#a1a1aa', fontSize: 13, marginBottom: 32 }}>
+      <p style={{ color: 'var(--casi-text-muted)', fontSize: 13, marginBottom: 32 }}>
         Information required under the Dutch Handelsregisterwet and EU Directive 2000/31/EC (Article 5).
       </p>
 
@@ -76,7 +76,7 @@ export default function ImprintPage() {
 
 const h2 = { fontSize: 18, fontWeight: 700, marginTop: 28, marginBottom: 8 } as const;
 const ul = { paddingLeft: 22, marginBottom: 12 } as const;
-const a  = { color: '#a78bfa', textDecoration: 'underline' } as const;
+const a  = { color: 'var(--casi-accent)', textDecoration: 'underline' } as const;
 const tbl = { width: '100%', borderCollapse: 'collapse' as const, marginBottom: 16 } as const;
-const th = { textAlign: 'left' as const, color: '#a1a1aa', fontWeight: 400, padding: '6px 0', verticalAlign: 'top' as const, width: 180 } as const;
+const th = { textAlign: 'left' as const, color: 'var(--casi-text-muted)', fontWeight: 400, padding: '6px 0', verticalAlign: 'top' as const, width: 180 } as const;
 const td = { padding: '6px 0', verticalAlign: 'top' as const } as const;

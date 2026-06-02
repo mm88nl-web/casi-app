@@ -6,7 +6,7 @@ export default function DmcaPage() {
   return (
     <>
       <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>DMCA & abuse reports</h1>
-      <p style={{ color: '#a1a1aa', fontSize: 13, marginBottom: 32 }}>Last updated: 17 April 2026 · Draft v0.1 — pending legal review.</p>
+      <p style={{ color: 'var(--casi-text-muted)', fontSize: 13, marginBottom: 32 }}>Last updated: 17 April 2026 · Draft v0.1 — pending legal review.</p>
 
       <h2 style={h2}>Emergency reports</h2>
       <p>If you are reporting <strong>child sexual abuse material (CSAM)</strong> or <strong>imminent threats of harm to a person</strong>, email <a href="mailto:abuse@casi.gg" style={a}>abuse@casi.gg</a> with the word <code style={code}>URGENT</code> in the subject. We also urge you to report directly to local law enforcement and, in the US, to the <a href="https://www.missingkids.org/gethelpnow/cybertipline" style={a} target="_blank" rel="noopener noreferrer">NCMEC CyberTipline</a>.</p>
@@ -31,7 +31,7 @@ export default function DmcaPage() {
       <h2 style={h2}>Other reports</h2>
       <p>For illegal content, harassment, impersonation, or other violations of the <a href="/legal/aup" style={a}>Acceptable Use Policy</a>, use the form below. Include as much detail as possible — screenshots and URLs help us act quickly.</p>
 
-      <div style={{ marginTop: 24, padding: 20, border: '1px solid #27272a', borderRadius: 12, background: '#0f0f13' }}>
+      <div style={{ marginTop: 24, padding: 20, border: '1px solid var(--casi-border)', borderRadius: 12, background: 'var(--casi-surface)' }}>
         <AbuseReportForm />
       </div>
     </>
@@ -40,5 +40,5 @@ export default function DmcaPage() {
 
 const h2 = { fontSize: 18, fontWeight: 700, marginTop: 28, marginBottom: 8 } as const;
 const ol = { paddingLeft: 22, marginBottom: 12 } as const;
-const a  = { color: '#a78bfa', textDecoration: 'underline' } as const;
-const code = { background: '#27272a', padding: '2px 6px', borderRadius: 4, fontSize: 13 } as const;
+const a  = { color: 'var(--casi-accent)', textDecoration: 'underline' } as const;
+const code = { background: 'var(--casi-border)', padding: '2px 6px', borderRadius: 4, fontSize: 13 } as const;
