@@ -12,6 +12,7 @@
    components don't break during the port.
    ═══════════════════════════════════════════════════════════════════════ */
 :root {
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
 
@@ -1145,11 +1146,10 @@
   --font-display: var(--font-casi-display);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Casi Light is the only scheme — never follow the OS dark preference, and
+   paint the root cream so mobile dark-mode doesn't flash a dark canvas. */
+html {
+  background: var(--paper);
 }
 
 body {

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { Bricolage_Grotesque, JetBrains_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
@@ -40,6 +40,13 @@ const serif = Instrument_Serif({
   style: ["normal", "italic"],
   display: "swap",
 });
+
+// Casi Light is the only scheme — pin the browser to light so mobile dark-mode
+// devices never paint a dark canvas/chrome before our CSS applies (no dark flash).
+export const viewport: Viewport = {
+  themeColor: "#f5e1d2",
+  colorScheme: "light",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(
