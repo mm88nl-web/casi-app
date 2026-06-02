@@ -2144,6 +2144,10 @@ function OverlayContent() {
       />
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        ${isOBS ? `/* OBS source: override the cream --paper that globals.css paints on
+           <html> (added in #148 for the mobile dark-flash) so beams composite
+           over the streamer's video instead of a solid rectangle. */
+        html, body { background: transparent !important; }` : ''}
         @keyframes blink     { 0%,100%{opacity:1} 50%{opacity:.2} }
         @keyframes fadeIn    { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         @keyframes springPop { from{opacity:0;transform:scale(0.88) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }

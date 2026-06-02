@@ -107,6 +107,11 @@ function OBSContent() {
   return (
     <div className="w-screen h-screen bg-transparent overflow-hidden">
       <style>{`
+        /* Force the page transparent so OBS composites the beams over the
+           streamer's video. globals.css paints the cream --paper on <html>
+           (added in #148 to kill the mobile dark-flash); without this override
+           that cream leaks into the browser source as a solid rectangle. */
+        html, body { background: transparent !important; }
         /* Shape mask + one-shot glow + banner marquee.
            Accent colour is derived from the streamer's skin/theme at load time
            so glow and banner edges match their brand colour. */
