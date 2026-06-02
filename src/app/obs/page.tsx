@@ -85,9 +85,20 @@ function OBSContent() {
       }, () => loadAll())
       .subscribe();
 
+    // Safety-refresh fallback. OBS browser sources run in CEF, which can
+    // throttle background JS — so a Supabase realtime push (e.g. a beam the
+    // streamer just approved) can land seconds late, sometimes ~30s. Polling
+    // as a backstop guarantees a newly-active beam shows within a few seconds
+    // regardless of realtime delivery. The render keys (`el.id` /
+    // `${el.id}-${active?.id}`) are stable, so an unchanged refresh causes no
+    // remount, flicker, or glow-animation replay; the queries are tiny and
+    // scoped to one profile_id.
+    const poll = setInterval(loadAll, 4000);
+
     return () => {
       supabase.removeChannel(elCh);
       supabase.removeChannel(bkCh);
+      clearInterval(poll);
     };
   }, [profileId, layer, supabase]);
 
