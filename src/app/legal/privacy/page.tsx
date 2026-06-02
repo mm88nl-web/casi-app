@@ -4,7 +4,7 @@ export default function PrivacyPage() {
   return (
     <>
       <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Privacy Policy</h1>
-      <p style={{ color: '#a1a1aa', fontSize: 13, marginBottom: 32 }}>Last updated: 15 May 2026 · v1.0.</p>
+      <p style={{ color: 'var(--casi-text-muted)', fontSize: 13, marginBottom: 32 }}>Last updated: 15 May 2026 · v1.0.</p>
 
       <h2 style={h2}>0. Controller</h2>
       <p>
@@ -102,7 +102,7 @@ export default function PrivacyPage() {
 
 const h2 = { fontSize: 18, fontWeight: 700, marginTop: 28, marginBottom: 8 } as const;
 const ul = { paddingLeft: 22, marginBottom: 12 } as const;
-const a  = { color: '#a78bfa', textDecoration: 'underline' } as const;
+const a  = { color: 'var(--casi-accent)', textDecoration: 'underline' } as const;
 const tbl = { width: '100%', borderCollapse: 'collapse' as const, marginBottom: 16 } as const;
-const th = { textAlign: 'left' as const, color: '#a1a1aa', fontWeight: 400, padding: '6px 12px 6px 0', verticalAlign: 'top' as const, width: 320 } as const;
+const th = { textAlign: 'left' as const, color: 'var(--casi-text-muted)', fontWeight: 400, padding: '6px 12px 6px 0', verticalAlign: 'top' as const, width: 320 } as const;
 const td = { padding: '6px 0', verticalAlign: 'top' as const } as const;

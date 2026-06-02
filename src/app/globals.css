@@ -15,9 +15,9 @@
   --background: #ffffff;
   --foreground: #171717;
 
-  /* ── v9 roots: the only colors that matter ── */
-  --ink:   #0DCFB0;
-  --paper: #0B0B0C;
+  /* ── Brand roots: Casi Light is the default scheme ── */
+  --ink:   #294b3c;
+  --paper: #f5e1d2;
 
   /* Derived — tints of ink against paper */
   --ink-04: color-mix(in oklab, var(--ink) 4%,  var(--paper));
@@ -54,9 +54,9 @@
 
   /* ── v7 alias layer — keeps existing components rendering correctly ── */
   --casi-accent:      var(--ink);
-  --casi-accent-rgb:  13, 207, 176;
-  --casi-accent2:     #9945FF;
-  --casi-accent2-rgb: 153, 69, 255;
+  --casi-accent-rgb:  41, 75, 60;
+  --casi-accent2:     #c04830;
+  --casi-accent2-rgb: 192, 72, 48;
   --casi-bg:          var(--paper);
   --casi-surface:     var(--surf);
   --casi-border:      var(--line);

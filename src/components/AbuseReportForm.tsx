@@ -105,7 +105,7 @@ export default function AbuseReportForm() {
         <textarea required value={description} onChange={(e) => setDescription(e.target.value)} style={{ ...inp, minHeight: 120, resize: 'vertical', fontFamily: 'inherit' }} placeholder="What should we look at? Include timestamps, URLs, and — for DMCA — the copyrighted work and your statement under penalty of perjury." maxLength={4000} />
       </label>
 
-      <TurnstileWidget onVerify={onVerify} onExpire={onExpire} theme="dark" />
+      <TurnstileWidget onVerify={onVerify} onExpire={onExpire} theme="light" />
 
       {error && <div style={{ color: '#f87171', fontSize: 13 }}>{error}</div>}
 
@@ -114,8 +114,8 @@ export default function AbuseReportForm() {
         disabled={submitting || !token}
         style={{
           padding: '12px 20px',
-          background: '#a78bfa',
-          color: '#09090b',
+          background: 'var(--casi-accent)',
+          color: 'var(--on-ink)',
           border: 'none',
           borderRadius: 8,
           fontFamily: "var(--font-casi-mono), monospace",

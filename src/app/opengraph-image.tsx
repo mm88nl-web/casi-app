@@ -21,9 +21,9 @@ export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
 export default async function OpenGraphImage() {
-  const ink = '#0DCFB0';
-  const paper = '#0C0D11';
-  const text = '#F0F2F5';
+  const ink = '#294b3c';
+  const paper = '#f5e1d2';
+  const text = '#221a14';
 
   return new ImageResponse(
     (
@@ -47,7 +47,7 @@ export default async function OpenGraphImage() {
             position: 'absolute',
             inset: 0,
             backgroundImage:
-              'radial-gradient(circle, rgba(13, 207, 176, 0.12) 1.5px, transparent 1.5px)',
+              'radial-gradient(circle, rgba(41, 75, 60, 0.12) 1.5px, transparent 1.5px)',
             backgroundSize: '32px 32px',
             opacity: 0.5,
           }}
