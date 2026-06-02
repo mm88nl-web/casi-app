@@ -94,6 +94,20 @@ export default function HomePage() {
             find a streamer
           </Link>
         </div>
+
+        <figure className="demo">
+          <video
+            src="/casi-demo.mp4"
+            poster="/casi-demo-poster.jpg"
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+            aria-label="Demo: a viewer's paid beam appears on a live stream"
+          />
+          <figcaption>a viewer’s beam, live on stream</figcaption>
+        </figure>
       </section>
 
       <div className="foot-strip">
@@ -255,6 +269,36 @@ export default function HomePage() {
           justify-content: center;
           gap: 22px;
           flex-wrap: wrap;
+        }
+
+        .demo {
+          margin: 40px auto 0;
+          width: 100%;
+          max-width: 600px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 11px;
+        }
+        .demo video {
+          width: 100%;
+          aspect-ratio: 16 / 9;
+          object-fit: cover;
+          display: block;
+          border-radius: 16px;
+          border: 1px solid color-mix(in oklab, var(--ink) 16%, transparent);
+          box-shadow: 0 22px 60px -24px rgba(41, 75, 60, 0.5);
+          background: var(--ink);
+        }
+        .demo figcaption {
+          font-family: var(--S);
+          font-style: italic;
+          font-size: 15px;
+          color: var(--type-2);
+        }
+        @media (max-width: 600px) {
+          .demo { margin-top: 30px; }
+          .demo figcaption { font-size: 13.5px; }
         }
 
         .foot-strip {
