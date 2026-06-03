@@ -1,0 +1,28 @@
+# casi
+
+> casi (casi.gg) lets livestream viewers pay to put their own clip, image, or
+> banner on a streamer's screen as an overlay ("beam") for a fixed number of
+> minutes — or as a quick "flash" message. The streamer approves every beam
+> before it airs and keeps 100% of the payment; casi never takes a cut.
+
+## What casi is
+- A paid on-stream overlay / takeover tool for live streamers (Twitch, Kick, YouTube via OBS).
+- Viewers book a slot, pay per minute (or per flash), and — once the streamer approves — their media appears on stream for the paid duration, then expires.
+- Two payment rails: card (Stripe) and USDC on Solana (open-source, time-vested escrow). 100% of every payment goes directly viewer→streamer; casi charges no protocol fee.
+- The streamer runs an OBS browser source; bookings and approvals happen on casi.gg.
+
+## How it differs from tip/media-share tools
+- The viewer's own uploaded image/video/banner appears (not just YouTube clips).
+- Time-vested: paid by the minute with prorated refunds if a beam ends early.
+- Streamer-approval gated: nothing airs without the streamer's explicit approval.
+- Open source: the Solana escrow program is Apache-2.0 and reusable.
+
+## Key pages
+- Home: https://www.casi.gg/
+- Find a streamer: https://www.casi.gg/search
+- Streamer profiles: https://www.casi.gg/s/{username}
+- Terms: https://www.casi.gg/legal/terms
+- Privacy: https://www.casi.gg/legal/privacy
+
+## Operator
+Operated by Terminal Data Solutions (Netherlands). Source: https://github.com/mm88nl-web/casi-app
