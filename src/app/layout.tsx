@@ -53,11 +53,12 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_URL || 'https://casi.gg',
   ),
   title: {
-    default: 'casi',
+    default: 'casi — viewers pay to appear on your live stream',
     template: '%s · casi',
   },
   description:
     'Pay-per-minute streamer overlays. Viewers pay to place clips, images, and banners on stream, by the minute or per flash. The streamer approves every one and keeps 100%. Apache 2.0 escrow on Solana.',
+  alternates: { canonical: '/' },
   keywords: [
     'streaming',
     'tipping',
@@ -75,7 +76,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://casi.gg',
+    url: 'https://www.casi.gg',
     siteName: 'casi',
     title: 'casi — Your stream is real estate. Lease it.',
     description:
@@ -98,6 +99,40 @@ export const metadata: Metadata = {
   },
 };
 
+// Site-wide structured data: who casi is, the site itself, and the product.
+// Helps rich results and makes casi citable by AI search engines.
+const SITE_JSONLD = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': 'https://www.casi.gg/#org',
+      name: 'casi',
+      url: 'https://www.casi.gg',
+      logo: 'https://www.casi.gg/icon.svg',
+      sameAs: ['https://github.com/mm88nl-web/casi-app'],
+    },
+    {
+      '@type': 'WebSite',
+      '@id': 'https://www.casi.gg/#website',
+      name: 'casi',
+      url: 'https://www.casi.gg',
+      publisher: { '@id': 'https://www.casi.gg/#org' },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: 'casi',
+      applicationCategory: 'MultimediaApplication',
+      operatingSystem: 'Web',
+      description:
+        'Pay-per-minute streamer overlays. Viewers pay to place clips, images, and banners on a live stream, by the minute or per flash. The streamer approves every one and keeps 100%. Open-source, time-vested USDC escrow on Solana.',
+      url: 'https://www.casi.gg',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      publisher: { '@id': 'https://www.casi.gg/#org' },
+    },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -110,6 +145,10 @@ export default function RootLayout({
       className={`${sans.variable} ${display.variable} ${mono.variable} ${serif.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(SITE_JSONLD) }}
+        />
         <Providers>
             <ClientErrorReporter />
             <Suspense fallback={null}>
