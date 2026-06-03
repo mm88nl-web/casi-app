@@ -215,6 +215,29 @@ function OBSContent() {
             </div>
           );
         })}
+
+        {/* Product-led growth: a subtle attribution tag that shows on the beams
+            layer whenever a beam is live — every paid beam becomes a discovery
+            moment for the viewers watching. pointer-events:none so it never
+            blocks. Future Pro tier ("custom branding") can hide this via a
+            profile flag; free tier keeps it. */}
+        {layer !== 'backdrop' && activeBookings.length > 0 && (
+          <div
+            style={{
+              position: 'absolute', left: 14, bottom: 12, zIndex: 60,
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '4px 9px', borderRadius: 8,
+              background: 'rgba(0,0,0,0.42)', backdropFilter: 'blur(4px)',
+              color: 'rgba(255,255,255,0.82)',
+              fontFamily: 'var(--font-casi-mono),ui-monospace,monospace',
+              fontSize: 12, fontWeight: 600, letterSpacing: '0.04em',
+              pointerEvents: 'none',
+            }}
+          >
+            <span style={{ color: accentHex, fontWeight: 800 }}>▸</span>
+            get on stream · casi.gg
+          </div>
+        )}
       </div>
     </div>
   );
