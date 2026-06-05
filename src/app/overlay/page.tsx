@@ -1156,6 +1156,19 @@ function OverlayContent() {
           media_offset_y: mediaOffsetY === 50 ? null : mediaOffsetY,
           media_zoom:     mediaZoom     === 1  ? null : mediaZoom,
         };
+    // Telemetry only: record which wallet app this booking used so we can see
+    // real Phantom-vs-Solflare(-vs-other) demand before investing further.
+    // Returning deeplink user → session.wallet; first-time mobile deeplink →
+    // the wallet they'll be handed to; desktop/in-app → the adapter's name.
+    let walletApp: string | null = pcSession?.wallet ?? null;
+    if (!walletApp) {
+      const mw = await import('@/lib/mobile-wallet');
+      if (mw.needsMobileHandoff() && !mw.isInWalletBrowser()) {
+        walletApp = (await import('@/lib/phantom-connect')).getPreferredDeeplinkWallet();
+      } else if (wallet?.adapter?.name) {
+        walletApp = wallet.adapter.name.toLowerCase();
+      }
+    }
     const createRes = await fetch('/api/bookings/create-solana', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1163,6 +1176,7 @@ function OverlayContent() {
         profile_id:    profile.id,
         element_id:    selectedSlot.id,
         viewer_name:   savedViewerName,
+        wallet_app:    walletApp,
         image_url:     effectiveSolImageUrl,
         storage_path:  effectiveSolStoragePath,
         file_type:     effectiveSolFileType,
