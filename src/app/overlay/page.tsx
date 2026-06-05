@@ -68,6 +68,12 @@ function OverlayContent() {
   const [queueCounts, setQueueCounts]   = useState<Record<string,number>>({});
   const [loading, setLoading]           = useState(true);
   const [myBookings, setMyBookings]     = useState<any[]>([]);
+  // Beams the viewer just pressed "end early" on — optimistic UI. The settle
+  // is an on-chain tx (sign → confirm → refresh), so without this the chip
+  // sits on "● Live" with a ticking countdown until it lands, making the tap
+  // feel ignored. We freeze the chip to "Ending…" the instant it's pressed;
+  // loadData (or a failed settle) reconciles it back to truth.
+  const [endingBeams, setEndingBeams]   = useState<Set<string>>(new Set());
   // Stuck Solana flashes the viewer paid for but that never settled —
   // either the streamer hasn't moderated yet OR a prior moderation
   // closed the PDA but the DB row is stale (drift). Surfaces a
@@ -2498,37 +2504,48 @@ function OverlayContent() {
               tc={tc}
               tcRgb={tcRgb}
               cancelling={cancelling}
+              ending={endingBeams}
               onEndEarly={async (booking, activeBooking) => {
-                if (booking.payment_method === 'solana') {
-                  // settle_beam pays streamer the vested portion on-chain and
-                  // refunds the viewer the rest in a single tx. DB is updated
-                  // after to advance the queue; settleSolanaBeam surfaces its
-                  // own toast on error.
-                  await settleSolanaBeam(booking);
-                  if (activeBooking) await clientExpireBooking(activeBooking);
-                } else {
-                  // Stripe rail. Wait for the server to confirm before
-                  // celebrating — previously this fired the success toast
-                  // unconditionally, so a 502 from /api/stripe/end-early
-                  // (e.g. when the pro-rated amount is below Stripe's
-                  // currency minimum) still showed 'Beam ended — refund
-                  // issued' on the viewer side while the beam kept
-                  // running. clientExpireBooking also moved on, which
-                  // realtime then snapped back, leaving the viewer with
-                  // a contradictory chip.
-                  const res = await fetch('/api/stripe/end-early', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ booking_id: booking.id }),
-                  });
-                  if (!res.ok) {
-                    const body = await res.json().catch(() => ({} as { message?: string; error?: string }));
-                    const detail = body.message || body.error || `HTTP ${res.status}`;
-                    showNotif(`Couldn't end beam early — ${detail}. The beam will continue running until it expires naturally.`, 'error');
-                    return;
+                // Optimistic: freeze the chip to "Ending…" the instant the
+                // tap lands so the viewer sees their press registered (the
+                // settle is an on-chain round-trip). Cleared in finally —
+                // loadData on success removes the row; on error it reverts
+                // to "● Live" so they can retry.
+                setEndingBeams(prev => new Set(prev).add(booking.id));
+                try {
+                  if (booking.payment_method === 'solana') {
+                    // settle_beam pays streamer the vested portion on-chain and
+                    // refunds the viewer the rest in a single tx. DB is updated
+                    // after to advance the queue; settleSolanaBeam surfaces its
+                    // own toast on error.
+                    await settleSolanaBeam(booking);
+                    if (activeBooking) await clientExpireBooking(activeBooking);
+                  } else {
+                    // Stripe rail. Wait for the server to confirm before
+                    // celebrating — previously this fired the success toast
+                    // unconditionally, so a 502 from /api/stripe/end-early
+                    // (e.g. when the pro-rated amount is below Stripe's
+                    // currency minimum) still showed 'Beam ended — refund
+                    // issued' on the viewer side while the beam kept
+                    // running. clientExpireBooking also moved on, which
+                    // realtime then snapped back, leaving the viewer with
+                    // a contradictory chip.
+                    const res = await fetch('/api/stripe/end-early', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ booking_id: booking.id }),
+                    });
+                    if (!res.ok) {
+                      const body = await res.json().catch(() => ({} as { message?: string; error?: string }));
+                      const detail = body.message || body.error || `HTTP ${res.status}`;
+                      showNotif(`Couldn't end beam early — ${detail}. The beam will continue running until it expires naturally.`, 'error');
+                      return;
+                    }
+                    if (activeBooking) await clientExpireBooking(activeBooking);
+                    showNotif('Beam ended — prorated refund issued', 'warning');
                   }
-                  if (activeBooking) await clientExpireBooking(activeBooking);
-                  showNotif('Beam ended — prorated refund issued', 'warning');
+                } finally {
+                  setEndingBeams(prev => { const n = new Set(prev); n.delete(booking.id); return n; });
                 }
               }}
               onCancel={cancelBooking}
