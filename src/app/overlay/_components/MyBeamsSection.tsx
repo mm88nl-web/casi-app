@@ -27,6 +27,7 @@ type Props = {
   tc: string;
   tcRgb: string;
   cancelling: string | null;
+  ending: Set<string>;                       // beams the viewer just pressed "end early" on (optimistic)
   onEndEarly: (booking: Booking, activeBooking: Booking | undefined) => void | Promise<void>;
   onCancel: (id: string) => void | Promise<void>;
   onReclaim: (booking: Booking) => void | Promise<void>;
@@ -44,6 +45,7 @@ export default function MyBeamsSection({
   tc,
   tcRgb,
   cancelling,
+  ending,
   onEndEarly,
   onCancel,
   onReclaim,
@@ -85,10 +87,13 @@ export default function MyBeamsSection({
           // prorated refund, not a full one.
           const isSolanaKickLeaked = isExpired && booking.payment_method === 'solana' && booking.escrow_pda;
           const isExpiring = isLive && expiringSoon.has(booking.id);
+          // Optimistic: the viewer pressed "end early" and the settle tx is
+          // in flight. Freeze the chip so the tap reads as registered.
+          const isEnding = isLive && ending.has(booking.id);
           const activeBooking = activeBookings.find(b => b.id === booking.id);
           const canCancel = isPending || isApproved;
           const needsRecover = isSolanaLocked || isSolanaKickLeaked;
-          const chipStyle = isExpiring
+          const chipStyle = (isExpiring || isEnding)
             ? { background: 'rgba(234,179,8,0.08)', borderColor: 'rgba(234,179,8,0.25)', color: '#facc15' }
             : isLive
             ? { background: `rgba(${tcRgb},0.07)`, borderColor: `rgba(${tcRgb},0.21)`, color: tc }
@@ -100,8 +105,9 @@ export default function MyBeamsSection({
             ? { background: 'rgba(248,113,113,0.06)', borderColor: 'rgba(248,113,113,0.22)', color: '#f87171' }
             : { background: 'rgba(255,255,255,0.03)', borderColor: 'var(--casi-border)', color: 'var(--casi-text-muted)' };
 
-          const statusLabel = isExpiring
-            ? '⚠ Expiring'
+          const statusLabel = isEnding
+            ? '⏳ Ending…'
+            : isExpiring ? '⚠ Expiring'
             : isLive ? '● Live'
             : isApproved ? '⏳ Queued'
             : isSolanaKickLeaked ? '⚡ Ended early — USDC recoverable'
@@ -113,7 +119,7 @@ export default function MyBeamsSection({
             <div key={booking.id} className="beam-chip" style={chipStyle}>
               {booking.image_url && <SlotMedia src={booking.image_url} fileType={booking.file_type} style={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4 }} />}
               <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, fontWeight: 500 }}>{statusLabel}</span>
-              {isLive && activeBooking && (
+              {isLive && !isEnding && activeBooking && (
                 <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, opacity: 0.7 }}>
                   <Countdown
                     booking={activeBooking}
@@ -123,8 +129,13 @@ export default function MyBeamsSection({
                 </span>
               )}
               {isLive && (
-                <button className="cancel-btn" onClick={() => onEndEarly(booking, activeBooking)}>
-                  ✕ end early
+                <button
+                  className="cancel-btn"
+                  onClick={() => onEndEarly(booking, activeBooking)}
+                  disabled={isEnding}
+                  style={isEnding ? { opacity: 0.6, cursor: 'default' } : undefined}
+                >
+                  {isEnding ? '⏳ ending…' : '✕ end early'}
                 </button>
               )}
               {canCancel && (

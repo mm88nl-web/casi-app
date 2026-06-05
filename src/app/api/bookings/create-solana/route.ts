@@ -99,8 +99,15 @@ export async function POST(req: Request) {
     price_unit,
     is_queued,
     queue_position,
+    wallet_app,
   } = body;
   const customization = sanitizeBookingCustomization(body);
+  // Telemetry only: which wallet app the viewer used (phantom|solflare|…).
+  // Sanitized to a short slug; nullable; never gates anything.
+  const walletApp =
+    typeof wallet_app === 'string'
+      ? wallet_app.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24) || null
+      : null;
 
   if (!profile_id || !element_id || !viewer_name) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -192,6 +199,19 @@ export async function POST(req: Request) {
       { error: 'Failed to create booking — please try again' },
       { status: 500 },
     );
+  }
+
+  // Best-effort telemetry write, intentionally decoupled from the insert so a
+  // not-yet-applied migration (the wallet_app column) can never break booking
+  // creation. Fire-and-forget; swallow any error (incl. missing column).
+  if (walletApp) {
+    void supabase
+      .from('bookings')
+      .update({ wallet_app: walletApp })
+      .eq('id', booking.id)
+      .then(({ error }) => {
+        if (error) logWarn('bookings/create-solana', 'wallet_app telemetry write skipped', { reason: error.message });
+      });
   }
 
   // Pre-compute and store the escrow PDA server-side. The derivation is

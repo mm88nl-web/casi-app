@@ -4,15 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
-import { NETWORK_LABEL, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
-import { buildConnectUrl, useStoredPhantomConnectSession, clearSession as clearPhantomConnectSession } from '@/lib/phantom-connect';
+import { NETWORK_LABEL } from '@/lib/solana-network';
+import { useStoredPhantomConnectSession, clearSession as clearPhantomConnectSession } from '@/lib/phantom-connect';
 import { needsMobileHandoff } from '@/lib/mobile-wallet';
-
-function buildClientPhantomConnectUrl(): string {
-  const sep = window.location.search ? '&' : '?';
-  const here = window.location.origin + window.location.pathname + window.location.search + `${sep}phantom_action=connect-resume`;
-  return buildConnectUrl({ cluster: WALLET_ADAPTER_CLUSTER, redirectTo: here });
-}
+import MobileWalletPicker from './MobileWalletPicker';
 import { useWalletBalances } from '@/lib/wallet-balances';
 // (mobile-wallet handoff helpers removed — Phantom Connect deeplink path now handles mobile signing)
 import UsdcIcon from './icons/UsdcIcon';
@@ -270,21 +265,13 @@ export default function WalletPill() {
 
   /* ── Disconnected ── */
   if (!isConnected || !effectivePublicKey) {
-    // Single Connect Wallet CTA — see WalletNav for rationale. Mobile-not-
-    // in-wallet-browser users get the same .wp-connect element rendered as
-    // an anchor to Phantom Connect's deeplink protocol.
-    const phantomConnectUrl = useDeeplink && typeof window !== 'undefined'
-      ? buildClientPhantomConnectUrl()
-      : null;
-
-    if (useDeeplink && phantomConnectUrl) {
+    // See WalletNav for rationale. Mobile-not-in-wallet-browser users get a
+    // small picker of .wp-connect anchors, one per supported deeplink wallet.
+    if (useDeeplink && typeof window !== 'undefined') {
       return (
         <>
           <style>{CSS}</style>
-          <a href={phantomConnectUrl} className="wp-connect" style={{ textDecoration: 'none' }}>
-            <SolanaIcon size={12} />
-            Connect Wallet
-          </a>
+          <MobileWalletPicker anchorClassName="wp-connect" />
         </>
       );
     }

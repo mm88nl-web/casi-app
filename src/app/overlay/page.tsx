@@ -68,6 +68,12 @@ function OverlayContent() {
   const [queueCounts, setQueueCounts]   = useState<Record<string,number>>({});
   const [loading, setLoading]           = useState(true);
   const [myBookings, setMyBookings]     = useState<any[]>([]);
+  // Beams the viewer just pressed "end early" on — optimistic UI. The settle
+  // is an on-chain tx (sign → confirm → refresh), so without this the chip
+  // sits on "● Live" with a ticking countdown until it lands, making the tap
+  // feel ignored. We freeze the chip to "Ending…" the instant it's pressed;
+  // loadData (or a failed settle) reconciles it back to truth.
+  const [endingBeams, setEndingBeams]   = useState<Set<string>>(new Set());
   // Stuck Solana flashes the viewer paid for but that never settled —
   // either the streamer hasn't moderated yet OR a prior moderation
   // closed the PDA but the DB row is stale (drift). Surfaces a
@@ -221,7 +227,9 @@ function OverlayContent() {
     const cleanUrl = (): void => {
       const next = new URLSearchParams(window.location.search);
       next.delete('phantom_action');
+      next.delete('casi_wallet');
       next.delete('phantom_encryption_public_key');
+      next.delete('solflare_encryption_public_key');
       next.delete('data');
       next.delete('nonce');
       next.delete('errorCode');
@@ -235,7 +243,10 @@ function OverlayContent() {
       const pc = await import('@/lib/phantom-connect');
       try {
         if (action === 'connect-resume') {
-          const session = pc.parseConnectResponse(params);
+          // Which wallet this connect deeplink was sent to — set in the
+          // return marker by MobileWalletPicker / the cold-booking handoff.
+          const casiWallet = params.get('casi_wallet') === 'solflare' ? 'solflare' : 'phantom';
+          const session = pc.parseConnectResponse(params, casiWallet);
           pc.saveSession(session);
           cleanUrl();
           // If a tx was stashed (we redirected to connect mid-booking),
@@ -256,18 +267,18 @@ function OverlayContent() {
         // Sign return: parse signature, attach to booking.
         const session = pc.getStoredSession();
         if (!session) {
-          showNotif('Phantom session expired — please retry the booking', 'denied');
+          showNotif('Wallet session expired — reconnect your wallet and book again', 'denied');
           cleanUrl();
           return;
         }
-        // Phantom returns the SIGNED tx; we submit it ourselves via our
-        // own RPC. Avoids Phantom's signAndSendTransaction returning
-        // -32601 "method not supported" on certain Phantom Mobile builds.
+        // The wallet returns the SIGNED tx; we submit it ourselves via our
+        // own RPC. Avoids signAndSendTransaction returning -32601 "method not
+        // supported" on certain Phantom Mobile builds.
         const { signedTransactionB58 } = pc.parseSignTransactionResponse(params, session);
         const pending = pc.readPendingBooking();
         cleanUrl();
         if (!pending) {
-          showNotif('Lost track of which booking — please retry', 'denied');
+          showNotif('Your booking session timed out — please start the booking again', 'denied');
           return;
         }
         const { Connection } = await import('@solana/web3.js');
@@ -339,7 +350,7 @@ function OverlayContent() {
       } catch (err) {
         const { reportClientError } = await import('@/lib/report-client-error');
         reportClientError('overlay/phantom-connect-return', err, { action });
-        showNotif(err instanceof Error ? err.message : 'Phantom return failed', 'denied');
+        showNotif(err instanceof Error ? err.message : 'Wallet return failed — please try again', 'denied');
         cleanUrl();
       }
     })();
@@ -1145,6 +1156,19 @@ function OverlayContent() {
           media_offset_y: mediaOffsetY === 50 ? null : mediaOffsetY,
           media_zoom:     mediaZoom     === 1  ? null : mediaZoom,
         };
+    // Telemetry only: record which wallet app this booking used so we can see
+    // real Phantom-vs-Solflare(-vs-other) demand before investing further.
+    // Returning deeplink user → session.wallet; first-time mobile deeplink →
+    // the wallet they'll be handed to; desktop/in-app → the adapter's name.
+    let walletApp: string | null = pcSession?.wallet ?? null;
+    if (!walletApp) {
+      const mw = await import('@/lib/mobile-wallet');
+      if (mw.needsMobileHandoff() && !mw.isInWalletBrowser()) {
+        walletApp = (await import('@/lib/phantom-connect')).getPreferredDeeplinkWallet();
+      } else if (wallet?.adapter?.name) {
+        walletApp = wallet.adapter.name.toLowerCase();
+      }
+    }
     const createRes = await fetch('/api/bookings/create-solana', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1152,6 +1176,7 @@ function OverlayContent() {
         profile_id:    profile.id,
         element_id:    selectedSlot.id,
         viewer_name:   savedViewerName,
+        wallet_app:    walletApp,
         image_url:     effectiveSolImageUrl,
         storage_path:  effectiveSolStoragePath,
         file_type:     effectiveSolFileType,
@@ -1224,7 +1249,7 @@ function OverlayContent() {
         showNotif(
           IS_MAINNET
             ? 'No USDC found in your wallet. Buy or bridge USDC and try again.'
-            : 'No devnet USDC found (mint 4zMMC9…DU). Switch Phantom to Devnet then mint at spl-token-faucet.vercel.app',
+            : 'No devnet USDC found (mint 4zMMC9…DU). Switch your wallet to Devnet then mint at spl-token-faucet.vercel.app',
           'denied',
         );
         await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
@@ -1351,7 +1376,11 @@ function OverlayContent() {
 
         if (!session) {
           // First time on this device — connect handshake. Stash the tx so
-          // the connect-return handler can chain straight into sign.
+          // the connect-return handler can chain straight into sign. Hand off
+          // to the viewer's preferred wallet (the one they picked in the
+          // connect UI; phantom by default) and tag the return marker so the
+          // handler parses the right wallet's response.
+          const wallet = pc.getPreferredDeeplinkWallet();
           pc.stashPendingBooking({
             booking_id:    String(newBooking.id),
             cancel_token:  cancelToken,
@@ -1360,8 +1389,9 @@ function OverlayContent() {
             pending_tx:    txB58,
           });
           window.location.href = pc.buildConnectUrl({
+            wallet,
             cluster: WALLET_ADAPTER_CLUSTER,
-            redirectTo: `${baseHere}${sep}phantom_action=connect-resume`,
+            redirectTo: `${baseHere}${sep}phantom_action=connect-resume&casi_wallet=${wallet}`,
           });
           return;
         }
@@ -2488,37 +2518,48 @@ function OverlayContent() {
               tc={tc}
               tcRgb={tcRgb}
               cancelling={cancelling}
+              ending={endingBeams}
               onEndEarly={async (booking, activeBooking) => {
-                if (booking.payment_method === 'solana') {
-                  // settle_beam pays streamer the vested portion on-chain and
-                  // refunds the viewer the rest in a single tx. DB is updated
-                  // after to advance the queue; settleSolanaBeam surfaces its
-                  // own toast on error.
-                  await settleSolanaBeam(booking);
-                  if (activeBooking) await clientExpireBooking(activeBooking);
-                } else {
-                  // Stripe rail. Wait for the server to confirm before
-                  // celebrating — previously this fired the success toast
-                  // unconditionally, so a 502 from /api/stripe/end-early
-                  // (e.g. when the pro-rated amount is below Stripe's
-                  // currency minimum) still showed 'Beam ended — refund
-                  // issued' on the viewer side while the beam kept
-                  // running. clientExpireBooking also moved on, which
-                  // realtime then snapped back, leaving the viewer with
-                  // a contradictory chip.
-                  const res = await fetch('/api/stripe/end-early', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ booking_id: booking.id }),
-                  });
-                  if (!res.ok) {
-                    const body = await res.json().catch(() => ({} as { message?: string; error?: string }));
-                    const detail = body.message || body.error || `HTTP ${res.status}`;
-                    showNotif(`Couldn't end beam early — ${detail}. The beam will continue running until it expires naturally.`, 'error');
-                    return;
+                // Optimistic: freeze the chip to "Ending…" the instant the
+                // tap lands so the viewer sees their press registered (the
+                // settle is an on-chain round-trip). Cleared in finally —
+                // loadData on success removes the row; on error it reverts
+                // to "● Live" so they can retry.
+                setEndingBeams(prev => new Set(prev).add(booking.id));
+                try {
+                  if (booking.payment_method === 'solana') {
+                    // settle_beam pays streamer the vested portion on-chain and
+                    // refunds the viewer the rest in a single tx. DB is updated
+                    // after to advance the queue; settleSolanaBeam surfaces its
+                    // own toast on error.
+                    await settleSolanaBeam(booking);
+                    if (activeBooking) await clientExpireBooking(activeBooking);
+                  } else {
+                    // Stripe rail. Wait for the server to confirm before
+                    // celebrating — previously this fired the success toast
+                    // unconditionally, so a 502 from /api/stripe/end-early
+                    // (e.g. when the pro-rated amount is below Stripe's
+                    // currency minimum) still showed 'Beam ended — refund
+                    // issued' on the viewer side while the beam kept
+                    // running. clientExpireBooking also moved on, which
+                    // realtime then snapped back, leaving the viewer with
+                    // a contradictory chip.
+                    const res = await fetch('/api/stripe/end-early', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ booking_id: booking.id }),
+                    });
+                    if (!res.ok) {
+                      const body = await res.json().catch(() => ({} as { message?: string; error?: string }));
+                      const detail = body.message || body.error || `HTTP ${res.status}`;
+                      showNotif(`Couldn't end beam early — ${detail}. The beam will continue running until it expires naturally.`, 'error');
+                      return;
+                    }
+                    if (activeBooking) await clientExpireBooking(activeBooking);
+                    showNotif('Beam ended — prorated refund issued', 'warning');
                   }
-                  if (activeBooking) await clientExpireBooking(activeBooking);
-                  showNotif('Beam ended — prorated refund issued', 'warning');
+                } finally {
+                  setEndingBeams(prev => { const n = new Set(prev); n.delete(booking.id); return n; });
                 }
               }}
               onCancel={cancelBooking}

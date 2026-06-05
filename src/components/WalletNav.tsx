@@ -3,22 +3,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
-import { useStoredPhantomConnectSession, clearSession as clearPhantomConnectSession, buildConnectUrl } from '@/lib/phantom-connect';
-import { NETWORK_LABEL, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
+import { useStoredPhantomConnectSession, clearSession as clearPhantomConnectSession } from '@/lib/phantom-connect';
+import { NETWORK_LABEL } from '@/lib/solana-network';
 import { needsMobileHandoff } from '@/lib/mobile-wallet';
-
-/** Pre-compute the Phantom Connect deeplink for the current page. Render
- *  this inside an `<a href>` so the OS treats the tap as a real user
- *  gesture — Android Chrome won't open Phantom from a JS-driven
- *  navigation that's lost the gesture context. */
-function buildClientPhantomConnectUrl(): string {
-  const sep = window.location.search ? '&' : '?';
-  const here = window.location.origin + window.location.pathname + window.location.search + `${sep}phantom_action=connect-resume`;
-  return buildConnectUrl({
-    cluster: WALLET_ADAPTER_CLUSTER,
-    redirectTo: here,
-  });
-}
+import MobileWalletPicker from './MobileWalletPicker';
 import { useWalletBalances, refreshWalletBalances } from '@/lib/wallet-balances';
 // (mobile-wallet handoff helpers removed — Phantom Connect handles mobile signing directly now)
 import SolanaIcon from './icons/SolanaIcon';
@@ -252,24 +240,17 @@ export default function WalletNav() {
 
   /* ── Disconnected / connecting ── */
   if (!isConnected || !effectivePublicKey) {
-    // Single Connect Wallet CTA. On a mobile browser that's NOT inside a
-    // wallet's in-app browser (where window.phantom.solana isn't injected),
-    // the wallet-adapter's deeplink connect is unreliable, so we render the
-    // SAME button as an <a href> to Phantom Connect's encrypted deeplink
-    // protocol — same visual, reliable navigation. Desktop and in-app-
-    // browser users keep the wallet-adapter modal flow.
-    const phantomConnectUrl = useDeeplink && typeof window !== 'undefined'
-      ? buildClientPhantomConnectUrl()
-      : null;
-
-    if (useDeeplink && phantomConnectUrl) {
+    // On a mobile browser that's NOT inside a wallet's in-app browser (where
+    // the wallet namespace isn't injected), the wallet-adapter's deeplink
+    // connect is unreliable, so we render a small picker of <a href> anchors
+    // to each wallet's encrypted deeplink protocol — same visual, reliable
+    // navigation, multi-wallet. Desktop and in-app-browser users keep the
+    // wallet-adapter modal flow.
+    if (useDeeplink && typeof window !== 'undefined') {
       return (
         <>
           <style>{CSS}</style>
-          <a href={phantomConnectUrl} className="wn-connect" style={{ textDecoration: 'none' }}>
-            <SolanaIcon size={12} />
-            Connect Wallet
-          </a>
+          <MobileWalletPicker anchorClassName="wn-connect" />
         </>
       );
     }
