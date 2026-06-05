@@ -221,7 +221,9 @@ function OverlayContent() {
     const cleanUrl = (): void => {
       const next = new URLSearchParams(window.location.search);
       next.delete('phantom_action');
+      next.delete('casi_wallet');
       next.delete('phantom_encryption_public_key');
+      next.delete('solflare_encryption_public_key');
       next.delete('data');
       next.delete('nonce');
       next.delete('errorCode');
@@ -235,7 +237,10 @@ function OverlayContent() {
       const pc = await import('@/lib/phantom-connect');
       try {
         if (action === 'connect-resume') {
-          const session = pc.parseConnectResponse(params);
+          // Which wallet this connect deeplink was sent to — set in the
+          // return marker by MobileWalletPicker / the cold-booking handoff.
+          const casiWallet = params.get('casi_wallet') === 'solflare' ? 'solflare' : 'phantom';
+          const session = pc.parseConnectResponse(params, casiWallet);
           pc.saveSession(session);
           cleanUrl();
           // If a tx was stashed (we redirected to connect mid-booking),
@@ -256,18 +261,18 @@ function OverlayContent() {
         // Sign return: parse signature, attach to booking.
         const session = pc.getStoredSession();
         if (!session) {
-          showNotif('Phantom session expired — please retry the booking', 'denied');
+          showNotif('Wallet session expired — reconnect your wallet and book again', 'denied');
           cleanUrl();
           return;
         }
-        // Phantom returns the SIGNED tx; we submit it ourselves via our
-        // own RPC. Avoids Phantom's signAndSendTransaction returning
-        // -32601 "method not supported" on certain Phantom Mobile builds.
+        // The wallet returns the SIGNED tx; we submit it ourselves via our
+        // own RPC. Avoids signAndSendTransaction returning -32601 "method not
+        // supported" on certain Phantom Mobile builds.
         const { signedTransactionB58 } = pc.parseSignTransactionResponse(params, session);
         const pending = pc.readPendingBooking();
         cleanUrl();
         if (!pending) {
-          showNotif('Lost track of which booking — please retry', 'denied');
+          showNotif('Your booking session timed out — please start the booking again', 'denied');
           return;
         }
         const { Connection } = await import('@solana/web3.js');
@@ -339,7 +344,7 @@ function OverlayContent() {
       } catch (err) {
         const { reportClientError } = await import('@/lib/report-client-error');
         reportClientError('overlay/phantom-connect-return', err, { action });
-        showNotif(err instanceof Error ? err.message : 'Phantom return failed', 'denied');
+        showNotif(err instanceof Error ? err.message : 'Wallet return failed — please try again', 'denied');
         cleanUrl();
       }
     })();
@@ -1224,7 +1229,7 @@ function OverlayContent() {
         showNotif(
           IS_MAINNET
             ? 'No USDC found in your wallet. Buy or bridge USDC and try again.'
-            : 'No devnet USDC found (mint 4zMMC9…DU). Switch Phantom to Devnet then mint at spl-token-faucet.vercel.app',
+            : 'No devnet USDC found (mint 4zMMC9…DU). Switch your wallet to Devnet then mint at spl-token-faucet.vercel.app',
           'denied',
         );
         await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
@@ -1351,7 +1356,11 @@ function OverlayContent() {
 
         if (!session) {
           // First time on this device — connect handshake. Stash the tx so
-          // the connect-return handler can chain straight into sign.
+          // the connect-return handler can chain straight into sign. Hand off
+          // to the viewer's preferred wallet (the one they picked in the
+          // connect UI; phantom by default) and tag the return marker so the
+          // handler parses the right wallet's response.
+          const wallet = pc.getPreferredDeeplinkWallet();
           pc.stashPendingBooking({
             booking_id:    String(newBooking.id),
             cancel_token:  cancelToken,
@@ -1360,8 +1369,9 @@ function OverlayContent() {
             pending_tx:    txB58,
           });
           window.location.href = pc.buildConnectUrl({
+            wallet,
             cluster: WALLET_ADAPTER_CLUSTER,
-            redirectTo: `${baseHere}${sep}phantom_action=connect-resume`,
+            redirectTo: `${baseHere}${sep}phantom_action=connect-resume&casi_wallet=${wallet}`,
           });
           return;
         }
