@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "CASI Solitaire",
+    "slug": "casi-solitaire",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "backgroundColor": "#0C0D11",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0C0D11"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "gg.casi.solitaire"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0C0D11"
+      },
+      "package": "gg.casi.solitaire"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "experiments": {
+      "baseUrl": "/solitaire"
+    }
+  }
+}
