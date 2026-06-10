@@ -57,6 +57,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  // Viewers may only cancel a booking that hasn't gone live. Flipping an
+  // `active` beam to denied would let a viewer kill a beam mid-stream — and on
+  // the Solana rail, desync the DB from an escrow that's still Active on-chain
+  // (the funds keep vesting to the streamer while the DB says denied). Ending
+  // a live beam is the streamer's action (end-early) or the on-chain settle.
+  // Terminal states (denied/expired/cancelled) stay allowed so the overlay's
+  // null_escrow recovery cleanup keeps working.
+  if (booking.status === 'active') {
+    return NextResponse.json(
+      { error: 'Beam is already live — it can’t be cancelled here' },
+      { status: 409 },
+    );
+  }
+
   const update: Record<string, unknown> = { status: 'denied' };
   if (nullEscrow) update.escrow_pda = null;
 

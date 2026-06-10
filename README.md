@@ -104,4 +104,4 @@ Found a vulnerability? See [SECURITY.md](./SECURITY.md) — please report privat
 
 ## License
 
-[Apache 2.0](./LICENSE) — Operator: Terminal Data Solutions, Netherlands.
+[Apache 2.0](./LICENSE)

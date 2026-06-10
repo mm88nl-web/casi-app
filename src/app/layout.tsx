@@ -71,8 +71,8 @@ export const metadata: Metadata = {
     'time-vested',
     'open source',
   ],
-  authors: [{ name: 'Matthew Melendez' }],
-  creator: 'Matthew Melendez',
+  authors: [{ name: 'casi' }],
+  creator: 'casi',
   openGraph: {
     type: 'website',
     locale: 'en_US',

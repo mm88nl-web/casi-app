@@ -1077,8 +1077,9 @@ function OverlayContent() {
     });
     const json = await res.json();
     if (json.checkout_url) {
-      // authorize may still return cancel_token for old bookings that were
-      // created before this change; store it as a fallback if not already set.
+      // cancel_token came from create-stripe above; authorize no longer
+      // returns it (echoing it would disclose the capability to any caller
+      // that knows the booking id). Kept defensive against older shapes.
       if (json.cancel_token) rememberBookingToken(newBookingId, json.cancel_token);
       window.location.href = json.checkout_url;
     } else {
