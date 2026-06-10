@@ -19,7 +19,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createHash, randomUUID } from 'node:crypto';
 import { moderateText, LIMITS } from '@/lib/content-moderation';
 import { verifyTurnstileToken } from '@/lib/turnstile';
-import { validateBannerBooking, sanitizeBookingCustomization } from '@/lib/banner';
+import { validateBannerBooking, sanitizeBookingCustomization, validateMediaUrl } from '@/lib/banner';
 import { logWarn } from '@/lib/observability';
 
 const supabase = createClient(
@@ -92,6 +92,11 @@ export async function POST(req: Request) {
 
   if (!profile_id || !element_id || !viewer_name) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  }
+
+  const mediaCheck = validateMediaUrl(image_url);
+  if (!mediaCheck.ok) {
+    return NextResponse.json({ error: mediaCheck.error }, { status: 400 });
   }
 
   // P0 guard: free slots are image-only until automated video moderation
@@ -171,7 +176,7 @@ export async function POST(req: Request) {
       profile_id,
       element_id,
       viewer_name: viewer_name.trim(),
-      image_url: image_url || null,
+      image_url: mediaCheck.value,
       storage_path: storage_path || null,
       file_type: file_type || null,
       message: message?.trim() || null,

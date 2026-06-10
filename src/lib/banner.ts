@@ -46,6 +46,39 @@ export function validateBannerBooking(
   return { ok: true };
 }
 
+/**
+ * Server-side validation for a viewer-supplied media URL (image/video).
+ *
+ * The overlay renders this as <img src> / <video src>; browsers don't execute
+ * `javascript:` / `data:` as script through a media `src`, so this isn't an
+ * XSS gate — it's defence-in-depth: reject anything that isn't a plain
+ * absolute http(s) URL so weird schemes (blob:, data:, file:, javascript:)
+ * never land in the DB, mixed-content http is caught, and the door stays shut
+ * if a server-side fetch of this URL is ever added (SSRF).
+ *
+ * Empty / null input is valid (text-only and banner bookings have no media).
+ * Throws-free: invalid input returns { ok: false }.
+ */
+export function validateMediaUrl(
+  url: unknown,
+): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (url == null) return { ok: true, value: null };
+  if (typeof url !== 'string') return { ok: false, error: 'Invalid media URL' };
+  const trimmed = url.trim();
+  if (trimmed.length === 0) return { ok: true, value: null };
+  if (trimmed.length > 2048) return { ok: false, error: 'Media URL is too long' };
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return { ok: false, error: 'Media URL must be an absolute http(s) URL' };
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return { ok: false, error: 'Media URL must use http or https' };
+  }
+  return { ok: true, value: trimmed };
+}
+
 // Per-booking customization clamps — kept in one place so the three
 // /api/bookings/create-* routes can't drift, and the same bounds match
 // the DB check constraints in 20260430000000_booking_customization.sql.

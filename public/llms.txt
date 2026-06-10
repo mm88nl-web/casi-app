@@ -25,4 +25,4 @@
 - Privacy: https://www.casi.gg/legal/privacy
 
 ## Operator
-Operated by Terminal Data Solutions (Netherlands). Source: https://github.com/mm88nl-web/casi-app
+Source: https://github.com/mm88nl-web/casi-app

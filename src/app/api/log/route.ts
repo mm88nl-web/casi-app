@@ -52,6 +52,21 @@ function clamp(s: unknown, max: number): string | undefined {
   return s.length > max ? s.slice(0, max) : s;
 }
 
+// `extra` is attacker-controlled and gets forwarded to ERROR_WEBHOOK_URL
+// (Slack/Discord). Bound it: serialize once and cap length so a deeply-nested
+// or huge object can't be relayed unbounded. Non-serializable (circular) → drop.
+const MAX_EXTRA_CHARS = 2000;
+function clampExtra(v: unknown): Record<string, unknown> | undefined {
+  if (typeof v !== 'object' || v === null) return undefined;
+  try {
+    const json = JSON.stringify(v);
+    if (typeof json !== 'string') return undefined;
+    return { json: json.length > MAX_EXTRA_CHARS ? json.slice(0, MAX_EXTRA_CHARS) : json };
+  } catch {
+    return undefined;
+  }
+}
+
 export async function POST(req: Request) {
   const ip = getClientIp(req);
   if (!rateLimit(ip)) {
@@ -76,7 +91,7 @@ export async function POST(req: Request) {
     stack: clamp(stack, MAX_STACK_LEN),
     url:   clamp(url, MAX_URL_LEN),
     ua:    req.headers.get('user-agent')?.slice(0, 300) || null,
-    extra: typeof extra === 'object' && extra !== null ? extra : undefined,
+    extra: clampExtra(extra),
   });
 
   return NextResponse.json({ ok: true });
