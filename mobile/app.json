@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "backgroundColor": "#0C0D11",
     "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
     "splash": {
       "backgroundColor": "#0C0D11"
     },
@@ -20,7 +21,7 @@
       "package": "gg.casi.solitaire"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "bundler": "metro"
     }
   }
 }

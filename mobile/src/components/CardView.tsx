@@ -52,9 +52,7 @@ function FaceUp({ card, selected, style, onTap, asView }: Props) {
       </View>
 
       {/* Center suit */}
-      <Text style={[styles.suitCenter, { color }]} pointerEvents="none">
-        {sym}
-      </Text>
+      <Text style={[styles.suitCenter, { color }]}>{sym}</Text>
 
       {/* Bottom-right corner rotated */}
       <View style={[styles.cornerTL, styles.cornerBR]} pointerEvents="none">

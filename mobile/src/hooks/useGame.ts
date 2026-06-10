@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import * as Haptics from 'expo-haptics';
+import { tapError, tapLight, tapMedium, tapSelect, tapWarn } from '../lib/haptics';
 import type { GameState, Selection } from '../engine/types';
 import { createDeck, dealInitial, shuffleDeck } from '../engine/deck';
 import {
@@ -56,14 +56,14 @@ export function useGame() {
   const commit = useCallback(
     (result: GameState | null, prev: GameState): boolean => {
       if (!result) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        tapError();
         setSelection(null);
         return false;
       }
       saveUndo(prev);
       setGame(result);
       setSelection(null);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      tapLight();
       return true;
     },
     [saveUndo]
@@ -76,7 +76,7 @@ export function useGame() {
     if (next === game) return;
     saveUndo(game);
     setGame(next);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    tapLight();
   }, [game, saveUndo]);
 
   const tapWaste = useCallback(() => {
@@ -85,7 +85,7 @@ export function useGame() {
     const waste = game.waste.cards;
     if (waste.length === 0) return;
     setSelection({ source: { zone: 'waste' }, cards: [waste[waste.length - 1]] });
-    Haptics.selectionAsync();
+    tapSelect();
   }, [game, selection]);
 
   const tapFoundation = useCallback(
@@ -97,7 +97,7 @@ export function useGame() {
         if (pile.cards.length === 0) return;
         const top = pile.cards[pile.cards.length - 1];
         setSelection({ source: { zone: 'foundation', pileIndex }, cards: [top] });
-        Haptics.selectionAsync();
+        tapSelect();
         return;
       }
 
@@ -108,7 +108,7 @@ export function useGame() {
       }
 
       if (selection.cards.length !== 1 || !canPlaceOnFoundation(selection.cards[0], pile)) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        tapError();
         setSelection(null);
         return;
       }
@@ -129,7 +129,7 @@ export function useGame() {
       const card = col[cardIndex];
 
       if (!card.faceUp) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        tapError();
         return;
       }
 
@@ -138,7 +138,7 @@ export function useGame() {
           source: { zone: 'tableau', colIndex, cardIndex },
           cards: col.slice(cardIndex),
         });
-        Haptics.selectionAsync();
+        tapSelect();
         return;
       }
 
@@ -150,7 +150,7 @@ export function useGame() {
 
       const targetTop = col.length > 0 ? col[col.length - 1] : null;
       if (!canPlaceOnTableau(selection.cards[0], targetTop)) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        tapError();
         setSelection(null);
         return;
       }
@@ -168,7 +168,7 @@ export function useGame() {
     (colIndex: number) => {
       if (game.autoCompleting || game.won || !selection) return;
       if (!canPlaceOnTableau(selection.cards[0], null)) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        tapError();
         setSelection(null);
         return;
       }
@@ -184,7 +184,7 @@ export function useGame() {
 
   const undo = useCallback(() => {
     if (undoStack.length === 0) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      tapWarn();
       return;
     }
     stopAC();
@@ -192,7 +192,7 @@ export function useGame() {
     setUndoStack(s => s.slice(0, -1));
     setGame(prev);
     setSelection(null);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    tapMedium();
   }, [undoStack, stopAC]);
 
   const newGame = useCallback(() => {
@@ -201,7 +201,7 @@ export function useGame() {
     setSelection(null);
     setElapsed(0);
     setGame(freshGame(game.drawMode));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    tapMedium();
   }, [game.drawMode, stopAC]);
 
   const startAutoComplete = useCallback(() => {
@@ -216,7 +216,7 @@ export function useGame() {
         const move = findAutoCompleteMove(current);
         if (!move) return { ...current, autoCompleting: false };
         const next = applyAutoCompleteMove(current, move);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        tapLight();
         if (next.won) return { ...next, autoCompleting: false };
         return next;
       });
