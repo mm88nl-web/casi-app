@@ -3,16 +3,6 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV === 'development';
 
 const nextConfig: NextConfig = {
-  async redirects() {
-    return [
-      {
-        source: '/solitaire',
-        destination: '/solitaire/index.html',
-        permanent: false,
-      },
-    ];
-  },
-
   async headers() {
     return [
       {

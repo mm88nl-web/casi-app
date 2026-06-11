@@ -125,6 +125,10 @@ export default function HomePage() {
             github
           </a>
         </div>
+        <div className="foot-mid">
+          <Link href="/solitaire">solitaire</Link>
+          <Link href="/words">word gen</Link>
+        </div>
         <div className="foot-right">
           <Link href="/legal/terms">terms</Link>
           <Link href="/legal/privacy">privacy</Link>
@@ -338,7 +342,7 @@ export default function HomePage() {
           border-top: 1px solid color-mix(in oklab, var(--type) 10%, transparent);
         }
         @media (max-width: 640px) { .foot { padding: 16px 22px 24px; } }
-        .foot-left, .foot-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+        .foot-left, .foot-mid, .foot-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
         .foot a { text-decoration: none; color: inherit; }
       `}</style>
     </main>
