@@ -32,7 +32,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createHash, randomUUID } from 'node:crypto';
-import { validateBannerBooking, sanitizeBookingCustomization } from '@/lib/banner';
+import { validateBannerBooking, sanitizeBookingCustomization, validateMediaUrl } from '@/lib/banner';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -105,6 +105,11 @@ export async function POST(req: Request) {
 
   if (!profile_id || !element_id || !viewer_name) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  }
+
+  const mediaCheck = validateMediaUrl(image_url);
+  if (!mediaCheck.ok) {
+    return NextResponse.json({ error: mediaCheck.error }, { status: 400 });
   }
 
   const viewerKey = `stripe:${hashIp(getClientIp(req))}`;
@@ -181,7 +186,7 @@ export async function POST(req: Request) {
       profile_id,
       element_id,
       viewer_name,
-      image_url: image_url || null,
+      image_url: mediaCheck.value,
       storage_path: storage_path || null,
       file_type: file_type || null,
       message: message || null,

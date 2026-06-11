@@ -13,6 +13,7 @@ import { loadCrankerKeypair } from '@/lib/cranker-keypair';
 import { CasiEscrowClient, solscanTxUrl } from '@/lib/casi-escrow';
 import { logError, logWarn } from '@/lib/observability';
 import { parseCasiError } from '@/lib/casi-errors';
+import { inMemoryRateLimit } from '@/lib/rate-limit';
 
 /**
  * POST /api/solana/delegates/deny-flash
@@ -69,6 +70,13 @@ export async function POST(req: Request) {
   }
   if (flash.profile_id !== user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  // Per-streamer cap on the shared cranker fee payer — see settle-beam route.
+  if (!inMemoryRateLimit('cranker', user.id, 60, 60_000)) {
+    return NextResponse.json(
+      { error: 'Too many delegated operations — slow down', reason: 'rate_limited' },
+      { status: 429 },
+    );
   }
   if (flash.payment_method !== 'solana') {
     return NextResponse.json({ error: 'Not a Solana flash', reason: 'wrong_rail' }, { status: 400 });

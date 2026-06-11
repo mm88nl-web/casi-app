@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { randomUUID } from 'node:crypto';
 import { stripe } from '@/lib/stripe';
 import { calcAmountCents } from '@/lib/payment-math';
+import { inMemoryRateLimit, clientIpFrom } from '@/lib/rate-limit';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,6 +10,14 @@ const supabase = createClient(
 );
 
 export async function POST(req: Request) {
+  // This route is unauthenticated and creates a Stripe Checkout Session on the
+  // streamer's connected account, so unbounded calls = Checkout-object spam.
+  // Speed-bump per IP (per-instance; the real gate on booking creation is the
+  // per-IP cooldown in /api/bookings/create-stripe).
+  if (!inMemoryRateLimit('stripe-authorize', clientIpFrom(req), 30, 60_000)) {
+    return NextResponse.json({ error: 'Too many requests — slow down' }, { status: 429 });
+  }
+
   const { booking_id } = await req.json();
 
   const { data: booking, error: bookingError } = await supabase
@@ -106,34 +114,21 @@ export async function POST(req: Request) {
     { stripeAccount: profile.stripe_account_id },
   );
 
-  // cancel_token is now minted in /api/bookings/create-stripe at insert time,
-  // atomically with the booking row. This eliminates a race where any caller
-  // who knew booking_id could call authorize first and receive the token.
-  //
-  // For the transition period (bookings created before this change) we still
-  // write a fresh token here if the row has none — same idempotent guard as
-  // before. Once all pre-existing rows have expired the fallback path becomes
-  // unreachable dead code, but the .is('cancel_token', null) guard makes it
-  // safe to leave in place.
-  const { data: updated } = await supabase
+  // Persist the authorized amount for later proration. cancel_token is NOT
+  // written or returned here: it's minted once in /api/bookings/create-stripe
+  // and handed to the viewer at booking-creation time. Because this route is
+  // unauthenticated, echoing the token back to anyone who supplies a
+  // (sequential, guessable) booking_id would disclose the per-booking
+  // capability that gates /api/bookings/viewer-deny, /attach-solana-tx, and
+  // /api/stripe/cancel — letting an attacker enumerate ids and cancel/deny or
+  // corrupt arbitrary bookings. The legitimate viewer already holds the token.
+  const { error: amountErr } = await supabase
     .from('bookings')
-    .update({ original_amount_cents: amount, cancel_token: randomUUID() })
-    .eq('id', booking_id)
-    .is('cancel_token', null)
-    .select('cancel_token')
-    .maybeSingle();
-
-  // Re-read the existing token if the row already had one (normal case for
-  // new bookings) or if authorize was retried.
-  let finalToken: string | null = updated?.cancel_token ?? null;
-  if (!updated) {
-    const { data: existing } = await supabase
-      .from('bookings')
-      .select('cancel_token')
-      .eq('id', booking_id)
-      .single();
-    if (existing?.cancel_token) finalToken = existing.cancel_token;
+    .update({ original_amount_cents: amount })
+    .eq('id', booking_id);
+  if (amountErr) {
+    return NextResponse.json({ error: 'Failed to persist booking amount' }, { status: 500 });
   }
 
-  return NextResponse.json({ checkout_url: session.url, cancel_token: finalToken });
+  return NextResponse.json({ checkout_url: session.url });
 }

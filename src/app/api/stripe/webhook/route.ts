@@ -87,6 +87,12 @@ export async function POST(req: Request) {
     const booking_id = session.metadata?.booking_id;
     const payment_intent_id = session.payment_intent as string;
 
+    // Critical linkage: attaching the PaymentIntent id is what later lets the
+    // booking be approved + captured. If this write fails we must NOT report
+    // success — the dedup row was already recorded, so a plain 200 here would
+    // let Stripe's retry be skipped as a duplicate, stranding the booking with
+    // no payment_intent_id (un-approvable forever). Roll back the dedup marker
+    // and return 5xx so the retry re-runs the handler.
     if (booking_id && payment_intent_id) {
       const { error } = await supabase
         .from('bookings')
@@ -94,7 +100,9 @@ export async function POST(req: Request) {
         .eq('id', booking_id);
 
       if (error) {
-        console.error('[stripe webhook] booking update failed:', error);
+        logError('stripe/webhook', error, { event_id: event.id, booking_id, scope: 'booking_pi_attach' });
+        await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
+        return NextResponse.json({ error: 'booking_update_failed' }, { status: 500 });
       }
     }
 
@@ -105,7 +113,9 @@ export async function POST(req: Request) {
         .update({ payment_intent_id })
         .eq('id', flash_id);
       if (flashErr) {
-        console.error('[stripe webhook] flash update failed:', flashErr);
+        logError('stripe/webhook', flashErr, { event_id: event.id, flash_id, scope: 'flash_pi_attach' });
+        await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
+        return NextResponse.json({ error: 'flash_update_failed' }, { status: 500 });
       }
     }
 

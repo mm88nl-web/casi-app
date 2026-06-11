@@ -138,6 +138,10 @@ export async function POST(req: Request) {
     const { data: pendingExtensions } = await supabase
       .from('bookings')
       .select('*')
+      // Stripe-rail only: this route owns the Stripe lifecycle. A Solana row
+      // sharing the slot's queue must not be denied here without settling its
+      // on-chain escrow (see the Solana state-machine rules in AGENTS.md).
+      .eq('payment_method', 'stripe')
       .eq('element_id', booking.element_id)
       .eq('viewer_name', booking.viewer_name)
       .eq('status', 'pending')
@@ -169,6 +173,12 @@ export async function POST(req: Request) {
     const { data: next } = await supabase
       .from('bookings')
       .select('*')
+      // Stripe-rail only. Auto-promoting a Solana booking here would flip it
+      // to `active` in the DB without calling start_beam on-chain, leaving the
+      // escrow Pending while the overlay shows it live — exactly the
+      // DB/chain desync AGENTS.md warns against ("don't auto-promote the
+      // Solana queue on expire").
+      .eq('payment_method', 'stripe')
       .eq('element_id', booking.element_id)
       .eq('status', 'approved_queued')
       .order('approved_at', { ascending: true })

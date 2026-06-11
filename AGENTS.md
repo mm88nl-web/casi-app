@@ -10,9 +10,9 @@ CASI lets livestream viewers pay to put their image / video / message **on strea
 
 ## Current project state (June 2026)
 
-**Phase**: pre-mainnet on Solana (USDC rail still on **devnet**) but **post-cutover on Stripe** — card payments are LIVE on real money as of 15 May 2026 against the production Stripe account for **Terminal Data Solutions** (eenmanszaak, KvK 80519687). Mainnet launch of the Solana program is gated on the external audit. The Stripe rail launched separately because Sec3 explicitly advised audits should follow PMF rather than precede it — letting fiat flow earlier means streamers can earn while the Solana side completes audit.
+**Phase**: pre-mainnet on Solana (USDC rail still on **devnet**) but **post-cutover on Stripe** — card payments are LIVE on real money as of 15 May 2026. Mainnet launch of the Solana program is gated on the external audit. The Stripe rail launched separately because Sec3 explicitly advised audits should follow PMF rather than precede it — letting fiat flow earlier means streamers can earn while the Solana side completes audit.
 
-**Repository**: public on GitHub at `mm88nl-web/casi-app`, **Apache-2.0** for the entire codebase. Founder: Matthew Melendez (mm88nl@gmail.com), Netherlands, solo non-technical builder using AI-assisted tooling.
+**Repository**: public on GitHub at `mm88nl-web/casi-app`, **Apache-2.0** for the entire codebase.
 
 **Canonical domain**: `www.casi.gg` is the canonical; `casi.gg` 307s to `www.casi.gg`. Every server-to-server callback URL (Stripe webhooks, Helius webhook, OAuth providers, `NEXT_PUBLIC_APP_URL`) must use the `www` prefix or it will 307 and be dropped — webhooks don't follow redirects. This bit us once on the Stripe `checkout.session.completed` path before the URLs were corrected.
 

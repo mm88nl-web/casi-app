@@ -66,7 +66,7 @@ pays the streamer the full vested amount on settlement.
   on streamers' connected accounts, end-to-end tested with real payments.
 - **Solana rail**: devnet with test USDC, full escrow + session-key delegation
   + daily reconciler cron deployed and running. Mainnet gated on external audit.
-- **Operator**: Terminal Data Solutions (eenmanszaak, KvK 80519687, Netherlands).
+- **Operator**: casi (Netherlands).
 - **Legal**: imprint + privacy policy (GDPR) + terms of service live at `/legal/*`.
 - **Deploy**: Vercel. Domain: `www.casi.gg`.
 - **Tech**: Next.js 16 (App Router), React 19, Supabase, Vercel, Stripe Connect,
