@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { CasiMark } from '@/components/v9/CasiMark';
+import { Wordmark } from '@/components/v9/Wordmark';
 import {
   type Card, type G, type Sel, type Dst, type Area,
   SUITS, SYM, lbl, isRed,
@@ -96,7 +98,21 @@ function CardFace({ card, selected, flip }: { card: Card; selected: boolean; fli
     </div>
   );
 }
-const CardBack = () => <div className="card cback" aria-hidden />;
+function CardBack() {
+  return (
+    <div className="card cback" aria-hidden>
+      <svg className="cback-logo" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+        <g stroke="currentColor" fill="currentColor" strokeWidth="16" strokeLinecap="round">
+          <line x1="50" y1="60" x2="350" y2="60" />
+          <line x1="20" y1="100" x2="380" y2="100" />
+          <line x1="50" y1="140" x2="350" y2="140" />
+        </g>
+        <path fill="currentColor" stroke="none" d="M 90,100 C 130,30 270,30 310,100 C 270,170 130,170 90,100 Z" />
+        <circle fill="var(--paper)" cx="200" cy="100" r="45" />
+      </svg>
+    </div>
+  );
+}
 
 // ─── main component ───────────────────────────────────────────────────────────
 type Phase = 'play' | 'cascade' | 'modal';
@@ -785,7 +801,10 @@ export default function SolitaireGame() {
       style={{ ['--ink' as string]: skin.ink, ['--paper' as string]: skin.paper }}
     >
       <header className="hdr">
-        <Link href="/" className="brand">casi<span className="dot">.</span></Link>
+        <Link href="/" className="brand" aria-label="Casi home">
+          <CasiMark width={28} height={14} className="brand-mark" />
+          <Wordmark />
+        </Link>
         <div className="mid">
           <span className="stat">{g.moves} moves</span>
           <span className="stat">{fmt(elapsed)}</span>
@@ -1101,10 +1120,16 @@ export default function SolitaireGame() {
           flex-shrink: 0;
         }
         .brand {
-          font-family: var(--H); font-weight: 800; font-size: 21px;
-          letter-spacing: -0.03em; color: #f3f5f4; text-decoration: none;
+          display: flex; align-items: center; gap: 7px;
+          color: var(--ink); text-decoration: none; flex-shrink: 0;
         }
-        .brand .dot { color: var(--ink); }
+        .brand :global(.brand-mark) { color: var(--ink); }
+        .brand :global(.casi-v9-wordmark) {
+          font-family: var(--H); font-weight: 800; font-size: 20px;
+          letter-spacing: -0.03em; color: #f3f5f4;
+          font-variation-settings: 'opsz' 24;
+        }
+        .brand :global(.casi-v9-wordmark .casi-v9-dot) { color: var(--ink); }
         .mid { display: flex; gap: 14px; }
         .stat {
           font-family: var(--M); font-size: 11.5px; letter-spacing: 0.06em;
@@ -1139,7 +1164,7 @@ export default function SolitaireGame() {
         @media (max-width: 480px) {
           .mid { gap: 8px; }
           .stat { font-size: 10px; }
-          .brand { font-size: 18px; }
+          .brand :global(.casi-v9-wordmark) { font-size: 17px; }
         }
 
         /* ── layout ── */
@@ -1225,6 +1250,8 @@ export default function SolitaireGame() {
           pointer-events: none;
         }
         :global(.cback) {
+          position: relative;
+          display: flex; align-items: center; justify-content: center;
           /* diamond crosshatch over a soft center glow, framed like a real card back */
           background:
             repeating-linear-gradient(45deg,
@@ -1240,6 +1267,13 @@ export default function SolitaireGame() {
           box-shadow:
             inset 0 0 0 2.5px color-mix(in srgb, var(--paper, #0c0d11) 88%, white 5%),
             inset 0 0 0 3.5px color-mix(in srgb, var(--ink, #0dcfb0) 28%, transparent);
+        }
+        :global(.cback-logo) {
+          width: 52%; height: auto;
+          color: var(--ink, #0dcfb0);
+          opacity: 0.82;
+          pointer-events: none;
+          filter: drop-shadow(0 0 6px color-mix(in srgb, var(--ink, #0dcfb0) 38%, transparent));
         }
         :global(.cempty) {
           background: transparent;
