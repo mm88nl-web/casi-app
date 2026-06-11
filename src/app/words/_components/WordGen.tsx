@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { CasiMark } from '@/components/v9/CasiMark';
+import { Wordmark } from '@/components/v9/Wordmark';
 
 type Category = 'noun' | 'adjective' | 'verb' | 'any';
 type WordBank = { noun: string[]; adjective: string[]; verb: string[] };
@@ -159,7 +161,10 @@ export default function WordGen() {
   return (
     <div className="wg">
       <header className="hdr">
-        <Link href="/" className="brand">casi<span className="dot">.</span></Link>
+        <Link href="/" className="brand" aria-label="Casi home">
+          <CasiMark width={28} height={14} className="brand-mark" />
+          <Wordmark />
+        </Link>
         <span className="tag">word generator</span>
         <button
           className={`fav-toggle${favsOpen ? ' open' : ''}`}
@@ -353,14 +358,16 @@ export default function WordGen() {
           flex-shrink: 0;
         }
         .brand {
-          font-family: var(--H);
-          font-weight: 800;
-          font-size: 22px;
-          letter-spacing: -0.03em;
-          color: #f3f5f4;
-          text-decoration: none;
+          display: flex; align-items: center; gap: 7px;
+          color: var(--ink); text-decoration: none; flex-shrink: 0;
         }
-        .brand .dot { color: var(--ink); }
+        .brand :global(.brand-mark) { color: var(--ink); }
+        .brand :global(.casi-v9-wordmark) {
+          font-family: var(--H); font-weight: 800; font-size: 20px;
+          letter-spacing: -0.03em; color: #f3f5f4;
+          font-variation-settings: 'opsz' 24;
+        }
+        .brand :global(.casi-v9-wordmark .casi-v9-dot) { color: var(--ink); }
         .tag {
           font-family: var(--M);
           font-size: 10px;
