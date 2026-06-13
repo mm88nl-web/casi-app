@@ -61,25 +61,37 @@ export default function CasiCut({ userId }: { userId: string }) {
   const [dragOver, setDragOver] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [job, setJob] = useState<CasicutJob | null>(null);
   const [clips, setClips] = useState<CasicutClip[]>([]);
   const [clipUrls, setClipUrls] = useState<Record<string, string>>({});
   const [pastJobs, setPastJobs] = useState<CasicutJob[]>([]);
   const [posting, setPosting] = useState<Record<string, string>>({});
+  const [postError, setPostError] = useState<Record<string, string>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const realtimeRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // load past jobs on mount
+  // load past jobs on mount, and resume any in-flight job (survives reload)
   useEffect(() => {
     supabase
       .from('casicut_jobs')
       .select('id, vod_filename, status, error_msg, clips_count, created_at')
       .order('created_at', { ascending: false })
       .limit(10)
-      .then(({ data }) => { if (data) setPastJobs(data as CasicutJob[]); });
+      .then(({ data }) => {
+        if (!data) return;
+        const jobs = data as CasicutJob[];
+        setPastJobs(jobs);
+        const active = jobs.find(j =>
+          !['done', 'error'].includes(j.status));
+        if (active) {
+          setJob(active);
+          setPhase('processing');
+          subscribeToJob(active.id);
+        }
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
   const loadClips = useCallback(async (jobId: string) => {
@@ -131,6 +143,24 @@ export default function CasiCut({ userId }: { userId: string }) {
     return () => { if (realtimeRef.current) supabase.removeChannel(realtimeRef.current); };
   }, [supabase]);
 
+  // C5: realtime can miss the terminal 'done' event (reconnect, backgrounded
+  // tab, replication hiccup). Poll as a safety net while processing.
+  useEffect(() => {
+    if (phase !== 'processing' || !job) return;
+    const id = setInterval(async () => {
+      const { data } = await supabase
+        .from('casicut_jobs')
+        .select('id, vod_filename, status, error_msg, clips_count, created_at')
+        .eq('id', job.id)
+        .single();
+      if (!data) return;
+      const j = data as CasicutJob;
+      setJob(j);
+      if (j.status === 'done') { setPhase('done'); loadClips(j.id); }
+    }, 8000);
+    return () => clearInterval(id);
+  }, [phase, job, supabase, loadClips]);
+
   const acceptFile = (f: File) => {
     const ok = ['video/mp4', 'video/x-matroska', 'video/quicktime', 'video/webm'].includes(f.type)
       || f.name.match(/\.(mp4|mkv|mov|webm)$/i);
@@ -151,21 +181,20 @@ export default function CasiCut({ userId }: { userId: string }) {
     if (!file) return;
     setUploading(true);
     setUploadError(null);
-    setUploadProgress(0);
 
     try {
       const jobId = crypto.randomUUID();
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const vodPath = `${userId}/${jobId}_${safeName}`;
 
+      // supabase-js v2 .upload() uses fetch() with no byte-level progress
+      // callback, so we can't show a real percentage. Show an indeterminate
+      // uploading state instead of a fake bar stuck at 0%.
       const { error: upErr } = await supabase.storage
         .from('casicut-vods')
         .upload(vodPath, file, {
           cacheControl: '3600',
           upsert: false,
-          // @ts-expect-error — onUploadProgress is supported at runtime
-          onUploadProgress: (p: { loaded: number; total: number }) =>
-            setUploadProgress(Math.round((p.loaded / p.total) * 100)),
         });
       if (upErr) throw new Error(upErr.message);
 
@@ -214,6 +243,7 @@ export default function CasiCut({ userId }: { userId: string }) {
       }
     } catch (e) {
       setPosting(p => ({ ...p, [`${clipId}-${platform}`]: 'error' }));
+      setPostError(p => ({ ...p, [`${clipId}-${platform}`]: e instanceof Error ? e.message : 'Post failed' }));
     }
   };
 
@@ -223,7 +253,6 @@ export default function CasiCut({ userId }: { userId: string }) {
     setJob(null);
     setClips([]);
     setClipUrls({});
-    setUploadProgress(0);
     setUploadError(null);
     if (realtimeRef.current) { supabase.removeChannel(realtimeRef.current); realtimeRef.current = null; }
   };
@@ -281,10 +310,10 @@ export default function CasiCut({ userId }: { userId: string }) {
 
             {uploading ? (
               <div className="progress-wrap">
-                <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${uploadProgress}%` }} />
+                <div className="progress-bar indeterminate">
+                  <div className="progress-fill" />
                 </div>
-                <span className="progress-pct">{uploadProgress}%</span>
+                <span className="progress-pct">uploading…</span>
               </div>
             ) : (
               <button
@@ -395,6 +424,11 @@ export default function CasiCut({ userId }: { userId: string }) {
                         </button>
                       )}
                     </div>
+                    {(postError[`${clip.id}-youtube`] || postError[`${clip.id}-tiktok`]) && (
+                      <p className="clip-err">
+                        {postError[`${clip.id}-youtube`] || postError[`${clip.id}-tiktok`]}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -530,9 +564,19 @@ export default function CasiCut({ userId }: { userId: string }) {
           background: var(--ink);
           transition: width 0.2s;
         }
+        .progress-bar.indeterminate { position: relative; }
+        .progress-bar.indeterminate .progress-fill {
+          position: absolute;
+          width: 40%;
+          animation: indet 1.2s ease-in-out infinite;
+        }
+        @keyframes indet {
+          0%   { left: -40%; }
+          100% { left: 100%; }
+        }
         .progress-pct {
           font-family: var(--M); font-size: 11px;
-          color: rgba(243,245,244,0.5); white-space: nowrap; min-width: 36px;
+          color: rgba(243,245,244,0.5); white-space: nowrap; min-width: 60px;
         }
         .process-btn {
           font-family: var(--H); font-weight: 700; font-size: 15px;
@@ -690,6 +734,10 @@ export default function CasiCut({ userId }: { userId: string }) {
           font-family: var(--M); font-size: 11px; letter-spacing: 0.06em;
           color: var(--ink); text-decoration: none;
           border-bottom: 1px solid color-mix(in srgb, var(--ink) 40%, transparent);
+        }
+        .clip-err {
+          font-family: var(--M); font-size: 10px; line-height: 1.4;
+          color: #e05444; margin: 8px 0 0;
         }
 
         @media (max-width: 600px) {
