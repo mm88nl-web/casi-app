@@ -354,7 +354,7 @@ async function applyTransition({
       if (booking.element_id) {
         const { error: elErr } = await supabase
           .from('overlay_elements')
-          .update({ image_url: '' })
+          .update({ image_url: null })
           .eq('id', booking.element_id);
         if (elErr) logError('solana-webhook', elErr, { kind, booking_id: booking.id, scope: 'overlay_elements' });
       }

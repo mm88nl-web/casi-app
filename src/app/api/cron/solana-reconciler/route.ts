@@ -354,7 +354,7 @@ async function reconcileActive(
   if (row.element_id) {
     await supabase
       .from('overlay_elements')
-      .update({ image_url: '' })
+      .update({ image_url: null })
       .eq('id', row.element_id);
   }
   return 'expired';

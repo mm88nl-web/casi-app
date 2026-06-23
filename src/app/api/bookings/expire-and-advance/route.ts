@@ -116,7 +116,7 @@ export async function POST(req: Request) {
     if (!next) {
       await supabase
         .from('overlay_elements')
-        .update({ image_url: '' })
+        .update({ image_url: null })
         .eq('id', booking.element_id);
     } else if (next.payment_method === 'solana') {
       // Solana queue advancement needs an on-chain start_beam before the DB
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
           { booking_id: next.id });
         await supabase
           .from('overlay_elements')
-          .update({ image_url: '' })
+          .update({ image_url: null })
           .eq('id', booking.element_id);
       } else {
         const { data: nextProfile } = await supabase
@@ -147,7 +147,7 @@ export async function POST(req: Request) {
             { booking_id: next.id, profile_id: next.profile_id });
           await supabase
             .from('overlay_elements')
-            .update({ image_url: '' })
+            .update({ image_url: null })
             .eq('id', booking.element_id);
         } else {
           const result = await signStartBeamDelegated({
@@ -191,7 +191,7 @@ export async function POST(req: Request) {
             // admin's Play Now.
             await supabase
               .from('overlay_elements')
-              .update({ image_url: '' })
+              .update({ image_url: null })
               .eq('id', booking.element_id);
           }
         }

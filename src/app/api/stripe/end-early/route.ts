@@ -197,7 +197,7 @@ export async function POST(req: Request) {
     } else {
       await supabase
         .from('overlay_elements')
-        .update({ image_url: '' })
+        .update({ image_url: null })
         .eq('id', booking.element_id);
     }
   }
