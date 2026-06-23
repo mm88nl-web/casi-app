@@ -98,7 +98,7 @@ export async function POST(req: Request) {
   }
 
   // Fire-and-forget: notify on Solana flash (funds are now locked in escrow).
-  if (shouldNotify(flash.profile_id)) void notifyFlash({
+  if (shouldNotify(flash.profile_id)) await notifyFlash({
     viewer_name: flash.viewer_name ?? null,
     message: flash.message ?? null,
     amount_display: flash.amount_cents != null

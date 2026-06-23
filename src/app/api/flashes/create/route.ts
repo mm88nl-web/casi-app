@@ -163,7 +163,7 @@ export async function POST(req: Request) {
     }
 
     // Fire-and-forget: notify on free flash.
-    if (shouldNotify(profile_id)) void notifyFlash({
+    if (shouldNotify(profile_id)) await notifyFlash({
       viewer_name: viewer_name ?? null,
       message: message?.trim() ?? null,
       amount_display: 'free',

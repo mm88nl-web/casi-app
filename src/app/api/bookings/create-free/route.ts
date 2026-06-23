@@ -200,7 +200,7 @@ export async function POST(req: Request) {
   }
 
   // Fire-and-forget: notify on free beam / backdrop.
-  if (shouldNotify(profile_id)) void notifyBeam({
+  if (shouldNotify(profile_id)) await notifyBeam({
     event: 'purchased',
     is_backdrop: element.is_background === true,
     viewer_name: viewer_name.trim(),

@@ -248,9 +248,8 @@ async function applyTransition({
         if (elErr) logError('solana-webhook', elErr, { kind, booking_id: booking.id, scope: 'overlay_elements' });
       }
 
-      // Notify: beam is now live on stream (fire-and-forget).
-      void (async () => {
-        if (!shouldNotify(booking.profile_id)) return;
+      // Notify: beam is now live on stream (awaited — void gets killed on return).
+      if (shouldNotify(booking.profile_id)) {
         try {
           let elementLabel: string | null = null;
           let isBackdrop = false;
@@ -280,7 +279,7 @@ async function applyTransition({
         } catch {
           // Swallow — notification is never load-bearing.
         }
-      })();
+      }
       return;
     }
 
