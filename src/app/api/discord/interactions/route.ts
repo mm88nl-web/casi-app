@@ -65,10 +65,11 @@ function hexToU8(hex: string): Uint8Array {
 async function verifySignature(sig: string, ts: string, body: string): Promise<boolean> {
   if (!DISCORD_PUBLIC_KEY) return false;
   try {
+    // Ed25519 uses a plain string name — no namedCurve (that's ECDSA).
     const key = await webcrypto.subtle.importKey(
       'raw',
       hexToU8(DISCORD_PUBLIC_KEY),
-      { name: 'Ed25519', namedCurve: 'Ed25519' } as AlgorithmIdentifier,
+      'Ed25519',
       false,
       ['verify'],
     );
