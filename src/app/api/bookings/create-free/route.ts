@@ -21,7 +21,7 @@ import { moderateText, LIMITS } from '@/lib/content-moderation';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { validateBannerBooking, sanitizeBookingCustomization, validateMediaUrl } from '@/lib/banner';
 import { logWarn } from '@/lib/observability';
-// notify.ts is used by paid-booking paths only; free bookings don't notify.
+import { notifyBeam, shouldNotify } from '@/lib/notify';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -197,6 +197,26 @@ export async function POST(req: Request) {
   if (insertErr || !booking) {
     console.error('[bookings/create-free] insert failed:', insertErr);
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
+  }
+
+  // Notify: free beams sit pending until the streamer manually approves them —
+  // fire immediately so the streamer knows to open the dashboard.
+  if (shouldNotify(profile_id)) {
+    try {
+      await notifyBeam({
+        event: 'purchased',
+        is_backdrop: element.is_background === true,
+        viewer_name: viewer_name.trim(),
+        element_label: element.shape ? element.shape.charAt(0).toUpperCase() + element.shape.slice(1) : null,
+        price_display: 'free',
+        duration_minutes: dur,
+        message: message?.trim() || null,
+        payment_method: 'free',
+        booking_id: booking.id,
+      });
+    } catch {
+      // Swallow — notification is never load-bearing.
+    }
   }
 
   return NextResponse.json({ booking_id: booking.id, cancel_token: cancelToken });

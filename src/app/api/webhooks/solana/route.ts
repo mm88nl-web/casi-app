@@ -205,6 +205,7 @@ async function applyTransition({
       // pending. If the row has already advanced (streamer approved fast,
       // viewer cancelled, etc.) the webhook is late and we leave status
       // alone — we only touch the identity fields.
+      const isFirstFunding = !booking.tx_signature; // true only on first delivery
       const patch: Record<string, unknown> = {};
       if (!booking.tx_signature) patch.tx_signature = txSignature;
       if (!booking.viewer_wallet && feePayer) patch.viewer_wallet = feePayer;
@@ -215,6 +216,41 @@ async function applyTransition({
         .update(patch)
         .eq('id', booking.id);
       if (error) logError('solana-webhook', error, { kind, booking_id: booking.id });
+
+      // Notify on first escrow funding — USDC is now locked and the streamer
+      // CAN approve. This is the right trigger for Solana paid beams (not
+      // start_beam, which fires after the streamer has already approved).
+      if (isFirstFunding && shouldNotify(booking.profile_id)) {
+        try {
+          let elementLabel: string | null = null;
+          let isBackdrop = false;
+          if (booking.element_id) {
+            const { data: el } = await supabase
+              .from('overlay_elements')
+              .select('shape, is_background')
+              .eq('id', booking.element_id)
+              .maybeSingle();
+            elementLabel = el?.shape ? el.shape.charAt(0).toUpperCase() + el.shape.slice(1) : null;
+            isBackdrop = el?.is_background === true;
+          }
+          const priceDisplay = booking.price_value
+            ? `${booking.price_value} USDC${booking.price_unit === 'per_min' ? '/min' : ''}`
+            : null;
+          await notifyBeam({
+            event: 'purchased',
+            is_backdrop: isBackdrop,
+            viewer_name: booking.viewer_name ?? null,
+            element_label: elementLabel,
+            price_display: priceDisplay,
+            duration_minutes: booking.duration_minutes != null ? Number(booking.duration_minutes) : null,
+            message: booking.message ?? null,
+            payment_method: 'solana',
+            booking_id: booking.id,
+          });
+        } catch {
+          // Swallow — notification is never load-bearing.
+        }
+      }
       return;
     }
 
