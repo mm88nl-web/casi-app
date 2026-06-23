@@ -21,7 +21,7 @@ import { moderateText, LIMITS } from '@/lib/content-moderation';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { validateBannerBooking, sanitizeBookingCustomization, validateMediaUrl } from '@/lib/banner';
 import { logWarn } from '@/lib/observability';
-import { notifyBeam, shouldNotify } from '@/lib/notify';
+// notify.ts is used by paid-booking paths only; free bookings don't notify.
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -198,19 +198,6 @@ export async function POST(req: Request) {
     console.error('[bookings/create-free] insert failed:', insertErr);
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
   }
-
-  // Fire-and-forget: notify on free beam / backdrop.
-  if (shouldNotify(profile_id)) await notifyBeam({
-    event: 'purchased',
-    is_backdrop: element.is_background === true,
-    viewer_name: viewer_name.trim(),
-    element_label: element.shape ? element.shape.charAt(0).toUpperCase() + element.shape.slice(1) : null,
-    price_display: 'free',
-    duration_minutes: dur,
-    message: message?.trim() || null,
-    payment_method: 'free',
-    booking_id: booking.id,
-  });
 
   return NextResponse.json({ booking_id: booking.id, cancel_token: cancelToken });
 }
