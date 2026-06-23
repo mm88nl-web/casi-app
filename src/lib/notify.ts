@@ -99,21 +99,9 @@ function buildComponents(
   paymentMethod: string | null | undefined,
 ): object[] {
   const id = String(entityId);
-  const isSolana = paymentMethod === 'solana';
 
-  if (isSolana) {
-    // Can't approve/deny Solana on-chain from Discord — show a studio link.
-    return [{
-      type: 1,
-      components: [{
-        type: 2,
-        style: 5,   // Link
-        label: '→ Open Studio',
-        url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.casi.gg'}/studio/live`,
-      }],
-    }];
-  }
-
+  // All rails: show approve/deny — the interaction handler cranks Solana on-chain
+  // via the delegate if installed, or falls back to a studio link if not.
   return [{
     type: 1,
     components: [

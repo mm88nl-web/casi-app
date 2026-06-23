@@ -33,10 +33,8 @@ import { createClient }  from '@supabase/supabase-js';
 import { webcrypto }     from 'node:crypto';
 import { stripe }        from '@/lib/stripe';
 import { logError }      from '@/lib/observability';
-// Solana delegate routes require a user session (auth'd client). From the
-// interaction handler we only have a service-role client, so Solana actions
-// redirect to studio instead. Phase 2: add an internal-secret bypass to the
-// delegate routes so the interaction handler can call them directly.
+import { signStartBeamDelegated }   from '@/lib/delegate-start-beam';
+import { signApproveFlashDelegated, signDenyFlashDelegated } from '@/lib/delegate-flash';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -158,7 +156,7 @@ async function bookingAction(
 ): Promise<NextResponse> {
   const { data: booking, error } = await supabase
     .from('bookings')
-    .select('id, status, payment_method, payment_intent_id, element_id, image_url, profile_id')
+    .select('id, status, payment_method, payment_intent_id, element_id, image_url, profile_id, escrow_pda')
     .eq('id', id)
     .single();
 
@@ -175,14 +173,75 @@ async function bookingAction(
 }
 
 async function approveBooking(booking: Record<string, any>, orig: Embed): Promise<NextResponse> {
-  const { id, payment_method, payment_intent_id, element_id, image_url, profile_id } = booking;
+  const { id, payment_method, payment_intent_id, element_id, image_url, profile_id, escrow_pda } = booking;
 
-  // ── Solana: needs on-chain signing — send to studio ───────────────────────
+  // ── Solana: crank via registered delegate keypair ─────────────────────────
   if (payment_method === 'solana') {
-    return updateMsg(
-      [{ ...orig, color: ORANGE, footer: { text: '🔑 Solana beam — approve from studio (wallet or delegate)' } }],
-      studioLink(),
-    );
+    if (!escrow_pda) {
+      return updateMsg([{
+        ...orig, color: RED,
+        footer: { text: '⚠️ Escrow not funded yet — cannot approve.' },
+      }]);
+    }
+
+    const { data: prof } = await supabase
+      .from('profiles').select('solana_wallet').eq('id', profile_id).single();
+    if (!prof?.solana_wallet) {
+      return updateMsg(
+        [{ ...orig, color: ORANGE, footer: { text: '⚠️ Streamer wallet not on file.' } }],
+        studioLink(),
+      );
+    }
+
+    // Slot occupied → queue in DB only (escrow stays Pending until slot frees)
+    if (element_id) {
+      const { data: active } = await supabase
+        .from('bookings').select('id')
+        .eq('element_id', element_id).eq('status', 'active').limit(1);
+      if (active && active.length > 0) {
+        const { error: qErr } = await supabase.from('bookings')
+          .update({ status: 'approved_queued' }).eq('id', id).eq('status', 'pending');
+        if (qErr) {
+          logError('discord/interactions', qErr, { booking_id: id, action: 'approve_solana_queue' });
+          return updateMsg([{ ...orig, color: RED, footer: { text: '⚠️ DB update failed.' } }]);
+        }
+        return updateMsg([{
+          ...orig, color: GREEN,
+          footer: { text: `✅ Approved (queued — slot busy) via Discord · ${new Date().toUTCString()}` },
+        }]);
+      }
+    }
+
+    // Slot free — start beam on-chain; Helius webhook flips pending → active
+    const result = await signStartBeamDelegated({
+      supabase,
+      scope:         'discord-interactions',
+      profileId:     profile_id,
+      bookingId:     id,
+      escrowId:      id,
+      streamerWallet: prof.solana_wallet,
+    });
+
+    if (!result.ok) {
+      let hint: string;
+      switch (result.reason) {
+        case 'no_delegate':   hint = 'no delegate installed'; break;
+        case 'revoked':       hint = 'delegate revoked'; break;
+        case 'expired':       hint = 'delegate expired — rotate in studio'; break;
+        case 'no_cranker':    hint = 'cranker not configured'; break;
+        case 'chain_error':   hint = `chain: ${result.message ?? 'unknown'}`; break;
+        default:              hint = result.reason; break;
+      }
+      return updateMsg(
+        [{ ...orig, color: ORANGE, footer: { text: `⚠️ Delegate failed (${hint}) — open studio.` } }],
+        studioLink(),
+      );
+    }
+
+    return updateMsg([{
+      ...orig, color: GREEN,
+      footer: { text: `✅ Approved on-chain via Discord · ${new Date().toUTCString()}` },
+    }]);
   }
 
   // ── Stripe: capture the payment intent ────────────────────────────────────
@@ -298,12 +357,54 @@ async function flashAction(
     return updateMsg([{ ...orig, color: GREY, footer: { text: `ℹ️ Flash already ${flash.status}.` } }]);
   }
 
-  // ── Solana: needs on-chain signing — send to studio ───────────────────────
+  // ── Solana: crank via registered delegate keypair ─────────────────────────
   if (flash.payment_method === 'solana') {
-    return updateMsg(
-      [{ ...orig, color: ORANGE, footer: { text: '🔑 Solana flash — approve from studio (wallet or delegate)' } }],
-      studioLink(),
-    );
+    if (!flash.escrow_pda || !flash.viewer_wallet) {
+      return updateMsg(
+        [{ ...orig, color: ORANGE, footer: { text: '⚠️ Escrow or viewer wallet missing — approve from studio.' } }],
+        studioLink(),
+      );
+    }
+    const { data: prof } = await supabase
+      .from('profiles').select('solana_wallet').eq('id', flash.profile_id).single();
+    if (!prof?.solana_wallet) {
+      return updateMsg(
+        [{ ...orig, color: ORANGE, footer: { text: '⚠️ Streamer wallet not on file.' } }],
+        studioLink(),
+      );
+    }
+
+    const flashFn = verb === 'approve' ? signApproveFlashDelegated : signDenyFlashDelegated;
+    const result  = await flashFn({
+      supabase,
+      scope:         'discord-interactions',
+      profileId:     flash.profile_id,
+      flashId:       flash.id,
+      streamerWallet: prof.solana_wallet,
+      viewerWallet:  flash.viewer_wallet,
+    });
+
+    if (!result.ok) {
+      let hint: string;
+      switch (result.reason) {
+        case 'no_delegate':   hint = 'no delegate installed'; break;
+        case 'revoked':       hint = 'delegate revoked'; break;
+        case 'expired':       hint = 'delegate expired — rotate in studio'; break;
+        case 'no_cranker':    hint = 'cranker not configured'; break;
+        case 'chain_error':   hint = `chain: ${result.message ?? 'unknown'}`; break;
+        default:              hint = result.reason; break;
+      }
+      return updateMsg(
+        [{ ...orig, color: ORANGE, footer: { text: `⚠️ Delegate failed (${hint}) — ${verb} from studio.` } }],
+        studioLink(),
+      );
+    }
+
+    const label = verb === 'approve' ? '✅ Approved on-chain' : '❌ Denied on-chain';
+    return updateMsg([{
+      ...orig, color: verb === 'approve' ? GREEN : RED,
+      footer: { text: `${label} via Discord · ${new Date().toUTCString()}` },
+    }]);
   }
 
   // ── Stripe: capture or cancel PI ──────────────────────────────────────────
