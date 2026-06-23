@@ -19,6 +19,7 @@ import { stripe } from '@/lib/stripe';
 import { moderateText } from '@/lib/content-moderation';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { logWarn } from '@/lib/observability';
+import { notifyFlash, shouldNotify } from '@/lib/notify';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -160,6 +161,16 @@ export async function POST(req: Request) {
       console.error('[flashes/create] free insert failed:', insertErr);
       return NextResponse.json({ error: 'Failed to create flash' }, { status: 500 });
     }
+
+    // Fire-and-forget: notify on free flash.
+    if (shouldNotify(profile_id)) void notifyFlash({
+      viewer_name: viewer_name ?? null,
+      message: message?.trim() ?? null,
+      amount_display: 'free',
+      payment_method: 'free',
+      flash_id: flash.id,
+    });
+
     return NextResponse.json({ flash_id: flash.id });
   }
 

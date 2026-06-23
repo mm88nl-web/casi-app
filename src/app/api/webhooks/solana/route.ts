@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { timingSafeEqual } from 'node:crypto';
 import { logError, logWarn } from '@/lib/observability';
+import { notifyBeam, shouldNotify } from '@/lib/notify';
 import {
   parseCasiInstruction,
   type CasiIxKind,
@@ -161,13 +162,20 @@ type BookingRow = {
   started_at: string | null;
   image_url: string | null;
   element_id: string | null;
+  // Notification fields — present when fetched via findBookingByPdaAccounts.
+  profile_id: string | null;
+  viewer_name: string | null;
+  message: string | null;
+  price_value: string | null;
+  price_unit: string | null;
+  duration_minutes: string | null;
 };
 
 async function findBookingByPdaAccounts(accounts: string[]): Promise<BookingRow | null> {
   if (accounts.length === 0) return null;
   const { data, error } = await supabase
     .from('bookings')
-    .select('id, status, escrow_pda, tx_signature, viewer_wallet, started_at, image_url, element_id')
+    .select('id, status, escrow_pda, tx_signature, viewer_wallet, started_at, image_url, element_id, profile_id, viewer_name, message, price_value, price_unit, duration_minutes')
     .in('escrow_pda', accounts)
     .eq('payment_method', 'solana')
     .limit(1);
@@ -239,6 +247,40 @@ async function applyTransition({
           .eq('id', booking.element_id);
         if (elErr) logError('solana-webhook', elErr, { kind, booking_id: booking.id, scope: 'overlay_elements' });
       }
+
+      // Notify: beam is now live on stream (fire-and-forget).
+      void (async () => {
+        if (!shouldNotify(booking.profile_id)) return;
+        try {
+          let elementLabel: string | null = null;
+          let isBackdrop = false;
+          if (booking.element_id) {
+            const { data: el } = await supabase
+              .from('overlay_elements')
+              .select('label, is_background')
+              .eq('id', booking.element_id)
+              .maybeSingle();
+            elementLabel = el?.label ?? null;
+            isBackdrop = el?.is_background === true;
+          }
+          const priceDisplay = booking.price_value
+            ? `${booking.price_value} USDC${booking.price_unit === 'per_min' ? '/min' : ''}`
+            : null;
+          await notifyBeam({
+            event: 'started',
+            is_backdrop: isBackdrop,
+            viewer_name: booking.viewer_name ?? null,
+            element_label: elementLabel,
+            price_display: priceDisplay,
+            duration_minutes: booking.duration_minutes != null ? Number(booking.duration_minutes) : null,
+            message: booking.message ?? null,
+            payment_method: 'solana',
+            booking_id: booking.id,
+          });
+        } catch {
+          // Swallow — notification is never load-bearing.
+        }
+      })();
       return;
     }
 

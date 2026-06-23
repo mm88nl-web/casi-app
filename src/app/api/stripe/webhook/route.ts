@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { stripe } from '@/lib/stripe';
 import { logError, logWarn } from '@/lib/observability';
+import { notifyBeam, notifyFlash, formatStripeAmount, shouldNotify } from '@/lib/notify';
 import type Stripe from 'stripe';
 
 const supabase = createClient(
@@ -104,6 +105,52 @@ export async function POST(req: Request) {
         await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
         return NextResponse.json({ error: 'booking_update_failed' }, { status: 500 });
       }
+
+      // Fire-and-forget: notify on new Stripe beam purchase.
+      // Runs after the critical write so it can never stall the webhook response.
+      void (async () => {
+        if (!process.env.DISCORD_NOTIFY_WEBHOOK_URL) return;
+        try {
+          const { data: bk } = await supabase
+            .from('bookings')
+            .select('profile_id, viewer_name, duration_minutes, message, element_id')
+            .eq('id', booking_id)
+            .maybeSingle();
+
+          if (!shouldNotify(bk?.profile_id)) return;
+
+          let elementLabel: string | null = null;
+          let isBackdrop = false;
+          if (bk?.element_id) {
+            const { data: el } = await supabase
+              .from('overlay_elements')
+              .select('label, is_background')
+              .eq('id', bk.element_id)
+              .maybeSingle();
+            elementLabel = el?.label ?? null;
+            isBackdrop = el?.is_background === true;
+          }
+
+          const priceDisplay =
+            session.amount_total != null && session.currency
+              ? formatStripeAmount(session.amount_total, session.currency)
+              : null;
+
+          await notifyBeam({
+            event: 'purchased',
+            is_backdrop: isBackdrop,
+            viewer_name: bk?.viewer_name ?? null,
+            element_label: elementLabel,
+            price_display: priceDisplay,
+            duration_minutes: bk?.duration_minutes != null ? Number(bk.duration_minutes) : null,
+            message: bk?.message ?? null,
+            payment_method: 'stripe',
+            booking_id,
+          });
+        } catch {
+          // Swallow — notification is never load-bearing.
+        }
+      })();
     }
 
     const flash_id = session.metadata?.flash_id;
@@ -117,6 +164,32 @@ export async function POST(req: Request) {
         await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
         return NextResponse.json({ error: 'flash_update_failed' }, { status: 500 });
       }
+
+      // Fire-and-forget: notify on new Stripe flash purchase.
+      void (async () => {
+        if (!process.env.DISCORD_NOTIFY_WEBHOOK_URL) return;
+        try {
+          const { data: fl } = await supabase
+            .from('flashes')
+            .select('profile_id, viewer_name, message')
+            .eq('id', flash_id)
+            .maybeSingle();
+          if (!shouldNotify(fl?.profile_id)) return;
+          const amountDisplay =
+            session.amount_total != null && session.currency
+              ? formatStripeAmount(session.amount_total, session.currency)
+              : null;
+          await notifyFlash({
+            viewer_name: fl?.viewer_name ?? null,
+            message: fl?.message ?? null,
+            amount_display: amountDisplay,
+            payment_method: 'stripe',
+            flash_id,
+          });
+        } catch {
+          // Swallow — notification is never load-bearing.
+        }
+      })();
     }
 
     if (!booking_id && !flash_id) {

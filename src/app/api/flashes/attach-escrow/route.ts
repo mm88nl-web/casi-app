@@ -23,6 +23,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { PublicKey } from '@solana/web3.js';
+import { notifyFlash, shouldNotify } from '@/lib/notify';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
 
   const { data: flash, error: readErr } = await supabase
     .from('flashes')
-    .select('id, status, payment_method, escrow_pda, tx_signature')
+    .select('id, status, payment_method, escrow_pda, tx_signature, profile_id, viewer_name, message, amount_cents')
     .eq('id', flash_id)
     .single();
 
@@ -95,6 +96,17 @@ export async function POST(req: Request) {
     console.error('[flashes/attach-escrow] update failed:', updErr);
     return NextResponse.json({ error: 'Update failed' }, { status: 500 });
   }
+
+  // Fire-and-forget: notify on Solana flash (funds are now locked in escrow).
+  if (shouldNotify(flash.profile_id)) void notifyFlash({
+    viewer_name: flash.viewer_name ?? null,
+    message: flash.message ?? null,
+    amount_display: flash.amount_cents != null
+      ? `${(flash.amount_cents / 100).toFixed(2)} USDC`
+      : null,
+    payment_method: 'solana',
+    flash_id: flash.id,
+  });
 
   return NextResponse.json({ success: true });
 }
