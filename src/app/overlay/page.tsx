@@ -2720,7 +2720,7 @@ function OverlayContent() {
                         ▰ Banner · your message scrolls here · tip to try
                       </span>
                     </div>
-                  ) : (
+                  ) : isOBS ? null : (
                     <div
                       className={shapeClass}
                       style={{
