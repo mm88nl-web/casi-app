@@ -81,29 +81,39 @@ export async function POST(req: Request) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
   // Direct Charge on the streamer's connected account — no platform fee.
-  const session = await stripe.checkout.sessions.create(
-    {
-      mode: 'payment',
-      payment_intent_data: {
-        capture_method: 'manual',
-      },
-      line_items: [{
-        price_data: {
-          currency,
-          product_data: {
-            name: `Queue slot — ${element.price_value}/${element.price_unit}`,
-            description: `${durationMinutes} min on ${profile.username}'s stream`,
-          },
-          unit_amount: amount,
+  // payment_method_types: ['card'] is required for capture_method: 'manual';
+  // without it Stripe uses automatic_payment_methods which blocks manual capture.
+  let session: Awaited<ReturnType<typeof stripe.checkout.sessions.create>>;
+  try {
+    session = await stripe.checkout.sessions.create(
+      {
+        mode: 'payment',
+        payment_method_types: ['card'],
+        payment_intent_data: {
+          capture_method: 'manual',
         },
-        quantity: 1,
-      }],
-      success_url: `${appUrl}/overlay?s=${profile.username}&payment=success&booking_id=${booking_id}`,
-      cancel_url: `${appUrl}/overlay?s=${profile.username}&payment=cancelled&booking_id=${booking_id}`,
-      metadata: { booking_id },
-    },
-    { stripeAccount: profile.stripe_account_id },
-  );
+        line_items: [{
+          price_data: {
+            currency,
+            product_data: {
+              name: `Queue slot — ${element.price_value}/${element.price_unit}`,
+              description: `${durationMinutes} min on ${profile.username}'s stream`,
+            },
+            unit_amount: amount,
+          },
+          quantity: 1,
+        }],
+        success_url: `${appUrl}/overlay?s=${profile.username}&payment=success&booking_id=${booking_id}`,
+        cancel_url: `${appUrl}/overlay?s=${profile.username}&payment=cancelled&booking_id=${booking_id}`,
+        metadata: { booking_id },
+      },
+      { stripeAccount: profile.stripe_account_id },
+    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[stripe/approve-queue] checkout.sessions.create failed:', msg);
+    return NextResponse.json({ error: msg }, { status: 502 });
+  }
 
   await supabase
     .from('bookings')

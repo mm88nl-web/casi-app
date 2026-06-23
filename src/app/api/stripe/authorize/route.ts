@@ -88,31 +88,45 @@ export async function POST(req: Request) {
   // their connected account. We take no application_fee_amount — revenue
   // comes from the SaaS subscription tier, not per-transaction fees, which
   // keeps us out of MSB/PSP territory. See AGENTS.md.
-  const session = await stripe.checkout.sessions.create(
-    {
-      mode: 'payment',
-      payment_intent_data: {
-        capture_method: 'manual',
-      },
-      line_items: [
-        {
-          price_data: {
-            currency,
-            product_data: {
-              name: `Beam slot — ${element.price_value}/${element.price_unit}`,
-              description: `${durationMinutes} min on ${profile.username}'s stream`,
-            },
-            unit_amount: amount,
-          },
-          quantity: 1,
+  //
+  // payment_method_types: ['card'] is required when capture_method is 'manual'.
+  // Without it, Stripe defaults to automatic_payment_methods which does not
+  // support manual capture and throws a 400 ("The Checkout Session's
+  // payment_intent_data.capture_method may only be manual when
+  // payment_method_types is also set").
+  let session: Awaited<ReturnType<typeof stripe.checkout.sessions.create>>;
+  try {
+    session = await stripe.checkout.sessions.create(
+      {
+        mode: 'payment',
+        payment_method_types: ['card'],
+        payment_intent_data: {
+          capture_method: 'manual',
         },
-      ],
-      success_url: `${appUrl}/overlay?s=${profile.username}&payment=success&booking_id=${booking_id}`,
-      cancel_url: `${appUrl}/overlay?s=${profile.username}&payment=cancelled&booking_id=${booking_id}`,
-      metadata: { booking_id },
-    },
-    { stripeAccount: profile.stripe_account_id },
-  );
+        line_items: [
+          {
+            price_data: {
+              currency,
+              product_data: {
+                name: `Beam slot — ${element.price_value}/${element.price_unit}`,
+                description: `${durationMinutes} min on ${profile.username}'s stream`,
+              },
+              unit_amount: amount,
+            },
+            quantity: 1,
+          },
+        ],
+        success_url: `${appUrl}/overlay?s=${profile.username}&payment=success&booking_id=${booking_id}`,
+        cancel_url: `${appUrl}/overlay?s=${profile.username}&payment=cancelled&booking_id=${booking_id}`,
+        metadata: { booking_id },
+      },
+      { stripeAccount: profile.stripe_account_id },
+    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[stripe/authorize] checkout.sessions.create failed:', msg);
+    return NextResponse.json({ error: msg }, { status: 502 });
+  }
 
   // Persist the authorized amount for later proration. cancel_token is NOT
   // written or returned here: it's minted once in /api/bookings/create-stripe
