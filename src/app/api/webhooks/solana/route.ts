@@ -257,10 +257,10 @@ async function applyTransition({
           if (booking.element_id) {
             const { data: el } = await supabase
               .from('overlay_elements')
-              .select('label, is_background')
+              .select('shape, is_background')
               .eq('id', booking.element_id)
               .maybeSingle();
-            elementLabel = el?.label ?? null;
+            elementLabel = el?.shape ? el.shape.charAt(0).toUpperCase() + el.shape.slice(1) : null;
             isBackdrop = el?.is_background === true;
           }
           const priceDisplay = booking.price_value

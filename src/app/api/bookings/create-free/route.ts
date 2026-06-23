@@ -131,7 +131,7 @@ export async function POST(req: Request) {
   // (b) it really is free (price_value = 0), (c) duration is within max.
   const { data: element } = await supabase
     .from('overlay_elements')
-    .select('id, profile_id, price_value, price_unit, max_duration_minutes, shape, is_background, label')
+    .select('id, profile_id, price_value, price_unit, max_duration_minutes, shape, is_background')
     .eq('id', element_id)
     .single();
 
@@ -204,7 +204,7 @@ export async function POST(req: Request) {
     event: 'purchased',
     is_backdrop: element.is_background === true,
     viewer_name: viewer_name.trim(),
-    element_label: element.label ?? null,
+    element_label: element.shape ? element.shape.charAt(0).toUpperCase() + element.shape.slice(1) : null,
     price_display: 'free',
     duration_minutes: dur,
     message: message?.trim() || null,
