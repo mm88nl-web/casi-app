@@ -246,6 +246,7 @@ async function applyTransition({
             message: booking.message ?? null,
             payment_method: 'solana',
             booking_id: booking.id,
+            image_url: booking.image_url ?? null,
           });
         } catch {
           // Swallow — notification is never load-bearing.

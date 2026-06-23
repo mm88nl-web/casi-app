@@ -108,11 +108,11 @@ export async function POST(req: Request) {
 
       // Notify on new Stripe beam purchase. Awaited so the Lambda doesn't
       // get frozen before the Discord POST completes (void is killed on return).
-      if (process.env.DISCORD_NOTIFY_WEBHOOK_URL) {
+      if (process.env.DISCORD_NOTIFY_WEBHOOK_URL || process.env.DISCORD_NOTIFY_CHANNEL_ID) {
         try {
           const { data: bk } = await supabase
             .from('bookings')
-            .select('profile_id, viewer_name, duration_minutes, message, element_id')
+            .select('profile_id, viewer_name, duration_minutes, message, element_id, image_url')
             .eq('id', booking_id)
             .maybeSingle();
 
@@ -142,6 +142,7 @@ export async function POST(req: Request) {
               message: bk?.message ?? null,
               payment_method: 'stripe',
               booking_id,
+              image_url: bk?.image_url ?? null,
             });
           }
         } catch {

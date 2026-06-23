@@ -213,6 +213,7 @@ export async function POST(req: Request) {
         message: message?.trim() || null,
         payment_method: 'free',
         booking_id: booking.id,
+        image_url: mediaCheck.value ?? null,
       });
     } catch {
       // Swallow — notification is never load-bearing.
