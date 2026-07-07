@@ -64,9 +64,13 @@ const nextConfig: NextConfig = {
               // Block plugins (Flash, etc.) entirely.
               "object-src 'none'",
 
-              // Restrict framing to same origin (modern equivalent of
-              // X-Frame-Options: SAMEORIGIN).
-              "frame-ancestors 'self'",
+              // Restrict framing to same origin, plus the streamer's own
+              // Tailscale-only stream-control panel (embeds /studio/live so
+              // OBS control + music + words + the booking canvas live in one
+              // tab). That origin is only reachable from devices on CASI's
+              // own tailnet, not the public internet, so this doesn't widen
+              // exposure to the clickjacking risk this header exists for.
+              "frame-ancestors 'self' http://100.113.132.53:9091",
 
               // Restrict <base href> injection.
               "base-uri 'self'",

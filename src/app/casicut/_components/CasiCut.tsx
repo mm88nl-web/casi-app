@@ -247,6 +247,20 @@ export default function CasiCut({ userId }: { userId: string }) {
     }
   };
 
+  const openPastJob = useCallback((j: CasicutJob) => {
+    setJob(j);
+    if (j.status === 'done') {
+      setPhase('done');
+      loadClips(j.id);
+    } else {
+      // in-progress or errored — reuse the same live-tracking view as a
+      // freshly-submitted job (subscribeToJob's initial fetch will pick up
+      // wherever it actually left off, not just the row snapshot we have).
+      setPhase('processing');
+      subscribeToJob(j.id);
+    }
+  }, [loadClips, subscribeToJob]);
+
   const reset = () => {
     setPhase('upload');
     setFile(null);
@@ -330,7 +344,14 @@ export default function CasiCut({ userId }: { userId: string }) {
                 <h2 className="past-title">Past jobs</h2>
                 <ul className="past-list">
                   {pastJobs.map(j => (
-                    <li key={j.id} className="past-item">
+                    <li
+                      key={j.id}
+                      className="past-item clickable"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openPastJob(j)}
+                      onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && openPastJob(j)}
+                    >
                       <span className="past-name">{j.vod_filename}</span>
                       <span className={`past-status s-${j.status}`}>{j.status}</span>
                       {j.status === 'done' && (
@@ -603,6 +624,15 @@ export default function CasiCut({ userId }: { userId: string }) {
           border: 1px solid rgba(255,255,255,0.06);
           border-radius: 8px;
           font-family: var(--M); font-size: 12px;
+        }
+        .past-item.clickable {
+          cursor: pointer;
+          transition: border-color 0.15s, background 0.15s;
+        }
+        .past-item.clickable:hover, .past-item.clickable:focus-visible {
+          border-color: color-mix(in srgb, var(--ink) 40%, transparent);
+          background: color-mix(in srgb, var(--ink) 6%, transparent);
+          outline: none;
         }
         .past-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(243,245,244,0.7); }
         .past-status { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }

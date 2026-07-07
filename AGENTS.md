@@ -8,7 +8,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 CASI lets livestream viewers pay to put their image / video / message **on stream** as an overlay for a fixed duration. Streamers run OBS with a CASI browser-source URL; viewers book a slot via the web app; the streamer approves, the beam appears, the timer expires, payment settles.
 
-## Current project state (June 2026)
+## Current project state (July 2026)
 
 **Phase**: pre-mainnet on Solana (USDC rail still on **devnet**) but **post-cutover on Stripe** — card payments are LIVE on real money as of 15 May 2026. Mainnet launch of the Solana program is gated on the external audit. The Stripe rail launched separately because Sec3 explicitly advised audits should follow PMF rather than precede it — letting fiat flow earlier means streamers can earn while the Solana side completes audit.
 
@@ -41,6 +41,11 @@ CASI lets livestream viewers pay to put their image / video / message **on strea
 - **Landing demo loop** (`/casi-demo.mp4`) in the hero showing the beam mechanic.
 - **SEO foundation**: per-streamer `generateMetadata` + `ProfilePage` JSON-LD on `/s/[username]` (server wrapper around the client `_components/StreamerProfile.tsx`); `app/sitemap.ts`; site-wide Organization/WebSite/SoftwareApplication JSON-LD in `layout.tsx`; canonical → `www`; `public/llms.txt`.
 - **On-stream growth tag**: `▸ get on stream · casi.gg` renders on the `/obs?layer=beams` overlay when a beam is live (product-led discovery; Pro "custom branding" will hide it later). Growth/referral plan: [`docs/growth-referral-plan.md`](./docs/growth-referral-plan.md).
+- **CasiCut** (`/casicut`, auth-gated): stream-to-shorts feature. Streamer uploads a VOD; AI finds the best rap moments, renders vertical clips, posts to YouTube Shorts (`/api/casicut/post-youtube`) and TikTok (`/api/casicut/post-tiktok`). Clips tracked in `casicut_clips` Supabase table. The heavy processing worker runs on an external server (casi-obs, via systemd `casicut-worker`), not on Vercel — Vercel routes are lightweight job-dispatch/status endpoints only. A WordSync integration ties the stream's live word-gen into clip metadata.
+- **Discord notifications + bot** (`/api/discord/interactions`): streamers receive a Discord DM/channel notification for every incoming beam, backdrop, and flash (with image preview). Approve and Deny buttons in the Discord message trigger `POST /api/discord/interactions`, which calls the same `streamer-moderation.ts` handlers as the web UI. Discord webhook URLs stored per-streamer in `profiles`. CASI colorway bot avatars shipped. `ERROR_WEBHOOK_URL` also fans critical observability alerts to Discord/Slack.
+- **CASI Solitaire** (`/solitaire`): free Klondike solitaire game embedded at casi.gg/solitaire. Also ships as a standalone Expo React Native mobile app (iOS/Android). CASI logo on card backs. Serves as a SEO/traffic surface and brand touchpoint, not monetized.
+- **CASI Words** (`/words`): free random word generator for rap, writing, and brainstorming. 55,000+ words, no ads, no auth required. FAQ JSON-LD + canonical tags for SEO. Separate from the OBS overlay word-gen — this is a public web tool.
+- **Builders page** (`/builders`): developer-facing landing page for the `casi-escrow` Solana primitive. Targets Solana developers evaluating the escrow program as a reusable building block. Visually consistent with `/` (v9 chrome) but content-scoped to the on-chain primitive story, not the streamer product. Supports the Solana Foundation grant narrative.
 
 **robots.txt is Cloudflare-managed, not in this repo.** casi.gg fronts Vercel with Cloudflare, which serves a managed robots.txt that **blocks AI crawlers** (GPTBot/ClaudeBot/Google-Extended/CCBot/…) with `ai-train=no`. Adding `app/robots.ts` may be overridden. Changing AI-crawler access is a **Cloudflare dashboard** action (AI Crawl Control), not code — and it currently conflicts with the goal of being cited by AI search.
 
@@ -80,6 +85,20 @@ src/app/
                       providers + email/password
   auth/callback/      OAuth callback route — provider-agnostic, hands off to
                       /login?finish=true if the user has no profiles row yet
+  casicut/            stream-to-shorts feature (auth-gated). Upload VOD → AI
+                      finds rap moments → vertical clips → post to YT/TikTok.
+                      Worker runs on casi-obs (systemd), not Vercel.
+  solitaire/          free Klondike solitaire (Expo React Native web build).
+                      SEO/brand surface, no auth required.
+  words/              free random word generator, 55k+ words, rap-focused SEO.
+  builders/           developer landing page for the casi-escrow primitive.
+                      Targets Solana devs / grant audience, not streamers.
+  join/               LEGACY simple signup page (direct supabase.auth.signUp).
+                      DO NOT route new users here — /login is the canonical
+                      auth surface. /join inserts a bare profiles row without
+                      username selection, producing orphan accounts.
+  v/                  DEV TEST page — fetches first profile for local beam
+                      testing. Not linked in production. Not a user surface.
   api/
     bookings/         create/expire/advance/deny + per-rail variants
     stripe/           authorize, cancel, webhook, end-early, approve-queue
@@ -87,6 +106,13 @@ src/app/
     solana/           sync-webhook (on-chain events → DB)
                       delegates/ (install / status / revoke / start-beam /
                                   settle-beam / approve-flash / deny-flash)
+    casicut/          post-youtube, post-tiktok — lightweight dispatch to
+                      casi-obs worker; not the processing logic itself
+    discord/          interactions/ — approve/deny from Discord bot buttons;
+                      calls same streamer-moderation.ts handlers as web UI
+    abuse/            report/ — viewer content-abuse reports on beams/flashes
+    webhooks/         solana/ (Helius on-chain events → DB)
+                      pumpfun/ (PumpFun token event ingestion)
     cron/             stripe-janitor, solana-reconciler, cranker-monitor
     flashes/          tip-style ephemeral messages
     log/              client-side error ingest (rate-limited)
@@ -412,11 +438,27 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 - **Don't refactor the Anchor program before the audit.** It's frozen pending external review. Bug fixes only, and only with a clear test demonstrating the bug.
 - **Don't ship new Pro-tier streamer features pre-mainnet.** SaaS upsell is the planned monetization but it's premature — focus is shipping mainnet + onboarding the first cohort.
 
+## AI / Fable integration points
+
+Fable 5 (`claude-fable-5`) is the creative model available for CASI tasks. The following are the highest-leverage places to invoke it — not speculative, these have clear inputs/outputs:
+
+- **CasiCut clip titles + descriptions**: every clip in `casicut_clips` needs a YouTube/TikTok title and description. Feed Fable the transcript/timestamp context and it writes punchy, platform-optimized copy per clip. This is pure text generation with a clear schema output.
+- **Discord bot message copy**: the Discord notification messages for new beams/flashes are static templates. Fable can vary the tone per event type (hype for a big-ticket booking, casual for a flash) and per streamer persona if `profiles.display_name` is in scope.
+- **Onboarding email drip** (see Known gaps below): Day-0 welcome, Day-2 activation, Day-7 earnings prompts. Fable writes the copy; send via Resend/Loops once SMTP is wired.
+- **`/words` word bank expansion**: the rap word generator serves 55k+ words. Fable generates thematic word packs (battle rap, motivational, street, storytelling) that can be surfaced as curated sets alongside the random generator — a product feature, not just copy.
+- **`/builders` and grant copy maintenance**: the Solana Foundation grant narrative and /builders page need staying updated as the program evolves. Fable drafts revisions when the escrow primitives change.
+- **Abuse review assist**: when a flagged beam/flash comes in via `/api/abuse/report`, Fable can pre-classify severity and draft the moderator decision rationale.
+
+**What Fable is NOT for here**: don't use it for code generation in this repo — use a code-capable model (Sonnet/Opus). Don't use it to generate Anchor program logic, RLS policies, or payment flow changes.
+
 ## Known compliance + product gaps (not bugs, but on the followup list)
 
 - **No custom SMTP wired in code.** Verification + password-reset emails go through Supabase's default sender, which has terrible deliverability. Configure Resend/Postmark + SPF/DKIM/DMARC on `casi.gg` in the Supabase Dashboard before mainnet.
-- **No onboarding email drip.** Streamer signs up → verification email → silence. Activation is going to suffer post-mainnet without at minimum a Day-0 welcome + Day-2 "set up your slot canvas" + Day-7 "first earnings" sequence (Loops / Customer.io / Resend).
-- **Landing demo loop shipped** (`public/casi-demo.mp4`, autoplay/muted/loop in the hero). Remaining marketing gaps: onboarding email drip (below) and a competitor/comparison page ("Streamlabs Media Share alternative").
+- **No onboarding email drip.** Streamer signs up → verification email → silence. Activation is going to suffer post-mainnet without at minimum a Day-0 welcome + Day-2 "set up your slot canvas" + Day-7 "first earnings" sequence (Loops / Customer.io / Resend). Fable writes the copy once SMTP is wired.
+- **Landing demo loop shipped** (`public/casi-demo.mp4`, autoplay/muted/loop in the hero). Remaining marketing gaps: onboarding email drip (above) and a competitor/comparison page ("Streamlabs Media Share alternative").
+- **`/join` is a zombie route.** It creates a bare `profiles` row without username selection — produces orphan accounts. Should redirect to `/login` or be deleted. Not linked anywhere in production but still accessible by URL.
+- **CasiCut worker dependency.** `/casicut` dispatches to a worker process running on casi-obs (systemd `casicut-worker`). If casi-obs is down or the worker crashes, the page loads but clip processing silently stalls. There is no Vercel-side health check or user-visible worker status. Add a `/api/casicut/status` health endpoint before publicizing CasiCut.
+- **PumpFun webhook** (`/api/webhooks/pumpfun`) — present in the codebase but not documented. Understand what events it handles before building on top of it; may be experimental/unused.
 - **Per-IP rate limit only on booking-creation routes.** Sophisticated abuse from a proxy pool bypasses. Add per-`profile_id` rate limit alongside per-IP — one column on `free_flash_rate_limits` table.
 - **SOL as a third bookable rail (post-audit).** Currently CASI prices in USDC only — the Anchor program transfers USDC tokens between SPL accounts and has no native-SOL transfer path on `start_beam` / `settle_beam` / `cancel_escrow`. A streamer wanting to accept native SOL tips would need (a) program changes (~200 LOC + tests for SOL-branched instructions, separate `EscrowState` accounting field), (b) audit re-scope (current Sec3 / OtterSec / Neodyme quotes are sized for ~1.2k LOC USDC-only), (c) cranker rebalance — current cranker holds ~0.05 SOL, can't underwrite SOL escrows. Frozen until post-mainnet. Don't add SOL pricing rows to `BeamCtrlPanel` / Settings / dashboard tiles before the program supports it; UI saying "SOL" while the booking flow ignores it is worse than no SOL at all.
 

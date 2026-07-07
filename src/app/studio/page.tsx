@@ -15,6 +15,7 @@ import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
 import PreviewBookingModal, { type PreviewBooking } from './_components/PreviewBookingModal';
 import StudioWelcome from './_components/StudioWelcome';
 import StudioFrame from './_components/StudioFrame';
+import StreamerPublishCard from './_components/StreamerPublishCard';
 import { fiatSymbol, formatFiat } from '@/lib/currency';
 
 // Explicit column lists. BOOKING_COLS adds the moderation-critical fields the
@@ -326,6 +327,7 @@ function StudioPageInner() {
   const [moderating, setModerating] = useState<Set<string>>(new Set());
   const [endingEarly, setEndingEarly] = useState<Set<string>>(new Set());
   const [playingNowId, setPlayingNowId] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [endStreamOpen, setEndStreamOpen] = useState(false);
   // Stripe Connect default currency for this streamer's account (lowercase
@@ -785,6 +787,42 @@ function StudioPageInner() {
     ]);
   }, [moderationCtx, queuedBookings, activeBookings, playingNowId]);
 
+  const handleStreamerPublish = useCallback(async (
+    elementId: string, imageUrl: string, fileType: 'image' | 'video', durationMinutes: number,
+  ) => {
+    if (!moderationCtx || publishing) return;
+    setPublishing(true);
+    setErrorMsg(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { setErrorMsg('Not signed in'); return; }
+
+      const res = await fetch('/api/bookings/streamer-publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ element_id: elementId, image_url: imageUrl, file_type: fileType, duration_minutes: durationMinutes }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setErrorMsg(data.error ?? 'Publish failed'); return; }
+
+      const booking = data.booking as BookingRow;
+      const current = activeBookings.find((b) => b.element_id === elementId) ?? null;
+      const result = await playNowBooking(moderationCtx, booking, current);
+      if (!result.ok) { setErrorMsg(result.message); return; }
+
+      if (current) {
+        setActiveBookings((prev) => prev.filter((b) => String(b.id) !== String(current.id)));
+      }
+      setActiveBookings((prev) => [
+        ...prev,
+        { ...booking, status: 'active', started_at: new Date().toISOString() } as BookingRow,
+      ]);
+    } finally {
+      setPublishing(false);
+    }
+  }, [moderationCtx, activeBookings, publishing, supabase]);
+
   const handleReject = useCallback(async (queueId: string) => {
     if (!moderationCtx) return;
     setErrorMsg(null);
@@ -983,6 +1021,14 @@ function StudioPageInner() {
         onPreview={setPreviewId}
         pendingIds={moderating}
         emptyLabel="Nothing pending · share your viewer link above to get your first beam"
+      />
+
+      <StreamerPublishCard
+        elements={Object.entries(elementsById).map(([id, el]) => ({
+          id, shape: el.shape, is_background: el.is_background,
+        }))}
+        publishing={publishing}
+        onPublish={handleStreamerPublish}
       />
 
       <FlashesLog
