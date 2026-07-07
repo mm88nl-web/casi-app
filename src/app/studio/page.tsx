@@ -595,7 +595,15 @@ function StudioPageInner() {
       supabase,
       connection,
       profile: { id: state.profile.id, solana_wallet: state.profile.solana_wallet },
-      activeBookings: activeBookings.map((b) => ({ element_id: b.element_id })),
+      activeBookings: activeBookings.map((b) => ({
+        id: b.id,
+        element_id: b.element_id,
+        payment_method: b.payment_method,
+        image_url: b.image_url,
+        escrow_pda: b.escrow_pda,
+        viewer_wallet: b.viewer_wallet,
+        storage_path: b.storage_path,
+      })),
       wallet: signer,
       cluster: WALLET_ADAPTER_CLUSTER,
     };
@@ -788,7 +796,7 @@ function StudioPageInner() {
   }, [moderationCtx, queuedBookings, activeBookings, playingNowId]);
 
   const handleStreamerPublish = useCallback(async (
-    elementId: string, imageUrl: string, fileType: 'image' | 'video', durationMinutes: number,
+    elementId: string, imageUrl: string, fileType: 'image' | 'video', durationMinutes: number, storagePath: string | null,
   ) => {
     if (!moderationCtx || publishing) return;
     setPublishing(true);
@@ -801,7 +809,7 @@ function StudioPageInner() {
       const res = await fetch('/api/bookings/streamer-publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ element_id: elementId, image_url: imageUrl, file_type: fileType, duration_minutes: durationMinutes }),
+        body: JSON.stringify({ element_id: elementId, image_url: imageUrl, file_type: fileType, duration_minutes: durationMinutes, storage_path: storagePath }),
       });
       const data = await res.json();
       if (!res.ok) { setErrorMsg(data.error ?? 'Publish failed'); return; }

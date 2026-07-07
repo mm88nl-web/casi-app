@@ -75,8 +75,15 @@ export type ModerationContext = {
   connection: Connection;
   /** Profile of the streamer logged in on this session. */
   profile: { id: string; solana_wallet: string | null };
-  /** Active bookings for this streamer — used to decide queue vs. direct start. */
-  activeBookings: Array<{ element_id: string | null }>;
+  /**
+   * Active bookings for this streamer — used to decide queue vs. direct
+   * start. Carries the full BookingLike shape (not just element_id) so
+   * approveBooking can tell a self-published occupant (payment_method
+   * 'streamer') from a real viewer booking, and — if it needs to kick a
+   * self-published one to let a viewer take over — has enough fields to
+   * call endBeamEarly on it.
+   */
+  activeBookings: Array<BookingLike>;
   /** Wallet-adapter sign hooks. Null if the user hasn't connected a wallet. */
   wallet: WalletSigner | null;
   cluster: 'devnet' | 'mainnet-beta';
@@ -180,8 +187,16 @@ export async function approveBooking(
   ctx: ModerationContext,
   booking: BookingLike,
 ): Promise<ModerationResult> {
-  const slotOccupied =
-    !!booking.element_id && ctx.activeBookings.some((b) => b.element_id === booking.element_id);
+  const occupant = booking.element_id
+    ? ctx.activeBookings.find((b) => b.element_id === booking.element_id)
+    : undefined;
+  // A slot currently showing the streamer's OWN self-published content
+  // (payment_method 'streamer', see /studio's "Publish my own content")
+  // isn't "occupied" in the sense that should make a real viewer wait —
+  // the whole point of self-publishing is filler the streamer is fine
+  // giving up the moment an actual paying viewer shows up. A slot held by
+  // a normal viewer booking still queues as before.
+  const slotOccupied = !!occupant && occupant.payment_method !== 'streamer';
 
   if (slotOccupied || booking.is_queued) {
     // Queued branch: the beam stays un-started on-chain until the current
@@ -192,6 +207,13 @@ export async function approveBooking(
       .eq('id', booking.id);
     if (error) return { ok: false, message: error.message };
     return { ok: true, optimistic: 'approved_queued' };
+  }
+
+  // If a self-published booking is the current occupant, kick it first —
+  // same as a normal playNow — so the viewer's approval can actually go live.
+  if (occupant && occupant.payment_method === 'streamer') {
+    const kicked = await endBeamEarly(ctx, occupant, { skipAutoAdvance: true });
+    if (!kicked.ok) return kicked;
   }
 
   // Direct branch: beam goes live. For solana we MUST start the on-chain
