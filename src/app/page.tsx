@@ -128,7 +128,6 @@ export default function HomePage() {
         <div className="foot-mid">
           <Link href="/solitaire">solitaire</Link>
           <Link href="/words">word gen</Link>
-          <Link href="/casicut">casiCut</Link>
         </div>
         <div className="foot-right">
           <Link href="/legal/terms">terms</Link>
