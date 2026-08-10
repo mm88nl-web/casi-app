@@ -2,7 +2,7 @@
  * payment-manager.ts
  *
  * Single source of truth for "pay for a flash" across the three rails:
- *   - stripe — redirect to Stripe Checkout (manual-capture PI)
+ *   - stripe — Stripe Embedded Checkout, mounted inline (manual-capture PI)
  *   - solana — on-chain escrow via CasiEscrowClient (devnet-only, feature-flagged)
  *   - free   — no payment, just an insert (subject to server-side rate limit)
  *
@@ -36,8 +36,10 @@ export interface SendFlashInput {
 }
 
 export interface SendFlashResult {
-  /** Stripe rail redirects the browser. */
-  redirectTo?: string;
+  /** Stripe rail — client secret for mounting Stripe Embedded Checkout
+   *  (see EmbeddedCheckoutModal.tsx). Was a full-page redirect URL before
+   *  2026-08-10; see flashes/create/route.ts for why that changed. */
+  stripeClientSecret?: string;
   /** Solana rail returns the on-chain sig + escrow PDA for the success banner. */
   solana?: { sig: string; escrowPda: string; solscanUrl: string };
   /** Free rail returns the newly-created flash id so the UI can subscribe to it. */
@@ -73,9 +75,9 @@ async function sendFlashStripe(input: SendFlashInput): Promise<SendFlashResult> 
       payment_method: 'stripe',
     }),
   });
-  const { checkout_url, flash_id, error } = await res.json();
-  if (error || !checkout_url) throw new Error(error || 'Failed to create Stripe checkout');
-  return { redirectTo: checkout_url, flashId: flash_id };
+  const { client_secret, flash_id, error } = await res.json();
+  if (error || !client_secret) throw new Error(error || 'Failed to create Stripe checkout');
+  return { stripeClientSecret: client_secret, flashId: flash_id };
 }
 
 // ─── Solana ──────────────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
 import { useStoredPhantomConnectSession } from '@/lib/phantom-connect';
 import SkinProvider from '@/components/SkinProvider';
+import EmbeddedCheckoutModal from '@/components/EmbeddedCheckoutModal';
 import { formatSlotPrice } from '@/lib/slot-pricing';
 import WalletPill from '@/components/WalletPill';
 import { refreshWalletNav } from '@/components/WalletNav';
@@ -108,6 +109,11 @@ function OverlayContent() {
   const [txStatus, setTxStatus]         = useState<TxStatus>('idle');
   const [txError, setTxError]           = useState<string|null>(null);
   const [confirmedTxId, setConfirmedTxId] = useState<string|null>(null);
+  // Stripe Embedded Checkout — replaces the old redirect-to-checkout_url
+  // flow. null = modal hidden. bookingId is kept alongside the secret so
+  // onComplete/onClose know which booking they're reacting to without
+  // depending on newBookingId still being in scope.
+  const [stripeCheckout, setStripeCheckout] = useState<{ clientSecret: string; bookingId: string } | null>(null);
 
   // ── Beam media (upload or URL) ────────────────────────────────────────────
   const [uploadMode, setUploadMode]         = useState<'url'|'upload'>('url');
@@ -1077,12 +1083,17 @@ function OverlayContent() {
       body: JSON.stringify({ booking_id: newBookingId }),
     });
     const json = await res.json();
-    if (json.checkout_url) {
+    if (json.client_secret) {
       // cancel_token came from create-stripe above; authorize no longer
       // returns it (echoing it would disclose the capability to any caller
       // that knows the booking id). Kept defensive against older shapes.
       if (json.cancel_token) rememberBookingToken(newBookingId, json.cancel_token);
-      window.location.href = json.checkout_url;
+      // Embedded Checkout modal instead of a full-page redirect — see
+      // EmbeddedCheckoutModal.tsx. setSubmitting(false) here (not left
+      // true) since the "submitting" spinner was for the create+authorize
+      // round trip, which is now done; the modal has its own loading state.
+      setSubmitting(false);
+      setStripeCheckout({ clientSecret: json.client_secret, bookingId: newBookingId });
     } else {
       console.error('Stripe error:', json.error);
       showNotif(json.error || 'Payment failed to initialize', 'error');
@@ -1094,6 +1105,38 @@ function OverlayContent() {
     setSubmitting(false);
   }
 };
+
+  // Embedded Checkout completed successfully. Mirrors what the old
+  // ?payment=success URL-param handler below used to do on redirect return
+  // — that handler is kept as a fallback for the rare case Stripe still
+  // needs to redirect (e.g. an unexpected step some payment method
+  // requires), so don't delete it when reading this.
+  const handleStripeCheckoutComplete = () => {
+    setStripeCheckout(null);
+    showNotif('Payment successful — request sent! 🎉', 'success');
+  };
+
+  // Viewer dismissed the modal without paying. Mirrors the old
+  // ?payment=cancelled handler: mark the booking denied via the same
+  // cancel_token-gated route (not a direct DB write — see that handler's
+  // comment for why), then refresh so the closed slot reflects immediately.
+  const handleStripeCheckoutClose = () => {
+    if (!stripeCheckout || !profile) { setStripeCheckout(null); return; }
+    const { bookingId } = stripeCheckout;
+    setStripeCheckout(null);
+    const cancelToken = readBookingTokens()[bookingId];
+    fetch('/api/stripe/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_id: bookingId, cancel_token: cancelToken }),
+    }).then(() => {
+      forgetBookingToken(bookingId);
+      if (typeof loadData === 'function') {
+        loadData(profile.id, savedViewerName ?? undefined);
+      }
+    });
+    showNotif('Payment cancelled', 'warning');
+  };
 
   // ── Solana / CASI escrow booking ────────────────────────────────────────────
   const submitSolanaBooking = async () => {
@@ -3037,6 +3080,15 @@ function OverlayContent() {
       </div>
 
       <BrowseStreamersModal open={showBrowseModal} onClose={() => setShowBrowseModal(false)} />
+
+      {/* Stripe Embedded Checkout — booking payment */}
+      {stripeCheckout && (
+        <EmbeddedCheckoutModal
+          clientSecret={stripeCheckout.clientSecret}
+          onComplete={handleStripeCheckoutComplete}
+          onClose={handleStripeCheckoutClose}
+        />
+      )}
 
       {/* Solana confirmation modal */}
       {showConfirmModal && selectedSlot && (

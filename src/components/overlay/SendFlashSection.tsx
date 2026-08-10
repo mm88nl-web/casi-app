@@ -19,6 +19,7 @@ import { sendFlash, SOLANA_ENABLED, type PaymentMethod } from '@/lib/payment-man
 import { useStoredPhantomConnectSession } from '@/lib/phantom-connect';
 import { EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 import { TurnstileWidget } from '@/components/TurnstileWidget';
+import EmbeddedCheckoutModal from '@/components/EmbeddedCheckoutModal';
 import StripeIcon from '@/components/icons/StripeIcon';
 import UsdcIcon from '@/components/icons/UsdcIcon';
 import { fiatSymbol, formatFiat } from '@/lib/currency';
@@ -82,6 +83,9 @@ export default function SendFlashSection({
   const [onChainStatus, setOnChainStatus] = useState<null | 'locking' | 'locked'>(null);
   const [onChainTx, setOnChainTx] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  // Stripe Embedded Checkout — replaces the old redirect-to-checkout_url
+  // flow (see EmbeddedCheckoutModal.tsx). null = modal hidden.
+  const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
   const onTurnstileVerify = useCallback((t: string) => setTurnstileToken(t), []);
   const onTurnstileExpire = useCallback(() => setTurnstileToken(null), []);
   const supabase = useRef(createClient()).current;
@@ -178,9 +182,9 @@ export default function SendFlashSection({
         turnstileToken: turnstileToken ?? undefined,
       });
 
-      if (result.redirectTo) {
-        window.location.href = result.redirectTo;
-        return; // Don't clear submitting — page is navigating
+      if (result.stripeClientSecret) {
+        setStripeClientSecret(result.stripeClientSecret);
+        return;
       }
       if (result.solana) {
         setOnChainTx(result.solana.sig);
@@ -191,11 +195,11 @@ export default function SendFlashSection({
         showNotif('⚡ Free flash sent — awaiting approval', 'success');
         setMessage('');
       }
-      // Collapse the composer after a successful non-redirecting send so
-      // the feed (in embedded mode) or summary card (standalone) is
-      // visible again. Stripe-redirect path exits early via window.location
-      // above and is handled by the composer starting collapsed on the
-      // returning page.
+      // Collapse the composer after a successful non-modal send so the feed
+      // (in embedded mode) or summary card (standalone) is visible again.
+      // The Stripe path exits early above once the checkout modal opens —
+      // handleStripeCheckoutComplete below collapses the composer once that
+      // payment actually completes.
       setOpen(false);
       onSent?.();
     } catch (err: unknown) {
@@ -205,6 +209,26 @@ export default function SendFlashSection({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Embedded Checkout completed — the flash's own realtime subscription
+  // above will surface the approve/deny outcome later; this just closes the
+  // modal and gives immediate feedback that the payment itself went through.
+  const handleStripeCheckoutComplete = () => {
+    setStripeClientSecret(null);
+    showNotif('⚡ Flash sent — awaiting streamer approval!', 'success');
+    setMessage('');
+    setOpen(false);
+    onSent?.();
+  };
+
+  // Viewer dismissed the modal without paying. No explicit cancel call
+  // needed here (unlike bookings) — an abandoned pending Stripe flash is
+  // already swept by the stripe-janitor cron's existing "Abandoned Stripe
+  // flashes" pass, same as if the viewer had closed a redirect-based
+  // checkout tab under the old flow.
+  const handleStripeCheckoutClose = () => {
+    setStripeClientSecret(null);
   };
 
   // Available methods in the order they render.
@@ -455,7 +479,7 @@ export default function SendFlashSection({
               ? (submitting ? (onChainStatus === 'locking' ? 'Locking on-chain…' : 'Submitting…') : `${(amountCents / 100).toFixed(2)} USDC Flash`)
               : paymentMethod === 'free'
                 ? (submitting ? 'Sending…' : 'Send Free Flash')
-                : (submitting ? 'Redirecting…' : `${formatFiat(profile.settlement_currency, amountCents / 100)} Flash`)}
+                : (submitting ? 'Preparing…' : `${formatFiat(profile.settlement_currency, amountCents / 100)} Flash`)}
           </button>
 
           <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#2a2a2a', textAlign: 'center', marginTop: 10, lineHeight: 1.9 }}>
@@ -469,6 +493,14 @@ export default function SendFlashSection({
             )}
           </div>
         </div>
+      )}
+
+      {stripeClientSecret && (
+        <EmbeddedCheckoutModal
+          clientSecret={stripeClientSecret}
+          onComplete={handleStripeCheckoutComplete}
+          onClose={handleStripeCheckoutClose}
+        />
       )}
     </div>
   );

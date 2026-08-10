@@ -253,9 +253,23 @@ export async function POST(req: Request) {
 
   // Direct Charge on the streamer's connected account, zero platform fee.
   // SaaS tier is the revenue source — see stripe/authorize/route.ts.
+  //
+  // payment_method_types: ['card'] added 2026-08-10 alongside the embedded-
+  // checkout conversion below — authorize.ts and approve-queue.ts both
+  // already document this as required for capture_method: 'manual' (without
+  // it Stripe defaults to automatic_payment_methods, which throws a 400 with
+  // manual capture); this route was missing it.
+  //
+  // ui_mode: 'embedded_page' + redirect_on_completion: 'if_required': same
+  // rationale as stripe/authorize/route.ts — keeps the flash payment inline
+  // on casi.gg instead of a full-page redirect to an unfamiliar domain
+  // showing the streamer's raw Stripe branding.
   const session = await stripe.checkout.sessions.create(
     {
       mode: 'payment',
+      ui_mode: 'embedded_page',
+      redirect_on_completion: 'if_required',
+      payment_method_types: ['card'],
       payment_intent_data: {
         capture_method: 'manual',
       },
@@ -272,12 +286,11 @@ export async function POST(req: Request) {
           quantity: 1,
         },
       ],
-      success_url: `${appUrl}/overlay?s=${profile.username}&flash_success=1&flash_id=${flash.id}`,
-      cancel_url:  `${appUrl}/overlay?s=${profile.username}&flash_cancelled=1&flash_id=${flash.id}`,
+      return_url: `${appUrl}/overlay?s=${profile.username}&flash_success=1&flash_id=${flash.id}`,
       metadata: { flash_id: flash.id },
     },
     { stripeAccount: profile.stripe_account_id },
   );
 
-  return NextResponse.json({ checkout_url: session.url, flash_id: flash.id });
+  return NextResponse.json({ client_secret: session.client_secret, flash_id: flash.id });
 }

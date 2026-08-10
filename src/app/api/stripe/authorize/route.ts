@@ -94,11 +94,29 @@ export async function POST(req: Request) {
   // support manual capture and throws a 400 ("The Checkout Session's
   // payment_intent_data.capture_method may only be manual when
   // payment_method_types is also set").
+  //
+  // ui_mode: 'embedded_page' (added 2026-08-10) mounts Checkout inline on
+  // casi.gg instead of a full-page redirect to a Stripe-hosted domain. For
+  // Direct Charges, Stripe's own hosted Checkout page shows the CONNECTED
+  // account's branding, not the platform's — for a viewer who's never heard
+  // of that specific streamer's Stripe-registered business name, landing on
+  // an unfamiliar domain showing an unfamiliar name reads as a scam page.
+  // Embedded mode can't change whose branding the form shows, but it removes
+  // the domain jump, which is the actual "am I being scammed" trigger.
+  // redirect_on_completion: 'if_required' keeps a successful card payment
+  // fully embedded (no post-payment redirect either) — card is the only
+  // payment_method_type enabled here, and card payments don't require an
+  // off-site redirect step (3D Secure, if triggered, renders inline).
+  // return_url is still required by the API even though the card-only,
+  // if_required combination should make it unreachable in the common case;
+  // it's the fallback if Stripe ever does need to redirect.
   let session: Awaited<ReturnType<typeof stripe.checkout.sessions.create>>;
   try {
     session = await stripe.checkout.sessions.create(
       {
         mode: 'payment',
+        ui_mode: 'embedded_page',
+        redirect_on_completion: 'if_required',
         payment_method_types: ['card'],
         payment_intent_data: {
           capture_method: 'manual',
@@ -116,8 +134,7 @@ export async function POST(req: Request) {
             quantity: 1,
           },
         ],
-        success_url: `${appUrl}/overlay?s=${profile.username}&payment=success&booking_id=${booking_id}`,
-        cancel_url: `${appUrl}/overlay?s=${profile.username}&payment=cancelled&booking_id=${booking_id}`,
+        return_url: `${appUrl}/overlay?s=${profile.username}&payment=success&booking_id=${booking_id}`,
         metadata: { booking_id },
       },
       { stripeAccount: profile.stripe_account_id },
@@ -144,5 +161,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to persist booking amount' }, { status: 500 });
   }
 
-  return NextResponse.json({ checkout_url: session.url });
+  return NextResponse.json({ client_secret: session.client_secret });
 }
