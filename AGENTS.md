@@ -67,17 +67,21 @@ CASI lets livestream viewers pay to put their image / video / message **on strea
 
 ```
 src/app/
-  admin/              legacy streamer dashboard (auth-gated)
-    page.tsx          main file — kept <2k lines by design
-    _components/      private components (underscore = Next.js ignores for routing)
-    settings/         settings home — payouts, session key, accent picker, etc.
-      _components/    one component per section (incl. AppearanceSection.tsx)
-  studio/             v7 streamer cockpit — split into two pages (Phase 4):
+  admin/              LEGACY REDIRECT ONLY (corrected 2026-08-10 — this used
+                      to be the kitchen-sink dashboard; the migration to
+                      /studio is now complete). page.tsx and settings/page.tsx
+                      are each ~17-line client components that just
+                      router.replace() to the /studio equivalent, kept so old
+                      bookmarks/external links don't 404. No _components/, no
+                      real logic — don't go looking for it here.
+  studio/             v7 streamer cockpit — the canonical dashboard now, split
+                      into two pages (Phase 4):
     page.tsx          /studio = dashboard (stats, share section, live status)
     live/page.tsx     /studio/live = canvas editor (slots / pricing / approvals)
-    settings/         v7 settings home (mirrors /admin/settings; canonical home)
+    settings/         settings home — payouts, session key, accent picker, etc.
     setup/            initial-setup flow for fresh streamer accounts
-    _components/      shared studio chrome
+    _components/      shared studio chrome (incl. DelegateKeyCard.tsx — see
+                      Phase 3 section below)
   overlay/            OBS browser-source target (renders active beams)
   s/[username]/       shareable streamer landing page — bio + live indicator +
                       flashes feed + hero CTA to /overlay (NOT a booking surface)
@@ -226,17 +230,17 @@ The v9 design system replaces v7's 7-skin variable bag with a **two-color contra
 - Don't reintroduce `--casi-accent2`. v9 is two-color only; the legacy purple is preserved as a static alias for any code that still reads it, but new code should compose with `--ink` only.
 - Don't mount the dev tools (`DevScreenSwitcher` / `DevTweaksPanel`) anywhere outside `layout.tsx` — they auto-gate on `NODE_ENV` and would render twice.
 
-## Admin / Studio conventions
+## Studio conventions
 
-- `src/app/admin/page.tsx` is the legacy kitchen sink — canvas, requests queue, modals, toasts. Kept together because state flows top-down and splitting the state shards makes things worse. Every self-contained UI chunk is extracted into `_components/`.
-- **`/studio` is the v7 streamer cockpit, split into two pages** (Phase 4):
+**`/admin` is a legacy redirect only** (corrected 2026-08-10 — AGENTS.md previously described it as the live kitchen-sink dashboard; that migration finished and this section was stale). `admin/page.tsx` and `admin/settings/page.tsx` are ~17-line client components that `router.replace()` to `/studio` / `/studio/settings` so old bookmarks and external links don't 404. There is no `admin/_components/`, no local moderation handlers, nothing else to find there.
+
+- **`/studio` is the v7 streamer cockpit and the canonical dashboard**, split into two pages (Phase 4):
   - `src/app/studio/page.tsx` is the **dashboard** — stats, share section, live status, no canvas editing.
   - `src/app/studio/live/page.tsx` is the **canvas editor** — slot positioning, pricing, approvals queue, the actual moderation surface.
   - Both call the same moderation lib (see below); they differ only in layout and which surfaces they expose.
-- **Both pages share moderation handlers via `src/lib/streamer-moderation.ts`.** The lib is the single source of truth for `approveBooking`, `denyBooking`, `endBeamEarly`, `moderateFlash`, `playNowBooking`, `endStreamCleanly`, plus the escrow primitives `startSolanaBeamOnChain` and `settleOrClearSolanaEscrow`. Admin's local handlers are thin adapters that pipe React state (toasts, optimistic updates) around lib calls — don't add new business logic to them, edit the lib instead.
+- **Moderation goes through `src/lib/streamer-moderation.ts`.** The lib is the single source of truth for `approveBooking`, `denyBooking`, `endBeamEarly`, `moderateFlash`, `playNowBooking`, `endStreamCleanly`, plus the escrow primitives `startSolanaBeamOnChain` and `settleOrClearSolanaEscrow`. `studio/page.tsx` calls these directly (e.g. `await approveBooking(moderationCtx, booking)`) wrapped in local async functions that handle toasts/optimistic state — don't add new business logic to those wrappers, edit the lib instead.
 - When adding a new card or panel, follow the existing split pattern: one component per file, props-driven, variant prop (e.g. `kind: 'beam' | 'backdrop'`) to share a component across similar but differently-themed surfaces.
-- Admin's four core handlers (`playNow`, `kickBeam`, `approveBooking`, `denyBooking`) close over supabase + profile + state and get passed into card components as callbacks. Don't duplicate them into children.
-- `kickBeam` (admin) and `endBeamEarly` (lib) both accept an `opts.skipAutoAdvance` flag. Play-Now and End-Stream callers set it true — they pick which booking gets promoted (or none, in End-Stream's case), so letting the auto-advance branch promote the queue's first entry would leave two `active` rows on the same slot.
+- `endBeamEarly` (the lib function studio calls for both kick-and-advance and end-stream) accepts an `opts.skipAutoAdvance` flag. Play-Now and End-Stream callers set it true — they pick which booking gets promoted (or none, in End-Stream's case), so letting the auto-advance branch promote the queue's first entry would leave two `active` rows on the same slot.
 - `endStreamCleanly(ctx, { actives, pendingBookings, pendingFlashes, queuedBookings, profileId }, { onProgress })` runs sequential shutdown: `endBeamEarly({ skipAutoAdvance: true })` per active → `denyBooking` per pending → `moderateFlash('deny')` per flash → `denyBooking` per queued → flip `is_live=false`. Sequential not parallel (wallet popups must come up one at a time when delegate isn't installed); failures collected (`EndStreamFailure[]`), don't halt the loop. Delegate-first via the existing primitives — zero popups when the session key is healthy. `/studio/live` bounces to `/studio?end=true` so the dashboard (which has the data loaded) owns the dialog.
 - `playNowBooking(ctx, queuedBooking, currentActive)` is the lib mirror of admin's `playNow`. Kicks the current beam (if any) with `skipAutoAdvance: true`, runs `start_beam` on the chosen booking (Solana rail), flips DB to `active`, and overwrites `overlay_elements.image_url`. Other queued rows untouched.
 
@@ -289,7 +293,7 @@ Phase 3 added a scoped delegation layer to the escrow program so the streamer do
 - Loader returns `null` on missing/malformed env — never throws. Callers branch on null and either fall back or 503.
 - **Daily balance monitor**: `/api/cron/cranker-monitor` (04:00 UTC) probes the cranker's SOL via `Connection.getBalance` and emits structured logs at two thresholds — `logWarn` at 0.005 SOL (~500 ops left), `logError` at 0.001 SOL (one fresh-ATA settle could break the next op). `ERROR_WEBHOOK_URL` fans the critical case out to Slack/Discord. Read-only; never moves funds.
 
-**Where the install UI lives**: `DelegateKeyCard.tsx` (in `src/app/admin/_components/`) is the reusable card. It's mounted inside `src/app/admin/settings/_components/SessionKeySection.tsx`, which provides the `onInstalled` callback that signs `set_delegate` from the streamer wallet. The legacy `/admin` route's `ProfileEditCard` also references it but the new settings page is the canonical home.
+**Where the install UI lives**: `DelegateKeyCard.tsx` (in `src/app/studio/_components/`, corrected 2026-08-10 — moved here when `/admin` was reduced to a redirect) is the reusable card. It's mounted inside `src/components/settings/SessionKeySection.tsx`, which provides the `onInstalled` callback that signs `set_delegate` from the streamer wallet.
 
 **Install UX contract** (see `DelegateKeyCard.tsx` state machine):
 
@@ -414,19 +418,19 @@ Streamers cannot cancel a `Pending` escrow from their side. That's a program-lev
 - `npm run dev` — local dev server
 - `npm run build` — production build (requires env vars; will fail in a bare sandbox, that's expected)
 - `npx tsc --noEmit` — type check only
-- `npm test` — 35 unit assertions, ~13ms
+- `npm test` — unit assertions via ts-mocha (100+ and growing — don't trust a hardcoded count here, run it)
 - `npm run lint` — ESLint
 
 ## When in doubt
 
 - **Don't add a protocol fee on either rail.** 100% of every booking flows direct viewer→streamer. CASI's positioning depends on this (regulatory posture: software, not payments) and the grant story depends on it. If you think you need a take rate, you don't — talk to the founder first.
 - **Don't broaden RLS or add table-level GRANTs.** Go column-level.
-- **Don't touch `admin/page.tsx` without extracting the piece you added to `_components/`** if it's more than ~30 lines of JSX.
-- **Don't put new moderation logic in `admin/page.tsx`.** The four core handlers live in `src/lib/streamer-moderation.ts` so /admin and /studio share one implementation. Admin's local handlers are thin adapters that translate `ModerationResult` to toasts + optimistic state. New logic goes in the lib.
+- **`admin/page.tsx` is a redirect stub, not a real surface** — don't add anything to it. The dashboard is `studio/page.tsx` now; follow the existing `_components/` extraction pattern there if a new piece is more than ~30 lines of JSX.
+- **Don't put new moderation logic in `studio/page.tsx`.** The handlers live in `src/lib/streamer-moderation.ts` as the single implementation; `studio/page.tsx`'s local wrappers only translate `ModerationResult` to toasts + optimistic state. New logic goes in the lib.
 - **Don't hardcode brand colors.** Use `var(--accent)` / `var(--accent2)` tokens; per-streamer overrides come from `profiles.theme_color` via the SkinProvider.
 - **Don't add an OAuth provider in code without enabling it in the Supabase Dashboard** (Authentication → Providers + client id/secret). The button will throw on click.
 - **Don't add every-minute cron on Hobby.** Deploy will fail.
-- **Don't call `select('*')` on bookings.** Use the explicit column list already in `admin/page.tsx` / `overlay/page.tsx`.
+- **Don't call `select('*')` on bookings.** Use the explicit `BOOKING_COLS`/`FLASH_COLS` constants already in `studio/page.tsx`, or the equivalent explicit list in `overlay/page.tsx`.
 - **Don't auto-promote Solana queue on expire.** Escrow program isn't wired for it.
 - **Don't flip a Solana booking's DB status without reconciling the chain first.** DB status ≠ escrow status; acting on the DB alone leaves funds stuck or over-vested to the streamer. Use `settleOrClearSolanaEscrow` or equivalent probe-first logic.
 - **Don't build a second booking surface.** `/overlay` is the canonical Stripe + Solana booking flow; `/s/[username]` is a marketing landing page that funnels into it. If you need richer in-page booking on /s/[username], wire it through `/api/stripe/authorize` + `CasiEscrowClient` — never a parallel implementation.
@@ -450,7 +454,6 @@ Fable 5 (`claude-fable-5`) is the creative model available for CASI tasks. The f
 - **No custom SMTP wired in code.** Verification + password-reset emails go through Supabase's default sender, which has terrible deliverability. Configure Resend/Postmark + SPF/DKIM/DMARC on `casi.gg` in the Supabase Dashboard before mainnet.
 - **No onboarding email drip.** Streamer signs up → verification email → silence. Activation is going to suffer post-mainnet without at minimum a Day-0 welcome + Day-2 "set up your slot canvas" + Day-7 "first earnings" sequence (Loops / Customer.io / Resend). Fable writes the copy once SMTP is wired.
 - **Landing demo loop shipped** (`public/casi-demo.mp4`, autoplay/muted/loop in the hero). Remaining marketing gaps: onboarding email drip (above) and a competitor/comparison page ("Streamlabs Media Share alternative").
-- **`/join` is a zombie route.** It creates a bare `profiles` row without username selection — produces orphan accounts. Should redirect to `/login` or be deleted. Not linked anywhere in production but still accessible by URL.
 - **PumpFun webhook** (`/api/webhooks/pumpfun`) — present in the codebase but not documented. Understand what events it handles before building on top of it; may be experimental/unused.
 - **Per-IP rate limit only on booking-creation routes.** Sophisticated abuse from a proxy pool bypasses. Add per-`profile_id` rate limit alongside per-IP — one column on `free_flash_rate_limits` table.
 - **SOL as a third bookable rail (post-audit).** Currently CASI prices in USDC only — the Anchor program transfers USDC tokens between SPL accounts and has no native-SOL transfer path on `start_beam` / `settle_beam` / `cancel_escrow`. A streamer wanting to accept native SOL tips would need (a) program changes (~200 LOC + tests for SOL-branched instructions, separate `EscrowState` accounting field), (b) audit re-scope (current Sec3 / OtterSec / Neodyme quotes are sized for ~1.2k LOC USDC-only), (c) cranker rebalance — current cranker holds ~0.05 SOL, can't underwrite SOL escrows. Frozen until post-mainnet. Don't add SOL pricing rows to `BeamCtrlPanel` / Settings / dashboard tiles before the program supports it; UI saying "SOL" while the booking flow ignores it is worse than no SOL at all.
