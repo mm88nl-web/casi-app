@@ -119,6 +119,9 @@ export default function FlashPanel({
 
   useEffect(() => {
     if (!profileId) return;
+    // Data fetch + realtime subscription on mount/profileId change — the
+    // textbook case for an effect, not derivable state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     const channel = supabase
       .channel(`flashes_panel_${profileId}`)

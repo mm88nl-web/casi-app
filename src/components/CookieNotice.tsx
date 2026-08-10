@@ -12,6 +12,9 @@ export function CookieNotice() {
 
   useEffect(() => {
     try {
+      // localStorage only exists client-side; this has to be an effect (not
+      // a lazy useState initializer) to avoid an SSR/hydration mismatch.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (!localStorage.getItem(DISMISS_KEY)) setVisible(true);
     } catch {
       // localStorage blocked (private mode / iframe). Don't show — we

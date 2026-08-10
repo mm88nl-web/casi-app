@@ -20,10 +20,6 @@ type Profile = {
   is_live: boolean;
 };
 
-function fmtViewers(n: number) {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-}
-
 export default function SearchPage() {
   const supabase = createClient();
   const [profiles, setProfiles] = useState<Profile[] | null>(null);

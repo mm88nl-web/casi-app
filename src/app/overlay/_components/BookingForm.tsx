@@ -64,7 +64,6 @@ type Props = {
   onMessageChange: (m: string) => void;
 
   // Cost / wallet
-  estimatedCost: string;
   /** Streamer's Stripe Connect settlement currency (lowercase ISO-4217).
    *  Drives the fiat symbol on the estimated-cost footer. null means
    *  Stripe isn't connected — the footer falls back to '$'. */
@@ -111,7 +110,7 @@ export default function BookingForm(props: Props) {
     imageUrl, imageValid, onImageUrlChange, onImageValidChange, getUrlFileType,
     durationSeconds, onDurationChange,
     message, onMessageChange,
-    estimatedCost, streamerCurrency, walletConnected, usdcBalance,
+    streamerCurrency, walletConnected, usdcBalance,
     activeBookings, approvedQueuedBookings,
     turnstileToken, onTurnstileVerify, onTurnstileExpire,
     customizeOpen, onCustomizeToggle,

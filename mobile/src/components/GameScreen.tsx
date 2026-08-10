@@ -9,7 +9,6 @@ import { BottomBar } from './BottomBar';
 import { WinOverlay } from './WinOverlay';
 import { COLORS } from '../constants/theme';
 import {
-  CARD_W,
   COL_GAP,
   H_PAD,
   TOP_ROW_MARGIN,

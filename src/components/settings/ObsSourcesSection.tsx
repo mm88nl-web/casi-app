@@ -33,6 +33,9 @@ export default function ObsSourcesSection({ username }: Props) {
   // hydration mismatch, then the effect fills it in.
   const [origin, setOrigin] = useState('');
   useEffect(() => {
+    // window.location only exists client-side; must run post-mount to avoid
+    // an SSR/hydration mismatch (see comment above).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (typeof window !== 'undefined') setOrigin(window.location.origin);
   }, []);
 

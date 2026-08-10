@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import SlotMedia from '@/components/SlotMedia';
@@ -19,7 +19,7 @@ function OBSContent() {
   // match the streamer's brand instead of the default purple.
   const [accentRgb, setAccentRgb] = useState('13, 207, 176'); // casi teal fallback
   const [accentHex, setAccentHex] = useState('#0DCFB0');
-  const supabase = useRef(createClient()).current;
+  const [supabase] = useState(() => createClient());
 
   useEffect(() => {
     const load = async () => {

@@ -10,27 +10,23 @@ import SkinProvider from '@/components/SkinProvider';
 import { formatSlotPrice } from '@/lib/slot-pricing';
 import WalletPill from '@/components/WalletPill';
 import { refreshWalletNav } from '@/components/WalletNav';
-import SlotMedia from '@/components/SlotMedia';
 import { useWalletBalances } from '@/lib/wallet-balances';
 import { BANNER_MAX_MESSAGE } from '@/lib/banner';
 import FlashPanel from '@/components/FlashPanel';
-import TurnstileWidget from '@/components/TurnstileWidget';
 import {
   SOLANA_RPC,
   USDC_MINT,
-  EXPLORER_CLUSTER_QUERY,
   IS_MAINNET,
   WALLET_ADAPTER_CLUSTER,
 } from '@/lib/solana-network';
 import { CasiMark, Wordmark } from '@/components/v9';
 import Countdown from './_components/Countdown';
-import { getSecondsRemaining, formatTime } from './_components/time';
+import { getSecondsRemaining } from './_components/time';
 import {
   VIEWER_NAME_KEY,
   readBookingTokens,
   rememberBookingToken,
   forgetBookingToken,
-  generateRandomName,
 } from './_components/viewerStorage';
 import NameEntryScreen from './_components/NameEntryScreen';
 import SolanaConfirmModal, { type TxStatus } from './_components/SolanaConfirmModal';
@@ -206,6 +202,11 @@ function OverlayContent() {
       (uploadMode === 'upload' && !!uploadedUrl) ||
       (uploadMode === 'url' && imageValid && !!imageUrl);
     if (hasMedia && !customizeOpen) setCustomizeOpen(true);
+    // customizeOpen is read intentionally without being a dependency: this
+    // effect should only fire when the media itself becomes ready, not every
+    // time the panel's open state changes (which would fight a viewer who
+    // manually closes it while media is still present).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadedUrl, imageValid, imageUrl, uploadMode, selectedSlot]);
 
   // Phantom Connect return handler. When the page loads with our
@@ -721,7 +722,7 @@ function OverlayContent() {
     };
     init();
     return () => { if (cleanup) cleanup(); };
-  }, [username, supabase, loadData]);
+  }, [username, supabase, loadData, isOBS]);
 
   const prevMyBookingsRef = useRef<any[]>([]);
   // Booking IDs that flipped to denied within the last minute. Used to keep
@@ -814,7 +815,7 @@ function OverlayContent() {
       const clean = `${window.location.pathname}?s=${profile.username}`;
       window.history.replaceState({}, '', clean);
     }
-  }, [profile]);
+  }, [profile, loadData, savedViewerName]);
 
   const getActiveBookingForSlot = (id: string) => activeBookings.find((b:any) => b.element_id===id)||null;
   const getMyBookingForSlot     = (id: string) => myBookings.find((b:any) => b.element_id===id && b.status!=='denied')||null;
@@ -2969,7 +2970,6 @@ function OverlayContent() {
                 onDurationChange={setDurationSecsClamped}
                 message={message}
                 onMessageChange={setMessage}
-                estimatedCost={estimatedCost}
                 streamerCurrency={profile?.settlement_currency ?? null}
                 walletConnected={connected || hasPhantomConnectSession}
                 usdcBalance={usdcBalance}

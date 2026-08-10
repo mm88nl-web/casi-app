@@ -50,7 +50,7 @@ type Props = {
   onAddHandler?: (handler: () => void) => void;
 };
 
-export default function StudioLiveEditor({ supabase, profileId, username, stripeCurrency, onAddHandler }: Props) {
+export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, onAddHandler }: Props) {
   const [elements, setElements] = useState<any[]>([]);
   // Map element_id → booking state: 'active' means a beam is currently
   // playing (glow + "Live" pill), 'queued' means approved and waiting.

@@ -17,7 +17,7 @@
 // are correctly excluded. Redeeming / refund lands USDC back in the ATA and
 // the WS callback fires immediately → UI reflects the new spendable number.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { getAssociatedTokenAddressSync } from '@solana/spl-token';
@@ -32,11 +32,14 @@ let currentState:   WalletBalances    = { sol: null, usdc: null };
 let solSubId:       number | null     = null;
 let usdcSubId:      number | null     = null;
 let pollInterval:   ReturnType<typeof setInterval> | null = null;
-const listeners = new Set<(s: WalletBalances) => void>();
+// No-arg notify callbacks (useSyncExternalStore's `subscribe` contract) —
+// each subscriber re-reads currentState itself via getSnapshot rather than
+// being handed the value directly.
+const listeners = new Set<() => void>();
 
 function publish(next: WalletBalances) {
   currentState = next;
-  listeners.forEach(l => l(currentState));
+  listeners.forEach(l => l());
 }
 
 async function fetchBalances() {
@@ -143,7 +146,6 @@ export function useWalletBalances(): WalletBalances {
   const sessionPubkey = pcSession ? new PublicKey(pcSession.walletPublicKey) : null;
   const effectivePublicKey = publicKey ?? sessionPubkey;
   const isConnected = connected || !!pcSession;
-  const [state, setState] = useState<WalletBalances>(currentState);
 
   // (Re)wire the store only when the connected wallet / connection changes.
   useEffect(() => {
@@ -163,13 +165,18 @@ export function useWalletBalances(): WalletBalances {
     setup(connection, effectivePublicKey);
   }, [connection, isConnected, effectivePublicKey]);
 
-  // Register this component's setter with the store.
-  useEffect(() => {
-    listeners.add(setState);
-    // Seed with the latest snapshot (another mount may already have data).
-    setState(currentState);
-    return () => { listeners.delete(setState); };
-  }, []);
-
-  return state;
+  // Subscribe to the shared store. useSyncExternalStore (rather than a
+  // useState + a second effect that adds this component's setter as a
+  // listener) is the primitive React ships specifically for "read a
+  // mutable value that lives outside React and re-render when it changes" —
+  // it also supplies a stable getServerSnapshot so this never mismatches
+  // during SSR/hydration.
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      listeners.add(onStoreChange);
+      return () => { listeners.delete(onStoreChange); };
+    },
+    () => currentState,
+    () => ({ sol: null, usdc: null }),
+  );
 }

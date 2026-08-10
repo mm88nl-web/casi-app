@@ -89,9 +89,14 @@ export default function TurnstileWidget({
   const onExpireRef   = useRef(onExpire);
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
-  // Keep refs current without destabilising the useEffect below.
-  onVerifyRef.current = onVerify;
-  onExpireRef.current = onExpire;
+  // Keep refs current without destabilising the useEffect below. Synced in
+  // its own effect (not assigned directly in the render body) — Turnstile's
+  // callbacks only ever fire after render + commit + effects have run, so
+  // this is just as fresh while keeping ref writes out of render.
+  useEffect(() => {
+    onVerifyRef.current = onVerify;
+    onExpireRef.current = onExpire;
+  });
 
   useEffect(() => {
     if (!siteKey) {
@@ -139,7 +144,6 @@ export default function TurnstileWidget({
     };
   // Only re-render the widget when truly structural props change.
   // Callbacks are stable via refs above.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteKey, theme, compact]);
 
   if (!siteKey) return null;

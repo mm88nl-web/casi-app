@@ -22,6 +22,9 @@ export default function DevBanner() {
 
   useEffect(() => {
     try {
+      // localStorage only exists client-side; deferring to an effect avoids
+      // an SSR/hydration mismatch (state starts "dismissed" until hydrated).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDismissed(window.localStorage.getItem(DISMISS_KEY) === '1');
     } catch {
       setDismissed(false);

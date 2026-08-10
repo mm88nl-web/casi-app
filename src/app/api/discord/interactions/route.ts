@@ -11,7 +11,10 @@
  *
  * Required env vars:
  *   DISCORD_PUBLIC_KEY   — from the Developer Portal "Public Key" field
- *   DISCORD_BOT_TOKEN    — bot token (used to update messages after action)
+ *
+ * The original message is updated in place via the interaction response
+ * itself (type: 7 / UPDATE_MESSAGE below), not a separate bot-token-
+ * authenticated PATCH — no DISCORD_BOT_TOKEN needed.
  *
  * Button custom_id format: "{verb}_{kind}:{entity_id}"
  *   e.g. "approve_booking:42"  "deny_flash:uuid"
@@ -42,7 +45,6 @@ const supabase = createClient(
 );
 
 const DISCORD_PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY ?? '';
-const BOT_TOKEN          = process.env.DISCORD_BOT_TOKEN  ?? '';
 const ALLOWED_GUILD      = '1502624105634074644';
 const APP_URL            = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.casi.gg';
 

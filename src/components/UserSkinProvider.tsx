@@ -96,6 +96,9 @@ export function UserSkinProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const storedSkin = window.localStorage.getItem(STORAGE_KEY);
+    // localStorage only exists client-side; this whole block has to run in
+    // an effect to avoid an SSR/hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (storedSkin) setSkinIdState(storedSkin);
     const storedInk = window.localStorage.getItem(INK_KEY)
       ?? window.localStorage.getItem(LEGACY_INK_KEY);

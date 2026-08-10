@@ -29,7 +29,7 @@ export default function FlashFeed({
   streamerCurrency?: string | null;
 }) {
   const [items, setItems] = useState<FlashItem[]>([]);
-  const supabase = useRef(createClient()).current;
+  const [supabase] = useState(() => createClient());
   // Commit-timestamp dedup so reconnect replays can't re-pop a flash
   // that has already aged out of the feed.
   const lastEventTsRef = useRef<Map<string, string>>(new Map());

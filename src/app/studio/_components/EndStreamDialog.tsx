@@ -38,9 +38,16 @@ type Props = {
 export default function EndStreamDialog({ open, onClose, counts, delegate, progress, onConfirm }: Props) {
   const [confirming, setConfirming] = useState(false);
 
-  useEffect(() => {
+  // Reset `confirming` when the dialog closes. Adjusted during render (React's
+  // documented pattern for "reset state when a prop changes") rather than in
+  // an effect — setState here bails out the in-progress render and re-runs
+  // immediately, so the stale `confirming` value is never painted; an effect
+  // would let one extra frame render with the old value first.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (!open) setConfirming(false);
-  }, [open]);
+  }
 
   // ESC closes when not actively running.
   useEffect(() => {

@@ -16,6 +16,9 @@ export default function StudioWelcome({ profileId }: Props) {
     if (typeof window === 'undefined') return;
     try {
       const dismissed = window.localStorage.getItem(`${STORAGE_KEY}:${profileId}`);
+      // localStorage only exists client-side; this has to be an effect to
+      // avoid an SSR/hydration mismatch.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (!dismissed) setVisible(true);
     } catch {
       // localStorage unavailable — skip welcome silently

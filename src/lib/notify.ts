@@ -96,7 +96,6 @@ async function postViaBot(channelId: string, payload: unknown): Promise<void> {
 function buildComponents(
   kind: 'booking' | 'flash',
   entityId: string | number,
-  paymentMethod: string | null | undefined,
 ): object[] {
   const id = String(entityId);
 
@@ -154,7 +153,7 @@ export async function notifyFlash(input: FlashNotifyInput): Promise<void> {
 
   // Use bot if possible (supports approve/deny buttons for free + Stripe flashes).
   if (channelId && input.flash_id) {
-    const components = buildComponents('flash', input.flash_id, input.payment_method);
+    const components = buildComponents('flash', input.flash_id);
     await postViaBot(channelId, { embeds: [embed], components });
     return;
   }
@@ -220,12 +219,11 @@ export async function notifyBeam(input: BeamNotifyInput): Promise<void> {
 
   // Purchased events: use bot so we can attach Approve / Deny buttons.
   if (input.event === 'purchased' && channelId && input.booking_id) {
-    const components = buildComponents('booking', input.booking_id, input.payment_method);
+    const components = buildComponents('booking', input.booking_id);
     await postViaBot(channelId, { embeds: [embed], components });
     return;
   }
 
   // Started events (or no bot config): use incoming webhook, no buttons.
-  const target = webhookUrl ?? (channelId ? null : null);
   if (webhookUrl) await postToWebhook(webhookUrl, { embeds: [embed] });
 }

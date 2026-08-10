@@ -4,7 +4,6 @@ import type { FoundationPile } from '../engine/types';
 import { Stock } from './Stock';
 import { Waste } from './Waste';
 import { Foundation } from './Foundation';
-import { EmptySlot } from './EmptySlot';
 import { CARD_W, COL_GAP, H_PAD } from '../constants/layout';
 
 interface Props {

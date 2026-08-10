@@ -65,19 +65,19 @@ export default function CustomizePanel({
   const isBanner = shape === 'banner';
   const isShapedMedia = shape === 'rect' || shape === 'rounded' || shape === 'circle' || shape === 'custom' || shape == null;
 
-  // Backdrop slots cover the full canvas — there's nothing to pan/zoom
-  // and no banner text. Hide the panel entirely so we don't surface
-  // controls that would confuse rather than help.
-  if (shape === 'backdrop') return null;
-
   const dragRef = useRef<HTMLDivElement | null>(null);
   const dragState = useRef<{ startX: number; startY: number; startOffX: number; startOffY: number } | null>(null);
 
-  // Stable refs so the wheel/touch handlers never go stale.
+  // Stable refs so the wheel/touch handlers never go stale. Synced in an
+  // effect (not assigned directly in the render body) — by the time any
+  // wheel/touch listener can fire, render + commit + effects have already
+  // completed, so this is just as fresh while keeping ref writes out of render.
   const mediaZoomRef = useRef(mediaZoom);
   const onMediaZoomChangeRef = useRef(onMediaZoomChange);
-  mediaZoomRef.current = mediaZoom;
-  onMediaZoomChangeRef.current = onMediaZoomChange;
+  useEffect(() => {
+    mediaZoomRef.current = mediaZoom;
+    onMediaZoomChangeRef.current = onMediaZoomChange;
+  });
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!mediaPreviewUrl) return;
@@ -151,6 +151,14 @@ export default function CustomizePanel({
       el.removeEventListener('touchend', handleTouchEnd);
     };
   }, [open]); // re-attach when panel opens (dragRef.current is null while closed)
+
+  // Backdrop slots cover the full canvas — there's nothing to pan/zoom
+  // and no banner text. Hide the panel entirely so we don't surface
+  // controls that would confuse rather than help. Must come after every
+  // hook above (rules-of-hooks — an early return before them meant the
+  // hook count/order changed if `shape` ever flipped to/from 'backdrop'
+  // on a mounted instance).
+  if (shape === 'backdrop') return null;
 
   const fontDef   = BANNER_FONT_PX_RANGE.default;
   const speedDef  = BANNER_SPEED_SECS_RANGE.default;

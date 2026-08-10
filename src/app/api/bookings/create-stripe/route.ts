@@ -95,8 +95,6 @@ export async function POST(req: Request) {
     file_type,
     message,
     duration_minutes,
-    price_value,
-    price_unit,
     is_queued,
     queue_position,
     is_extend,

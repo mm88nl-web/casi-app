@@ -1,9 +1,9 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import type { FoundationPile } from '../engine/types';
 import { CardView } from './CardView';
 import { EmptySlot } from './EmptySlot';
-import { rankLabel, suitColor, suitSymbol } from '../engine/rules';
+import { suitSymbol } from '../engine/rules';
 import { COLORS } from '../constants/theme';
 import { CARD_H, CARD_RADIUS, CARD_W } from '../constants/layout';
 

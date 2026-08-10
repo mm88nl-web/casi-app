@@ -23,6 +23,9 @@ export default function BrowseStreamersModal({ open, onClose }: Props) {
     if (!open) return;
     const supabase = createClient();
     let cancelled = false;
+    // Reset to loading state for the upcoming fetch below — part of the
+    // same data-fetch synchronization, not state derivable during render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLive(null);
     (async () => {
       const { data } = await supabase

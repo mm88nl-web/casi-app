@@ -83,6 +83,9 @@ export default function ViewerBookingPage() {
   // Look up the streamer by slug.
   useEffect(() => {
     if (!username) {
+      // Degenerate branch of the data-fetch effect below, not state
+      // derivable during render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState({ kind: 'not-found' });
       return;
     }
@@ -124,11 +127,17 @@ export default function ViewerBookingPage() {
     setFlashes(((data ?? []) as FlashRow[]).map((r) => flashRowToFlash(r, currency)));
   }, [supabase]);
 
-  // Realtime subscription on flashes for this streamer.
-  const lastEventRef = useRef(Date.now());
+  // Realtime subscription on flashes for this streamer. Starts at 0 (not
+  // Date.now()) since calling an impure function directly in the render
+  // body is what react-hooks/purity flags; the effect below sets the real
+  // timestamp on mount before anything reads it.
+  const lastEventRef = useRef(0);
   useEffect(() => {
     if (!profileId) return;
     lastEventRef.current = Date.now();
+    // Data fetch + realtime subscription on mount/profileId change — the
+    // textbook case for an effect, not derivable state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadFlashes(profileId, streamerCurrency);
 
     const bump = () => { lastEventRef.current = Date.now(); };

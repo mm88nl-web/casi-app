@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import type { TableauColumn } from '../engine/types';
 import { CardView } from './CardView';
 import { EmptySlot } from './EmptySlot';
-import { CARD_H, CARD_W, getCardTop, getColumnHeight } from '../constants/layout';
+import { CARD_W, getCardTop, getColumnHeight } from '../constants/layout';
 
 interface Props {
   column: TableauColumn;

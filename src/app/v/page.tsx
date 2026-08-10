@@ -7,7 +7,7 @@ export default function ViewerPage() {
   const [previewImg, setPreviewImg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
 
   useEffect(() => {
     const fetchStreamer = async () => {
@@ -24,14 +24,14 @@ export default function ViewerPage() {
         } else {
           setStreamer(data);
         }
-      } catch (err) {
+      } catch {
         setError("System Error: Could not connect to Supabase.");
       } finally {
         setLoading(false);
       }
     };
     fetchStreamer();
-  }, []);
+  }, [supabase]);
 
   if (loading) return <div className="p-20 text-center font-black animate-pulse">LOADING CASI VIBE...</div>;
   

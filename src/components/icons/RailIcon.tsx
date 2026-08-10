@@ -1,6 +1,5 @@
 'use client';
 
-import SolanaIcon from './SolanaIcon';
 import UsdcIcon from './UsdcIcon';
 import StripeIcon from './StripeIcon';
 

@@ -103,6 +103,9 @@ export default function AuthPage() {
     const params = new URLSearchParams(window.location.search);
     const finish = params.get('finish') === 'true';
     const oauthErr = params.get('oauth_error');
+    // One-time URL-param read at mount, entangled with the async session
+    // check right below — not state derivable during render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (oauthErr) setError(oauthErr);
     if (params.get('tab') === 'signup') setMode('signup');
 

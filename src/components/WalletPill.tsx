@@ -217,6 +217,9 @@ export default function WalletPill() {
   const [dropPos, setDropPos] = useState<{ top: number; right: number }>({ top: 56, right: 12 });
   // Defer needsMobileHandoff() check to after mount — see WalletNav.
   const [useDeeplink, setUseDeeplink] = useState(false);
+  // needsMobileHandoff() reads navigator/window; must run post-mount to
+  // avoid an SSR/hydration mismatch (see comment above).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setUseDeeplink(needsMobileHandoff()); }, []);
   const rowRef = useRef<HTMLDivElement>(null);
 

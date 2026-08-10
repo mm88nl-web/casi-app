@@ -184,6 +184,9 @@ export default function WalletNav() {
   // SSR (always false) matches the first client render — avoids hydration
   // mismatch + a flash of the wrong button on mobile.
   const [useDeeplink, setUseDeeplink] = useState(false);
+  // needsMobileHandoff() reads navigator/window; must run post-mount to
+  // avoid an SSR/hydration mismatch (see comment above).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setUseDeeplink(needsMobileHandoff()); }, []);
   const dropRef = useRef<HTMLDivElement>(null);
 

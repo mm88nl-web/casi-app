@@ -160,6 +160,9 @@ export default function SearchDropdown() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = query.trim();
+    // Reset branch of the debounced-search effect below, not state
+    // derivable during render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!q) { setResults([]); setDropOpen(false); setSearching(false); return; }
 
     setSearching(true);
