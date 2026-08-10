@@ -40,12 +40,31 @@ anchor test --skip-local-validator
 All phase-3 tests are in `tests/casi-escrow.ts` under the headings
 `SessionDelegate`, `CancelStalePending`, `VersionedState`, `Invariants`.
 
+**Known issue (2026-08-10): this fails 33/129 tests as of writing**, all
+`AccountNotInitialized` on `config`. It's a test-harness bug, not a program
+regression — `solana-test-validator`'s genesis `--bpf-program` loading
+reports the program's upgrade authority incorrectly, which makes
+`initialize_config` uncallable under this exact harness (and
+`tests/casi-escrow.ts` never calls it, which is why this went unnoticed).
+Deploying normally via `solana program deploy` to a fresh validator instead
+of genesis-loading works fine. See `README.md`'s "Build, test, deploy"
+section and `docs/fable-security-review-2026-08-10.md` Finding 2 before
+assuming a failing run here means don't-deploy.
+
 ## 3. Apply the DB migrations
 
 Supabase Dashboard → SQL Editor → paste each of these in order:
 
 - `supabase/migrations/20260425000000_streamer_delegates.sql`
   — per-streamer session-key storage (AES-GCM sealed at rest)
+- `supabase/migrations/20260810120144_delegate_rate_limit.sql`
+  — Postgres-backed atomic rate limit for the `delegates/*` routes, replacing
+  an in-memory limiter that didn't hold across concurrent serverless instances
+- `supabase/migrations/20260810120251_delegate_rate_limit_hit_revoke_anon.sql`
+  — **apply immediately after the one above, don't skip it** — Supabase
+  auto-grants `EXECUTE` on new functions to `anon` regardless of a
+  `revoke ... from public`, so without this the rate-limit function is
+  callable unauthenticated
 
 (All prior phase-1/2 migrations should already be applied — check
 `bookings.escrow_pda` exists before running any phase-3 routes.)
@@ -80,6 +99,12 @@ All set in Vercel → Project → Settings → Environment Variables. Every
 | `SOLANA_CRANKER_KEYPAIR` | 64-byte secret as base58 OR JSON array (matches `~/.config/solana/id.json`). **Required** as the fee payer for `start_beam_delegated` — the session key has no SOL and Solana refuses to debit an un-credited account. Same keypair also powers the daily `solana-reconciler`'s permissionless `cancel_stale_pending` crank on 7d-old Pending escrows. Fund with ~0.05 SOL; the reconciler eats ~5k lamports per crank and each delegated start costs one base fee + compute. |
 
 If you leave `SOLANA_CRANKER_KEYPAIR` unset, `/api/solana/delegates/start-beam` returns 503 (`reason: 'no_cranker'`) and the admin page falls back to wallet-signed `start_beam`. That's a safe degradation — every Approve will prompt the streamer's wallet, same as phase-2 behavior.
+
+### Required to call `initialize_config` (undocumented here previously)
+
+| Name | Notes |
+|---|---|
+| `SOLANA_DEPLOYER_KEYPAIR` | JSON byte array or base58 64-byte secret of the program's **upgrade authority**. Used once by `POST /api/admin/init-escrow-config` (streamer-admin-gated, callable repeatedly but no-ops once config exists) to call `initialize_config` on a freshly deployed program. The route verifies on-chain that this key actually is the upgrade authority before it will act — a mismatched key gets a 400 with both addresses in the response, not a silent failure. |
 
 ## 5. Helius webhook
 

@@ -26,19 +26,28 @@ programs/casi-escrow/
 └── FEE_MODEL.md               # How platform-fee splits work
 ```
 
-**Deployed program ID:** `6utjMbb5ovFHUdMcMWaGc5ovmVhLryVRLEzYPWzeBosg`
+**Program ID — corrected 2026-08-10, this was mislabeled:** `6utjMbb5ovFHUdMcMWaGc5ovmVhLryVRLEzYPWzeBosg` is the **mainnet** program ID reserved in `Anchor.toml` (`[programs.mainnet]`) — it is **not actually deployed** there yet (confirmed via `solana program show <id> --url mainnet-beta` → "Unable to find the account"). The program that's actually live right now is on **devnet**, at `CDunHmMe2KW8qmjoqWanuu3p1DsEYjqRA1yVmyXDtakM` (`[programs.devnet]` in `Anchor.toml`, matches `declare_id!` in `src/lib.rs`). Don't treat the mainnet address as "deployed" until a real `anchor deploy --provider.cluster mainnet-beta` has actually happened.
 
-**Instructions exported:**
-- `start_beam` — streamer wallet signs, flips `Pending → Active`, sets `start_timestamp`.
-- `settle_beam` — viewer or streamer wallet signs; after `elapsed ≥ duration` anyone can sign.
-- `cancel_escrow` — viewer only, `Pending` only, 100% refund.
+**Instructions exported — corrected 2026-08-10, this list was missing 8 of 16:**
+- `initialize_config` — deployer (must be upgrade authority), one-time. Sets accepted mint, admin, per-escrow cap/floor.
+- `update_config` — admin only. Adjusts `paused` / cap / floor.
+- `transfer_admin` — admin only. Rotates the admin key.
+- `initialize_escrow` — viewer signs, `— → Pending`. Locks USDC in the PDA vault.
+- `approve_flash` — streamer signs, `Pending → Settled`, 100% to streamer. Flash only.
+- `deny_flash` — streamer signs, `Pending → Cancelled`, full refund. Flash only (same type-check as approve_flash).
+- `cancel_escrow` — viewer only, `Pending` only, 100% refund. Either type.
+- `start_beam` — streamer wallet signs, flips `Pending → Active`, sets `start_timestamp`. Beam only.
+- `settle_beam` — viewer or streamer wallet signs; after `elapsed ≥ duration` anyone can sign. Beam only.
+- `approve_flash_delegated` / `deny_flash_delegated` — session-key-signed twins of `approve_flash`/`deny_flash`, cranker pays fees.
 - `set_delegate` — streamer registers a session pubkey + expiry (one row per streamer).
 - `revoke_delegate` — streamer invalidates the delegate.
 - `start_beam_delegated` — session key signs, cranker pays fees. Same effect as `start_beam`.
 - `settle_beam_delegated` — session key signs, cranker pays fees + ATA rents. Same effect as `settle_beam`.
-- `cancel_stale_pending` — permissionless, refunds viewer after 7 days (`PENDING_TIMEOUT_SECS`) in Pending.
+- `cancel_stale_pending` — permissionless, refunds viewer after 7 days (`PENDING_TIMEOUT_SECS`) in Pending. Beam only (Flash viewers already have `cancel_escrow` at any time).
 
-**Scoping guarantee:** the session key can ONLY call the two `*_delegated` twins. It cannot touch funds outside the vesting schedule, cannot cancel, cannot re-delegate. Worst case with a compromised session key: an attacker can force an early `settle_beam_delegated` at the current vested point — funds still split per the on-chain schedule, no theft.
+Full table with signer/notes in `programs/casi-escrow/README.md`.
+
+**Scoping guarantee:** the session key can ONLY call the **four** `*_delegated` twins (`start_beam_delegated`, `settle_beam_delegated`, `approve_flash_delegated`, `deny_flash_delegated` — this said "two" until 2026-08-10, predating the Flash pair). It cannot touch funds outside the vesting schedule, cannot cancel, cannot re-delegate. Worst case with a compromised session key: an attacker can force an early `settle_beam_delegated` at the current vested point — funds still split per the on-chain schedule, no theft. (Verified directly against the account-constraint code in `docs/fable-security-review-2026-08-10.md`'s "Checked and found clean" section.)
 
 **EscrowState layout (for raw decoding without IDL):**
 ```
