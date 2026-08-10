@@ -21,11 +21,21 @@
  *
  * Request body: { booking_id }
  * Response:     { expired: boolean, advanced?: boolean, reason?: string }
+ *
+ * Rate limit added 2026-08-10: this route was fully unauthenticated with no
+ * throttle, and for an Active Solana booking whose timer hasn't naturally
+ * elapsed yet, every call runs a real conn.getAccountInfo() RPC probe before
+ * it can reject with `not_overdue` — booking_id is a small sequential
+ * integer and any live beam is visible on the streamer's public /overlay, so
+ * there's nothing to guess. A scripted loop against a real active booking id
+ * could force repeated RPC calls for free. Per-IP is intentionally the scope
+ * (not per-booking) since an attacker can vary booking_id freely.
  */
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { signStartBeamDelegated } from '@/lib/delegate-start-beam';
 import { logError, logWarn } from '@/lib/observability';
+import { inMemoryRateLimit, clientIpFrom } from '@/lib/rate-limit';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,6 +43,13 @@ const supabase = createClient(
 );
 
 export async function POST(req: Request) {
+  // 20/60s per IP — generous for the legitimate case (one call per viewer
+  // per beam, right when their own countdown hits zero) while stopping a
+  // scripted loop from forcing repeated on-chain RPC probes for free.
+  if (!inMemoryRateLimit('expire-and-advance', clientIpFrom(req), 20, 60_000)) {
+    return NextResponse.json({ error: 'Too many requests — slow down' }, { status: 429 });
+  }
+
   const body = await req.json().catch(() => null);
   const rawId = body?.booking_id;
   if (rawId === undefined || rawId === null || rawId === '') {

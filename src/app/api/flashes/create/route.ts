@@ -27,6 +27,13 @@ const supabase = createClient(
 );
 
 const FREE_FLASH_COOLDOWN_MS = 60_000;
+// Paid branches (stripe/solana) had NO rate limit at all until this fix —
+// every sibling creation route (create-free, create-solana, create-stripe)
+// has one. Matches those routes' cooldown exactly (payment itself is the
+// friction; this just stops an unthrottled loop from hammering
+// stripe.checkout.sessions.create() on the streamer's live connected
+// account, or growing the flashes table unbounded on the Solana branch).
+const PAID_FLASH_COOLDOWN_MS = 5_000;
 
 type PaymentMethod = 'stripe' | 'solana' | 'free';
 
@@ -59,7 +66,11 @@ async function resolveViewerKey(req: Request): Promise<string> {
 }
 
 /** Atomic upsert-with-cooldown — returns true if the send is allowed. */
-async function claimFreeFlashSlot(streamerId: string, viewerKey: string): Promise<boolean> {
+async function claimFreeFlashSlot(
+  streamerId: string,
+  viewerKey: string,
+  cooldownMs: number = FREE_FLASH_COOLDOWN_MS,
+): Promise<boolean> {
   const { data: existing } = await supabase
     .from('free_flash_rate_limits')
     .select('last_sent_at')
@@ -69,7 +80,7 @@ async function claimFreeFlashSlot(streamerId: string, viewerKey: string): Promis
 
   if (existing?.last_sent_at) {
     const elapsed = Date.now() - new Date(existing.last_sent_at).getTime();
-    if (elapsed < FREE_FLASH_COOLDOWN_MS) return false;
+    if (elapsed < cooldownMs) return false;
   }
 
   const { error } = await supabase
@@ -175,6 +186,17 @@ export async function POST(req: Request) {
   }
 
   // ── Paid branches (stripe / solana) ────────────────────────────────────────
+  // Rail-prefixed key so this cooldown bucket never collides with the free
+  // branch's ip:/u: keys above — same convention as create-solana/create-stripe.
+  const paidViewerKey = `${method}:${hashIp(getClientIp(req))}`;
+  const paidAllowed = await claimFreeFlashSlot(profile_id, paidViewerKey, PAID_FLASH_COOLDOWN_MS);
+  if (!paidAllowed) {
+    return NextResponse.json(
+      { error: 'Slow down — wait a few seconds before sending another flash.' },
+      { status: 429 },
+    );
+  }
+
   const { data: flash, error: flashError } = await supabase
     .from('flashes')
     .insert({

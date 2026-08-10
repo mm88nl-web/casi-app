@@ -18,6 +18,17 @@
  * recovery chip". We accept that tradeoff to keep the flow usable across
  * browsers without bearer tokens or signed challenges.
  *
+ * Rate limit added 2026-08-10: the fund-safety reasoning above still holds,
+ * but each call can trigger up to 100 real Solana RPC calls (one per matched
+ * row), and `viewer_wallet` is readable straight off the public anon-key
+ * REST API (bookings has column-level SELECT for anon per AGENTS.md's RLS
+ * section) — so a scripted, unthrottled loop against this route was a real
+ * RPC-cost DoS surface with no auth needed to reach it. Per-IP is the right
+ * scope here (not per-streamer/per-viewer) since an attacker can vary
+ * viewer_wallet/viewer_name freely while keeping the same IP; in-memory is
+ * an acceptable tradeoff (unlike the cranker-protecting delegate routes)
+ * since this route never moves funds or changes status.
+ *
  * Both scopes get OR-matched because the overlay's myBookings query already
  * surfaces rows by viewer_name OR viewer_wallet (see overlay/page.tsx:227)
  * — without OR-matching here, ghost pills on rows tagged with the viewer's
@@ -35,6 +46,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { logError } from '@/lib/observability';
+import { inMemoryRateLimit, clientIpFrom } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +60,12 @@ const supabase = createClient(
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export async function POST(req: Request) {
+  // 10/60s per IP — each request can cost up to 100 real RPC calls below, so
+  // this needs to be tighter than a typical create-route speed bump.
+  if (!inMemoryRateLimit('cleanup-stale-solana', clientIpFrom(req), 10, 60_000)) {
+    return NextResponse.json({ error: 'Too many requests — slow down' }, { status: 429 });
+  }
+
   const body = await req.json().catch(() => null);
   const viewer_wallet: string | undefined = body?.viewer_wallet;
   const viewer_name:   string | undefined = body?.viewer_name;
