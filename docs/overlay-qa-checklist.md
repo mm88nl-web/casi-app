@@ -403,7 +403,7 @@
 
 ## Partial / Constrained Areas
 
-⚠️ **Solana all flows** — devnet-only: requires `NEXT_PUBLIC_CASI_SOLANA_ENABLED=true`, devnet wallet, devnet USDC (mint 4zMMC9…DU). All Solana checklist items above must be run against devnet; mainnet launch is pending external audit.
+⚠️ **Solana all flows** — devnet-only: requires `NEXT_PUBLIC_CASI_SOLANA_ENABLED=true`, devnet wallet, devnet USDC (mint 4zMMC9…DU). All Solana checklist items above must be run against devnet; mainnet launch is planned as a capped rollout, not gated on a full external audit — see `capped-mainnet-plan.md`.
 
 ⚠️ **Flash USDC tab** — not testable unless `NEXT_PUBLIC_CASI_SOLANA_ENABLED=true` is set in the environment; the tab is hidden client-side when the flag is false regardless of `solana_wallet` value on the profile.
 

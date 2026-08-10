@@ -1,6 +1,6 @@
 # CASI — Investor Brief
 
-*Last updated May 2026.*
+*Last updated 2026-08-10.*
 
 ## One-liner
 
@@ -60,12 +60,16 @@ pays the streamer the full vested amount on settlement.
    Connect onboarding, Solana wallet linking, session-key delegation (no wallet
    popup on every approve) — all in one dashboard.
 
-## Current state (May 2026)
+## Current state (as of 2026-08-10)
 
 - **Stripe rail**: live on mainnet. Multi-currency, manual-capture PaymentIntents
   on streamers' connected accounts, end-to-end tested with real payments.
 - **Solana rail**: devnet with test USDC, full escrow + session-key delegation
-  + daily reconciler cron deployed and running. Mainnet gated on external audit.
+  + daily reconciler cron deployed and running. Mainnet plan is a **capped**
+  launch (see Roadmap) rather than waiting on the external audit budget;
+  an internal adversarial security review (2026-08-10) found and fixed two
+  real issues at the app layer ahead of that launch — see
+  `docs/fable-security-review-2026-08-10.md`.
 - **Operator**: casi (Netherlands).
 - **Legal**: imprint + privacy policy (GDPR) + terms of service live at `/legal/*`.
 - **Deploy**: Vercel. Domain: `www.casi.gg`.

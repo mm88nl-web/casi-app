@@ -44,22 +44,29 @@ For every escrow the chain enforces:
 
 ## Instruction × caller matrix
 
-Who can call what. This is the entire surface area — the rest of the
-program is accounts and math.
+Who can call what. **Corrected 2026-08-10** — this table claimed to be "the
+entire surface area" while missing 5 of 16 instructions (the whole config
+system, plus the Flash delegated twins). Re-derive from `src/lib.rs`
+(`grep -n "    pub fn " src/lib.rs`) if it drifts again.
 
 | Instruction              | Caller(s)                               | Purpose                                                           |
 |--------------------------|-----------------------------------------|-------------------------------------------------------------------|
+| `initialize_config`      | deployer (must be upgrade authority)    | One-time. Sets accepted mint, admin, per-escrow cap/floor.        |
+| `update_config`          | admin                                   | Adjusts `paused` / `max_escrow_amount` / `min_escrow_amount`.     |
+| `transfer_admin`         | admin                                   | Rotates the admin key.                                            |
 | `initialize_escrow`      | buyer                                   | Deposits USDC, creates PDA + vault, records duration.             |
 | `cancel_escrow`          | buyer (only while Pending)              | Buyer self-refund, 100%.                                          |
 | `approve_flash`          | provider                                | Flash (one-shot tip) → 100% to provider.                          |
 | `deny_flash`             | provider                                | One-shot denial, 100% refund.                                     |
+| `approve_flash_delegated`| provider's pre-registered session key   | Same as `approve_flash`, signed by a scoped ephemeral key.        |
+| `deny_flash_delegated`   | provider's pre-registered session key   | Same as `deny_flash`, signed by a scoped ephemeral key.           |
 | `start_beam`             | provider                                | Starts the vesting clock.                                         |
 | `start_beam_delegated`   | provider's pre-registered session key   | Same as `start_beam`, signed by a scoped ephemeral key.           |
 | `settle_beam`            | buyer OR provider OR (anyone post-dur.) | Settles at current `vested`. Permissionless after duration.       |
 | `settle_beam_delegated`  | provider's pre-registered session key   | Same effect as `settle_beam`, signed by the scoped ephemeral key. |
 | `set_delegate`           | provider                                | Registers a session key allowed to call the delegated twins.      |
 | `revoke_delegate`        | provider                                | Invalidates the registered session key.                           |
-| `cancel_stale_pending`   | **anyone**, but only past 7-day stale   | Refunds buyer when provider abandoned a Pending escrow.           |
+| `cancel_stale_pending`   | **anyone**, but only past 7-day stale   | Refunds buyer when provider abandoned a Pending escrow. Beam only. |
 
 The permissionless paths (`settle_beam` post-duration,
 `cancel_stale_pending`) and the session-key twins (`start_beam_delegated`,
@@ -84,9 +91,10 @@ program does not know the cranker exists.
 | **Fully gasless**          | relayer / paymaster        | relayer co-signs           | Future work. Protocol already supports it — any caller that can pay fees + co-sign the session key works. |
 
 The delegation model is scoped: the session key can call
-`start_beam_delegated` and `settle_beam_delegated` and nothing else. It
-cannot withdraw funds outside the vesting schedule, cannot cancel pending
-escrows, cannot change the delegate registration. Both delegated calls
+`start_beam_delegated`, `settle_beam_delegated`, `approve_flash_delegated`,
+and `deny_flash_delegated` — nothing else. It cannot withdraw funds outside
+the vesting schedule, cannot cancel pending escrows, cannot change the
+delegate registration. Both delegated calls
 run the same vesting math as their wallet-signed twins; a compromised
 session key can at worst force an early settle at the current `vested`
 point (funds split per the schedule, no theft). Providers can revoke at

@@ -47,6 +47,15 @@ is stated in Jack's reply — sufficient context to fill in the budget below.
 A formal quote PDF can be requested if/when the grant or revenue path
 indicates we're actually going to engage Sec3.
 
+**Update 2026-08-10**: concrete evidence for the "self-funded launch with
+deliberate caps" narrative above — ran an internal AI-driven adversarial
+review of `casi-escrow` ahead of the capped launch (not a substitute for
+Sec3-caliber review, but real de-risking work in the interim). It proved two
+real issues with working exploit PoCs and both were fixed at the app/config
+layer without touching the frozen program. Full report:
+`docs/fable-security-review-2026-08-10.md`. Worth citing in the application
+body as evidence of active pre-audit diligence, not just a stated intention.
+
 ---
 
 ## 1. Identity

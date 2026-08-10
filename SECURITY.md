@@ -49,10 +49,34 @@ Out of scope:
 
 ## Audit status
 
+**Updated 2026-08-10 — this section previously said mainnet launch is gated
+on a clean external audit; that's no longer the actual plan and this was
+left stale.**
+
 The `casi-escrow` Anchor program runs on Solana **devnet** with test USDC.
-Mainnet launch on the Solana rail is gated on a clean external audit.
-Audit-firm outreach is in progress; the program is frozen (bug fixes only)
-until the audit completes.
+A professional third-party audit is not yet funded (quotes obtained from
+Sec3 — approx. $22k against the program's ~1.2k LOC — with OtterSec and
+Neodyme as alternates); the plan is to launch mainnet **capped** rather than
+wait indefinitely for that budget. See `capped-mainnet-plan.md` for the
+design: per-booking ($50 on Solana), per-streamer TVL ($500), and
+per-streamer-daily ($1,000) limits enforced at the application layer, sized
+so a worst-case incident is bounded even against an unaudited program. The
+on-chain program's own `max_escrow_amount`/`min_escrow_amount` config
+(settable via `update_config`, no code change) should be set to match
+before launch, closing the gap where a caller who bypasses the app entirely
+could otherwise exceed the app-layer cap.
+
+Separate from the professional audit, an internal AI-driven adversarial
+review (Fable, 2026-08-10, `docs/fable-security-review-2026-08-10.md`) found
+and proved two real issues with working exploit PoCs — both fixed at the
+app/config layer without touching the program. Treat that review as a
+supplement that raised confidence for a capped launch, not a substitute for
+the professional audit; the two fixed issues are exactly the class of thing
+the Sec3-caliber audit would also have caught.
+
+The program remains frozen against refactoring pending the professional
+audit (bug fixes only, and only with a test proving the bug — see
+`AGENTS.md`).
 
 The **Stripe rail is live on mainnet** (EUR/USD/GBP and more) as of May 2026
 and has been exercised with real payments. Stripe Connect Direct Charges and

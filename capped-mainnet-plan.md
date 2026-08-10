@@ -324,17 +324,21 @@ audit programs people actually use.
 | Bug in `casi-escrow` causes loss within the cap | Caps mean per-incident loss is bounded at $500/streamer × N streamers; insurance-grade risk, not bankruptcy-grade |
 | Streamer reaches cap and is annoyed | Alpha banner sets expectation; cap raises clearly communicated; Pro tier could later offer cap upgrades for paying streamers |
 | Cap evasion via multi-account abuse | Same cap applies per `profile_id`; multi-accounting requires multiple full signups; rate-limit on signup IP already exists |
-| Caps get bypassed via direct on-chain interaction | The Anchor program itself has no caps; a sophisticated viewer could call `start_beam` directly with $5k. Mitigation: program-level cap added during the audit phase, OR rely on the fact that direct on-chain interaction requires off-platform booking infra (no overlay slot to claim, viewer's media never displays). Acceptable risk because there's no economic incentive to do this. |
+| Caps get bypassed via direct on-chain interaction | **Corrected 2026-08-10 — this row was wrong.** The Anchor program already has on-chain caps: `GlobalConfig.max_escrow_amount` / `min_escrow_amount`, enforced inside `initialize_escrow` itself, settable via `update_config` (admin-only, no program change, doesn't touch the audit freeze). A sophisticated viewer calling `initialize_escrow` directly is still bounded by whatever `max_escrow_amount` is currently set to — set it to the app-layer cap (e.g. 50 USDC) via `update_config` and the on-chain and app-layer caps actually agree, closing this gap for real rather than deferring it to "during the audit phase." `min_escrow_amount` was separately found live at 0 (should never have been) and fixed to 1 USDC the same day — see `docs/fable-security-review-2026-08-10.md` Finding 6. Before shipping this plan, call `update_config` to set `max_escrow_amount` to match whatever `SOLANA_BOOKING_MAX_USD` ends up being, so the two layers can't drift apart. |
 | Audit takes longer than runway | Cap removal stage 1 doesn't require audit complete — just "no incidents on capped mainnet for N weeks." Could relax to 2× cap autonomously based on operational confidence. |
 
 ---
 
 ## What we're explicitly NOT doing
 
-- **Adding caps to the Anchor program.** It's frozen pending audit. Per
-  AGENTS.md: "Don't refactor the Anchor program before the audit." The
-  application-layer caps are the right tool because they're removable
-  without re-deploying or re-auditing the program.
+- **Refactoring the Anchor program to add caps.** It's frozen pending audit,
+  per AGENTS.md. Not needed anyway — `GlobalConfig.max_escrow_amount` /
+  `min_escrow_amount` already exist in the deployed program and are
+  *configurable* via `update_config` (admin-only call, not a code change).
+  The application-layer caps are still the right primary tool because
+  they're removable without touching the config account at all, but the
+  on-chain config should be set to match rather than left at its current
+  values, per the corrected risk-table row above.
 - **Adding a "premium plan" that lifts caps.** Caps are a safety mechanism,
   not a feature gate. Selling cap relief monetizes the wrong thing and
   contradicts the "100% to streamer, no protocol fees" pitch.

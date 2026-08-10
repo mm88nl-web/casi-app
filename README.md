@@ -5,7 +5,7 @@ Streamer monetisation platform. Viewers pay to put their image, video, or messag
 [![CI](https://github.com/mm88nl-web/casi-app/actions/workflows/ci.yml/badge.svg)](https://github.com/mm88nl-web/casi-app/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
-**Live at [casi.gg](https://www.casi.gg)** — Stripe rail on mainnet (EUR/USD/GBP/+), Solana USDC on devnet pending audit.
+**Live at [casi.gg](https://www.casi.gg)** — Stripe rail on mainnet (EUR/USD/GBP/+), Solana USDC on devnet — mainnet launch planned as a capped rollout (see `capped-mainnet-plan.md`) rather than waiting on a full paid audit.
 
 ---
 
@@ -60,7 +60,7 @@ npm test
 npm run lint
 ```
 
-**Required env vars**: see `AGENTS.md → Environment variables` for the full list. At minimum you need `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, and `NEXT_PUBLIC_CASI_PROGRAM_ID`.
+**Required env vars**: there's no single consolidated list — the closest thing is `programs/casi-escrow/DEPLOY.md`'s env var tables (Solana/delegate-flow vars) plus `.env.example` at the repo root (everything else, incl. Stripe/Supabase). At minimum you need `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, and `NEXT_PUBLIC_CASI_PROGRAM_ID`.
 
 ---
 
@@ -70,7 +70,7 @@ npm run lint
 src/app/
   overlay/          OBS browser-source + viewer booking flow
   studio/           Streamer dashboard (earnings, queue, live canvas)
-  admin/            Legacy streamer dashboard
+  admin/            Legacy redirect to studio/ (no real logic left here)
   s/[username]/     Public streamer landing page
   login/            Auth — email + 4 OAuth providers
   api/              Route Handlers (bookings, stripe, solana, flashes, cron)
@@ -92,7 +92,7 @@ tests/unit/             Unit tests
 
 - Program source: [`programs/casi-escrow/`](./programs/casi-escrow/)
 - Program README: [`programs/casi-escrow/README.md`](./programs/casi-escrow/README.md)
-- Current deploy: Solana **devnet**, pending external audit before mainnet
+- Current deploy: Solana **devnet**. See [`SECURITY.md`](./SECURITY.md) for audit status and the capped-mainnet plan.
 
 ---
 
