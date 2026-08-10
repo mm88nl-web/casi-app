@@ -13,7 +13,7 @@ import { loadCrankerKeypair } from '@/lib/cranker-keypair';
 import { CasiEscrowClient, solscanTxUrl } from '@/lib/casi-escrow';
 import { logError, logWarn } from '@/lib/observability';
 import { parseCasiError } from '@/lib/casi-errors';
-import { inMemoryRateLimit } from '@/lib/rate-limit';
+import { distributedRateLimit } from '@/lib/rate-limit';
 
 /**
  * POST /api/solana/delegates/deny-flash
@@ -72,7 +72,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   // Per-streamer cap on the shared cranker fee payer — see settle-beam route.
-  if (!inMemoryRateLimit('cranker', user.id, 60, 60_000)) {
+  // DB-backed so the cap holds across concurrent serverless instances.
+  if (!(await distributedRateLimit(supabase, user.id, 60, 60))) {
     return NextResponse.json(
       { error: 'Too many delegated operations — slow down', reason: 'rate_limited' },
       { status: 429 },

@@ -3,6 +3,8 @@ import {
   decodeBase58,
   matchDiscriminator,
   parseCasiInstruction,
+  decodeInitializeEscrowAmount,
+  expectedEscrowMicroUsdc,
   CASI_IX_DISCRIMINATORS,
 } from '../../src/lib/casi-escrow-decoder';
 
@@ -148,6 +150,15 @@ describe('casi-escrow-decoder', () => {
       }
     });
 
+    it('returns the decoded raw bytes alongside kind/accounts', () => {
+      const bytes = new Uint8Array([...CASI_IX_DISCRIMINATORS.settle_beam, 9, 9, 9]);
+      const parsed = parseCasiInstruction(
+        { programId: CASI_PROGRAM_ID, data: encodeBase58(bytes), accounts: [] },
+        CASI_PROGRAM_ID,
+      );
+      expect(Array.from(parsed!.data)).to.deep.equal(Array.from(bytes));
+    });
+
     it('tolerates missing or malformed accounts arrays', () => {
       const disc = CASI_IX_DISCRIMINATORS.cancel_escrow;
       const data = encodeBase58(new Uint8Array(disc));
@@ -167,6 +178,78 @@ describe('casi-escrow-decoder', () => {
         CASI_PROGRAM_ID,
       );
       expect(mixed?.accounts).to.deep.equal(['valid', 'also-valid']);
+    });
+  });
+
+  describe('decodeInitializeEscrowAmount', () => {
+    /** Little-endian byte encoding of a u64, independent of the impl under test. */
+    function amountBytesLE(amount: bigint): number[] {
+      const bytes: number[] = [];
+      let v = amount;
+      for (let i = 0; i < 8; i++) {
+        bytes.push(Number(v & 0xffn));
+        v >>= 8n;
+      }
+      return bytes;
+    }
+
+    /** Builds a full initialize_escrow-shaped ix data buffer (or another
+     *  instruction's discriminator, for the negative case below). */
+    function ixFor(amount: bigint, kind: keyof typeof CASI_IX_DISCRIMINATORS = 'initialize_escrow') {
+      const disc = CASI_IX_DISCRIMINATORS[kind];
+      const escrowId = new Array(32).fill(7); // arbitrary filler
+      const amountBytes = amountBytesLE(amount);
+      const durationBytes = amountBytesLE(600n); // arbitrary filler
+      const escrowType = [1];
+      return new Uint8Array([...disc, ...escrowId, ...amountBytes, ...durationBytes, ...escrowType]);
+    }
+
+    it('decodes a typical price (50 USDC = 50_000_000 micro-units)', () => {
+      expect(decodeInitializeEscrowAmount(ixFor(50_000_000n))).to.equal(50_000_000n);
+    });
+
+    it('decodes zero', () => {
+      expect(decodeInitializeEscrowAmount(ixFor(0n))).to.equal(0n);
+    });
+
+    it('decodes near u64::MAX without precision loss', () => {
+      const big = 18_446_744_073_709_551_615n;
+      expect(decodeInitializeEscrowAmount(ixFor(big))).to.equal(big);
+    });
+
+    it('catches the underpayment attack scenario: 1 micro-USDC instead of a real price', () => {
+      expect(decodeInitializeEscrowAmount(ixFor(1n))).to.equal(1n);
+    });
+
+    it('returns null for buffers too short to contain the amount field', () => {
+      const short = new Uint8Array([...CASI_IX_DISCRIMINATORS.initialize_escrow, 1, 2, 3]);
+      expect(decodeInitializeEscrowAmount(short)).to.equal(null);
+    });
+
+    it('returns null when the discriminator is not initialize_escrow', () => {
+      expect(decodeInitializeEscrowAmount(ixFor(50_000_000n, 'settle_beam'))).to.equal(null);
+    });
+  });
+
+  describe('expectedEscrowMicroUsdc', () => {
+    it('per-minute: 2 USDC/min x 10 min = 20 USDC = 20_000_000 micro-units', () => {
+      const got = expectedEscrowMicroUsdc({ priceValue: 2, priceUnit: 'min', durationMinutes: 10 });
+      expect(got).to.equal(20_000_000n);
+    });
+
+    it('per-hour (any priceUnit other than "min"): 60 USDC/hr x 30 min = 30 USDC', () => {
+      const got = expectedEscrowMicroUsdc({ priceValue: 60, priceUnit: 'hour', durationMinutes: 30 });
+      expect(got).to.equal(30_000_000n);
+    });
+
+    it('matches the attack scenario: a real $50 price must not collapse to 1 micro-USDC', () => {
+      const got = expectedEscrowMicroUsdc({ priceValue: 50, priceUnit: 'min', durationMinutes: 1 });
+      expect(got).to.equal(50_000_000n);
+      expect(got).to.not.equal(1n);
+    });
+
+    it('zero price returns zero', () => {
+      expect(expectedEscrowMicroUsdc({ priceValue: 0, priceUnit: 'min', durationMinutes: 10 })).to.equal(0n);
     });
   });
 });

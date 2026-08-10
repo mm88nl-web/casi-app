@@ -13,7 +13,7 @@ import { loadCrankerKeypair } from '@/lib/cranker-keypair';
 import { CasiEscrowClient, solscanTxUrl } from '@/lib/casi-escrow';
 import { logError, logWarn } from '@/lib/observability';
 import { parseCasiError } from '@/lib/casi-errors';
-import { inMemoryRateLimit } from '@/lib/rate-limit';
+import { distributedRateLimit } from '@/lib/rate-limit';
 
 /**
  * POST /api/solana/delegates/settle-beam
@@ -86,8 +86,10 @@ export async function POST(req: Request) {
   // per-streamer throughput so a malicious streamer can't self-deal (fund +
   // approve + settle their own beams in a loop) to drain its SOL and degrade
   // the delegated flow platform-wide. Generous limit — well above any real
-  // burst, including sequential end-stream settles.
-  if (!inMemoryRateLimit('cranker', user.id, 60, 60_000)) {
+  // burst, including sequential end-stream settles. DB-backed (not
+  // in-memory) so the cap actually holds across concurrent serverless
+  // instances — see distributedRateLimit's doc comment.
+  if (!(await distributedRateLimit(supabase, user.id, 60, 60))) {
     return NextResponse.json(
       { error: 'Too many delegated operations — slow down', reason: 'rate_limited' },
       { status: 429 },

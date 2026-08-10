@@ -127,8 +127,17 @@ export async function POST(req: NextRequest) {
     setProvider(provider);
     const program = new Program(IDL as Idl, provider);
 
+    // min_escrow_amount = 1_000_000 (1 USDC at 6 decimals) matches the value
+    // GlobalConfig's own doc comment (lib.rs) names as the example floor
+    // that "makes ATA-rent griefing uneconomical" — each settle/cancel that
+    // has to init a fresh ATA costs the cranker ~0.002 SOL regardless of
+    // escrow size, so a zero floor lets that be forced by escrows worth a
+    // fraction of a cent. max_escrow_amount stays 0 (no on-chain cap) per
+    // capped-mainnet-plan.md's deliberate choice to enforce the $50/booking
+    // cap at the app layer, where it's removable post-audit without an
+    // on-chain config change.
     const sig = await (program.methods as any)
-      .initializeConfig(new BN(0), new BN(0))
+      .initializeConfig(new BN(0), new BN(1_000_000))
       .accounts({
         initializer:   deployer.publicKey,
         config:        configPda,

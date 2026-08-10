@@ -8,8 +8,12 @@
  * limit is per-instance and resets on cold start — it is NOT shared across
  * concurrent serverless instances. This is the same model as /api/log: a
  * deterrent against a single hot caller, not a hard distributed guarantee.
- * For a limit that must hold across instances, use a DB-backed counter.
+ * For a limit that must hold across instances, use `distributedRateLimit`
+ * below instead.
  */
+
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { logError } from '@/lib/observability';
 
 type Bucket = { count: number; resetAt: number };
 
@@ -40,6 +44,41 @@ export function inMemoryRateLimit(
   if (b.count >= limit) return false;
   b.count += 1;
   return true;
+}
+
+/**
+ * Distributed sliding-window rate limit backed by Postgres — holds across
+ * concurrent Vercel serverless instances, unlike `inMemoryRateLimit`.
+ *
+ * Calls the `delegate_rate_limit_hit` DB function (see migrations
+ * `20260810120144_delegate_rate_limit.sql` and
+ * `20260810120251_delegate_rate_limit_hit_revoke_anon.sql`), which atomically
+ * increments a per-streamer counter in a single UPSERT statement, resetting it if
+ * `windowSecs` has elapsed since the window started. Returns true if the
+ * post-increment count is still within `limit`.
+ *
+ * Fails CLOSED on any DB/RPC error: this exists specifically to protect the
+ * shared cranker's SOL from a self-dealing streamer, so "we couldn't verify
+ * the caller is under the limit" must deny, not allow. Callers already have
+ * a safe fallback for a denied delegated op — the admin UI drops to a
+ * wallet-signed popup — so failing closed here just costs one extra popup,
+ * never a stuck action.
+ */
+export async function distributedRateLimit(
+  supabase: SupabaseClient,
+  streamerId: string,
+  limit: number,
+  windowSecs: number,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc('delegate_rate_limit_hit', {
+    p_streamer_id: streamerId,
+    p_window_secs: windowSecs,
+  });
+  if (error) {
+    logError('rate-limit', error, { streamer_id: streamerId, scope: 'distributedRateLimit' });
+    return false;
+  }
+  return (data as number) <= limit;
 }
 
 /** Best-effort client IP from proxy headers (Vercel sets x-real-ip). */

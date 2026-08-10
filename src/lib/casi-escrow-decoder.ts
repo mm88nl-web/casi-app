@@ -126,11 +126,14 @@ export function matchDiscriminator(data: Uint8Array): CasiIxKind | null {
  *
  * `ix.accounts` is passed through unchanged so the caller can match them
  * against `bookings.escrow_pda` without caring about IDL account ordering.
+ * `data` is the decoded raw instruction bytes (discriminator included) so
+ * callers that need an argument — e.g. `decodeInitializeEscrowAmount` below —
+ * don't have to re-decode the base58 string themselves.
  */
 export function parseCasiInstruction(
   ix: { programId?: string; data?: string; accounts?: string[] },
   casiProgramId: string,
-): { kind: CasiIxKind; accounts: string[] } | null {
+): { kind: CasiIxKind; accounts: string[]; data: Uint8Array } | null {
   if (!ix || ix.programId !== casiProgramId) return null;
   if (typeof ix.data !== 'string' || ix.data.length === 0) return null;
 
@@ -147,5 +150,57 @@ export function parseCasiInstruction(
   return {
     kind,
     accounts: Array.isArray(ix.accounts) ? ix.accounts.filter((a): a is string => typeof a === 'string') : [],
+    data: decoded,
   };
+}
+
+/**
+ * Decode the `amount` argument (u64, USDC micro-units) from a raw
+ * `initialize_escrow` instruction data buffer.
+ *
+ * Borsh layout after the 8-byte Anchor discriminator, matching
+ * `initialize_escrow(ctx, escrow_id: [u8; 32], amount: u64, duration_secs: u64,
+ * escrow_type_val: u8)` in `programs/casi-escrow/src/lib.rs`:
+ *   [0..8)   discriminator
+ *   [8..40)  escrow_id (32 bytes, fixed array — no length prefix)
+ *   [40..48) amount (u64, little-endian)
+ *   [48..56) duration_secs (u64, little-endian) — not decoded here
+ *   [56]     escrow_type_val (u8) — not decoded here
+ *
+ * This exists so the webhook can verify the amount actually locked on-chain
+ * matches the price the streamer was shown, instead of trusting a
+ * transaction signature's mere presence as proof of correct payment (a
+ * viewer can sign initialize_escrow directly with any amount — the program,
+ * IDL, and client are all public — so "a tx landed" alone proves nothing
+ * about how much).
+ *
+ * Returns null if the buffer is too short to contain the amount field, or if
+ * its discriminator isn't initialize_escrow's.
+ */
+export function decodeInitializeEscrowAmount(data: Uint8Array): bigint | null {
+  if (data.length < 48) return null;
+  if (matchDiscriminator(data) !== 'initialize_escrow') return null;
+  const view = new DataView(data.buffer, data.byteOffset + 40, 8);
+  return view.getBigUint64(0, true);
+}
+
+/**
+ * Computes the USDC micro-units a booking's escrow SHOULD have been funded
+ * with, from the same inputs `overlay/page.tsx` uses client-side to build
+ * the real `initializeEscrow` call (`totalUsdc = price_unit === 'min'
+ * ? price_value * durationMinutes : price_value * (durationMinutes / 60)`,
+ * then `Math.round(totalUsdc * 1e6)`). Kept as one exported, tested function
+ * rather than inlined in the webhook so the two call sites (client-side
+ * amountUsdc, server-side verification) can't silently drift apart.
+ */
+export function expectedEscrowMicroUsdc(params: {
+  priceValue: number;
+  priceUnit: string | null;
+  durationMinutes: number;
+}): bigint {
+  const { priceValue, priceUnit, durationMinutes } = params;
+  const totalUsdc = priceUnit === 'min'
+    ? priceValue * durationMinutes
+    : priceValue * (durationMinutes / 60);
+  return BigInt(Math.round(totalUsdc * 1_000_000));
 }

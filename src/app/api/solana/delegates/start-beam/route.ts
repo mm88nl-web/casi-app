@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { signStartBeamDelegated } from '@/lib/delegate-start-beam';
 import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 import { solscanTxUrl } from '@/lib/casi-escrow';
-import { inMemoryRateLimit } from '@/lib/rate-limit';
+import { distributedRateLimit } from '@/lib/rate-limit';
 
 /**
  * POST /api/solana/delegates/start-beam
@@ -82,7 +82,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   // Per-streamer cap on the shared cranker fee payer — see settle-beam route.
-  if (!inMemoryRateLimit('cranker', user.id, 60, 60_000)) {
+  // DB-backed so the cap holds across concurrent serverless instances.
+  if (!(await distributedRateLimit(supabase, user.id, 60, 60))) {
     return NextResponse.json(
       { error: 'Too many delegated operations — slow down', reason: 'rate_limited' },
       { status: 429 },

@@ -5,6 +5,8 @@ import { logError, logWarn } from '@/lib/observability';
 import { notifyBeam, shouldNotify } from '@/lib/notify';
 import {
   parseCasiInstruction,
+  decodeInitializeEscrowAmount,
+  expectedEscrowMicroUsdc,
   type CasiIxKind,
 } from '@/lib/casi-escrow-decoder';
 
@@ -130,6 +132,8 @@ async function processEvent(event: HeliusEvent, casiProgramId: string): Promise<
         booking,
         txSignature,
         feePayer: event.feePayer,
+        onChainAmountMicroUsdc:
+          parsed.kind === 'initialize_escrow' ? decodeInitializeEscrowAmount(parsed.data) : null,
       });
       continue;
     }
@@ -191,6 +195,9 @@ type TransitionInput = {
   booking: BookingRow;
   txSignature: string;
   feePayer?: string;
+  /** Decoded on-chain `amount` for `initialize_escrow` events; null otherwise
+   *  or if decoding failed. See the value-integrity check below. */
+  onChainAmountMicroUsdc?: bigint | null;
 };
 
 async function applyTransition({
@@ -198,6 +205,7 @@ async function applyTransition({
   booking,
   txSignature,
   feePayer,
+  onChainAmountMicroUsdc,
 }: TransitionInput): Promise<void> {
   switch (kind) {
     case 'initialize_escrow': {
@@ -206,6 +214,35 @@ async function applyTransition({
       // viewer cancelled, etc.) the webhook is late and we leave status
       // alone — we only touch the identity fields.
       const isFirstFunding = !booking.tx_signature; // true only on first delivery
+
+      // Value-integrity check: the program is a neutral primitive — it has
+      // no opinion on price, it just accepts any caller-chosen amount
+      // (bounded only by GlobalConfig's cap/floor). Nothing on-chain ties
+      // an escrow to "the price this booking is supposed to cost," so
+      // downstream code must not treat tx_signature presence as proof of
+      // correct payment. Without this check, a viewer can sign
+      // initialize_escrow themselves (program, IDL, and client are all
+      // public) with e.g. amount = 1 micro-USDC and the booking would look
+      // fully paid to isPaymentConfirmed()/approveBooking() below.
+      if (isFirstFunding) {
+        const expectedMicroUsdc = expectedEscrowMicroUsdc({
+          priceValue: Number(booking.price_value) || 0,
+          priceUnit: booking.price_unit,
+          durationMinutes: Number(booking.duration_minutes) || 0,
+        });
+
+        if (onChainAmountMicroUsdc == null || onChainAmountMicroUsdc !== expectedMicroUsdc) {
+          logWarn('solana-webhook', 'initialize_escrow amount mismatch — refusing to mark booking as paid', {
+            booking_id: booking.id,
+            tx_signature: txSignature,
+            fee_payer: feePayer,
+            expected_micro_usdc: expectedMicroUsdc.toString(),
+            onchain_micro_usdc: onChainAmountMicroUsdc?.toString() ?? null,
+          });
+          return;
+        }
+      }
+
       const patch: Record<string, unknown> = {};
       if (!booking.tx_signature) patch.tx_signature = txSignature;
       if (!booking.viewer_wallet && feePayer) patch.viewer_wallet = feePayer;
