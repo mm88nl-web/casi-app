@@ -463,18 +463,35 @@ function StudioPageInner() {
 
     const bump = () => { lastEventRef.current = Date.now(); };
 
+    // Debounce realtime-triggered reloads: reload() fires 7 parallel
+    // Supabase queries, and without coalescing, a burst of N inserts in a
+    // tight window (a spam flood, or just a streamer's own reconnect
+    // replay) costs N full reloads back-to-back instead of one. Trailing-
+    // debounce collapses the burst into a single reload ~200ms after
+    // quiet — same pattern and window as overlay/page.tsx's scheduleReload,
+    // which solves the identical problem on the viewer-facing side.
+    let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleReload = () => {
+      bump();
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        reloadTimer = undefined;
+        reload(profileId);
+      }, 200);
+    };
+
     const bookingsChannel = supabase
       .channel(`studio_bookings_${profileId}`)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'bookings', filter: `profile_id=eq.${profileId}` },
-        () => { bump(); reload(profileId); })
+        scheduleReload)
       .subscribe();
 
     const flashesChannel = supabase
       .channel(`studio_flashes_${profileId}`)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'flashes', filter: `profile_id=eq.${profileId}` },
-        () => { bump(); reload(profileId); })
+        scheduleReload)
       .subscribe();
 
     // Profile updates from /studio/settings (username, solana_wallet,
@@ -541,6 +558,7 @@ function StudioPageInner() {
     document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
       supabase.removeChannel(bookingsChannel);
       supabase.removeChannel(flashesChannel);
       supabase.removeChannel(profileChannel);
