@@ -29,6 +29,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { deriveEscrowPda, PROGRAM_ID } from '@/lib/casi-escrow';
 import { validateBannerBooking, sanitizeBookingCustomization, validateMediaUrl } from '@/lib/banner';
 import { logError, logWarn } from '@/lib/observability';
+import { streamerCreationRateLimit, STREAMER_CREATION_LIMIT, STREAMER_CREATION_WINDOW_SECS } from '@/lib/rate-limit';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -123,6 +124,16 @@ export async function POST(req: Request) {
   if (!allowed) {
     return NextResponse.json(
       { error: 'Slow down — wait a few seconds before booking again.' },
+      { status: 429 },
+    );
+  }
+
+  // Aggregate cap across ALL callers — the per-IP cooldown above is
+  // bypassable by rotating IPs (proven, see
+  // docs/fable-spam-abuse-review-2026-08-10.md).
+  if (!(await streamerCreationRateLimit(supabase, profile_id, STREAMER_CREATION_LIMIT, STREAMER_CREATION_WINDOW_SECS))) {
+    return NextResponse.json(
+      { error: 'This streamer is getting a lot of requests right now — try again shortly.' },
       { status: 429 },
     );
   }

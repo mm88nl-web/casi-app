@@ -20,6 +20,7 @@ import { moderateText } from '@/lib/content-moderation';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { logWarn } from '@/lib/observability';
 import { notifyFlash, shouldNotify } from '@/lib/notify';
+import { streamerCreationRateLimit, STREAMER_CREATION_LIMIT, STREAMER_CREATION_WINDOW_SECS } from '@/lib/rate-limit';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -153,6 +154,15 @@ export async function POST(req: Request) {
         { status: 429 },
       );
     }
+    // Aggregate cap across ALL callers — the per-identity cooldown above is
+    // bypassable by rotating IPs (proven, see
+    // docs/fable-spam-abuse-review-2026-08-10.md).
+    if (!(await streamerCreationRateLimit(supabase, profile_id, STREAMER_CREATION_LIMIT, STREAMER_CREATION_WINDOW_SECS))) {
+      return NextResponse.json(
+        { error: 'This streamer is getting a lot of requests right now — try again shortly.' },
+        { status: 429 },
+      );
+    }
 
     const { data: flash, error: insertErr } = await supabase
       .from('flashes')
@@ -193,6 +203,13 @@ export async function POST(req: Request) {
   if (!paidAllowed) {
     return NextResponse.json(
       { error: 'Slow down — wait a few seconds before sending another flash.' },
+      { status: 429 },
+    );
+  }
+  // Aggregate cap across ALL callers — same rationale as the free branch above.
+  if (!(await streamerCreationRateLimit(supabase, profile_id, STREAMER_CREATION_LIMIT, STREAMER_CREATION_WINDOW_SECS))) {
+    return NextResponse.json(
+      { error: 'This streamer is getting a lot of requests right now — try again shortly.' },
       { status: 429 },
     );
   }

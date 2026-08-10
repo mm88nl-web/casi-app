@@ -22,6 +22,7 @@ import { verifyTurnstileToken } from '@/lib/turnstile';
 import { validateBannerBooking, sanitizeBookingCustomization, validateMediaUrl } from '@/lib/banner';
 import { logWarn } from '@/lib/observability';
 import { notifyBeam, shouldNotify } from '@/lib/notify';
+import { streamerCreationRateLimit, STREAMER_CREATION_LIMIT, STREAMER_CREATION_WINDOW_SECS } from '@/lib/rate-limit';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -162,6 +163,17 @@ export async function POST(req: Request) {
   if (!allowed) {
     return NextResponse.json(
       { error: 'Slow down — one free booking per minute.' },
+      { status: 429 },
+    );
+  }
+
+  // Aggregate cap across ALL callers, not just this one IP — the per-IP
+  // cooldown above is bypassable by rotating IPs (proven, see
+  // docs/fable-spam-abuse-review-2026-08-10.md). This one can't be raised
+  // by identity rotation since it doesn't key on identity at all.
+  if (!(await streamerCreationRateLimit(supabase, profile_id, STREAMER_CREATION_LIMIT, STREAMER_CREATION_WINDOW_SECS))) {
+    return NextResponse.json(
+      { error: 'This streamer is getting a lot of requests right now — try again shortly.' },
       { status: 429 },
     );
   }

@@ -81,6 +81,54 @@ export async function distributedRateLimit(
   return (data as number) <= limit;
 }
 
+/**
+ * Per-streamer AGGREGATE distributed rate limit for booking/flash creation
+ * routes — counts ALL creation attempts against a streamer regardless of
+ * caller identity, so it holds even against the proven IP-rotation bypass
+ * of the existing per-(streamer, IP) cooldowns (see
+ * docs/fable-spam-abuse-review-2026-08-10.md, Finding 3, and AGENTS.md's
+ * long-flagged "add per-profile_id rate limit alongside per-IP" gap).
+ * Calls the `streamer_creation_rate_limit_hit` DB function (migration
+ * `20260810150641_streamer_creation_rate_limit.sql`) — same atomic-UPSERT
+ * mechanism as `distributedRateLimit`, deliberately a separate table so
+ * this concern's traffic can't eat into the cranker-protecting limiter's
+ * budget or vice versa.
+ *
+ * Fails OPEN on any DB/RPC error, unlike `distributedRateLimit` above: that
+ * one protects a scarce shared resource (the cranker's SOL) with a safe
+ * wallet-popup fallback if denied. This one gates the core "a viewer can
+ * just show up and pay" path (see memory feedback-casi-viewer-no-signup) —
+ * there's no fallback if it's wrongly denied, so a transient rate-limit-
+ * check failure should never itself block a real booking/flash.
+ */
+/**
+ * Shared tuning for `streamerCreationRateLimit` call sites — one number to
+ * adjust rather than four routes drifting apart. 30/60s is generous for a
+ * genuinely busy/viral moment (one creation every 2s sustained) while
+ * sitting well below what the proven IP-rotation bypass could sustain
+ * (Appendix A of the spam-abuse review defeated the per-identity cooldown
+ * with a trivial proxy pool, no rate limit at all beneath it until now).
+ */
+export const STREAMER_CREATION_LIMIT = 30;
+export const STREAMER_CREATION_WINDOW_SECS = 60;
+
+export async function streamerCreationRateLimit(
+  supabase: SupabaseClient,
+  streamerId: string,
+  limit: number,
+  windowSecs: number,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc('streamer_creation_rate_limit_hit', {
+    p_streamer_id: streamerId,
+    p_window_secs: windowSecs,
+  });
+  if (error) {
+    logError('rate-limit', error, { streamer_id: streamerId, scope: 'streamerCreationRateLimit' });
+    return true;
+  }
+  return (data as number) <= limit;
+}
+
 /** Best-effort client IP from proxy headers (Vercel sets x-real-ip). */
 export function clientIpFrom(req: Request): string {
   const realIp = req.headers.get('x-real-ip');
