@@ -20,7 +20,7 @@ export default function StreamerPublishCard({
 }: {
   elements: PublishableElement[];
   publishing: boolean;
-  onPublish: (elementId: string, imageUrl: string, fileType: 'image' | 'video', durationMinutes: number, storagePath: string | null) => void;
+  onPublish: (elementId: string, imageUrl: string, fileType: 'image' | 'video', storagePath: string | null) => void;
 }) {
   const supabase = createClient();
   const [elementId, setElementId] = useState('');
@@ -31,12 +31,9 @@ export default function StreamerPublishCard({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [fileType, setFileType] = useState<'image' | 'video'>('image');
-  const [durationValue, setDurationValue] = useState(30);
-  const [durationUnit, setDurationUnit] = useState<'minutes' | 'hours'>('minutes');
 
   const activeUrl = mode === 'upload' ? uploadedUrl : imageUrl.trim();
-  const durationMinutes = durationUnit === 'hours' ? durationValue * 60 : durationValue;
-  const canPublish = !!elementId && !!activeUrl && durationValue > 0 && !publishing && !uploading;
+  const canPublish = !!elementId && !!activeUrl && !publishing && !uploading;
 
   const handleFile = async (file: File) => {
     setUploadError('');
@@ -67,9 +64,9 @@ export default function StreamerPublishCard({
         Publish my own content
       </h3>
       <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-        Puts an image/video straight on your overlay — no payment, no approval step.
-        Kicks whatever's currently active on that slot (a viewer&apos;s approved booking can
-        take this back over whenever they show up).
+        Puts an image/video straight on your overlay — no payment, no approval step, no
+        time limit. Stays up until you publish something else, or a viewer&apos;s approved
+        booking takes the slot back over.
       </p>
 
       <select
@@ -122,41 +119,21 @@ export default function StreamerPublishCard({
         </div>
       )}
 
-      <div className="flex gap-2 items-center">
-        <select
-          className="rounded border px-2 py-1 text-sm bg-transparent"
-          style={{ borderColor: 'var(--line)' }}
-          value={fileType}
-          onChange={(e) => setFileType(e.target.value as 'image' | 'video')}
-          disabled={mode === 'upload'}
-        >
-          <option value="image">Image</option>
-          <option value="video">Video</option>
-        </select>
-        <input
-          type="number"
-          min={1}
-          max={durationUnit === 'hours' ? 24 : 1440}
-          className="w-20 rounded border px-2 py-1 text-sm bg-transparent"
-          style={{ borderColor: 'var(--line)' }}
-          value={durationValue}
-          onChange={(e) => setDurationValue(Number(e.target.value) || 0)}
-        />
-        <select
-          className="rounded border px-2 py-1 text-sm bg-transparent"
-          style={{ borderColor: 'var(--line)' }}
-          value={durationUnit}
-          onChange={(e) => setDurationUnit(e.target.value as 'minutes' | 'hours')}
-        >
-          <option value="minutes">minutes</option>
-          <option value="hours">hours</option>
-        </select>
-      </div>
+      <select
+        className="rounded border px-2 py-1 text-sm bg-transparent w-fit"
+        style={{ borderColor: 'var(--line)' }}
+        value={fileType}
+        onChange={(e) => setFileType(e.target.value as 'image' | 'video')}
+        disabled={mode === 'upload'}
+      >
+        <option value="image">Image</option>
+        <option value="video">Video</option>
+      </select>
 
       <button
         type="button"
         disabled={!canPublish}
-        onClick={() => onPublish(elementId, activeUrl, fileType, durationMinutes, mode === 'upload' ? uploadedPath : null)}
+        onClick={() => onPublish(elementId, activeUrl, fileType, mode === 'upload' ? uploadedPath : null)}
         className="rounded px-3 py-2 text-sm font-semibold disabled:opacity-40"
         style={{ background: 'var(--ink)', color: 'var(--paper)' }}
       >

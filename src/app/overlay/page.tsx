@@ -2651,10 +2651,14 @@ function OverlayContent() {
               // line 2193 so slot pill and form agree. Clamp to ≥1 min so
               // the pill never reads "0m wait" when there's genuinely a
               // live beam and queue ahead.
-              const activeRemainingMin = activeBooking ? Math.max(0, getSecondsRemaining(activeBooking) / 60) : 0;
+              // null = current occupant has no time limit (streamer-published
+              // content) -- there's no numeric wait estimate to give.
+              const activeRemainingSecs = activeBooking ? getSecondsRemaining(activeBooking) : 0;
               const queueOnSlot        = approvedQueuedBookings.filter((b:any) => b.element_id === el.id);
               const queueDurationMin   = queueOnSlot.reduce((sum: number, b:any) => sum + Number(b.duration_minutes || 0), 0);
-              const waitMin            = Math.max(1, Math.round(activeRemainingMin + queueDurationMin));
+              const waitMin            = activeRemainingSecs === null
+                ? null
+                : Math.max(1, Math.round(Math.max(0, activeRemainingSecs) / 60 + queueDurationMin));
               // Viewer has a preview ready (upload or validated URL)
               const viewerHasPreview = isSelected && (
                 (uploadMode === 'upload' && !!uploadedUrl) ||
@@ -2910,7 +2914,7 @@ function OverlayContent() {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      ⏳ {queueCount > 0 ? `${queueCount} queued · ` : ''}~{waitMin}m wait
+                      ⏳ {queueCount > 0 ? `${queueCount} queued · ` : ''}{waitMin === null ? 'wait unknown' : `~${waitMin}m wait`}
                     </div>
                   )}
 

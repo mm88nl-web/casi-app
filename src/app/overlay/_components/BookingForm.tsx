@@ -218,10 +218,13 @@ export default function BookingForm(props: Props) {
     if (!isQueue) return null;
     const active = activeBookings.find(b => b.element_id === slot.id);
     if (!active) return null;
-    const remaining = getSecondsRemaining(active) / 60;
+    const activeRemaining = getSecondsRemaining(active);
     const queue = approvedQueuedBookings.filter(b => b.element_id === slot.id);
     const queueMinutes = queue.reduce((sum, b) => sum + Number(b.duration_minutes || 0), 0);
-    return { wait: Math.round(remaining + queueMinutes), ahead: queue.length };
+    // null = the current occupant has no time limit (streamer-published
+    // content) -- there's no numeric estimate to give, not "0 min."
+    if (activeRemaining === null) return { wait: null, ahead: queue.length };
+    return { wait: Math.round(activeRemaining / 60 + queueMinutes), ahead: queue.length };
   })();
 
   return (
@@ -610,7 +613,9 @@ export default function BookingForm(props: Props) {
       {queueWait && (
         <div style={{ background: `rgba(${tcRgb},0.06)`, border: `1px solid rgba(${tcRgb},0.15)`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
           <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 4 }}>Estimated wait</div>
-          <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 15, fontWeight: 700, color: 'var(--casi-accent)' }}>~{queueWait.wait} min</div>
+          <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 15, fontWeight: 700, color: 'var(--casi-accent)' }}>
+            {queueWait.wait === null ? 'Unknown — waiting on streamer' : `~${queueWait.wait} min`}
+          </div>
           <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: '#555', marginTop: 2 }}>
             {queueWait.ahead} booking{queueWait.ahead !== 1 ? 's' : ''} ahead of you
           </div>

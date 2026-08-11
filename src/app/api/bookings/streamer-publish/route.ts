@@ -11,7 +11,17 @@
  * so kicking whatever's currently active on that slot is handled identically
  * (including Solana settlement via the delegate/cranker if that's what's live).
  *
- * Request body: { element_id, image_url, storage_path?, file_type?, duration_minutes }
+ * Self-published content never has a time limit -- duration_minutes is
+ * always written as null. It stays active until the streamer publishes
+ * something else on the same slot, or a real viewer booking takes the slot
+ * back over (see approveBooking's payment_method==='streamer' non-occupant
+ * check in streamer-moderation.ts, and expire-and-advance's timerElapsed
+ * guard, which already no-ops on a falsy duration rather than auto-expiring
+ * it). A duration input here would just be one more thing for the streamer
+ * to fill in for no real benefit -- either of the two replace paths above
+ * already covers it.
+ *
+ * Request body: { element_id, image_url, storage_path?, file_type? }
  * Response: { booking } | { error }
  */
 import { NextResponse } from 'next/server';
@@ -24,8 +34,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
-
-const MAX_DURATION_MINUTES = 24 * 60; // sanity cap — no "indefinite" state exists
 
 export async function POST(req: Request) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -40,7 +48,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
 
-  const { element_id, image_url, storage_path, file_type, duration_minutes } = body;
+  const { element_id, image_url, storage_path, file_type } = body;
   if (!element_id || !image_url) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
@@ -49,9 +57,6 @@ export async function POST(req: Request) {
   if (!mediaCheck.ok) {
     return NextResponse.json({ error: mediaCheck.error }, { status: 400 });
   }
-
-  const dur = Math.min(Math.max(Number(duration_minutes) || 0, 0), MAX_DURATION_MINUTES);
-  if (dur <= 0) return NextResponse.json({ error: 'Invalid duration' }, { status: 400 });
 
   // The slot must belong to the authenticated streamer — this route can
   // only ever publish to the caller's own overlay, never anyone else's.
@@ -81,7 +86,7 @@ export async function POST(req: Request) {
       image_url: mediaCheck.value,
       storage_path: storage_path || null,
       file_type: file_type || null,
-      duration_minutes: dur,
+      duration_minutes: null,
       price_value: 0,
       price_unit: element.price_unit,
       status: 'pending',

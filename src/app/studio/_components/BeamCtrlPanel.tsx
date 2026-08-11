@@ -126,7 +126,7 @@ export default function BeamCtrlPanel({
   const [maxMin, setMaxMin] = useState<string>(
     String(el.prices?.max_min ?? el.max_duration_minutes ?? ''),
   );
-  const [liveSeconds, setLiveSeconds] = useState(
+  const [liveSeconds, setLiveSeconds] = useState<number | null>(
     activeBooking ? getSecondsRemaining(activeBooking) : 0,
   );
   // Snapshot of pre-free rates so toggling Free → not-free restores
@@ -157,7 +157,7 @@ export default function BeamCtrlPanel({
   }, [activeBooking?.id]);
 
   const durMins = activeBooking ? Number(activeBooking.duration_minutes) : 0;
-  const elapsed = activeBooking ? Math.max(0, durMins * 60 - liveSeconds) : 0;
+  const elapsed = activeBooking && liveSeconds !== null ? Math.max(0, durMins * 60 - liveSeconds) : 0;
   const earnedSoFar = activeBooking
     ? activeBooking.price_unit === 'min'
       ? ((elapsed / 60) * activeBooking.price_value).toFixed(2)

@@ -215,8 +215,9 @@ export default function MyTransactionsSection({ rows, username }: Props) {
               : `€${(cents / 100).toFixed(2)}`;
           // Beam description: prefer aired duration when we know it (started)
           // — falls back to the booked duration for pending/cancelled rows.
+          const durationLabel = r.duration_minutes != null ? `${r.duration_minutes}m` : '∞';
           const beamLabel = r.kind === 'beam'
-            ? (airedSecs !== null ? fmtAired(airedSecs) : `${r.duration_minutes}m`)
+            ? (airedSecs !== null ? fmtAired(airedSecs) : durationLabel)
             : null;
           return (
             <div key={`${r.kind}-${r.id}`} className="my-tx-row">
@@ -224,7 +225,7 @@ export default function MyTransactionsSection({ rows, username }: Props) {
               <span className="my-tx-kind">{r.kind === 'beam' ? '★ beam' : '⚡ flash'}</span>
               <span
                 className="my-tx-msg"
-                title={wasKickedEarly ? `Ended early — aired ${fmtAired(airedSecs!)} of ${r.duration_minutes}m` : (r.message ?? '')}
+                title={wasKickedEarly ? `Ended early — aired ${fmtAired(airedSecs!)} of ${durationLabel}` : (r.message ?? '')}
               >
                 {beamLabel
                   ? `${beamLabel}${wasKickedEarly ? ' (early)' : ''} · ${r.message || '—'}`

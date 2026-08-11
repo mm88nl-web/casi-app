@@ -10,7 +10,7 @@ type Props = {
 };
 
 export default function Countdown({ booking, onWarning, onExpire }: Props) {
-  const [seconds, setSeconds] = useState(getSecondsRemaining(booking));
+  const [seconds, setSeconds] = useState<number | null>(getSecondsRemaining(booking));
   const firedRef = useRef(false);
 
   useEffect(() => {
@@ -18,6 +18,10 @@ export default function Countdown({ booking, onWarning, onExpire }: Props) {
     const interval = setInterval(() => {
       const s = getSecondsRemaining(booking);
       setSeconds(s);
+      // null = no time limit (streamer-published content) -- never warn or
+      // auto-expire it; s <= 0 there would otherwise fire onExpire on the
+      // very first tick.
+      if (s === null) return;
       if (onWarning) onWarning(s);
       if (s <= 0 && onExpire && !firedRef.current) {
         firedRef.current = true;

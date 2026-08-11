@@ -52,7 +52,9 @@ function timeAgo(createdAt: string): string {
   return logTime(createdAt);
 }
 
-function formatRemaining(secs: number): string {
+function formatRemaining(secs: number | null): string {
+  // null = no time limit (streamer-published content with no duration set).
+  if (secs === null) return '∞';
   // Floor first — duration_minutes can be fractional (e.g. 0.5min for tests)
   // so durationSecs - elapsed is a float, and `s = float % 60` produced
   // "3:34.9999..." in the timer.
@@ -138,6 +140,7 @@ function bookingToQueueItem(
       ? 'video clip'
       : 'image';
   const duration = Number(b.duration_minutes) || 0;
+  const durationLabel = b.duration_minutes != null ? `${duration}m` : '∞';
   const rate = Number(b.price_value) || 0;
   const unitMinutes = b.price_unit === 'hr' ? 60 : 1;
   const total = rate * (duration / unitMinutes);
@@ -149,7 +152,7 @@ function bookingToQueueItem(
     id: `booking-${b.id}`,
     kind: 'beam',
     name: `${who} · ${snippet}`,
-    subtitle: `${timeAgo(b.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · ${duration}m${b.file_type === 'video' ? ' · video' : ''}${rate > 0 ? ` · ${rate}/${b.price_unit}` : ''}`,
+    subtitle: `${timeAgo(b.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · ${durationLabel}${b.file_type === 'video' ? ' · video' : ''}${rate > 0 ? ` · ${rate}/${b.price_unit}` : ''}`,
     rail: b.payment_method === 'free' ? null : (isUsdc ? 'usdc' : 'stripe'),
     priceLabel,
     readOnly: false,
@@ -218,9 +221,12 @@ function bookingToAiringItem(b: BookingRow, currency: string | null = null): Air
   const snippet = b.message ? `"${b.message.slice(0, 40)}"` : b.file_type === 'video' ? 'video clip' : 'image';
   const { total, isUsdc, label } = bookingTotal(b, currency);
   const startMs = b.started_at ? new Date(b.started_at).getTime() : Date.now();
-  const durationSecs = (Number(b.duration_minutes) || 0) * 60;
+  // No duration set (streamer-published content) = no time limit, not "0
+  // seconds left" -- keep that distinct all the way through the display.
+  const hasLimit = !!b.duration_minutes && Number(b.duration_minutes) > 0;
+  const durationSecs = hasLimit ? Number(b.duration_minutes) * 60 : 0;
   const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
-  const remaining = Math.max(0, durationSecs - elapsed);
+  const remaining = hasLimit ? Math.max(0, durationSecs - elapsed) : null;
 
   // Live vested-amount display — same math the on-chain program uses
   // (vested = total × min(elapsed, duration) / duration), so the streamer
@@ -814,7 +820,7 @@ function StudioPageInner() {
   }, [moderationCtx, queuedBookings, activeBookings, playingNowId]);
 
   const handleStreamerPublish = useCallback(async (
-    elementId: string, imageUrl: string, fileType: 'image' | 'video', durationMinutes: number, storagePath: string | null,
+    elementId: string, imageUrl: string, fileType: 'image' | 'video', storagePath: string | null,
   ) => {
     if (!moderationCtx || publishing) return;
     setPublishing(true);
@@ -824,10 +830,14 @@ function StudioPageInner() {
       const token = session?.access_token;
       if (!token) { setErrorMsg('Not signed in'); return; }
 
+      // No duration_minutes sent -- streamer-published content never has a
+      // time limit, per the route's own default. It's replaced by the
+      // streamer publishing again, or displaced automatically the moment a
+      // real viewer booking activates on the same slot.
       const res = await fetch('/api/bookings/streamer-publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ element_id: elementId, image_url: imageUrl, file_type: fileType, duration_minutes: durationMinutes, storage_path: storagePath }),
+        body: JSON.stringify({ element_id: elementId, image_url: imageUrl, file_type: fileType, storage_path: storagePath }),
       });
       const data = await res.json();
       if (!res.ok) { setErrorMsg(data.error ?? 'Publish failed'); return; }
@@ -1111,9 +1121,11 @@ function buildPreview(
     const fmt = (n: number) => n.toFixed(n % 1 === 0 ? 0 : 2);
     const totalLabel = isUsdc ? `${fmt(total)} USDC` : `€${fmt(total)}`;
     const rateLabel = isUsdc ? `${fmt(rate)} USDC/${b.price_unit}` : `€${fmt(rate)}/${b.price_unit}`;
-    const durationLabel = duration >= 60
-      ? `${Math.floor(duration / 60)}h${duration % 60 ? ` ${duration % 60}m` : ''}`
-      : `${duration}m`;
+    const durationLabel = b.duration_minutes == null
+      ? '∞'
+      : duration >= 60
+        ? `${Math.floor(duration / 60)}h${duration % 60 ? ` ${duration % 60}m` : ''}`
+        : `${duration}m`;
     const element = b.element_id ? elementsById[b.element_id] : undefined;
     return {
       id,
