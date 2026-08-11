@@ -667,7 +667,15 @@ export default function AuthPage() {
                     </label>
                     {error && <div className="ap-error">{error}</div>}
                     <div><TurnstileWidget onVerify={onCaptchaVerify} onExpire={onCaptchaExpire} compact /></div>
-                    <button type="submit" className="ap-submit" disabled={!acceptedTos || loading}>
+                    {/* Gated on captchaToken (not just acceptedTos) so a blocked/
+                        failed/slow-to-load widget can't let a signup carry an
+                        undefined captchaToken all the way to handleSignup's
+                        signUp() call two steps later — see
+                        docs/fable-spam-abuse-review-2026-08-10.md Finding 4.
+                        Widget only lives on this step, so gating here (not on
+                        the final profile-step submit) keeps a retry path
+                        visible instead of dead-ending the user. */}
+                    <button type="submit" className="ap-submit" disabled={!acceptedTos || loading || !captchaToken}>
                       Continue <span className="arr">→</span>
                     </button>
                   </form>

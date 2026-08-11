@@ -8,6 +8,15 @@
  *   - Light validation: email required, description required, kind in allow-list.
  *   - Insert into abuse_reports via service role (anon cannot read the table).
  *   - IP-hash rate-limit: max 5 reports per IP per hour.
+ *   - Per-target_username rate-limit: max 20 reports per hour, added 2026-08-10.
+ *     The IP-hash cap alone is bypassable by rotating IPs (same mechanics as
+ *     docs/fable-spam-abuse-review-2026-08-10.md Finding 3); since nothing
+ *     downstream auto-acts on report volume the practical damage is a real
+ *     report (e.g. an actual DMCA notice) getting buried under IP-rotated
+ *     noise targeting one streamer. This second, DB-backed cap (not
+ *     in-memory — needs to hold across serverless instances) closes that
+ *     without touching the per-IP cap's own semantics. 20/hr is well above
+ *     any realistic legitimate-report volume for one streamer in an hour.
  *
  * Operators triage reports from the admin tooling or straight from the table.
  */
@@ -30,6 +39,7 @@ const MAX_URL_LEN         = 600;
 const MAX_USERNAME_LEN    = 64;
 const MAX_DESCRIPTION_LEN = 4000;
 const HOURLY_LIMIT        = 5;
+const TARGET_HOURLY_LIMIT = 20;
 
 function getClientIp(req: Request): string {
   const realIp = req.headers.get('x-real-ip');
@@ -108,6 +118,22 @@ export async function POST(req: Request) {
       { error: 'Too many reports from your network in the last hour. Email abuse@casi.gg directly.' },
       { status: 429 },
     );
+  }
+
+  // Aggregate cap per target, independent of reporter IP — see file header.
+  const cleanedTargetUsername = typeof target_username === 'string' ? target_username.trim() : '';
+  if (cleanedTargetUsername) {
+    const { count: targetCount } = await supabase
+      .from('abuse_reports')
+      .select('id', { count: 'exact', head: true })
+      .eq('target_username', cleanedTargetUsername)
+      .gte('created_at', oneHourAgo);
+    if ((targetCount ?? 0) >= TARGET_HOURLY_LIMIT) {
+      return NextResponse.json(
+        { error: 'This streamer has received a lot of reports in the last hour. Try again later, or email abuse@casi.gg directly.' },
+        { status: 429 },
+      );
+    }
   }
 
   const { error: insertErr } = await supabase.from('abuse_reports').insert({
