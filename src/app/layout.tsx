@@ -144,6 +144,69 @@ export default function RootLayout({
       data-paper="light"
       className={`${sans.variable} ${display.variable} ${mono.variable} ${serif.variable} h-full antialiased`}
     >
+      {/* Anti-FOUC: apply the stored skin before first paint, synchronously,
+          so a returning visitor with a non-default skin (e.g. the flagship
+          Casi Dark teal) never sees the Casi Light :root default flash
+          before UserSkinProvider's effect runs post-mount. Reinstates
+          26643fc, which 2026-06-02's e1d1c01 ("kill teal flash on nav")
+          deleted outright instead of just fixing the new-visitor case it
+          was actually chasing -- that regressed this exact flash for every
+          returning visitor on a non-default skin. globals.css's :root
+          already matches casi-light now (that part of e1d1c01 was correct
+          and stays), so this script is a genuine no-op for a first-time
+          visitor and only does real work for someone with a stored
+          preference. Mirrors UserSkinProvider.tsx's applySkinToRoot()
+          exactly, including custom-skin overrides and the data-paper
+          light/dark toggle -- <html> above hardcodes data-paper="light" as
+          the SSR/no-JS fallback, so a dark-skin visitor needs that
+          attribute actively removed here, not just left unset, or the
+          color-mix derivations stay on the light formula despite correct
+          raw ink/paper values. Keep this table in sync with SKINS in
+          src/lib/skins.ts by hand -- it can't import that module (this
+          runs before any JS bundle loads). */}
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{
+function h2rgb(h){h=h.replace('#','');if(h.length!==6)return null;return parseInt(h.slice(0,2),16)+', '+parseInt(h.slice(2,4),16)+', '+parseInt(h.slice(4,6),16);}
+function isLightHex(h){h=h.replace('#','');if(h.length!==6)return false;var r=parseInt(h.slice(0,2),16)/255,g=parseInt(h.slice(2,4),16)/255,b=parseInt(h.slice(4,6),16)/255;return (0.2126*r+0.7152*g+0.0722*b)>0.5;}
+var S={
+'casi-light':['#294b3c','41, 75, 60','#f5e1d2','#c04830','192, 72, 48',1],
+'rose':['#BE185D','190, 24, 93','#FDF2F8','#9333EA','147, 51, 234',1],
+'snow':['#2563EB','37, 99, 235','#F0F5FF','#7C3AED','124, 58, 237',1],
+'amber':['#B45309','180, 83, 9','#FFFBEB','#DC2626','220, 38, 38',1],
+'youtube':['#FF0000','255, 0, 0','#FFF8F8','#CC0000','204, 0, 0',1],
+'casi-dark':['#0DCFB0','13, 207, 176','#0C0D11','#9945FF','153, 69, 255',0],
+'twitch':['#9146FF','145, 70, 255','#0e0e1a','#772CE8','119, 44, 232',0],
+'kick':['#53FC18','83, 252, 24','#0a1a0a','#00cc00','0, 204, 0',0],
+'mono':['#E8E8E8','232, 232, 232','#0a0a0a','#888888','136, 136, 136',0],
+'apothecary':['#C8A45C','200, 164, 92','#0F0C07','#7C5C2A','124, 92, 42',0],
+'onlyfans':['#00AFF0','0, 175, 240','#0A1420','#0088CC','0, 136, 204',0],
+'custom':['#FFFFFF','255, 255, 255','#0A0A0A','#888888','136, 136, 136',0]
+};
+var id=localStorage.getItem('casi-skin-id')||'casi-light';
+var sk=S[id]||S['casi-light'];
+var isCustom=(id==='custom');
+var validHex=function(s){return !!s&&/^#[0-9A-Fa-f]{6}$/.test(s);};
+var inkOv=isCustom?(localStorage.getItem('casi-ink-color')||localStorage.getItem('casi-theme-color')):null;
+var paperOv=isCustom?localStorage.getItem('casi-paper-color'):null;
+var accent2Ov=isCustom?localStorage.getItem('casi-accent2-color'):null;
+var useInk=validHex(inkOv), usePaper=validHex(paperOv), useAccent2=validHex(accent2Ov);
+var ink=useInk?inkOv:sk[0];
+var inkRgb=useInk?h2rgb(inkOv):sk[1];
+var paper=usePaper?paperOv:sk[2];
+var accent2=useAccent2?accent2Ov:sk[3];
+var accent2Rgb=useAccent2?h2rgb(accent2Ov):sk[4];
+var lightMode=(sk[5]===1)||(usePaper&&isLightHex(paper));
+var r=document.documentElement;
+r.style.setProperty('--ink',ink);
+r.style.setProperty('--paper',paper);
+if(lightMode){r.setAttribute('data-paper','light');}else{r.removeAttribute('data-paper');}
+r.style.setProperty('--casi-accent',ink);
+r.style.setProperty('--casi-accent-rgb',inkRgb);
+r.style.setProperty('--casi-accent2',accent2);
+r.style.setProperty('--casi-accent2-rgb',accent2Rgb);
+r.style.setProperty('--casi-bg',paper);
+}catch(e){}})();` }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <script
           type="application/ld+json"

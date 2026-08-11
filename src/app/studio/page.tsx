@@ -357,8 +357,16 @@ function StudioPageInner() {
 
     const [pendingBookingsRes, pendingFlashesRes, activeBookingsRes, queuedBookingsRes, elementsRes, logFlashesRes, todayBookingsRes] =
       await Promise.all([
+        // payment_method='streamer' rows (self-published content) are
+        // excluded here -- they're inserted as 'pending' for a brief
+        // instant before handleStreamerPublish immediately activates them,
+        // and with no filter they'd flash into the approval queue looking
+        // like a real paid booking awaiting a decision (bookingToQueueItem
+        // has no 'streamer' case, so it falls into the stripe/"paid" rail
+        // by default) for that split second between insert and activate.
         supabase.from('bookings').select(BOOKING_COLS)
           .eq('profile_id', profileId).eq('status', 'pending')
+          .neq('payment_method', 'streamer')
           .order('created_at', { ascending: false }).limit(50),
         supabase.from('flashes').select(FLASH_COLS)
           .eq('profile_id', profileId).eq('status', 'pending')
