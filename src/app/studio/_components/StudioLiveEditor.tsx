@@ -8,6 +8,30 @@ import BeamCtrlPanel from './BeamCtrlPanel';
 import StudioLayersPanel, { type LayerItem } from './StudioLayersPanel';
 import { formatSlotPrice } from '@/lib/slot-pricing';
 
+// Outage-workaround fallback — see src/app/api/overlay-direct/mutate/route.ts
+// and src/lib/db-direct.ts. Only reached when the normal supabase-js write
+// already failed (e.g. the Supabase egress-quota 402). Safe to delete this
+// helper and its two call sites once that's resolved.
+async function tryDirectMutate(
+  supabase: SupabaseClient,
+  body: { action: 'update'; id: string; updates: Record<string, unknown> }
+    | { action: 'insert'; data: Record<string, unknown> }
+): Promise<{ data: any } | null> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return null;
+    const res = await fetch('/api/overlay-direct/mutate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null; // bypass also unavailable — caller falls back to its normal failure path
+  }
+}
+
 // Smart placement: find the first 4x4 grid cell with no nearby beam. Ported
 // verbatim from admin/page.tsx so setup-surface inserts don't clash with
 // the admin canvas when both are open in parallel tabs.
@@ -168,12 +192,15 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
     }));
     const { error } = await supabase.from('overlay_elements').update(s).eq('id', id);
     if (error) {
-      // Roll back the optimistic update — a 402/network failure means this
-      // never persisted, so the UI shouldn't keep showing it as applied.
-      if (prevEl) setElements((prev) => prev.map((el) => (el.id === id ? prevEl : el)));
-      setSaveStatus('Ready');
-      showToast('Save failed — change was not saved', 'err');
-      return;
+      const bypassed = await tryDirectMutate(supabase, { action: 'update', id, updates: s });
+      if (!bypassed) {
+        // Roll back the optimistic update — nothing persisted, so the UI
+        // shouldn't keep showing it as applied.
+        if (prevEl) setElements((prev) => prev.map((el) => (el.id === id ? prevEl : el)));
+        setSaveStatus('Ready');
+        showToast('Save failed — change was not saved', 'err');
+        return;
+      }
     }
     setSaveStatus('Saved');
     setTimeout(() => setSaveStatus('Ready'), 2000);
@@ -230,17 +257,24 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
 
   const addBeam = useCallback(async () => {
     const freePos = findFreePosition(elements);
-    const { data, error } = await supabase.from('overlay_elements').insert({
+    const insertData = {
       profile_id: profileId, image_url: '',
       pos_x: freePos.pos_x, pos_y: freePos.pos_y,
       width: 20, height: 20,
       is_background: false, price_value: 0, price_unit: 'min', max_duration_minutes: null, locked: false,
-    }).select().single();
+    };
+    const { data, error } = await supabase.from('overlay_elements').insert(insertData).select().single();
     if (data) {
       setElements((prev) => [...prev, data]);
       setSelectedSlotId(data.id);
     } else if (error) {
-      showToast('Could not add beam — save failed', 'err');
+      const bypassed = await tryDirectMutate(supabase, { action: 'insert', data: insertData });
+      if (bypassed?.data) {
+        setElements((prev) => [...prev, bypassed.data]);
+        setSelectedSlotId(bypassed.data.id);
+      } else {
+        showToast('Could not add beam — save failed', 'err');
+      }
     }
   }, [supabase, profileId, elements]);
 
