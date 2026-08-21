@@ -160,8 +160,21 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
     setSaveStatus('Saving…');
     const s = { ...updates };
     if (s.price_value !== undefined) s.price_value = parseFloat(s.price_value) || 0;
-    setElements((prev) => prev.map((el) => (el.id === id ? { ...el, ...s } : el)));
-    await supabase.from('overlay_elements').update(s).eq('id', id);
+    let prevEl: any = null;
+    setElements((prev) => prev.map((el) => {
+      if (el.id !== id) return el;
+      prevEl = el;
+      return { ...el, ...s };
+    }));
+    const { error } = await supabase.from('overlay_elements').update(s).eq('id', id);
+    if (error) {
+      // Roll back the optimistic update — a 402/network failure means this
+      // never persisted, so the UI shouldn't keep showing it as applied.
+      if (prevEl) setElements((prev) => prev.map((el) => (el.id === id ? prevEl : el)));
+      setSaveStatus('Ready');
+      showToast('Save failed — change was not saved', 'err');
+      return;
+    }
     setSaveStatus('Saved');
     setTimeout(() => setSaveStatus('Ready'), 2000);
   }, [supabase]);
@@ -170,7 +183,8 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
     setElements((prev) => prev.map((el) => (el.id === id ? { ...el, ...updates } : el)));
     if (sliderSaveTimer.current) clearTimeout(sliderSaveTimer.current);
     sliderSaveTimer.current = setTimeout(async () => {
-      await supabase.from('overlay_elements').update(updates).eq('id', id);
+      const { error } = await supabase.from('overlay_elements').update(updates).eq('id', id);
+      if (error) showToast('Save failed — change was not saved', 'err');
     }, 400);
   }, [supabase]);
 
@@ -201,13 +215,22 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
   }, [updateLayer]);
 
   const toggleLock = useCallback(async (id: string, locked: boolean) => {
-    setElements((prev) => prev.map((el) => (el.id === id ? { ...el, locked } : el)));
-    await supabase.from('overlay_elements').update({ locked }).eq('id', id);
+    let prevEl: any = null;
+    setElements((prev) => prev.map((el) => {
+      if (el.id !== id) return el;
+      prevEl = el;
+      return { ...el, locked };
+    }));
+    const { error } = await supabase.from('overlay_elements').update({ locked }).eq('id', id);
+    if (error) {
+      if (prevEl) setElements((prev) => prev.map((el) => (el.id === id ? prevEl : el)));
+      showToast('Save failed — change was not saved', 'err');
+    }
   }, [supabase]);
 
   const addBeam = useCallback(async () => {
     const freePos = findFreePosition(elements);
-    const { data } = await supabase.from('overlay_elements').insert({
+    const { data, error } = await supabase.from('overlay_elements').insert({
       profile_id: profileId, image_url: '',
       pos_x: freePos.pos_x, pos_y: freePos.pos_y,
       width: 20, height: 20,
@@ -216,6 +239,8 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
     if (data) {
       setElements((prev) => [...prev, data]);
       setSelectedSlotId(data.id);
+    } else if (error) {
+      showToast('Could not add beam — save failed', 'err');
     }
   }, [supabase, profileId, elements]);
 
