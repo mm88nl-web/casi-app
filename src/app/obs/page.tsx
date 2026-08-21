@@ -23,11 +23,22 @@ function OBSContent() {
 
   useEffect(() => {
     const load = async () => {
-      const { data: prof } = await supabase
+      let prof: any = null;
+      const { data, error } = await supabase
         .from('profiles')
         .select('id, ink_color, theme_color, skin')
         .eq('username', username)
         .single();
+      prof = data;
+      if (error || !prof) {
+        // Supabase REST is down (e.g. quota-outage 402) — fall back to the
+        // direct-Postgres bypass route. See src/lib/db-direct.ts. Safe to
+        // remove this whole branch once the outage is resolved.
+        try {
+          const res = await fetch(`/api/overlay-direct/obs-data?username=${encodeURIComponent(username)}`);
+          if (res.ok) prof = (await res.json()).profile;
+        } catch { /* bypass also unavailable — nothing more to try */ }
+      }
       if (prof) {
         setProfileId(prof.id);
         const hex = prof.skin === 'custom'
@@ -45,7 +56,7 @@ function OBSContent() {
     if (!profileId) return;
 
     const loadAll = async () => {
-      const [{ data: els }, { data: bks }] = await Promise.all([
+      const [elRes, bkRes] = await Promise.all([
         supabase.from('overlay_elements').select('*').eq('profile_id', profileId),
         supabase
           .from('bookings')
@@ -53,6 +64,21 @@ function OBSContent() {
           .eq('profile_id', profileId)
           .eq('status', 'active'),
       ]);
+
+      let els = elRes.data;
+      let bks = bkRes.data;
+      if (elRes.error || bkRes.error) {
+        // Same outage bypass as the profile-lookup effect above — one call
+        // covers both tables since the route already joins them server-side.
+        try {
+          const res = await fetch(`/api/overlay-direct/obs-data?username=${encodeURIComponent(username)}`);
+          if (res.ok) {
+            const json = await res.json();
+            els = json.elements;
+            bks = json.bookings;
+          }
+        } catch { /* bypass also unavailable — render whatever we already have */ }
+      }
 
       let filteredEls = els || [];
       if (layer === 'beams')         filteredEls = filteredEls.filter(el => !el.is_background);
