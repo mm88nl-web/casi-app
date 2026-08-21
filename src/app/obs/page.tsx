@@ -67,12 +67,19 @@ function OBSContent() {
 
     loadAll();
 
+    // Tracks the last time we know the realtime pipe was alive (an actual
+    // change event, or the channel reaching SUBSCRIBED). The watchdog below
+    // only refetches once this goes stale — a healthy connection never
+    // triggers the backstop at all.
+    let lastEventAt = Date.now();
+    const bump = () => { lastEventAt = Date.now(); };
+
     const elCh = supabase.channel(`obs_els_${layer}_${profileId}`)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'overlay_elements',
         filter: `profile_id=eq.${profileId}`,
-      }, () => loadAll())
-      .subscribe();
+      }, () => { bump(); loadAll(); })
+      .subscribe((status) => { if (status === 'SUBSCRIBED') bump(); });
 
     // Banner content lives on bookings (message field), so the OBS render
     // needs to hear about booking transitions too — not just element
@@ -82,23 +89,30 @@ function OBSContent() {
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'bookings',
         filter: `profile_id=eq.${profileId}`,
-      }, () => loadAll())
-      .subscribe();
+      }, () => { bump(); loadAll(); })
+      .subscribe((status) => { if (status === 'SUBSCRIBED') bump(); });
 
-    // Safety-refresh fallback. OBS browser sources run in CEF, which can
+    // Safety-refresh backstop. OBS browser sources run in CEF, which can
     // throttle background JS — so a Supabase realtime push (e.g. a beam the
-    // streamer just approved) can land seconds late, sometimes ~30s. Polling
-    // as a backstop guarantees a newly-active beam shows within a few seconds
-    // regardless of realtime delivery. The render keys (`el.id` /
-    // `${el.id}-${active?.id}`) are stable, so an unchanged refresh causes no
-    // remount, flicker, or glow-animation replay; the queries are tiny and
-    // scoped to one profile_id.
-    const poll = setInterval(loadAll, 4000);
+    // streamer just approved) can land seconds late, sometimes ~30s. Rather
+    // than polling unconditionally (which was ~43k requests/day per open
+    // OBS window and blew through the Supabase free-tier egress quota), this
+    // checks every 5s whether a realtime event has landed in the last 15s;
+    // only a genuinely stalled connection triggers a refetch. The render
+    // keys (`el.id` / `${el.id}-${active?.id}`) are stable, so an unchanged
+    // refresh causes no remount, flicker, or glow-animation replay.
+    const STALE_MS = 15_000;
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastEventAt > STALE_MS) {
+        bump(); // avoid re-firing every tick while the outage continues
+        loadAll();
+      }
+    }, 5_000);
 
     return () => {
       supabase.removeChannel(elCh);
       supabase.removeChannel(bkCh);
-      clearInterval(poll);
+      clearInterval(watchdog);
     };
   }, [profileId, layer, supabase]);
 
