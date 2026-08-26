@@ -44,6 +44,10 @@ export interface SendFlashResult {
   solana?: { sig: string; escrowPda: string; solscanUrl: string };
   /** Free rail returns the newly-created flash id so the UI can subscribe to it. */
   flashId?: string;
+  /** Every rail's create call mints this — the credential
+   *  /api/flashes/my-status verifies to prove read-ownership without a
+   *  real auth session. Caller stores it via rememberFlashToken(). */
+  flashViewerToken?: string;
 }
 
 export const SOLANA_ENABLED =
@@ -75,9 +79,9 @@ async function sendFlashStripe(input: SendFlashInput): Promise<SendFlashResult> 
       payment_method: 'stripe',
     }),
   });
-  const { client_secret, flash_id, error } = await res.json();
+  const { client_secret, flash_id, viewer_token, error } = await res.json();
   if (error || !client_secret) throw new Error(error || 'Failed to create Stripe checkout');
-  return { stripeClientSecret: client_secret, flashId: flash_id };
+  return { stripeClientSecret: client_secret, flashId: flash_id, flashViewerToken: viewer_token };
 }
 
 // ─── Solana ──────────────────────────────────────────────────────────────────
@@ -108,7 +112,7 @@ async function sendFlashSolana(input: SendFlashInput): Promise<SendFlashResult> 
       payment_method: 'solana',
     }),
   });
-  const { flash_id, solana_wallet, error: apiErr } = await createRes.json();
+  const { flash_id, solana_wallet, viewer_token, error: apiErr } = await createRes.json();
   if (apiErr || !flash_id) throw new Error(apiErr || 'Failed to create flash');
   if (!solana_wallet)      throw new Error('Streamer wallet not found');
 
@@ -157,7 +161,14 @@ async function sendFlashSolana(input: SendFlashInput): Promise<SendFlashResult> 
     phantomConnect.stashPendingBooking({
       kind:           'flash',
       booking_id:     String(flash_id),
-      cancel_token:   '',
+      // Reusing the `cancel_token` stash slot to carry viewer_token across
+      // the deeplink redirect — PendingBooking is shared between 'book' and
+      // 'flash' kinds and flashes don't have a cancel action, so this slot
+      // was previously always ''. The return handler (overlay/page.tsx,
+      // phantom_action=sign-resume) reads it back and calls
+      // rememberFlashToken() the same way the 'book' kind uses it for
+      // cancel_token.
+      cancel_token:   viewer_token ?? '',
       escrow_pda:     escrowPda.toBase58(),
       viewer_wallet:  publicKey.toBase58(),
     });
@@ -229,7 +240,7 @@ async function sendFlashSolana(input: SendFlashInput): Promise<SendFlashResult> 
     );
   }
 
-  return { flashId: flash_id, solana: { sig, escrowPda, solscanUrl } };
+  return { flashId: flash_id, flashViewerToken: viewer_token, solana: { sig, escrowPda, solscanUrl } };
 }
 
 // ─── Free ────────────────────────────────────────────────────────────────────
@@ -247,7 +258,7 @@ async function sendFlashFree(input: SendFlashInput): Promise<SendFlashResult> {
       turnstile_token: input.turnstileToken ?? null,
     }),
   });
-  const { flash_id, error } = await res.json();
+  const { flash_id, viewer_token, error } = await res.json();
   if (error || !flash_id) throw new Error(error || 'Failed to create free flash');
-  return { flashId: flash_id };
+  return { flashId: flash_id, flashViewerToken: viewer_token };
 }

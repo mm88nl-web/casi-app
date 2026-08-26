@@ -28,6 +28,8 @@ import {
   readBookingTokens,
   rememberBookingToken,
   forgetBookingToken,
+  readFlashTokens,
+  rememberFlashToken,
 } from './_components/viewerStorage';
 import NameEntryScreen from './_components/NameEntryScreen';
 import SolanaConfirmModal, { type TxStatus } from './_components/SolanaConfirmModal';
@@ -320,7 +322,10 @@ function OverlayContent() {
           }
         } else if (kind === 'flash') {
           // Flash booking_id is the flash row id. Different attach endpoint
-          // — flashes don't carry a cancel_token in the same way.
+          // — flashes' read-ownership credential rides in the same stash
+          // slot bookings use for cancel_token (see payment-manager.ts's
+          // sendFlashSolana mobile-handoff branch); remembered below on
+          // success so /api/flashes/my-status can find this flash later.
           const res = await fetch('/api/flashes/attach-escrow', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -332,6 +337,7 @@ function OverlayContent() {
             }),
           });
           if (res.ok) {
+            if (pending.cancel_token) rememberFlashToken(pending.booking_id, pending.cancel_token);
             showNotif('⚡ Flash locked — awaiting streamer approval!', 'success');
             pc.clearPendingBooking();
             refreshWalletNav();
@@ -384,43 +390,57 @@ function OverlayContent() {
   const loadData = useCallback(async (profId: string, nameOverride?: string) => {
     const name = nameOverride ?? viewerNameRef.current;
     const wallet = viewerWalletRef.current;
-    const [{ data: els }, { data: active }, { data: aq }, { data: queued }] = await Promise.all([
+    const [{ data: els }, { data: active }, { data: aq }, queueCountsRes] = await Promise.all([
       supabase.from('overlay_elements').select('*').eq('profile_id', profId),
       supabase.from('bookings').select(BOOKING_COLS).eq('profile_id', profId).eq('status','active').limit(BOOKING_PAGE_LIMIT),
       supabase.from('bookings').select(BOOKING_COLS).eq('profile_id', profId).eq('status','approved_queued').order('approved_at',{ascending:true}).limit(BOOKING_PAGE_LIMIT),
-      supabase.from('bookings').select('element_id').eq('profile_id', profId).eq('status','pending').limit(BOOKING_PAGE_LIMIT),
+      // Per-slot pending-queue counts. Was a direct `.eq('status','pending')`
+      // table read (element_id only) — anon RLS no longer exposes `pending`
+      // rows at all (20260827010000_narrow_anon_select_policies.sql), so
+      // this now goes through a route that returns aggregate counts only,
+      // never row content.
+      fetch('/api/bookings/queue-counts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: profId }),
+      }).then(r => r.json()).catch(() => ({ counts: {} })),
     ]);
     // Viewer overlay: show backdrops + any slot with a defined price (0 == free).
     setElements((els||[]).filter((el:any) => el.is_background || el.price_value >= 0));
     setActiveBookings(active||[]);
     setApprovedQueuedBookings(aq||[]);
-    const counts: Record<string,number> = {};
-    (queued||[]).forEach((b:any) => { if (b.element_id) counts[b.element_id]=(counts[b.element_id]||0)+1; });
-    setQueueCounts(counts);
+    setQueueCounts(queueCountsRes?.counts || {});
     if (name || wallet) {
       // Load the viewer's active + recent rows. Denied rows are included so
       // the visibility filter at visibleMyBookings can surface "recover USDC"
       // for Solana bookings whose escrow PDA still holds funds. Without this,
       // a viewer who can't recover within the 30s grace window below is stuck.
       //
-      // Two parallel queries, merged on id:
-      //   - by viewer_name: the full recent set (pending / active / queued /
-      //     denied / expired) for this browser's saved handle. `expired` is
+      // Two parallel lookups, merged on id:
+      //   - by token: the full recent set (pending / active / queued /
+      //     denied / expired / cancelled) for every booking this browser
+      //     holds a cancel_token for, via /api/bookings/my-status — replaces
+      //     the old `.eq('viewer_name', name)` direct read, since
+      //     viewer_name never proved ownership and anon RLS no longer
+      //     exposes those statuses broadly
+      //     (20260827010000_narrow_anon_select_policies.sql). `expired` is
       //     included so a kick whose on-chain settle silently failed still
-      //     surfaces the RECOVER USDC chip — the DB says "done", the PDA still
-      //     holds funds, and only the viewer can close it out.
-      //   - by viewer_wallet: denied or expired Solana rows with a live escrow
-      //     PDA, so a viewer who abandoned recovery on one device and
-      //     reconnects the same wallet elsewhere still sees the chip. Scoped
-      //     to payment_method=solana + non-null escrow_pda so we don't drag in
-      //     unrelated history.
+      //     surfaces the RECOVER USDC chip — the DB says "done", the PDA
+      //     still holds funds, and only the viewer can close it out.
+      //   - by viewer_wallet: denied or expired Solana rows with a live
+      //     escrow PDA, so a viewer who abandoned recovery on one device and
+      //     reconnects the same wallet elsewhere still sees the chip — still
+      //     a direct anon read since there's no token to check on a fresh
+      //     device, scoped tightly enough (payment_method=solana + non-null
+      //     escrow_pda) that anon RLS allows exactly this subset.
+      const tokenMap = readBookingTokens();
       const [nameRes, walletRes] = await Promise.all([
-        name
-          ? supabase.from('bookings').select(BOOKING_COLS)
-              .eq('profile_id', profId).eq('viewer_name', name)
-              .in('status', ['pending', 'active', 'approved_queued', 'denied', 'expired'])
-              .order('created_at', { ascending: false })
-              .limit(50)
+        Object.keys(tokenMap).length
+          ? fetch('/api/bookings/my-status', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tokens: tokenMap }),
+            }).then(r => r.json()).then(j => ({ data: (j.bookings || []).filter((b: any) => b.profile_id === profId) })).catch(() => ({ data: [] as any[] }))
           : Promise.resolve({ data: [] as any[] }),
         wallet
           ? supabase.from('bookings').select(BOOKING_COLS)
@@ -499,24 +519,32 @@ function OverlayContent() {
       const histStartIso = histStart.toISOString();
       const HIST_BOOK_COLS = 'id, status, payment_method, price_value, price_unit, original_amount_cents, message, duration_minutes, tx_signature, started_at, ended_at, created_at';
       const HIST_FLASH_COLS = 'id, status, payment_method, amount_cents, message, tx_signature, created_at';
-      const [histBookName, histBookWallet, histFlashName, histFlashWallet] = await Promise.all([
-        name
-          ? supabase.from('bookings').select(HIST_BOOK_COLS)
-              .eq('profile_id', profId).eq('viewer_name', name)
-              .gte('created_at', histStartIso)
-              .order('created_at', { ascending: false }).limit(50)
-          : Promise.resolve({ data: [] as any[] }),
+      const flashTokenMap = readFlashTokens();
+      // histBookName reuses `nameRes` (already fetched above via
+      // /api/bookings/my-status — every status/age this browser holds a
+      // token for) instead of a second round trip, just re-filtered to
+      // today. histBookWallet keeps its own direct query: still a real anon
+      // read, but now naturally narrowed by RLS to whatever the wallet
+      // carve-out allows rather than the full day's history (see the
+      // "residual gap" note in 20260827010000_narrow_anon_select_policies.sql)
+      // — a viewer on a brand-new device sees less of today's spend log than
+      // before, not a money-recovery regression.
+      const histBookNameData = (nameRes.data || []).filter((b: any) => b.created_at >= histStartIso);
+      const [histBookWallet, histFlashName, histFlashWallet] = await Promise.all([
         wallet
           ? supabase.from('bookings').select(HIST_BOOK_COLS)
               .eq('profile_id', profId).eq('viewer_wallet', wallet)
               .gte('created_at', histStartIso)
               .order('created_at', { ascending: false }).limit(50)
           : Promise.resolve({ data: [] as any[] }),
-        name
-          ? supabase.from('flashes').select(HIST_FLASH_COLS)
-              .eq('profile_id', profId).eq('viewer_name', name)
-              .gte('created_at', histStartIso)
-              .order('created_at', { ascending: false }).limit(50)
+        Object.keys(flashTokenMap).length
+          ? fetch('/api/flashes/my-status', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tokens: flashTokenMap }),
+            }).then(r => r.json()).then(j => ({
+              data: (j.flashes || []).filter((f: any) => f.profile_id === profId && f.created_at >= histStartIso),
+            })).catch(() => ({ data: [] as any[] }))
           : Promise.resolve({ data: [] as any[] }),
         wallet
           ? supabase.from('flashes').select(HIST_FLASH_COLS)
@@ -554,7 +582,7 @@ function OverlayContent() {
         ended_at: b.ended_at ?? null,
         created_at: b.created_at,
       });
-      for (const b of (histBookName.data || [])) {
+      for (const b of histBookNameData) {
         histById.set(`beam-${b.id}`, toBeamRow(b));
       }
       for (const b of (histBookWallet.data || [])) {

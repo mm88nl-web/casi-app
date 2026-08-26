@@ -14,7 +14,7 @@
  */
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { stripe } from '@/lib/stripe';
 import { moderateText } from '@/lib/content-moderation';
 import { verifyTurnstileToken } from '@/lib/turnstile';
@@ -164,6 +164,11 @@ export async function POST(req: Request) {
       );
     }
 
+    // Minted here (not in a later attach/authorize step — free flashes have
+    // none) so the credential reaches the client atomically with the row,
+    // same rationale as bookings/create-stripe.ts's cancel_token comment.
+    const viewerToken = randomUUID();
+
     const { data: flash, error: insertErr } = await supabase
       .from('flashes')
       .insert({
@@ -174,6 +179,7 @@ export async function POST(req: Request) {
         currency: 'usd',
         status: 'pending',
         payment_method: 'free',
+        viewer_token: viewerToken,
       })
       .select('id')
       .single();
@@ -192,7 +198,7 @@ export async function POST(req: Request) {
       flash_id: flash.id,
     });
 
-    return NextResponse.json({ flash_id: flash.id });
+    return NextResponse.json({ flash_id: flash.id, viewer_token: viewerToken });
   }
 
   // ── Paid branches (stripe / solana) ────────────────────────────────────────
@@ -214,6 +220,12 @@ export async function POST(req: Request) {
     );
   }
 
+  // Minted atomically with the row for the same reason the free branch
+  // above does — no separate attach/authorize step exists for the solana
+  // rail that could mint it later, and the stripe rail's client_secret is
+  // returned in this same response too.
+  const viewerToken = randomUUID();
+
   const { data: flash, error: flashError } = await supabase
     .from('flashes')
     .insert({
@@ -224,6 +236,7 @@ export async function POST(req: Request) {
       currency: 'usd',
       status: 'pending',
       payment_method: method,
+      viewer_token: viewerToken,
     })
     .select()
     .single();
@@ -237,6 +250,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       flash_id: flash.id,
       solana_wallet: profile.solana_wallet ?? null,
+      viewer_token: viewerToken,
     });
   }
 
@@ -292,5 +306,5 @@ export async function POST(req: Request) {
     { stripeAccount: profile.stripe_account_id },
   );
 
-  return NextResponse.json({ client_secret: session.client_secret, flash_id: flash.id });
+  return NextResponse.json({ client_secret: session.client_secret, flash_id: flash.id, viewer_token: viewerToken });
 }

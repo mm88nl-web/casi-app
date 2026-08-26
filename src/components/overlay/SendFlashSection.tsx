@@ -17,6 +17,7 @@ import { PublicKey } from '@solana/web3.js';
 import { createClient } from '@/utils/supabase/client';
 import { sendFlash, SOLANA_ENABLED, type PaymentMethod } from '@/lib/payment-manager';
 import { useStoredPhantomConnectSession } from '@/lib/phantom-connect';
+import { rememberFlashToken } from '@/app/overlay/_components/viewerStorage';
 import { EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
 import { TurnstileWidget } from '@/components/TurnstileWidget';
 import EmbeddedCheckoutModal from '@/components/EmbeddedCheckoutModal';
@@ -181,6 +182,16 @@ export default function SendFlashSection({
           : undefined,
         turnstileToken: turnstileToken ?? undefined,
       });
+
+      // Store the read-ownership credential regardless of which rail this
+      // was — /api/flashes/my-status verifies it later so "my activity"
+      // can show this flash without a broad anon table read. Not set on
+      // the Solana mobile-handoff branch (payment-manager throws before
+      // returning there); that path stashes it instead and the Phantom
+      // Connect return handler in overlay/page.tsx remembers it on resume.
+      if (result.flashId && result.flashViewerToken) {
+        rememberFlashToken(result.flashId, result.flashViewerToken);
+      }
 
       if (result.stripeClientSecret) {
         setStripeClientSecret(result.stripeClientSecret);
