@@ -25,7 +25,7 @@
 type Network = 'devnet' | 'mainnet';
 
 // ⇩ FLIP THIS. ⇩
-export const NETWORK: Network = 'devnet';
+export const NETWORK: Network = 'mainnet';
 
 export const IS_MAINNET = (NETWORK as Network) === 'mainnet';
 

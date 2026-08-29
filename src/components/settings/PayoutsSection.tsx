@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { PublicKey } from '@solana/web3.js';
+import { WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 import SettingsSection from './SettingsSection';
 import GhostButton from './GhostButton';
 import StripeIcon from '@/components/icons/StripeIcon';
@@ -198,14 +200,21 @@ export default function PayoutsSection({
   initialSolanaWallet,
 }: Props) {
   const wallet = useWallet();
+  const { connection } = useConnection();
   const { setVisible: setWalletModalVisible } = useWalletModal();
 
   const [stripe, setStripe] = useState<StripeStatus>(
     initialStripeAccountId ? { kind: 'loading' } : { kind: 'not_connected' },
   );
   const [savedWallet, setSavedWallet] = useState<string | null>(initialSolanaWallet);
-  const [busy, setBusy] = useState<'stripe' | 'wallet' | null>(null);
+  const [busy, setBusy] = useState<'stripe' | 'wallet' | 'register' | null>(null);
   const [walletErr, setWalletErr] = useState<string | null>(null);
+  // Null = not checked yet. A streamer whose wallet was saved before this
+  // on-chain check existed (or whose registration tx failed silently) would
+  // otherwise never learn their Solana bookings can't work — see
+  // docs/fable-security-review-2026-08-10.md Finding 4 / register_streamer
+  // in lib.rs. initialize_escrow now requires this account to exist.
+  const [registered, setRegistered] = useState<boolean | null>(null);
 
   // ── Stripe status fetch ──────────────────────────────────────────────────
   useEffect(() => {
@@ -275,6 +284,66 @@ export default function PayoutsSection({
     }
   };
 
+  // Probe whether the currently-saved wallet has completed on-chain
+  // registration — covers both a fresh page load and a wallet saved before
+  // this check existed. `deriveRegistryPda`/getAccountInfo only, no wallet
+  // interaction needed to just check.
+  useEffect(() => {
+    let cancelled = false;
+    if (!savedWallet) { setRegistered(null); return; }
+    (async () => {
+      try {
+        const { deriveRegistryPda } = await import('@/lib/casi-escrow');
+        const [registryPda] = deriveRegistryPda(new PublicKey(savedWallet));
+        const info = await connection.getAccountInfo(registryPda);
+        if (!cancelled) setRegistered(!!info);
+      } catch {
+        // RPC hiccup — leave as unknown rather than falsely claiming either
+        // state; the retry action below re-checks via registerOnChain anyway.
+        if (!cancelled) setRegistered(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [savedWallet, connection]);
+
+  // Signs + submits register_streamer from the connected wallet. Required
+  // before initialize_escrow will let any viewer target this streamer — see
+  // docs/fable-security-review-2026-08-10.md Finding 4. Best-effort: a
+  // failure here doesn't undo the DB-side wallet save (mirrors
+  // DelegateKeyCard's needs-finalize pattern) — the card below shows a clear
+  // retry action instead of silently leaving Solana bookings broken.
+  const registerOnChain = async (): Promise<boolean> => {
+    if (!wallet.publicKey || !wallet.signTransaction) return false;
+    setBusy('register');
+    try {
+      const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const anchorWallet: any = {
+        publicKey: wallet.publicKey,
+        signTransaction: wallet.signTransaction,
+        signAllTransactions:
+          wallet.signAllTransactions ||
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (async (txs: any[]) => {
+            const out = [];
+            for (const tx of txs) out.push(await wallet.signTransaction!(tx));
+            return out;
+          }),
+      };
+      const client = new CasiEscrowClient(connection, anchorWallet, WALLET_ADAPTER_CLUSTER);
+      await client.registerStreamer();
+      setRegistered(true);
+      setWalletErr(null);
+      return true;
+    } catch (err) {
+      setWalletErr(err instanceof Error ? err.message : 'On-chain registration failed');
+      setRegistered(false);
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const handleLinkWallet = async () => {
     setWalletErr(null);
     if (!wallet.publicKey) {
@@ -293,9 +362,13 @@ export default function PayoutsSection({
       setSavedWallet(pk);
     } catch (err) {
       setWalletErr(err instanceof Error ? err.message : 'Save failed');
-    } finally {
       setBusy(null);
+      return;
     }
+    setBusy(null);
+    // Same wallet is still connected — finish the on-chain half right away
+    // rather than making this a second, separate trip to Settings.
+    await registerOnChain();
   };
 
   // ── Card renderers ───────────────────────────────────────────────────────
@@ -375,6 +448,26 @@ export default function PayoutsSection({
     const connected = wallet.publicKey?.toBase58() ?? null;
     const matchesSaved = !!connected && !!savedWallet && connected === savedWallet;
 
+    // registered === false means the on-chain probe positively confirmed
+    // this wallet has NOT completed register_streamer — without it, every
+    // Solana booking targeting this streamer fails on-chain, silently, no
+    // matter how correct everything else is. null (still checking, or an
+    // RPC hiccup) intentionally falls through to the normal "linked" card
+    // rather than flashing a false warning.
+    if (savedWallet && matchesSaved && registered === false) {
+      return (
+        <ConnectedCard
+          logo={SOLANA_LOGO}
+          title="Solana wallet ·setup incomplete"
+          meta={<><StatusDot kind="warn" />{shortPk(savedWallet)} · one more signature needed to receive Solana payments</>}
+          action={
+            <GhostButton type="button" onClick={registerOnChain} disabled={busy === 'register'}>
+              {busy === 'register' ? 'Signing…' : 'Finish setup →'}
+            </GhostButton>
+          }
+        />
+      );
+    }
     if (savedWallet && matchesSaved) {
       return (
         <ConnectedCard

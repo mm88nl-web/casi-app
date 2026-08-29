@@ -123,7 +123,7 @@ export async function POST(req: Request) {
   if (booking.element_id) {
     const { data: next } = await supabase
       .from('bookings')
-      .select('id, profile_id, image_url, element_id, payment_method, escrow_pda')
+      .select('id, profile_id, image_url, element_id, payment_method, escrow_pda, escrow_seed')
       .eq('element_id', booking.element_id)
       .eq('status', 'approved_queued')
       .order('approved_at', { ascending: true })
@@ -172,7 +172,7 @@ export async function POST(req: Request) {
             scope: 'expire-and-advance',
             profileId: next.profile_id,
             bookingId: next.id,
-            escrowId: next.id,
+            escrowId: next.escrow_seed ?? next.id,
             streamerWallet: nextProfile.solana_wallet,
           });
           if (result.ok) {

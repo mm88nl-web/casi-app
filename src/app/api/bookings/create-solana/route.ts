@@ -178,6 +178,13 @@ export async function POST(req: Request) {
     .is('escrow_pda', null);
 
   const cancelToken = randomUUID();
+  // Random per-booking escrow seed — see
+  // supabase/migrations/20260828230000_add_bookings_escrow_seed.sql and
+  // docs/fable-security-review-2026-08-28.md Finding 1. Generated
+  // independently of booking.id (which is a predictable sequential integer)
+  // specifically so the resulting escrow PDA can't be pre-computed before
+  // this row exists.
+  const escrowSeed = randomUUID();
 
   const { data: booking, error: insertErr } = await supabase
     .from('bookings')
@@ -197,6 +204,7 @@ export async function POST(req: Request) {
       is_queued: !!is_queued,
       queue_position: is_queued ? queue_position ?? null : null,
       cancel_token: cancelToken,
+      escrow_seed: escrowSeed,
       ...customization,
     })
     .select('id')
@@ -231,8 +239,8 @@ export async function POST(req: Request) {
   }
 
   // Pre-compute and store the escrow PDA server-side. The derivation is
-  // deterministic (sha256(booking_id) → PDA), so the server and client end up
-  // with the same address. Storing it at insert time is what lets the Helius
+  // deterministic (sha256(escrow_seed) → PDA), so the server and client end
+  // up with the same address. Storing it at insert time is what lets the Helius
   // webhook (/api/webhooks/solana) look up the booking by PDA on the very
   // first event — before the client has a chance to POST /attach-solana-tx.
   // Without this, initialize_escrow webhooks would miss and we'd rely on the
@@ -243,7 +251,7 @@ export async function POST(req: Request) {
   // path; only the webhook-only path is affected.
   if (!PROGRAM_ID.equals(SystemProgram.programId)) {
     try {
-      const [escrowPda] = deriveEscrowPda(booking.id);
+      const [escrowPda] = deriveEscrowPda(escrowSeed);
       const { error: pdaErr } = await supabase
         .from('bookings')
         .update({ escrow_pda: escrowPda.toBase58() })
@@ -259,5 +267,5 @@ export async function POST(req: Request) {
     logWarn('bookings/create-solana', 'NEXT_PUBLIC_CASI_PROGRAM_ID unset — skipping server-side escrow_pda');
   }
 
-  return NextResponse.json({ booking_id: booking.id, cancel_token: cancelToken });
+  return NextResponse.json({ booking_id: booking.id, cancel_token: cancelToken, escrow_seed: escrowSeed });
 }

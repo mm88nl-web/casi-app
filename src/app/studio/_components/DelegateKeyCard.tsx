@@ -35,7 +35,7 @@ type BaseInstalled = {
 type Status =
   | { kind: 'loading' }
   | { kind: 'absent' }
-  | ({ kind: 'healthy' | 'expired' | 'revoked' | 'needs-finalize' } & BaseInstalled);
+  | ({ kind: 'healthy' | 'expired' | 'revoked' | 'needs-finalize' | 'revoke-needs-finalize' } & BaseInstalled);
 
 /** 7 days — matches the hobby-cron cadence for /api/cron/solana-reconciler.
  *  Anything shorter forces rotation noise; anything longer and we risk a
@@ -47,6 +47,7 @@ export default function DelegateKeyCard({
   supabase,
   walletReady,
   onInstalled,
+  onRevoked,
 }: {
   supabase: SupabaseClient;
   /** True iff the streamer's wallet is connected AND matches the
@@ -58,9 +59,15 @@ export default function DelegateKeyCard({
    *  a Solscan URL is optional — if provided it's rendered as a success
    *  confirmation. */
   onInstalled?: (sessionPubkey: string, expiresAt: number) => Promise<void | { solscanUrl?: string }>;
+  /** Sign `revoke_delegate` on-chain, after the DB side has already been
+   *  flagged revoked. Must throw on failure so the card can transition to
+   *  `revoke-needs-finalize` and offer a retry — without this step, the
+   *  session key stays fully authorized on-chain regardless of what the DB
+   *  says (see docs/fable-security-review-2026-08-28.md Finding 2). */
+  onRevoked?: () => Promise<void | { solscanUrl?: string }>;
 }) {
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
-  const [busy, setBusy]     = useState<'install' | 'finalize' | 'revoke' | null>(null);
+  const [busy, setBusy]     = useState<'install' | 'finalize' | 'revoke' | 'revoke-finalize' | null>(null);
   const [err, setErr]       = useState<string | null>(null);
   const [okLink, setOkLink] = useState<string | null>(null);
 
@@ -160,6 +167,7 @@ export default function DelegateKeyCard({
   const revoke = async () => {
     if (!confirm('Revoke the current session key? You can always install a new one.')) return;
     setBusy('revoke'); setErr(null); setOkLink(null);
+    let dbRevoked = false;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/solana/delegates/revoke', {
@@ -168,9 +176,48 @@ export default function DelegateKeyCard({
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Revoke failed');
+      dbRevoked = true;
+      if (j.alreadyRevoked) { await load(); return; }
+
+      // DB side is done, but the session key is STILL fully authorized
+      // on-chain until revoke_delegate actually lands — don't report
+      // success (or even leave the card silent) until it does.
+      if (!onRevoked) {
+        setErr('Revoked in the app, but the key is still active on-chain — reconnect your wallet and finish revoking below.');
+        setStatus(prev => prev.kind === 'loading' || prev.kind === 'absent'
+          ? prev
+          : { kind: 'revoke-needs-finalize', sessionPubkey: prev.sessionPubkey, expiresAt: prev.expiresAt });
+        return;
+      }
+      const maybe = await onRevoked();
+      if (maybe && typeof maybe === 'object' && 'solscanUrl' in maybe && maybe.solscanUrl) {
+        setOkLink(maybe.solscanUrl);
+      }
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Revoke failed');
+      if (dbRevoked) {
+        setStatus(prev => prev.kind === 'loading' || prev.kind === 'absent'
+          ? prev
+          : { kind: 'revoke-needs-finalize', sessionPubkey: prev.sessionPubkey, expiresAt: prev.expiresAt });
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const finalizeRevoke = async () => {
+    if (status.kind !== 'revoke-needs-finalize') return;
+    if (!onRevoked) return;
+    setBusy('revoke-finalize'); setErr(null); setOkLink(null);
+    try {
+      const maybe = await onRevoked();
+      if (maybe && typeof maybe === 'object' && 'solscanUrl' in maybe && maybe.solscanUrl) {
+        setOkLink(maybe.solscanUrl);
+      }
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Finish-revoking failed');
     } finally {
       setBusy(null);
     }
@@ -180,13 +227,20 @@ export default function DelegateKeyCard({
 
   const { headline, sub, accent } = describe(status);
   const primaryLabel =
-    busy === 'install'  ? 'Generating…'
+    busy === 'install'         ? 'Generating…'
+    : busy === 'revoke-finalize' ? 'Signing…'
+    : status.kind === 'revoke-needs-finalize' ? 'Finish revoking →'
     : status.kind === 'healthy'         ? 'Rotate'
     : status.kind === 'needs-finalize'  ? 'Finalize →'
     : status.kind === 'absent'          ? 'Install →'
                                         : 'Reinstall →';
-  const primaryAction = status.kind === 'needs-finalize' ? finalize : install;
-  const primaryBusy   = busy === 'install' || busy === 'finalize';
+  const primaryAction =
+    status.kind === 'revoke-needs-finalize' ? finalizeRevoke
+    : status.kind === 'needs-finalize'      ? finalize
+                                             : install;
+  const primaryBusy   = busy === 'install' || busy === 'finalize' || busy === 'revoke-finalize';
+  // No separate Revoke button once the DB side is already revoked — the
+  // primary button above (Finish revoking →) is the only remaining action.
   const showRevoke    = status.kind === 'healthy' || status.kind === 'needs-finalize';
 
   return (
@@ -251,7 +305,7 @@ export default function DelegateKeyCard({
                 opacity: walletReady ? 1 : 0.5,
                 whiteSpace: 'nowrap',
               }}>
-              {primaryBusy ? (busy === 'finalize' ? 'Signing…' : 'Generating…') : primaryLabel}
+              {primaryBusy ? ((busy === 'finalize' || busy === 'revoke-finalize') ? 'Signing…' : 'Generating…') : primaryLabel}
             </button>
           )}
           {showRevoke && (
@@ -318,6 +372,12 @@ function describe(s: Status): { headline: ReactNode; sub: string; accent: string
         headline: withIcon('Finalize on-chain'),
         sub: `${shortPk(s.sessionPubkey)} · generated, not yet registered`,
         accent: '#eab308',
+      };
+    case 'revoke-needs-finalize':
+      return {
+        headline: withIcon('Still active on-chain'),
+        sub: `${shortPk(s.sessionPubkey)} · revoked here, NOT yet revoked on-chain`,
+        accent: '#ef4444',
       };
     case 'expired':
       return {
