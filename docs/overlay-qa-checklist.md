@@ -172,7 +172,7 @@
 > All Solana flows are **devnet-only** (`NEXT_PUBLIC_CASI_SOLANA_ENABLED=true` required; USDC mint: 4zMMC9…DU).
 
 - **Given** a paid slot with a USDC price and the USDC rail selected,  
-  **when** the viewer has `< 0.01 SOL` in their wallet,  
+  **when** the viewer has `< 0.015 SOL` in their wallet (raised from 0.01 once initialize_escrow started pre-funding an ATA-rent buffer — see ATA_RENT_LAMPORTS in lib.rs),  
   **then** a preflight check fires and the booking is denied on server side with "Need devnet SOL for rent + fees."
 
 - **Given** the viewer has no devnet USDC ATA,  

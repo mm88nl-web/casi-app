@@ -59,6 +59,50 @@ export default function SessionKeySection({ supabase, savedSolanaWallet }: Props
     return { solscanUrl };
   };
 
+  // Sign + submit revoke_delegate on-chain. Until this lands, the session
+  // key the DB just flagged "revoked" is still fully authorized on-chain —
+  // see docs/fable-security-review-2026-08-28.md Finding 2. This mirrors
+  // onInstalled's shape exactly (throw on failure so the card can show a
+  // retry affordance instead of a false "revoked" success).
+  const onRevoked = async () => {
+    if (!publicKey || !signTransaction) {
+      throw new Error('Connect your streamer wallet to finish revoking on-chain');
+    }
+    if (savedSolanaWallet && connectedAddr !== savedSolanaWallet) {
+      throw new Error('Connected wallet is not the streamer wallet on file');
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anchorWallet: any = {
+      publicKey,
+      signTransaction,
+      signAllTransactions:
+        signAllTransactions ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (async (txs: any[]) => {
+          const out = [];
+          for (const tx of txs) out.push(await signTransaction(tx));
+          return out;
+        }),
+    };
+
+    const { CasiEscrowClient } = await import('@/lib/casi-escrow');
+    const client = new CasiEscrowClient(connection, anchorWallet, WALLET_ADAPTER_CLUSTER);
+    try {
+      const { solscanUrl } = await client.revokeDelegate();
+      return { solscanUrl };
+    } catch (err) {
+      // If the DB-side install never actually finalized on-chain (the
+      // needs-finalize state), there's no delegate PDA to close — that's
+      // already the terminal state revoke wants, not a failure.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/AccountNotInitialized|account.*not.*exist/i.test(msg)) {
+        return {};
+      }
+      throw err;
+    }
+  };
+
   return (
     <SettingsSection
       id="session-key"
@@ -81,6 +125,7 @@ export default function SessionKeySection({ supabase, savedSolanaWallet }: Props
         supabase={supabase}
         walletReady={walletReady}
         onInstalled={onInstalled}
+        onRevoked={onRevoked}
       />
     </SettingsSection>
   );

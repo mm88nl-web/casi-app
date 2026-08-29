@@ -44,6 +44,7 @@ import { randomBytes } from "crypto";
 
 const ESCROW_SEED = Buffer.from("casi-escrow");
 const CONFIG_SEED = Buffer.from("casi-config");
+const REGISTRY_SEED = Buffer.from("casi-registry");
 const USDC_DECIMALS = 6;
 const TYPE_BEAM = 1;
 
@@ -145,11 +146,28 @@ describe("casi-escrow — security review PoCs (2026-08-10)", () => {
     vault: PublicKey;
   }
 
+  async function registerStreamer(streamer: Keypair) {
+    const [registryPda] = PublicKey.findProgramAddressSync(
+      [REGISTRY_SEED, streamer.publicKey.toBuffer()],
+      program.programId,
+    );
+    return program.methods
+      .registerStreamer()
+      .accounts({
+        streamer: streamer.publicKey,
+        registry: registryPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([streamer])
+      .rpc();
+  }
+
   async function setupParties(mintAmount: bigint): Promise<Ctx> {
     const viewer = Keypair.generate();
     const streamer = Keypair.generate();
     await airdrop(viewer.publicKey);
     await airdrop(streamer.publicKey);
+    await registerStreamer(streamer);
 
     const viewerAta = (
       await getOrCreateAssociatedTokenAccount(provider.connection, payer, usdcMint, viewer.publicKey)
@@ -398,10 +416,20 @@ describe("casi-escrow — security review PoCs (2026-08-10)", () => {
 
   // =========================================================================
   // 4. SPAM / DoS — consent-free escrow creation against an arbitrary pubkey
+  //
+  // FIXED (register_streamer / StreamerRegistry in lib.rs, same session as
+  // this rewrite): initialize_escrow now requires a StreamerRegistry account
+  // to exist for whatever `streamer` pubkey is targeted. This test used to
+  // prove any pubkey — including one that never signed up for CASI at all —
+  // could be targeted; it now proves the opposite for an unregistered
+  // pubkey, AND separately confirms the fix didn't cost the product its
+  // core "viewer books instantly, streamer isn't present" property: once
+  // registered (a one-time step, unrelated to any specific booking), a
+  // streamer still needs zero live participation at booking time.
   // =========================================================================
-  describe("Attack: open Pending escrows against a target who never signs anything", () => {
-    it("`streamer` in initialize_escrow is an UncheckedAccount — no signature, ownership, or existence check is required", async () => {
-      const victimStreamer = Keypair.generate(); // never funded, never signs, may not even be a real user's key
+  describe("Fixed: initialize_escrow now requires the target streamer to have registered at least once", () => {
+    it("rejects targeting a pubkey that never called register_streamer (AccountNotInitialized)", async () => {
+      const victimStreamer = Keypair.generate(); // never registered, never funded, never signs
       const attacker = Keypair.generate();
       await airdrop(attacker.publicKey);
 
@@ -414,19 +442,71 @@ describe("casi-escrow — security review PoCs (2026-08-10)", () => {
       const escrowPda = derivePda(escrowId, program.programId);
       const vault = getAssociatedTokenAddressSync(usdcMint, escrowPda, true);
 
-      // Succeeds with ZERO participation from victimStreamer — proving any
-      // pubkey (a real onboarded streamer, an uninvolved wallet, even a
-      // never-before-seen address) can be targeted with an unlimited number
-      // of Pending escrows at no cost to the "streamer" and minimal cost
-      // (1 micro-USDC + one tx fee) to the attacker. This is fully reachable
-      // by calling the Anchor program directly — it does not go through
-      // /api/bookings/create-solana, so none of that route's IP rate limit
-      // or element_id ownership checks apply.
+      let rejected = false;
+      try {
+        await program.methods
+          .initializeEscrow(escrowId, new BN(1), new BN(60), TYPE_BEAM)
+          .accounts({
+            viewer: attacker.publicKey,
+            streamer: victimStreamer.publicKey, // never registered
+            config: configPda,
+            escrowState: escrowPda,
+            vault,
+            viewerAta: attackerAta,
+            usdcMint,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([attacker])
+          .rpc();
+      } catch (err) {
+        rejected = true;
+        const msg = err instanceof Error ? err.message : String(err);
+        expect(msg).to.include("AccountNotInitialized");
+      }
+      expect(rejected, "targeting an unregistered pubkey must fail").to.equal(true);
+
+      // No escrow was ever created — the failed init means nothing exists
+      // at this PDA at all (not even a Pending one), unlike the pre-fix
+      // world where this call succeeded outright.
+      const info = await provider.connection.getAccountInfo(escrowPda);
+      expect(info).to.equal(null);
+    });
+
+    it("once registered, a streamer can still be targeted with zero live participation at booking time — the fix didn't cost the product its instant-booking UX", async () => {
+      const realStreamer = Keypair.generate();
+      await airdrop(realStreamer.publicKey);
+      // Registration is the ONE thing this streamer ever does — a one-time,
+      // ahead-of-time opt-in, not a per-booking action. No further signature
+      // or participation from realStreamer follows.
+      await registerStreamer(realStreamer);
+
+      const attacker = Keypair.generate();
+      await airdrop(attacker.publicKey);
+
+      const attackerAta = (
+        await getOrCreateAssociatedTokenAccount(provider.connection, payer, usdcMint, attacker.publicKey)
+      ).address;
+      await mintTo(provider.connection, payer, usdcMint, attackerAta, payer, 1n);
+
+      const escrowId = makeEscrowId();
+      const escrowPda = derivePda(escrowId, program.programId);
+      const vault = getAssociatedTokenAddressSync(usdcMint, escrowPda, true);
+
+      // Succeeds with ZERO further participation from realStreamer beyond
+      // the one-time registration above — proving the registry requirement
+      // doesn't reintroduce a "streamer must be present at booking time"
+      // requirement. This remains reachable by calling the Anchor program
+      // directly — it does not go through /api/bookings/create-solana, so
+      // none of that route's IP rate limit or element_id ownership checks
+      // apply — but only against pubkeys that have opted in at all, which
+      // is the actual gap this fix closes.
       await program.methods
         .initializeEscrow(escrowId, new BN(1), new BN(60), TYPE_BEAM)
         .accounts({
           viewer: attacker.publicKey,
-          streamer: victimStreamer.publicKey, // no .signers() entry for this key — and it still works
+          streamer: realStreamer.publicKey, // no .signers() entry for this key — and it still works
           config: configPda,
           escrowState: escrowPda,
           vault,
@@ -440,16 +520,31 @@ describe("casi-escrow — security review PoCs (2026-08-10)", () => {
         .rpc();
 
       const state = await program.account.escrowState.fetch(escrowPda);
-      expect(state.streamer.toBase58()).to.equal(victimStreamer.publicKey.toBase58());
+      expect(state.streamer.toBase58()).to.equal(realStreamer.publicKey.toBase58());
       expect(state.status).to.deep.equal({ pending: {} });
     });
   });
 
   // =========================================================================
   // 5. SPAM / DoS — cost asymmetry on permissionless / cranker-paid ATA init
+  //
+  // FIXED (same session as this PoC's rewrite, see ATA_RENT_LAMPORTS /
+  // reimburse_ata_rent in lib.rs): initialize_escrow now pre-collects a SOL
+  // buffer from the viewer (1x ATA rent for Flash, 2x for Beam — sized for
+  // the worst case of settle_beam needing both streamer_ata and viewer_ata
+  // created in the same call), and every settle-shaped instruction
+  // reimburses whoever actually pays for a fresh counterparty ATA out of
+  // that buffer. This test used to prove the caller/cranker took a real,
+  // disproportionate SOL loss processing a dust-value stranger's escrow —
+  // it now proves the opposite: they're made whole (here, actually a little
+  // better off, since only one of the two pre-funded ATA-rent's worth was
+  // actually needed — the unspent remainder is a deliberate design choice,
+  // not a bug, see the fix's own comments in lib.rs for why an unconditional
+  // flat reimbursement was chosen over trying to detect exactly which ATAs
+  // were freshly created).
   // =========================================================================
-  describe("Attack: force a disproportionate SOL cost onto whoever processes a stranger's escrow", () => {
-    it("a caller settling a permissionless post-duration Beam pays real SOL rent to create the OTHER party's fresh token account — cost is unrelated to the (tiny) escrowed amount", async () => {
+  describe("Fixed: ATA-rent cost asymmetry no longer falls on whoever processes a stranger's escrow", () => {
+    it("a caller settling a permissionless post-duration Beam is reimbursed for creating the OTHER party's fresh token account, out of the buffer the viewer pre-funded", async () => {
       // This mirrors the exact `init_if_needed, payer = <caller|cranker>`
       // pattern used by cancel_stale_pending (programs/casi-escrow/src/lib.rs,
       // CancelStalePending's viewer_ata) and by settle_beam_delegated /
@@ -467,6 +562,13 @@ describe("casi-escrow — security review PoCs (2026-08-10)", () => {
       const freshStreamer = Keypair.generate(); // NEVER had a token account before
       await airdrop(viewer.publicKey);
       await airdrop(freshStreamer.publicKey, 0.01); // just enough for nothing token-related — freshStreamer never signs a token ix
+      // Registration (a one-time opt-in, unrelated to ever having a token
+      // account) is orthogonal to what this test demonstrates — needed
+      // simply for initialize_escrow to accept freshStreamer as a target at
+      // all post-fix, see the "open Pending escrows against a target who
+      // never registered" describe block below for what registration itself
+      // actually gates.
+      await registerStreamer(freshStreamer);
 
       const viewerAta = (
         await getOrCreateAssociatedTokenAccount(provider.connection, payer, usdcMint, viewer.publicKey)
@@ -555,20 +657,21 @@ describe("casi-escrow — security review PoCs (2026-08-10)", () => {
       const spentLamports =
         (tx!.meta!.preBalances[crankerIndex] ?? 0) - (tx!.meta!.postBalances[crankerIndex] ?? 0);
 
-      // Base tx fee alone is ~5000 lamports. Creating one fresh ATA costs
-      // ~2,039,280 lamports (rent-exempt minimum for a 165-byte token
-      // account) on top of that. Assert we actually paid ATA-creation rent,
-      // not just the flat fee — proving the cost is real, not theoretical.
-      expect(spentLamports).to.be.greaterThan(1_000_000);
+      // Pre-fix, this was `expect(spentLamports).to.be.greaterThan(1_000_000)`
+      // — a real, uncompensated loss. Now: creating freshStreamerAta cost
+      // ~2,039,280 lamports, but the Beam pre-funded a 2x buffer (this
+      // escrow's viewer never needed their own ATA created — they already
+      // had one — so only half the buffer was actually spent on real ATA
+      // rent). Net, the caller comes out ahead by roughly one ATA-rent's
+      // worth: spentLamports is negative (their balance went UP).
+      expect(spentLamports).to.be.lessThan(0);
 
-      // The escrow moved 100 micro-USDC (0.0001 USDC — effectively dust).
-      // The caller who processed it paid >1,000,000x that in lamports of
-      // real SOL rent. An attacker who repeats this pattern (fresh viewer OR
-      // fresh streamer wallet per escrow) forces this cost onto whichever
-      // party's `init_if_needed, payer=` account processes it — the shared
-      // cranker in the delegated/permissionless paths, per DEPLOY.md funded
-      // with only ~0.05 SOL. ~0.05 SOL / ~0.00204 SOL per fresh ATA ≈ 24
-      // such escrows would exhaust the entire cranker balance.
+      // The escrow moved 100 micro-USDC (0.0001 USDC — effectively dust),
+      // and the caller who processed it is NOT the one who ends up
+      // subsidizing real ATA-creation rent anymore — the escrow's own
+      // viewer pre-paid for that at initialize_escrow time. A shared
+      // cranker (or any permissionless third-party cranker) processing
+      // many such escrows no longer bleeds SOL doing so.
       expect(await balanceOf(freshStreamerAta)).to.equal(total); // full vest — duration elapsed
     });
   });

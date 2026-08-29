@@ -8,6 +8,30 @@ import BeamCtrlPanel from './BeamCtrlPanel';
 import StudioLayersPanel, { type LayerItem } from './StudioLayersPanel';
 import { formatSlotPrice } from '@/lib/slot-pricing';
 
+// Outage-workaround fallback — see src/app/api/overlay-direct/mutate/route.ts
+// and src/lib/db-direct.ts. Only reached when the normal supabase-js write
+// already failed (e.g. the Supabase egress-quota 402). Safe to delete this
+// helper and its two call sites once that's resolved.
+async function tryDirectMutate(
+  supabase: SupabaseClient,
+  body: { action: 'update'; id: string; updates: Record<string, unknown> }
+    | { action: 'insert'; data: Record<string, unknown> }
+): Promise<{ data: any } | null> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return null;
+    const res = await fetch('/api/overlay-direct/mutate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null; // bypass also unavailable — caller falls back to its normal failure path
+  }
+}
+
 // Smart placement: find the first 4x4 grid cell with no nearby beam. Ported
 // verbatim from admin/page.tsx so setup-surface inserts don't clash with
 // the admin canvas when both are open in parallel tabs.
@@ -160,8 +184,24 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
     setSaveStatus('Saving…');
     const s = { ...updates };
     if (s.price_value !== undefined) s.price_value = parseFloat(s.price_value) || 0;
-    setElements((prev) => prev.map((el) => (el.id === id ? { ...el, ...s } : el)));
-    await supabase.from('overlay_elements').update(s).eq('id', id);
+    let prevEl: any = null;
+    setElements((prev) => prev.map((el) => {
+      if (el.id !== id) return el;
+      prevEl = el;
+      return { ...el, ...s };
+    }));
+    const { error } = await supabase.from('overlay_elements').update(s).eq('id', id);
+    if (error) {
+      const bypassed = await tryDirectMutate(supabase, { action: 'update', id, updates: s });
+      if (!bypassed) {
+        // Roll back the optimistic update — nothing persisted, so the UI
+        // shouldn't keep showing it as applied.
+        if (prevEl) setElements((prev) => prev.map((el) => (el.id === id ? prevEl : el)));
+        setSaveStatus('Ready');
+        showToast('Save failed — change was not saved', 'err');
+        return;
+      }
+    }
     setSaveStatus('Saved');
     setTimeout(() => setSaveStatus('Ready'), 2000);
   }, [supabase]);
@@ -170,7 +210,8 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
     setElements((prev) => prev.map((el) => (el.id === id ? { ...el, ...updates } : el)));
     if (sliderSaveTimer.current) clearTimeout(sliderSaveTimer.current);
     sliderSaveTimer.current = setTimeout(async () => {
-      await supabase.from('overlay_elements').update(updates).eq('id', id);
+      const { error } = await supabase.from('overlay_elements').update(updates).eq('id', id);
+      if (error) showToast('Save failed — change was not saved', 'err');
     }, 400);
   }, [supabase]);
 
@@ -201,21 +242,39 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
   }, [updateLayer]);
 
   const toggleLock = useCallback(async (id: string, locked: boolean) => {
-    setElements((prev) => prev.map((el) => (el.id === id ? { ...el, locked } : el)));
-    await supabase.from('overlay_elements').update({ locked }).eq('id', id);
+    let prevEl: any = null;
+    setElements((prev) => prev.map((el) => {
+      if (el.id !== id) return el;
+      prevEl = el;
+      return { ...el, locked };
+    }));
+    const { error } = await supabase.from('overlay_elements').update({ locked }).eq('id', id);
+    if (error) {
+      if (prevEl) setElements((prev) => prev.map((el) => (el.id === id ? prevEl : el)));
+      showToast('Save failed — change was not saved', 'err');
+    }
   }, [supabase]);
 
   const addBeam = useCallback(async () => {
     const freePos = findFreePosition(elements);
-    const { data } = await supabase.from('overlay_elements').insert({
+    const insertData = {
       profile_id: profileId, image_url: '',
       pos_x: freePos.pos_x, pos_y: freePos.pos_y,
       width: 20, height: 20,
       is_background: false, price_value: 0, price_unit: 'min', max_duration_minutes: null, locked: false,
-    }).select().single();
+    };
+    const { data, error } = await supabase.from('overlay_elements').insert(insertData).select().single();
     if (data) {
       setElements((prev) => [...prev, data]);
       setSelectedSlotId(data.id);
+    } else if (error) {
+      const bypassed = await tryDirectMutate(supabase, { action: 'insert', data: insertData });
+      if (bypassed?.data) {
+        setElements((prev) => [...prev, bypassed.data]);
+        setSelectedSlotId(bypassed.data.id);
+      } else {
+        showToast('Could not add beam — save failed', 'err');
+      }
     }
   }, [supabase, profileId, elements]);
 

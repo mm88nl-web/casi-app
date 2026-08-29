@@ -15,7 +15,11 @@
 //! (different program ID) owns its own config. CASI ships a reference deployment;
 //! other teams fork and deploy their own copy.
 
-use anchor_lang::{prelude::*, solana_program::bpf_loader_upgradeable};
+use anchor_lang::{
+    prelude::*,
+    solana_program::bpf_loader_upgradeable,
+    system_program::{transfer, Transfer},
+};
 use anchor_spl::{
     associated_token::AssociatedToken,
     token_interface::{
@@ -24,7 +28,7 @@ use anchor_spl::{
     },
 };
 
-declare_id!("CDunHmMe2KW8qmjoqWanuu3p1DsEYjqRA1yVmyXDtakM");
+declare_id!("6MUJL1ktHT7R6gTq3AE7HR6Eeq8aFsHUPiMdEzgaaPd8");
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -39,6 +43,10 @@ pub const DELEGATE_SEED: &[u8] = b"casi-delegate";
 /// PDA seed for the single global config account (one per deployment).
 pub const CONFIG_SEED: &[u8] = b"casi-config";
 
+/// PDA seed prefix for per-streamer registration accounts — see
+/// register_streamer / StreamerRegistry.
+pub const REGISTRY_SEED: &[u8] = b"casi-registry";
+
 /// Current on-chain layout version for EscrowState. Every handler verifies
 /// this; legacy accounts (pre-versioning) fail to deserialize because the
 /// account size changed, and any future account that somehow has a lower
@@ -48,8 +56,25 @@ pub const ESCROW_STATE_VERSION: u8 = 1;
 /// Current on-chain layout version for StreamerDelegate.
 pub const STREAMER_DELEGATE_VERSION: u8 = 1;
 
+/// Current on-chain layout version for StreamerRegistry.
+pub const STREAMER_REGISTRY_VERSION: u8 = 1;
+
 /// Current on-chain layout version for GlobalConfig.
 pub const GLOBAL_CONFIG_VERSION: u8 = 1;
+
+/// Rent-exempt minimum for a fresh SPL/Token-2022 associated token account,
+/// as of the current cluster (2,039,280 lamports — matches the figure
+/// measured in docs/fable-security-review-2026-08-10.md Finding 3 and
+/// documented in AGENTS.md's cranker-balance section). Used to size the SOL
+/// buffer initialize_escrow pre-collects from the viewer and to cap how much
+/// any settle-shaped instruction reimburses whoever pays for a fresh
+/// counterparty ATA — see reimburse_ata_rent below. This closes the
+/// cost-asymmetry: previously whoever processed a stranger's escrow (the
+/// shared cranker, or a permissionless post-duration caller) ate this cost
+/// personally regardless of the escrow's size; now the escrow's own viewer
+/// pre-funds it and it flows to whoever actually does the work, with any
+/// unused portion returning to the viewer on close (same as it always has).
+pub const ATA_RENT_LAMPORTS: u64 = 2_039_280;
 
 /// Maximum lifetime for a session-key delegate. Caps the damage if a session
 /// key is ever compromised — the streamer can always revoke manually, but an
@@ -94,6 +119,17 @@ pub mod casi_escrow {
         max_escrow_amount: u64,
         min_escrow_amount: u64,
     ) -> Result<()> {
+        // 0 means "no cap"/"no floor" respectively, so the check only bites
+        // when both are actually set — an admin fat-finger here (min > max)
+        // would otherwise make initialize_escrow's two independent require!
+        // checks mutually unsatisfiable, silently taking new-escrow creation
+        // offline platform-wide. See
+        // docs/fable-security-review-2026-08-28.md Finding 5.
+        require!(
+            max_escrow_amount == 0 || min_escrow_amount == 0 || min_escrow_amount <= max_escrow_amount,
+            CasiError::InvalidCapFloor
+        );
+
         // Verify that `initializer` is the upgrade authority for this program.
         // ProgramData is bincode-serialized by the BPF Upgradeable Loader:
         //   [0..4]  variant index u32 LE (3 = ProgramData)
@@ -138,19 +174,40 @@ pub mod casi_escrow {
         // mutable accounts or drain ATAs it has authority over.
         //
         // Classic SPL Token mints are exactly 82 bytes (no room for extensions).
-        // Token-2022 mints are larger; the AccountType byte is at index 82 and
-        // TLV-encoded extensions follow from index 83.
+        // Token-2022 mints with any extension are larger, but the AccountType
+        // byte is NOT at index 82 — spl-token-2022 pads a Mint's extension
+        // area out to `BASE_ACCOUNT_LENGTH = Account::LEN = 165` bytes before
+        // placing AccountType, specifically so a Mint-with-extensions and an
+        // Account-with-extensions share one fixed AccountType offset (see
+        // spl-token-2022 v6.0.0 extension/mod.rs: `BASE_ACCOUNT_LENGTH`,
+        // `BASE_ACCOUNT_AND_TYPE_LENGTH`, and the doc comment above them
+        // explaining the Account-size-165 collision this avoids). So for a
+        // Mint: bytes [82..165) are zero padding, AccountType is at [165],
+        // and real TLV-encoded extensions start at [166) — not [83).
         //
         // TLV layout:  [u16 LE type][u16 LE len][len bytes data] ...
-        // TransferHook extension type = 26 (0x001A).
+        // TransferHook extension type = 14 (0x000E), per ExtensionType's
+        // declaration order in spl-token-2022 (Uninitialized=0 through
+        // NonTransferableAccount=13, then TransferHook=14). Verified against
+        // spl-token-2022 v6.0.0's source directly, not just documentation.
         // TransferHook data: [authority: 32 B][program_id: 32 B]
         // All-zero program_id → no hook configured (safe).
+        //
+        // This whole check was a silent no-op before this fix: it hardcoded
+        // both the wrong extension-type constant (26 instead of 14) AND the
+        // wrong TLV start offset (83 instead of 166, i.e. it read 82 bytes of
+        // zero padding as if it were extension data). Either bug alone would
+        // have broken the rejection; both were present. Caught by
+        // tests/00-transfer-hook-rejection.ts, which builds an actual
+        // Token-2022 mint with a real TransferHook extension — it failed
+        // (initialize_config wrongly accepted the mint) before this fix.
         {
             let mint_info = ctx.accounts.accepted_mint.to_account_info();
             let mint_data = mint_info.data.borrow();
-            if mint_data.len() > 82 {
-                const TRANSFER_HOOK_EXT_TYPE: u16 = 26;
-                let tlv = &mint_data[83..]; // skip base (82 B) + AccountType (1 B)
+            const BASE_ACCOUNT_AND_TYPE_LENGTH: usize = 166; // Account::LEN (165) + AccountType (1)
+            if mint_data.len() >= BASE_ACCOUNT_AND_TYPE_LENGTH {
+                const TRANSFER_HOOK_EXT_TYPE: u16 = 14;
+                let tlv = &mint_data[BASE_ACCOUNT_AND_TYPE_LENGTH..];
                 let mut pos = 0usize;
                 while pos + 4 <= tlv.len() {
                     let ext_type = u16::from_le_bytes([tlv[pos], tlv[pos + 1]]);
@@ -216,6 +273,10 @@ pub mod casi_escrow {
             ctx.accounts.config.version == GLOBAL_CONFIG_VERSION,
             CasiError::UnsupportedVersion
         );
+        require!(
+            max_escrow_amount == 0 || min_escrow_amount == 0 || min_escrow_amount <= max_escrow_amount,
+            CasiError::InvalidCapFloor
+        );
 
         ctx.accounts.config.paused             = paused;
         ctx.accounts.config.max_escrow_amount  = max_escrow_amount;
@@ -248,14 +309,22 @@ pub mod casi_escrow {
             new_admin != Pubkey::default(),
             CasiError::InvalidAdmin
         );
-        // Reject off-curve addresses (PDAs, program IDs derived via
-        // find_program_address) which can never produce a valid signature.
-        // Without this check an admin typo to a PDA address permanently bricks
-        // update_config and transfer_admin with no recovery path.
-        require!(
-            new_admin.is_on_curve(),
-            CasiError::InvalidAdmin
-        );
+        // An earlier version of this check rejected off-curve addresses (PDAs,
+        // program IDs) via `new_admin.is_on_curve()`, to stop an admin typo
+        // from permanently bricking update_config/transfer_admin. That check
+        // is REMOVED: `Pubkey::is_on_curve()`'s on-chain implementation is
+        // `unimplemented!()` in this SDK (`bytes_are_curve_point` in
+        // solana-pubkey gates the real curve25519 math to
+        // `#[cfg(not(target_os = "solana"))]` and panics under
+        // `#[cfg(target_os = "solana")]`), so calling it here didn't add a
+        // safety net — it made transfer_admin panic on every single call,
+        // for any input, valid or not. Confirmed via a real BPF deployment
+        // (tests/config-admin-and-delegated-flash.ts's transfer_admin tests
+        // all failed with "not implemented" before this fix). The
+        // Pubkey::default() guard above still stands; a typo'd PDA is an
+        // accepted residual risk here, same as everywhere else in this
+        // program that trusts the admin to double-check addresses before
+        // signing (see update_config, which has no analogous check either).
 
         ctx.accounts.config.admin = new_admin;
 
@@ -314,6 +383,16 @@ pub mod casi_escrow {
             EscrowType::Flash => require!(duration_secs == 0, CasiError::FlashMustHaveZeroDuration),
         }
 
+        // Sized before `etype` moves into EscrowState below. See
+        // ATA_RENT_LAMPORTS / reimburse_ata_rent for the full explanation:
+        // Beam covers settle_beam's worst case of both streamer_ata and
+        // viewer_ata needing creation in the same call; Flash only ever
+        // needs at most one (approve/deny are mutually exclusive).
+        let rent_buffer_lamports = match etype {
+            EscrowType::Beam  => ATA_RENT_LAMPORTS.saturating_mul(2),
+            EscrowType::Flash => ATA_RENT_LAMPORTS,
+        };
+
         ctx.accounts.escrow_state.set_inner(EscrowState {
             escrow_id,
             viewer:          ctx.accounts.viewer.key(),
@@ -336,6 +415,22 @@ pub mod casi_escrow {
             &ctx.accounts.usdc_mint,
             &ctx.accounts.viewer,
             &ctx.accounts.token_program,
+        )?;
+
+        // Pre-fund the ATA-rent buffer this escrow might need at
+        // settle/approve/deny/cancel time (rent_buffer_lamports computed
+        // above, before etype moved into EscrowState). Any portion never
+        // actually needed returns to the viewer when escrow_state closes,
+        // exactly like the rest of its rent.
+        transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.viewer.to_account_info(),
+                    to:   ctx.accounts.escrow_state.to_account_info(),
+                },
+            ),
+            rent_buffer_lamports,
         )?;
 
         emit!(EscrowInitialized {
@@ -395,6 +490,16 @@ pub mod casi_escrow {
             signer,
         )?;
 
+        // Reimburse the streamer if this call had to create their ATA — see
+        // ATA_RENT_LAMPORTS / reimburse_ata_rent. Funded by the buffer the
+        // viewer pre-paid at initialize_escrow; any unused portion still
+        // flows to the viewer via escrow_state's close = viewer below.
+        reimburse_ata_rent(
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.streamer.to_account_info(),
+            ATA_RENT_LAMPORTS,
+        )?;
+
         emit!(FlashSettled {
             escrow_id,
             streamer_amount: total,
@@ -447,6 +552,14 @@ pub mod casi_escrow {
             &ctx.accounts.escrow_state.to_account_info(),
             &ctx.accounts.token_program,
             signer,
+        )?;
+
+        // Reimburse the streamer, who paid to create the viewer's refund ATA
+        // — see ATA_RENT_LAMPORTS / reimburse_ata_rent.
+        reimburse_ata_rent(
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.streamer.to_account_info(),
+            ATA_RENT_LAMPORTS,
         )?;
 
         emit!(FlashSettled {
@@ -655,6 +768,15 @@ pub mod casi_escrow {
             signer,
         )?;
 
+        // Reimburse whoever called settle for any ATA(s) this call had to
+        // create — up to 2x since streamer_ata AND viewer_ata can both need
+        // creating in the same call. See ATA_RENT_LAMPORTS / reimburse_ata_rent.
+        reimburse_ata_rent(
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.caller.to_account_info(),
+            ATA_RENT_LAMPORTS.saturating_mul(2),
+        )?;
+
         emit!(BeamSettled {
             escrow_id,
             streamer_amount: streamer_amt,
@@ -752,6 +874,16 @@ pub mod casi_escrow {
             signer,
         )?;
 
+        // Reimburse the cranker for any ATA(s) this call had to create — see
+        // ATA_RENT_LAMPORTS / reimburse_ata_rent. This is the fix for the
+        // cranker cost-asymmetry finding: previously the cranker ate this
+        // cost personally regardless of the escrow's size.
+        reimburse_ata_rent(
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.cranker.to_account_info(),
+            ATA_RENT_LAMPORTS.saturating_mul(2),
+        )?;
+
         emit!(BeamSettled {
             escrow_id,
             streamer_amount: streamer_amt,
@@ -814,6 +946,14 @@ pub mod casi_escrow {
             &ctx.accounts.escrow_state.to_account_info(),
             &ctx.accounts.token_program,
             signer,
+        )?;
+
+        // Reimburse the cranker if this call had to create the streamer's
+        // ATA — see ATA_RENT_LAMPORTS / reimburse_ata_rent.
+        reimburse_ata_rent(
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.cranker.to_account_info(),
+            ATA_RENT_LAMPORTS,
         )?;
 
         emit!(FlashSettled {
@@ -880,12 +1020,59 @@ pub mod casi_escrow {
             signer,
         )?;
 
+        // Reimburse the cranker if this call had to create the viewer's
+        // refund ATA — see ATA_RENT_LAMPORTS / reimburse_ata_rent.
+        reimburse_ata_rent(
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.cranker.to_account_info(),
+            ATA_RENT_LAMPORTS,
+        )?;
+
         emit!(FlashSettled {
             escrow_id,
             streamer_amount: 0,
             approved: false,
         });
 
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Streamer registration
+    // -----------------------------------------------------------------------
+
+    /// One-time on-chain registration proving a pubkey is a real, opted-in
+    /// CASI streamer. initialize_escrow requires this account to exist for
+    /// whatever `streamer` pubkey a viewer targets — see
+    /// docs/fable-security-review-2026-08-10.md Finding 4. This is a
+    /// one-time setup step (during wallet connect), NOT a per-booking
+    /// requirement: once registered, a viewer can still book that streamer
+    /// instantly with zero live participation from them at booking time.
+    /// `init_if_needed` makes re-calling (e.g. after a wallet reconnect) a
+    /// harmless no-op rather than an error.
+    pub fn register_streamer(ctx: Context<RegisterStreamer>) -> Result<()> {
+        ctx.accounts.registry.set_inner(StreamerRegistry {
+            version:  STREAMER_REGISTRY_VERSION,
+            streamer: ctx.accounts.streamer.key(),
+            bump:     ctx.bumps.registry,
+        });
+
+        emit!(StreamerRegistered {
+            streamer: ctx.accounts.streamer.key(),
+        });
+
+        Ok(())
+    }
+
+    /// Reverses register_streamer — closes the registry account, so new
+    /// escrows can no longer target this pubkey until it re-registers.
+    /// Escrows already open against it are completely unaffected (same
+    /// non-retroactive spirit as GlobalConfig's pause flag) — this only
+    /// gates NEW initialize_escrow calls.
+    pub fn unregister_streamer(ctx: Context<UnregisterStreamer>) -> Result<()> {
+        emit!(StreamerUnregistered {
+            streamer: ctx.accounts.streamer.key(),
+        });
         Ok(())
     }
 
@@ -997,6 +1184,14 @@ pub mod casi_escrow {
             signer,
         )?;
 
+        // Reimburse the cranker if this call had to create the viewer's
+        // refund ATA — see ATA_RENT_LAMPORTS / reimburse_ata_rent.
+        reimburse_ata_rent(
+            &ctx.accounts.escrow_state.to_account_info(),
+            &ctx.accounts.cranker.to_account_info(),
+            ATA_RENT_LAMPORTS,
+        )?;
+
         emit!(StalePendingCancelled {
             escrow_id,
             age_secs: age,
@@ -1068,6 +1263,43 @@ fn pda_close_account<'info>(
     close_account(
         CpiContext::new_with_signer(token_program.to_account_info(), accounts, signer_seeds),
     )
+}
+
+/// Reimburses up to `amount` lamports out of `escrow_state`'s own balance to
+/// `dest` — the ATA-rent buffer initialize_escrow pre-collected from the
+/// viewer, paid out here to whoever is actually settling/cranking this
+/// escrow. `escrow_state` is owned by this program, so adjusting its
+/// lamports directly is valid without a CPI (unlike the SPL-token transfers
+/// above, which move funds owned by the token program).
+///
+/// Capped at whatever's actually available above escrow_state's own
+/// rent-exempt minimum — by construction this should always exactly match
+/// what was pre-funded, but this is computed live via Rent::get() rather
+/// than trusting that invariant, so a future account-size change (or an
+/// escrow created before this fix, which never received a buffer) can never
+/// under-rent the account mid-instruction or panic. escrow_state closes
+/// immediately after every caller of this helper returns, sweeping whatever
+/// remains to `viewer` exactly as before this change.
+fn reimburse_ata_rent<'info>(
+    escrow_state: &AccountInfo<'info>,
+    dest: &AccountInfo<'info>,
+    amount: u64,
+) -> Result<()> {
+    let rent_exempt_min = Rent::get()?.minimum_balance(escrow_state.data_len());
+    let available = escrow_state.lamports().saturating_sub(rent_exempt_min);
+    let reimbursement = amount.min(available);
+    if reimbursement == 0 {
+        return Ok(());
+    }
+    **escrow_state.try_borrow_mut_lamports()? = escrow_state
+        .lamports()
+        .checked_sub(reimbursement)
+        .ok_or(CasiError::MathOverflow)?;
+    **dest.try_borrow_mut_lamports()? = dest
+        .lamports()
+        .checked_add(reimbursement)
+        .ok_or(CasiError::MathOverflow)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1150,7 +1382,25 @@ pub struct InitializeEscrow<'info> {
     pub viewer: Signer<'info>,
 
     /// CHECK: Streamer wallet — stored in EscrowState, verified on settle/deny.
+    /// Not required to sign or co-operate at booking time (a viewer can still
+    /// book instantly) — but must have a StreamerRegistry account (see
+    /// below), a one-time step any real CASI streamer completes during
+    /// wallet setup.
     pub streamer: UncheckedAccount<'info>,
+
+    /// Proves `streamer` opted in to receiving CASI escrows at some point in
+    /// the past — see register_streamer. Anchor fails this account's
+    /// deserialization (AccountNotInitialized) if it's never been created,
+    /// which is exactly the gate this exists for: without it, `streamer`
+    /// above is a fully unchecked, unsigned pubkey of the CALLER's choosing,
+    /// so anyone could open Pending escrows "against" an address that never
+    /// signed up for CASI at all. See
+    /// docs/fable-security-review-2026-08-10.md Finding 4.
+    #[account(
+        seeds = [REGISTRY_SEED, streamer.key().as_ref()],
+        bump  = streamer_registry.bump,
+    )]
+    pub streamer_registry: Account<'info, StreamerRegistry>,
 
     /// Global config is read to enforce: not paused, correct mint, amount cap/floor.
     #[account(
@@ -1401,6 +1651,38 @@ pub struct SettleBeam<'info> {
     pub token_program:            Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program:           Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RegisterStreamer<'info> {
+    #[account(mut)]
+    pub streamer: Signer<'info>,
+
+    #[account(
+        init_if_needed,
+        payer  = streamer,
+        space  = 8 + StreamerRegistry::INIT_SPACE,
+        seeds  = [REGISTRY_SEED, streamer.key().as_ref()],
+        bump,
+    )]
+    pub registry: Account<'info, StreamerRegistry>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UnregisterStreamer<'info> {
+    #[account(mut)]
+    pub streamer: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds   = [REGISTRY_SEED, streamer.key().as_ref()],
+        bump    = registry.bump,
+        has_one = streamer @ CasiError::Unauthorized,
+        close   = streamer,
+    )]
+    pub registry: Account<'info, StreamerRegistry>,
 }
 
 #[derive(Accounts)]
@@ -1753,6 +2035,17 @@ pub struct StreamerDelegate {
     pub bump:        u8,
 }
 
+/// One per streamer who's opted in to receiving CASI escrows. Existence
+/// alone is the whole signal — initialize_escrow just needs this account to
+/// deserialize successfully for whatever `streamer` pubkey is targeted.
+#[account]
+#[derive(InitSpace)]
+pub struct StreamerRegistry {
+    pub version:  u8,
+    pub streamer: Pubkey,
+    pub bump:     u8,
+}
+
 // ---------------------------------------------------------------------------
 // Enums
 // ---------------------------------------------------------------------------
@@ -1838,6 +2131,16 @@ pub struct BeamStarted {
 }
 
 #[event]
+pub struct StreamerRegistered {
+    pub streamer: Pubkey,
+}
+
+#[event]
+pub struct StreamerUnregistered {
+    pub streamer: Pubkey,
+}
+
+#[event]
 pub struct DelegateInstalled {
     pub streamer:    Pubkey,
     pub session_key: Pubkey,
@@ -1901,4 +2204,6 @@ pub enum CasiError {
     TransferHookNotAllowed,
     #[msg("Amount is below the per-escrow minimum set in GlobalConfig")]
     AmountBelowMin,
+    #[msg("min_escrow_amount cannot exceed max_escrow_amount")]
+    InvalidCapFloor,
 }

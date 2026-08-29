@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     await Promise.all([
       supabase
         .from('bookings')
-        .select('id, profile_id, status, payment_method, escrow_pda')
+        .select('id, profile_id, status, payment_method, escrow_pda, escrow_seed')
         .eq('id', bookingId)
         .maybeSingle(),
       supabase
@@ -113,7 +113,7 @@ export async function POST(req: Request) {
     scope: 'delegates-start-beam',
     profileId: user.id,
     bookingId: booking.id,
-    escrowId: booking.id,
+    escrowId: booking.escrow_seed ?? booking.id,
     streamerWallet: profile.solana_wallet,
   });
 

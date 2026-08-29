@@ -23,11 +23,22 @@ function OBSContent() {
 
   useEffect(() => {
     const load = async () => {
-      const { data: prof } = await supabase
+      let prof: any = null;
+      const { data, error } = await supabase
         .from('profiles')
         .select('id, ink_color, theme_color, skin')
         .eq('username', username)
         .single();
+      prof = data;
+      if (error || !prof) {
+        // Supabase REST is down (e.g. quota-outage 402) — fall back to the
+        // direct-Postgres bypass route. See src/lib/db-direct.ts. Safe to
+        // remove this whole branch once the outage is resolved.
+        try {
+          const res = await fetch(`/api/overlay-direct/obs-data?username=${encodeURIComponent(username)}`);
+          if (res.ok) prof = (await res.json()).profile;
+        } catch { /* bypass also unavailable — nothing more to try */ }
+      }
       if (prof) {
         setProfileId(prof.id);
         const hex = prof.skin === 'custom'
@@ -45,7 +56,7 @@ function OBSContent() {
     if (!profileId) return;
 
     const loadAll = async () => {
-      const [{ data: els }, { data: bks }] = await Promise.all([
+      const [elRes, bkRes] = await Promise.all([
         supabase.from('overlay_elements').select('*').eq('profile_id', profileId),
         supabase
           .from('bookings')
@@ -53,6 +64,21 @@ function OBSContent() {
           .eq('profile_id', profileId)
           .eq('status', 'active'),
       ]);
+
+      let els = elRes.data;
+      let bks = bkRes.data;
+      if (elRes.error || bkRes.error) {
+        // Same outage bypass as the profile-lookup effect above — one call
+        // covers both tables since the route already joins them server-side.
+        try {
+          const res = await fetch(`/api/overlay-direct/obs-data?username=${encodeURIComponent(username)}`);
+          if (res.ok) {
+            const json = await res.json();
+            els = json.elements;
+            bks = json.bookings;
+          }
+        } catch { /* bypass also unavailable — render whatever we already have */ }
+      }
 
       let filteredEls = els || [];
       if (layer === 'beams')         filteredEls = filteredEls.filter(el => !el.is_background);
@@ -67,12 +93,19 @@ function OBSContent() {
 
     loadAll();
 
+    // Tracks the last time we know the realtime pipe was alive (an actual
+    // change event, or the channel reaching SUBSCRIBED). The watchdog below
+    // only refetches once this goes stale — a healthy connection never
+    // triggers the backstop at all.
+    let lastEventAt = Date.now();
+    const bump = () => { lastEventAt = Date.now(); };
+
     const elCh = supabase.channel(`obs_els_${layer}_${profileId}`)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'overlay_elements',
         filter: `profile_id=eq.${profileId}`,
-      }, () => loadAll())
-      .subscribe();
+      }, () => { bump(); loadAll(); })
+      .subscribe((status) => { if (status === 'SUBSCRIBED') bump(); });
 
     // Banner content lives on bookings (message field), so the OBS render
     // needs to hear about booking transitions too — not just element
@@ -82,23 +115,30 @@ function OBSContent() {
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'bookings',
         filter: `profile_id=eq.${profileId}`,
-      }, () => loadAll())
-      .subscribe();
+      }, () => { bump(); loadAll(); })
+      .subscribe((status) => { if (status === 'SUBSCRIBED') bump(); });
 
-    // Safety-refresh fallback. OBS browser sources run in CEF, which can
+    // Safety-refresh backstop. OBS browser sources run in CEF, which can
     // throttle background JS — so a Supabase realtime push (e.g. a beam the
-    // streamer just approved) can land seconds late, sometimes ~30s. Polling
-    // as a backstop guarantees a newly-active beam shows within a few seconds
-    // regardless of realtime delivery. The render keys (`el.id` /
-    // `${el.id}-${active?.id}`) are stable, so an unchanged refresh causes no
-    // remount, flicker, or glow-animation replay; the queries are tiny and
-    // scoped to one profile_id.
-    const poll = setInterval(loadAll, 4000);
+    // streamer just approved) can land seconds late, sometimes ~30s. Rather
+    // than polling unconditionally (which was ~43k requests/day per open
+    // OBS window and blew through the Supabase free-tier egress quota), this
+    // checks every 5s whether a realtime event has landed in the last 15s;
+    // only a genuinely stalled connection triggers a refetch. The render
+    // keys (`el.id` / `${el.id}-${active?.id}`) are stable, so an unchanged
+    // refresh causes no remount, flicker, or glow-animation replay.
+    const STALE_MS = 15_000;
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastEventAt > STALE_MS) {
+        bump(); // avoid re-firing every tick while the outage continues
+        loadAll();
+      }
+    }, 5_000);
 
     return () => {
       supabase.removeChannel(elCh);
       supabase.removeChannel(bkCh);
-      clearInterval(poll);
+      clearInterval(watchdog);
     };
   }, [profileId, layer, supabase]);
 

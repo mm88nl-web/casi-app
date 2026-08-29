@@ -158,7 +158,7 @@ async function bookingAction(
 ): Promise<NextResponse> {
   const { data: booking, error } = await supabase
     .from('bookings')
-    .select('id, status, payment_method, payment_intent_id, element_id, image_url, profile_id, escrow_pda')
+    .select('id, status, payment_method, payment_intent_id, element_id, image_url, profile_id, escrow_pda, escrow_seed')
     .eq('id', id)
     .single();
 
@@ -175,7 +175,7 @@ async function bookingAction(
 }
 
 async function approveBooking(booking: Record<string, any>, orig: Embed): Promise<NextResponse> {
-  const { id, payment_method, payment_intent_id, element_id, image_url, profile_id, escrow_pda } = booking;
+  const { id, payment_method, payment_intent_id, element_id, image_url, profile_id, escrow_pda, escrow_seed } = booking;
 
   // ── Solana: crank via registered delegate keypair ─────────────────────────
   if (payment_method === 'solana') {
@@ -220,7 +220,7 @@ async function approveBooking(booking: Record<string, any>, orig: Embed): Promis
       scope:         'discord-interactions',
       profileId:     profile_id,
       bookingId:     id,
-      escrowId:      id,
+      escrowId:      escrow_seed ?? id,
       streamerWallet: prof.solana_wallet,
     });
 

@@ -76,6 +76,9 @@ const PENDING_CRANK_CUTOFF_HOURS = 7 * 24 + 1;
 type PendingRow = {
   id: number | string;
   escrow_pda: string;
+  /** See docs/fable-security-review-2026-08-28.md Finding 1 — falls back to
+   *  `id` for rows created before this column existed. */
+  escrow_seed: string | null;
   created_at: string;
   image_url: string | null;
   element_id: string | null;
@@ -121,7 +124,7 @@ export async function GET(req: Request) {
   const [pending, active] = await Promise.all([
     supabase
       .from('bookings')
-      .select('id, escrow_pda, created_at, image_url, element_id, viewer_wallet')
+      .select('id, escrow_pda, escrow_seed, created_at, image_url, element_id, viewer_wallet')
       .eq('status', 'pending')
       .eq('payment_method', 'solana')
       .not('escrow_pda', 'is', null)
@@ -314,7 +317,7 @@ async function crankStalePending(
 
   const client = new CasiEscrowClient(connection, wallet, WALLET_ADAPTER_CLUSTER);
   await client.cancelStalePending({
-    escrowId: row.id,
+    escrowId: row.escrow_seed ?? row.id,
     viewer:   new PublicKey(row.viewer_wallet),
   });
 }

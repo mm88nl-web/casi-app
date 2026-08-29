@@ -9,7 +9,7 @@ skip-lint = false
 casi_escrow = "CDunHmMe2KW8qmjoqWanuu3p1DsEYjqRA1yVmyXDtakM"
 
 [programs.mainnet]
-casi_escrow = "6utjMbb5ovFHUdMcMWaGc5ovmVhLryVRLEzYPWzeBosg"
+casi_escrow = "6MUJL1ktHT7R6gTq3AE7HR6Eeq8aFsHUPiMdEzgaaPd8"
 
 [registry]
 url = "https://api.apr.dev"

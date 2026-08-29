@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     await Promise.all([
       supabase
         .from('bookings')
-        .select('id, profile_id, status, payment_method, escrow_pda, viewer_wallet')
+        .select('id, profile_id, status, payment_method, escrow_pda, escrow_seed, viewer_wallet')
         .eq('id', bookingId)
         .maybeSingle(),
       supabase
@@ -212,7 +212,7 @@ export async function POST(req: Request) {
       WALLET_ADAPTER_CLUSTER,
     );
     const ix = await client.buildSettleBeamDelegatedIx({
-      escrowId:   booking.id,
+      escrowId:   booking.escrow_seed ?? booking.id,
       streamer,
       viewer,
       sessionKey: session.publicKey,

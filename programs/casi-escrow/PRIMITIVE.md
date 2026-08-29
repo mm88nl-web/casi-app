@@ -54,7 +54,9 @@ system, plus the Flash delegated twins). Re-derive from `src/lib.rs`
 | `initialize_config`      | deployer (must be upgrade authority)    | One-time. Sets accepted mint, admin, per-escrow cap/floor.        |
 | `update_config`          | admin                                   | Adjusts `paused` / `max_escrow_amount` / `min_escrow_amount`.     |
 | `transfer_admin`         | admin                                   | Rotates the admin key.                                            |
-| `initialize_escrow`      | buyer                                   | Deposits USDC, creates PDA + vault, records duration.             |
+| `register_streamer`      | provider                                | One-time opt-in. Required before `initialize_escrow` will accept this provider as a target — see below. |
+| `unregister_streamer`    | provider                                | Reverses registration for new escrows; existing ones are unaffected. |
+| `initialize_escrow`      | buyer                                   | Deposits USDC, creates PDA + vault, records duration. Also pre-funds a small SOL buffer — see "ATA-rent buffer" below. |
 | `cancel_escrow`          | buyer (only while Pending)              | Buyer self-refund, 100%.                                          |
 | `approve_flash`          | provider                                | Flash (one-shot tip) → 100% to provider.                          |
 | `deny_flash`             | provider                                | One-shot denial, 100% refund.                                     |
@@ -105,6 +107,65 @@ funded with ~0.05 SOL. Forks that don't want to operate a cranker can
 ship mode 1 and get a popup-per-action product. Forks that want
 truly gasless interactions can plug in a paymaster relayer without
 modifying the program.
+
+---
+
+## Provider registration — required before anyone can target you
+
+`initialize_escrow`'s `streamer` account is an unchecked, unsigned pubkey
+chosen entirely by the buyer — by design, since the provider only needs to
+act *later* (`start_beam`/`approve_flash`), not at deposit time. Without any
+further check, that means a stranger could open a Pending escrow "against"
+any pubkey at all, including one that never opted into this program.
+`register_streamer` closes that: `initialize_escrow` requires a
+`StreamerRegistry` account to already exist for whatever `streamer` pubkey
+is targeted.
+
+This is a **one-time opt-in, not a per-booking requirement** — it doesn't
+reintroduce "the provider must be present at booking time." A provider
+registers once (during onboarding/wallet-connect, in whatever app is built
+on top), and every booking after that still needs zero live participation
+from them until they choose to act. `unregister_streamer` reverses it for
+*future* escrows only; anything already open against a provider settles
+normally regardless of registration status, the same non-retroactive spirit
+as `update_config`'s pause flag.
+
+## ATA-rent buffer — who pays for a fresh counterparty's token account
+
+Several instructions (`settle_beam`, the delegated Flash/Beam twins,
+`cancel_stale_pending`) use `init_if_needed` to create the counterparty's
+USDC associated-token-account if it doesn't exist yet — a real SOL cost
+(~0.002 SOL, the ATA rent-exemption minimum) that has nothing to do with the
+escrow's own size. Left unaddressed, whoever processes someone else's
+escrow (a shared cranker, or any permissionless post-duration caller) eats
+that cost personally, regardless of whether the escrow moved $0.0001 or
+$1,000 — a real problem to fix if you fork this and don't want to bleed SOL
+running a cranker.
+
+The fix: `initialize_escrow` pre-collects a SOL buffer from the buyer (1x
+ATA-rent for Flash, 2x for Beam — sized for `settle_beam`'s worst case of
+both counterparty ATAs needing creation in the same call) into the escrow's
+own PDA balance. Every settle-shaped instruction then reimburses whoever
+actually processes it — `reimburse_ata_rent` in `lib.rs` — out of that
+buffer, capped at what's actually there. Any portion never spent (the
+common case: most counterparties already have an ATA after their first
+payment) returns to the buyer along with the rest of the escrow's rent when
+it closes, exactly as before this existed.
+
+This is a deliberately simple, **unconditional** flat reimbursement rather
+than trying to detect precisely which ATA(s) were freshly created this
+call — Anchor's account-constraint processing happens before your handler
+body runs, so there's no clean signal to check that without abandoning
+`init_if_needed`'s declarative sugar for manual CPI. The tradeoff: whoever
+processes a `settle_beam` on an escrow where the counterparty ATAs happened
+to already exist gets a small windfall (up to one ATA-rent's worth) instead
+of the buyer getting 100% of the unused buffer back. We consider this a
+feature, not a bug, for a permissionless primitive — it's a genuine
+(self-funded, bounded, never drawn from anyone but that escrow's own buyer)
+incentive for third-party cranks to exist independent of any one
+platform's own infrastructure, which is exactly the kind of resilience a
+"generic reusable primitive" should want. Fork and change this if your
+usecase wants the stricter behavior instead.
 
 ---
 
@@ -206,6 +267,20 @@ product that is not CASI?" should verify:
 5. **CPI surface is two programs.** `token_interface` (`transfer_checked`,
    `close_account`) and the associated-token-program. No user-supplied
    program IDs, no arbitrary CPI.
+6. **TransferHook is checked once, at deploy time — this is a real
+   TOCTOU gap if your mint isn't classic SPL Token.** `initialize_config`
+   rejects a Token-2022 mint that already has a TransferHook extension
+   configured (a hook executes arbitrary code during every
+   `transfer_checked` CPI this program makes — approve, deny, settle,
+   cancel). It does **not** re-check later. If your `accepted_mint` is a
+   Token-2022 mint with a *retained* extension-update authority, that
+   authority could attach a hook after this check passes, and the program
+   has no mechanism to notice or react. **This doesn't affect CASI's own
+   deployment** — CASI's `accepted_mint` is real USDC, a classic SPL Token
+   mint, which cannot grow extensions at all, ever, regardless of anyone's
+   intent. If you fork this with a Token-2022 stablecoin, either use a mint
+   whose update authority has been permanently renounced, or add your own
+   periodic re-verification — this program doesn't do it for you.
 
 ---
 

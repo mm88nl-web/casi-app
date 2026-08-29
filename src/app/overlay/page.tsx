@@ -46,7 +46,7 @@ import BrowseStreamersModal from './_components/BrowseStreamersModal';
 // column-level GRANT in 20260423 — if a new sensitive column lands on
 // bookings and someone forgets to update the REVOKE/GRANT list, clients
 // here still only ask for known columns.
-const BOOKING_COLS = 'id, created_at, profile_id, element_id, viewer_name, status, image_url, storage_path, file_type, message, duration_minutes, price_value, price_unit, payment_method, tx_signature, payment_intent_id, original_amount_cents, approved_at, started_at, escrow_pda, viewer_wallet, is_queued, queue_position, banner_font_px, banner_speed_secs, media_offset_x, media_offset_y, media_zoom';
+const BOOKING_COLS = 'id, created_at, profile_id, element_id, viewer_name, status, image_url, storage_path, file_type, message, duration_minutes, price_value, price_unit, payment_method, tx_signature, payment_intent_id, original_amount_cents, approved_at, started_at, escrow_pda, escrow_seed, viewer_wallet, is_queued, queue_position, banner_font_px, banner_speed_secs, media_offset_x, media_offset_y, media_zoom';
 const BOOKING_PAGE_LIMIT = 200;
 
 // How long a Stripe-denied booking stays surfaced to the viewer with the
@@ -659,7 +659,7 @@ function OverlayContent() {
         const id = String(b.id);
         probedPendingRef.current.add(id);
         try {
-          const [pda] = deriveEscrowPda(b.id);
+          const [pda] = deriveEscrowPda(b.escrow_seed ?? b.id);
           const info = await conn.getAccountInfo(pda).catch(() => null);
           if (!info) continue;
           const res = await fetch('/api/bookings/attach-solana-tx', {
@@ -1270,7 +1270,7 @@ function OverlayContent() {
       setSubmitting(false);
       return;
     }
-    const newBooking = { id: createBody.booking_id as string };
+    const newBooking = { id: createBody.booking_id as string, escrow_seed: createBody.escrow_seed as string | undefined };
     rememberBookingToken(newBooking.id, createBody.cancel_token as string);
 
     setTxStatus('streaming');
@@ -1296,11 +1296,17 @@ function OverlayContent() {
       // ── Pre-flight: verify viewer has SOL + a USDC ATA with enough balance ──
       const connection = new Connection(SOLANA_RPC);
 
-      // SOL: initialize_escrow creates both the EscrowState PDA and a PDA-owned
-      // vault ATA (~2× rent) plus a signature fee. Empirically ~0.003 SOL on
-      // devnet — we require 0.01 for safety margin.
+      // SOL: initialize_escrow creates the EscrowState PDA (~0.00209 SOL
+      // rent) and a PDA-owned vault ATA (~0.00204 SOL rent), pays a
+      // signature fee, and — since the ATA-rent-reimbursement fix (see
+      // ATA_RENT_LAMPORTS / reimburse_ata_rent in lib.rs) — also pre-funds a
+      // buffer for whoever later settles this escrow: 1x ATA-rent for
+      // Flash, 2x for Beam (durationSeconds > 0). Real worst case (Beam):
+      // ~0.0082 SOL. Require 0.015 for a real safety margin — the previous
+      // 0.01 threshold predates the buffer and left only ~0.0018 SOL of
+      // slack against the actual Beam requirement, thinner than intended.
       const solLamports = await connection.getBalance(effectivePublicKey);
-      const MIN_SOL     = 0.01 * 1e9;
+      const MIN_SOL     = 0.015 * 1e9;
       if (solLamports < MIN_SOL) {
         showNotif(
           IS_MAINNET
@@ -1416,7 +1422,7 @@ function OverlayContent() {
       // PDA-only path completes the booking just fine.
       // ────────────────────────────────────────────────────────────────
       const { tx, escrowPda: escrowPdaPubkey } = await client.buildInitializeBeamTx({
-        escrowId:     newBooking.id,
+        escrowId:     newBooking.escrow_seed ?? newBooking.id,
         streamer:     new PublicKey(profile.solana_wallet),
         amountUsdc:   amountUsdcMicro,
         durationSecs: durationSecsInt,
@@ -1631,7 +1637,7 @@ function OverlayContent() {
       try {
         const { Connection } = await import('@solana/web3.js');
         const { deriveEscrowPda } = await import('@/lib/casi-escrow');
-        const [escrowPda] = deriveEscrowPda(newBooking.id);
+        const [escrowPda] = deriveEscrowPda(newBooking.escrow_seed ?? newBooking.id);
         const conn = new Connection(SOLANA_RPC, 'confirmed');
         // Long-tail polling: Phantom mobile submits via its own RPC and the
         // tx can take 30+ seconds to propagate to Helius on devnet. The old
@@ -1805,7 +1811,7 @@ function OverlayContent() {
       // once the signed tx submits successfully.
       if (await isPhantomConnectMobile()) {
         const { tx } = await client.buildSettleBeamTx({
-          escrowId: booking.id,
+          escrowId: booking.escrow_seed ?? booking.id,
           viewer:   new PK(booking.viewer_wallet),
           streamer: new PK(profile.solana_wallet),
         });
@@ -1813,7 +1819,7 @@ function OverlayContent() {
         return;
       }
       await client.settleBeam({
-        escrowId: booking.id,
+        escrowId: booking.escrow_seed ?? booking.id,
         viewer:   new PK(booking.viewer_wallet),
         streamer: new PK(profile.solana_wallet),
       });
@@ -1943,7 +1949,7 @@ function OverlayContent() {
         const { PublicKey: PK } = await import('@solana/web3.js');
         if (await isPhantomConnectMobile()) {
           const { tx } = await client.buildSettleBeamTx({
-            escrowId: booking.id,
+            escrowId: booking.escrow_seed ?? booking.id,
             viewer:   new PK(booking.viewer_wallet),
             streamer: new PK(profile.solana_wallet),
           });
@@ -1951,7 +1957,7 @@ function OverlayContent() {
           return;
         }
         await client.settleBeam({
-          escrowId: booking.id,
+          escrowId: booking.escrow_seed ?? booking.id,
           viewer:   new PK(booking.viewer_wallet),
           streamer: new PK(profile.solana_wallet),
         });
@@ -1991,11 +1997,11 @@ function OverlayContent() {
       const client = await buildViewerCasiClient();
       if (!client) throw new Error('Wallet not ready to sign');
       if (await isPhantomConnectMobile()) {
-        const { tx } = await client.buildCancelEscrowTx({ escrowId: booking.id });
+        const { tx } = await client.buildCancelEscrowTx({ escrowId: booking.escrow_seed ?? booking.id });
         await phantomConnectSignAndSubmit(tx, 'cancel', booking);
         return;
       }
-      await client.cancelEscrow({ escrowId: booking.id });
+      await client.cancelEscrow({ escrowId: booking.escrow_seed ?? booking.id });
     } catch (err) {
       cancelThrew = true;
       const { formatEscrowError } = await import('@/lib/casi-errors');

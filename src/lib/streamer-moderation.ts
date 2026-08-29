@@ -52,6 +52,10 @@ export type BookingLike = {
   payment_method?: string | null;
   image_url?: string | null;
   escrow_pda?: string | null;
+  /** Random per-booking seed used for the escrow PDA instead of `id` (which
+   *  is predictable) — see docs/fable-security-review-2026-08-28.md Finding
+   *  1. Falls back to `id` for rows created before this column existed. */
+  escrow_seed?: string | null;
   viewer_wallet?: string | null;
   /** For storage cleanup on end-early / expire. */
   storage_path?: string | null;
@@ -797,7 +801,7 @@ async function startSolanaBeamOnChain(
         }),
     };
     const client = new CasiEscrowClient(ctx.connection, anchorWallet as never, ctx.cluster);
-    await client.startBeam({ escrowId: booking.id, streamer: ctx.wallet.publicKey });
+    await client.startBeam({ escrowId: booking.escrow_seed ?? booking.id, streamer: ctx.wallet.publicKey });
     return { ok: true };
   } catch (err) {
     const { formatEscrowError } = await import('@/lib/casi-errors');
@@ -849,7 +853,7 @@ async function settleOrClearSolanaEscrow(
     };
     const client = new CasiEscrowClient(ctx.connection, anchorWallet as never, ctx.cluster);
     await client.settleBeam({
-      escrowId: booking.id,
+      escrowId: booking.escrow_seed ?? booking.id,
       viewer: new PublicKey(booking.viewer_wallet),
       streamer: ctx.wallet.publicKey,
     });

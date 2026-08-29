@@ -77,6 +77,7 @@ export { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID };
 const ESCROW_SEED   = Buffer.from('casi-escrow');
 const DELEGATE_SEED = Buffer.from('casi-delegate');
 const CONFIG_SEED   = Buffer.from('casi-config');
+const REGISTRY_SEED = Buffer.from('casi-registry');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -128,6 +129,22 @@ export function deriveConfigPda(
   programId: PublicKey = PROGRAM_ID,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([CONFIG_SEED], programId);
+}
+
+/**
+ * Derive a streamer's registration PDA — see register_streamer in lib.rs.
+ * initialize_escrow requires this account to exist for whatever `streamer`
+ * pubkey is targeted (docs/fable-security-review-2026-08-10.md Finding 4),
+ * so every initializeFlash/initializeBeam call needs it in its accounts.
+ */
+export function deriveRegistryPda(
+  streamer: PublicKey,
+  programId: PublicKey = PROGRAM_ID,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [REGISTRY_SEED, streamer.toBuffer()],
+    programId,
+  );
 }
 
 /** Solscan transaction link. */
@@ -352,6 +369,7 @@ export class CasiEscrowClient {
     const escrowIdBytes  = uuidToBytes(escrowId);
     const [escrowPda]    = deriveEscrowPda(escrowId);
     const [configPda]    = deriveConfigPda();
+    const [registryPda]  = deriveRegistryPda(streamer);
     const viewer         = this.wallet.publicKey;
 
     const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer, false, tokenProgram);
@@ -372,6 +390,7 @@ export class CasiEscrowClient {
         .accounts({
           viewer,
           streamer,
+          streamerRegistry:     registryPda,
           config:               configPda,
           escrowState:          escrowPda,
           vault,
@@ -411,6 +430,7 @@ export class CasiEscrowClient {
     const escrowIdBytes  = uuidToBytes(escrowId);
     const [escrowPda]    = deriveEscrowPda(escrowId);
     const [configPda]    = deriveConfigPda();
+    const [registryPda]  = deriveRegistryPda(streamer);
     const viewer         = this.wallet.publicKey;
     const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer,    false, tokenProgram);
     const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true,  tokenProgram);
@@ -419,6 +439,7 @@ export class CasiEscrowClient {
       .initializeEscrow(escrowIdBytes, new BN(amountUsdc), new BN(0), 0)
       .accounts({
         viewer, streamer,
+        streamerRegistry: registryPda,
         config:  configPda,
         escrowState: escrowPda,
         vault, viewerAta,
@@ -456,6 +477,7 @@ export class CasiEscrowClient {
     const escrowIdBytes  = uuidToBytes(escrowId);
     const [escrowPda]    = deriveEscrowPda(escrowId);
     const [configPda]    = deriveConfigPda();
+    const [registryPda]  = deriveRegistryPda(streamer);
     const viewer         = this.wallet.publicKey;
     const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer,   false, tokenProgram);
     const vault     = getAssociatedTokenAddressSync(usdcMint, escrowPda, true, tokenProgram);
@@ -465,6 +487,7 @@ export class CasiEscrowClient {
       .accounts({
         viewer,
         streamer,
+        streamerRegistry:     registryPda,
         config:               configPda,
         escrowState:          escrowPda,
         vault,
@@ -584,6 +607,7 @@ export class CasiEscrowClient {
     const escrowIdBytes  = uuidToBytes(escrowId);
     const [escrowPda]    = deriveEscrowPda(escrowId);
     const [configPda]    = deriveConfigPda();
+    const [registryPda]  = deriveRegistryPda(streamer);
     const viewer         = this.wallet.publicKey;
 
     const viewerAta = getAssociatedTokenAddressSync(usdcMint, viewer,   false, tokenProgram);
@@ -594,6 +618,7 @@ export class CasiEscrowClient {
       .accounts({
         viewer,
         streamer,
+        streamerRegistry:     registryPda,
         config:               configPda,
         escrowState:          escrowPda,
         vault,
@@ -803,6 +828,42 @@ export class CasiEscrowClient {
         tokenProgram,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram:          SystemProgram.programId,
+      })
+      .rpc();
+
+    return { sig, solscanUrl: solscanTxUrl(sig, this.cluster) };
+  }
+
+  // -------------------------------------------------------------------------
+  // register_streamer  (one-time opt-in; required before initialize_escrow
+  // will let anyone target this streamer — see deriveRegistryPda)
+  // -------------------------------------------------------------------------
+
+  async registerStreamer(): Promise<{ sig: string; solscanUrl: string }> {
+    const streamer = this.wallet.publicKey;
+    const [registryPda] = deriveRegistryPda(streamer);
+
+    const sig = await (this.program.methods as any)
+      .registerStreamer()
+      .accounts({
+        streamer,
+        registry:      registryPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    return { sig, solscanUrl: solscanTxUrl(sig, this.cluster) };
+  }
+
+  async unregisterStreamer(): Promise<{ sig: string; solscanUrl: string }> {
+    const streamer = this.wallet.publicKey;
+    const [registryPda] = deriveRegistryPda(streamer);
+
+    const sig = await (this.program.methods as any)
+      .unregisterStreamer()
+      .accounts({
+        streamer,
+        registry: registryPda,
       })
       .rpc();
 

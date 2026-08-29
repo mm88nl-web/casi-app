@@ -35,6 +35,7 @@ import { randomBytes } from "crypto";
 // ---- constants mirrored from lib.rs -----------------------------------------
 const ESCROW_SEED   = Buffer.from("casi-escrow");
 const DELEGATE_SEED = Buffer.from("casi-delegate");
+const REGISTRY_SEED = Buffer.from("casi-registry");
 const USDC_DECIMALS = 6;
 
 // Escrow type enum (discriminant values sent as u8)
@@ -66,6 +67,14 @@ function derivePda(escrowId: number[], programId: PublicKey): PublicKey {
 function deriveDelegatePda(streamer: PublicKey, programId: PublicKey): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
     [DELEGATE_SEED, streamer.toBuffer()],
+    programId,
+  );
+  return pda;
+}
+
+function deriveRegistryPda(streamer: PublicKey, programId: PublicKey): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [REGISTRY_SEED, streamer.toBuffer()],
     programId,
   );
   return pda;
@@ -122,11 +131,25 @@ describe("casi-escrow", () => {
     vault: PublicKey;
   }
 
+  async function registerStreamer(streamer: Keypair) {
+    const registryPda = deriveRegistryPda(streamer.publicKey, program.programId);
+    return program.methods
+      .registerStreamer()
+      .accounts({
+        streamer: streamer.publicKey,
+        registry: registryPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([streamer])
+      .rpc();
+  }
+
   async function setupParties(mintAmount: bigint): Promise<EscrowCtx> {
     const viewer   = Keypair.generate();
     const streamer = Keypair.generate();
     await airdrop(viewer.publicKey);
     await airdrop(streamer.publicKey);
+    await registerStreamer(streamer);
 
     const viewerAta = (
       await getOrCreateAssociatedTokenAccount(
@@ -278,10 +301,46 @@ describe("casi-escrow", () => {
   }
 
   // ---- suite fixture --------------------------------------------------------
+  //
+  // initializeEscrow reads GlobalConfig (mint/pause/cap checks), so it must
+  // exist before any test below runs. This file previously never called
+  // initialize_config at all, which meant every test failed with
+  // AccountNotInitialized on `config` — see
+  // docs/fable-security-review-2026-08-10.md, Finding #2. Mirrors
+  // security-findings.ts's fixture: reuse an existing config (mocha runs all
+  // files against one shared validator/program deployment, and file order
+  // isn't guaranteed) instead of unconditionally minting + initializing,
+  // which would fail with already-in-use on the second file to run.
   before(async () => {
+    const configPda = PublicKey.findProgramAddressSync(
+      [Buffer.from("casi-config")],
+      program.programId,
+    )[0];
+    const existing = await provider.connection.getAccountInfo(configPda);
+    if (existing) {
+      const cfg = await program.account.globalConfig.fetch(configPda);
+      usdcMint = cfg.acceptedMint as PublicKey;
+      return;
+    }
+
     usdcMint = await createMint(
       provider.connection, payer, payer.publicKey, null, USDC_DECIMALS,
     );
+    const progInfo = await provider.connection.getAccountInfo(program.programId);
+    if (!progInfo) throw new Error("casi_escrow program not found on localnet");
+    const programDataAddress = new PublicKey(progInfo.data.slice(4, 36));
+    await program.methods
+      .initializeConfig(new BN(0), new BN(0)) // no cap, no floor — matches deployed config
+      .accounts({
+        initializer:   payer.publicKey,
+        config:        configPda,
+        acceptedMint:  usdcMint,
+        programData:   programDataAddress,
+        tokenProgram:  TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([payer])
+      .rpc();
   });
 
   // ---------------------------------------------------------------------------

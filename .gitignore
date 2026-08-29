@@ -46,3 +46,7 @@ next-env.d.ts
 .anchor/
 .anchor/
 .claude/
+
+# personal local-only tools (direct-DB scripts etc.) — not app code, has
+# raw production DB access, keep out of the public repo
+/scripts/
