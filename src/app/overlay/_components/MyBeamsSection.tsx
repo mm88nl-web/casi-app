@@ -24,8 +24,6 @@ type Props = {
   viewerWallet: string | null;
   cleanupBusy: boolean;
   onStaleCleanup: () => void | Promise<void>;
-  tc: string;
-  tcRgb: string;
   cancelling: string | null;
   ending: Set<string>;                       // beams the viewer just pressed "end early" on (optimistic)
   onEndEarly: (booking: Booking, activeBooking: Booking | undefined) => void | Promise<void>;
@@ -42,8 +40,6 @@ export default function MyBeamsSection({
   viewerWallet,
   cleanupBusy,
   onStaleCleanup,
-  tc,
-  tcRgb,
   cancelling,
   ending,
   onEndEarly,
@@ -95,16 +91,27 @@ export default function MyBeamsSection({
           const canCancel = isPending || isApproved;
           const needsRecover = isSolanaLocked || isSolanaKickLeaked;
           const chipStyle = (isExpiring || isEnding)
+            // Amber "expiring/ending" warning — semantic status colour, kept
+            // fixed across skins (same precedent as the yellow Extend-mode
+            // button elsewhere): a viewer learns "amber = about to end"
+            // regardless of which skin the streamer is on.
             ? { background: 'rgba(234,179,8,0.08)', borderColor: 'rgba(234,179,8,0.25)', color: '#facc15' }
             : isLive
-            ? { background: `rgba(${tcRgb},0.07)`, borderColor: `rgba(${tcRgb},0.21)`, color: tc }
+            // "Live" is a state, not brand — accent2 per the skin token
+            // contract, not ink.
+            ? { background: 'var(--accent-soft)', borderColor: 'rgba(var(--casi-accent2-rgb),0.35)', color: 'var(--accent)' }
             : isApproved
-            ? { background: `rgba(${tcRgb},0.06)`, borderColor: `rgba(${tcRgb},0.19)`, color: tc }
+            ? { background: 'rgba(var(--casi-accent2-rgb),0.10)', borderColor: 'rgba(var(--casi-accent2-rgb),0.28)', color: 'var(--accent)' }
             : needsRecover
+            // Purple "funds recoverable" — semantic status colour, kept
+            // fixed for the same reason as the amber warning above: this
+            // specific hue means "your money is stuck here, click to
+            // recover" and shouldn't shift meaning depending on the skin's
+            // own accent2 (which already means something else: live/flash).
             ? { background: 'rgba(192,132,252,0.06)', borderColor: 'rgba(192,132,252,0.25)', color: '#c084fc' }
             : isDenied
             ? { background: 'rgba(248,113,113,0.06)', borderColor: 'rgba(248,113,113,0.22)', color: '#f87171' }
-            : { background: 'rgba(255,255,255,0.03)', borderColor: 'var(--casi-border)', color: 'var(--casi-text-muted)' };
+            : { background: 'var(--paper-3)', borderColor: 'var(--casi-border)', color: 'var(--casi-text-muted)' };
 
           const statusLabel = isEnding
             ? '⏳ Ending…'

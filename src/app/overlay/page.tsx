@@ -2596,8 +2596,6 @@ function OverlayContent() {
               viewerWallet={viewerWalletRef.current}
               cleanupBusy={cleanupBusy}
               onStaleCleanup={runStaleSolanaCleanup}
-              tc={tc}
-              tcRgb={tcRgb}
               cancelling={cancelling}
               ending={endingBeams}
               onEndEarly={async (booking, activeBooking) => {

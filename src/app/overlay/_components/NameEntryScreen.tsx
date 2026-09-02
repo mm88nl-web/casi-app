@@ -20,7 +20,7 @@ export default function NameEntryScreen({ onConfirm, tc }: Props) {
           <div style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom:40 }}>
             <Logo scale={0.5} color={tc} />
             <div style={{ fontSize:28, fontWeight:800, color:tc, letterSpacing:-1, marginTop:8 }}>casi</div>
-            <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, letterSpacing:3, textTransform:'uppercase', color:'#444', marginTop:4 }}>Viewer</div>
+            <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, letterSpacing:3, textTransform:'uppercase', color:'var(--ink-45)', marginTop:4 }}>Viewer</div>
           </div>
           <div style={{ background:'var(--casi-surface)', border:'1px solid var(--casi-border)', borderRadius:16, padding:28, marginBottom:12 }}>
             <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, letterSpacing:2, textTransform:'uppercase', color:'var(--casi-text-muted)', marginBottom:16 }}>Pick a name for this stream</div>
@@ -38,12 +38,12 @@ export default function NameEntryScreen({ onConfirm, tc }: Props) {
               />
               <button
                 onClick={() => setName(generateRandomName())}
-                style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#555', cursor:'pointer', textTransform:'uppercase', letterSpacing:1 }}
+                style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'var(--ink-70)', cursor:'pointer', textTransform:'uppercase', letterSpacing:1 }}
               >
                 ↺ random
               </button>
             </div>
-            <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#333', marginBottom:20 }}>A random name was generated — change it or keep it.</div>
+            <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'var(--ink-45)', marginBottom:20 }}>A random name was generated — change it or keep it.</div>
             <button
               onClick={() => name.trim() && onConfirm(name.trim())}
               disabled={!name.trim()}
@@ -54,13 +54,13 @@ export default function NameEntryScreen({ onConfirm, tc }: Props) {
           </div>
           <button
             onClick={() => setShowNote(!showNote)}
-            style={{ width:'100%', background:'none', border:'none', fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#333', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5, padding:'10px 0' }}
+            style={{ width:'100%', background:'none', border:'none', fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'var(--ink-45)', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5, padding:'10px 0' }}
           >
             Why no account?
           </button>
           {showNote && (
-            <div style={{ background:'rgba(255,255,255,0.02)', border:'1px solid #111', borderRadius:10, padding:16, textAlign:'center', marginTop:8 }}>
-              <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:11, color:'#444', lineHeight:1.7 }}>Viewers don&apos;t need one. Your name lives on this device so we can show your bookings here. Clear cookies to reset.<br /><br />Streamer? <a href="/login" style={{ color:'#888', textDecoration:'underline' }}>Sign in</a>.</div>
+            <div style={{ background:'var(--paper-2)', border:'1px solid var(--ink-12)', borderRadius:10, padding:16, textAlign:'center', marginTop:8 }}>
+              <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:11, color:'var(--ink-45)', lineHeight:1.7 }}>Viewers don&apos;t need one. Your name lives on this device so we can show your bookings here. Clear cookies to reset.<br /><br />Streamer? <a href="/login" style={{ color:'var(--ink-70)', textDecoration:'underline' }}>Sign in</a>.</div>
             </div>
           )}
         </div>
