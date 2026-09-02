@@ -10,6 +10,10 @@ import {
 
 type Props = {
   shape: string | null | undefined;
+  /** The real slot's on-stream aspect ratio (width/height). Drives the
+   *  preview box shape so drag/zoom operates on the actual crop region
+   *  instead of a guessed 16:9 or 1:1 box. */
+  slotAspectRatio: number;
   open: boolean;
   onToggle: () => void;
   accentColor: string;
@@ -55,7 +59,7 @@ const SPEED_PRESETS = [
 ] as const;
 
 export default function CustomizePanel({
-  shape, open, onToggle,
+  shape, slotAspectRatio, open, onToggle,
   accentColor, accentColorRgb,
   message, bannerFontPx, onBannerFontPxChange, bannerSpeedSecs, onBannerSpeedSecsChange,
   mediaPreviewUrl, mediaPreviewFileType,
@@ -278,7 +282,7 @@ export default function CustomizePanel({
                   onPointerCancel={onPointerUp}
                   style={{
                     width: '100%',
-                    aspectRatio: shape === 'circle' || shape === 'custom' ? '1 / 1' : '16 / 9',
+                    aspectRatio: slotAspectRatio,
                     maxHeight: 200,
                     background: '#0d0d0d',
                     border: `1px solid rgba(${accentColorRgb},0.2)`,
@@ -339,9 +343,30 @@ export default function CustomizePanel({
                 </div>
 
                 {mediaPreviewUrl && (
-                  <div style={{ marginTop: 5, fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: '#555', letterSpacing: 0.5 }}>
-                    Drag to pan · scroll to zoom
-                  </div>
+                  <>
+                    {/* Explicit zoom slider — scroll/pinch alone isn't
+                        discoverable on every input device (no wheel on a
+                        touch laptop trackpad without two-finger support,
+                        no pinch on desktop). A slider makes zoom control
+                        directly visible and precise. */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                      <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 12, color: '#555', userSelect: 'none' }}>−</span>
+                      <input
+                        type="range"
+                        min={MEDIA_ZOOM_RANGE.min}
+                        max={MEDIA_ZOOM_RANGE.max}
+                        step={0.05}
+                        value={mediaZoom}
+                        onChange={(e) => onMediaZoomChange(Number(e.target.value))}
+                        aria-label="Zoom"
+                        style={{ flex: 1, accentColor }}
+                      />
+                      <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 12, color: '#555', userSelect: 'none' }}>+</span>
+                    </div>
+                    <div style={{ marginTop: 5, fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: '#555', letterSpacing: 0.5 }}>
+                      Drag to pan · scroll, pinch, or the slider to zoom
+                    </div>
+                  </>
                 )}
               </div>
             </>
