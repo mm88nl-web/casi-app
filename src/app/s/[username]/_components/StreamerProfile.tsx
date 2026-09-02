@@ -12,7 +12,7 @@ import StreamPreview from './StreamPreview';
 import FlashesFeed, { type Flash } from './FlashesFeed';
 import { formatFiat } from '@/lib/currency';
 
-const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, is_live, skin, theme_color, ink_color, paper_color, settlement_currency';
+const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, is_live, skin, theme_color, ink_color, paper_color, accent2_color, settlement_currency';
 const FLASH_COLS = 'id, created_at, viewer_name, status, message, amount_cents, payment_method';
 
 type Profile = {
@@ -26,6 +26,7 @@ type Profile = {
   theme_color: string | null;
   ink_color: string | null;
   paper_color: string | null;
+  accent2_color: string | null;
   settlement_currency: string | null;
 };
 
@@ -180,12 +181,13 @@ export default function ViewerBookingPage() {
   const { profile } = state;
 
   return (
-    <main className="min-h-screen" style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}>
+    <main className="min-h-screen skin-root" style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}>
       {/* Inherit the streamer's skin + theme colour — this overrides the user-picked skin for this page. */}
       <SkinProvider
         skin={profile.skin}
         inkColor={profile.skin === 'custom' ? (profile.ink_color ?? profile.theme_color) : null}
         paperColor={profile.skin === 'custom' ? profile.paper_color : null}
+        accent2Color={profile.skin === 'custom' ? profile.accent2_color : null}
       />
 
       {/* v7 nav. The live badge moved into StreamerBar (vb-head) since v7

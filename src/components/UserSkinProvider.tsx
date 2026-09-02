@@ -85,6 +85,12 @@ function applySkinToRoot(
   root.style.setProperty('--casi-accent2',     accent2);
   root.style.setProperty('--casi-accent2-rgb', accent2Rgb);
   root.style.setProperty('--casi-bg',          paper);
+
+  // Redesign ladder --border: curated exact hex per skin, EXCEPT custom —
+  // left to the globals.css fallback (mix(paper, ink, 18%)) so it tracks
+  // whatever ink/paper this streamer actually picked.
+  if (isCustom) root.style.removeProperty('--border');
+  else          root.style.setProperty('--border', skin.border);
 }
 
 export function UserSkinProvider({ children }: { children: ReactNode }) {

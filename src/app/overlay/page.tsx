@@ -2239,6 +2239,7 @@ function OverlayContent() {
         skin={profile?.skin}
         inkColor={profile?.skin === 'custom' ? (profile?.ink_color ?? profile?.theme_color) : null}
         paperColor={profile?.skin === 'custom' ? profile?.paper_color : null}
+        accent2Color={profile?.skin === 'custom' ? profile?.accent2_color : null}
       />
       <NameEntryScreen onConfirm={confirmName} tc={tc} />
     </>
@@ -2250,6 +2251,7 @@ function OverlayContent() {
         skin={profile?.skin}
         inkColor={profile?.skin === 'custom' ? (profile?.ink_color ?? profile?.theme_color) : null}
         paperColor={profile?.skin === 'custom' ? profile?.paper_color : null}
+        accent2Color={profile?.skin === 'custom' ? profile?.accent2_color : null}
       />
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2503,7 +2505,7 @@ function OverlayContent() {
         }
       `}</style>
 
-      <div className="ov">
+      <div className="ov skin-root">
         {!isOBS && (
           <nav className="ov-nav">
             <a href="/" className="ov-logo">

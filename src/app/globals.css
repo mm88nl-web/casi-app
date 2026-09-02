@@ -70,6 +70,25 @@
   --casi-text-mid:    var(--text-3);
   --casi-text-dim:    var(--text-4);
   --casi-text-faint:  color-mix(in oklab, var(--paper) 92%, white);
+
+  /* ── Redesign skin-token contract (casi-app AGENTS.md § skin token
+     contract) — additive to the ladder above, not a replacement. Consumed
+     by viewer-facing surfaces only: /s/[username], /overlay, /obs. Doesn't
+     touch --surf/--surf-2/--line/--line-2/--text*, which nav / /studio /
+     /studio/settings chrome keeps reading untouched.
+     --border defaults to a generated mix(paper, ink, 18%) here; Skin/User
+     providers override it inline with each preset's curated exact hex
+     (matching src/lib/skins.ts) and clear the override for the Custom skin
+     so it stays generated from whatever ink/paper the streamer picks. */
+  --paper-2:       var(--ink-04);
+  --paper-3:       var(--ink-08);
+  --border:        color-mix(in oklab, var(--ink) 18%, var(--paper));
+  --border-strong: color-mix(in oklab, var(--ink) 34%, var(--paper));
+  --ink-12:        color-mix(in oklab, var(--ink) 12%, var(--paper));
+  --ink-45:        color-mix(in oklab, var(--ink) 45%, var(--paper));
+  --accent:        var(--casi-accent2);
+  --accent-soft:   color-mix(in oklab, var(--casi-accent2) 14%, var(--paper));
+  --on-accent:     var(--paper);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -1136,6 +1155,18 @@
   --line:   color-mix(in oklab, var(--paper) 88%, black);
   --line-2: color-mix(in oklab, var(--paper) 75%, black);
   --on-ink: color-mix(in oklab, var(--paper) 90%, white);
+}
+
+/* Skin root — wraps viewer-facing surfaces only (/s/[username], /overlay,
+   /obs). Redefines --on-ink to the redesign contract's hard rule ("text on
+   an ink fill is always paper") *scoped to this subtree only*. It can't go
+   in :root above: nav / StudioFrame / WalletPill / EarningsBar / builders
+   all read var(--on-ink) directly off the document root already, so a
+   global redefinition would recolor app chrome too. Everything else in the
+   redesign ladder (--paper-2, --accent, --accent-soft, --border, …) has no
+   existing chrome consumer and lives in :root directly. */
+.skin-root {
+  --on-ink: var(--paper);
 }
 
 @theme inline {
