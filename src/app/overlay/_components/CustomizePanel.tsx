@@ -190,7 +190,7 @@ export default function CustomizePanel({
     borderRight: isLast ? `1px solid ${active ? accentColor : 'rgba(255,255,255,0.12)'}` : 'none',
     borderRadius: 0,
     background: active ? accentColor : 'transparent',
-    color: active ? 'var(--casi-bg)' : '#888',
+    color: active ? 'var(--casi-bg)' : 'var(--ink-70)',
     transition: 'background 0.12s, color 0.12s',
   });
 
@@ -207,7 +207,7 @@ export default function CustomizePanel({
         }}
       >
         <span>{open ? '▾' : '▸'} Customize</span>
-        <span style={{ color: '#444' }}>{isBanner ? 'size · speed' : 'drag · scroll to zoom'}</span>
+        <span style={{ color: 'var(--ink-45)' }}>{isBanner ? 'size · speed' : 'drag · scroll to zoom'}</span>
       </button>
 
       {open && (
@@ -244,14 +244,14 @@ export default function CustomizePanel({
                     </button>
                   ))}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: '#444', marginTop: 3 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: 'var(--ink-45)', marginTop: 3 }}>
                   <span>Slow</span><span>Fast</span>
                 </div>
               </div>
 
               {/* Live banner preview */}
               <div style={{ borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,0.65)', border: '1px solid rgba(var(--casi-accent-rgb),0.25)' }}>
-                <div style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', color: '#555', padding: '6px 10px 0' }}>Preview</div>
+                <div style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ink-45)', padding: '6px 10px 0' }}>Preview</div>
                 <div className="beam-banner" style={{ height: Math.max(44, bannerFontPx + 16), borderTop: 'none', borderBottom: 'none' }}>
                   <span
                     className="beam-banner-track"
@@ -262,7 +262,7 @@ export default function CustomizePanel({
                 </div>
               </div>
 
-              <button onClick={resetBanner} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: '#555', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>
+              <button onClick={resetBanner} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: 'var(--ink-70)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>
                 ↺ Reset defaults
               </button>
             </>
@@ -284,7 +284,7 @@ export default function CustomizePanel({
                     width: '100%',
                     aspectRatio: slotAspectRatio,
                     maxHeight: 200,
-                    background: '#0d0d0d',
+                    background: 'var(--paper-2)',
                     border: `1px solid rgba(${accentColorRgb},0.2)`,
                     borderRadius: 8,
                     position: 'relative',
@@ -311,7 +311,7 @@ export default function CustomizePanel({
                       )}
                     </div>
                   ) : (
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#444', fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, letterSpacing: 1 }}>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-45)', fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, letterSpacing: 1 }}>
                       Upload media to position it
                     </div>
                   )}
@@ -332,7 +332,7 @@ export default function CustomizePanel({
                       padding: '3px 8px',
                       fontFamily: 'var(--font-casi-mono),monospace',
                       fontSize: 10,
-                      color: mediaZoom > 1 ? accentColor : '#666',
+                      color: mediaZoom > 1 ? accentColor : 'var(--ink-45)',
                       cursor: 'pointer',
                       userSelect: 'none',
                       lineHeight: 1.4,
@@ -350,7 +350,7 @@ export default function CustomizePanel({
                         no pinch on desktop). A slider makes zoom control
                         directly visible and precise. */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                      <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 12, color: '#555', userSelect: 'none' }}>−</span>
+                      <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 12, color: 'var(--ink-45)', userSelect: 'none' }}>−</span>
                       <input
                         type="range"
                         min={MEDIA_ZOOM_RANGE.min}
@@ -361,12 +361,13 @@ export default function CustomizePanel({
                         aria-label="Zoom"
                         style={{ flex: 1, accentColor }}
                       />
-                      <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 12, color: '#555', userSelect: 'none' }}>+</span>
+                      <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 12, color: 'var(--ink-45)', userSelect: 'none' }}>+</span>
                     </div>
-                    <div style={{ marginTop: 5, fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: '#555', letterSpacing: 0.5 }}>
+                    <div style={{ marginTop: 5, fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: 'var(--ink-45)', letterSpacing: 0.5 }}>
                       Drag to pan · scroll, pinch, or the slider to zoom
                     </div>
                   </>
+
                 )}
               </div>
             </>
