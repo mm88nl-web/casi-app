@@ -353,7 +353,7 @@ export default function BookingForm(props: Props) {
                 {imageUrl && getUrlFileType(imageUrl) === 'video' && (
                   <video src={imageUrl} style={{ display: 'none' }} muted onLoadedMetadata={() => onImageValidChange(true)} onError={() => onImageValidChange(false)} />
                 )}
-                <div className="bf-hint" style={{ color: !imageUrl ? '#444' : !imageUrl.startsWith('https://') ? '#f87171' : imageValid ? accentColor : '#f87171' }}>
+                <div className="bf-hint" style={{ color: !imageUrl ? 'var(--ink-45)' : !imageUrl.startsWith('https://') ? '#f87171' : imageValid ? accentColor : '#f87171' }}>
                   {!imageUrl
                     ? 'Paste a direct HTTPS image or GIF URL'
                     : !imageUrl.startsWith('https://')
@@ -440,7 +440,7 @@ export default function BookingForm(props: Props) {
               ))}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-              <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, letterSpacing: 1, color: '#555', textTransform: 'uppercase' }}>Custom</span>
+              <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, letterSpacing: 1, color: 'var(--ink-45)', textTransform: 'uppercase' }}>Custom</span>
               <input
                 type="number"
                 min="0.5"
@@ -460,7 +460,7 @@ export default function BookingForm(props: Props) {
                   }
                 }}
               />
-              <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: '#555' }}>min</span>
+              <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: 'var(--ink-45)' }}>min</span>
             </div>
           </div>
 
@@ -481,13 +481,13 @@ export default function BookingForm(props: Props) {
                   className="bf-inp"
                   style={{ resize: 'none' }}
                 />
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: message.length > BANNER_MAX_MESSAGE * 0.85 ? '#facc15' : '#555' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: message.length > BANNER_MAX_MESSAGE * 0.85 ? '#facc15' : 'var(--ink-45)' }}>
                   <span>Shows as a live scroll on stream</span>
                   <span>{message.length}/{BANNER_MAX_MESSAGE}</span>
                 </div>
                 {message.trim().length > 0 && (
                   <div style={{ marginTop: 10, padding: 0, borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,0.65)', border: '1px solid rgba(var(--casi-accent-rgb),0.25)' }}>
-                    <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', color: '#555', padding: '6px 10px 0' }}>Preview</div>
+                    <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ink-45)', padding: '6px 10px 0' }}>Preview</div>
                     <div className="beam-banner" style={{ height: 44, borderTop: 'none', borderBottom: 'none' }}>
                       <span className="beam-banner-track" style={{ fontSize: 20 }}>{message}</span>
                     </div>
@@ -543,7 +543,7 @@ export default function BookingForm(props: Props) {
             <div className="bf-rail-row" style={{ display: 'grid', gridTemplateColumns: `repeat(${rails.length}, minmax(0, 1fr))`, gap: 8 }}>
               {rails.map((r) => {
                 const selected = paymentRail === r;
-                const railAccent = r === 'free' ? '#4ade80' : r === 'usdc' ? '#9945FF' : accentColor;
+                const railAccent = r === 'free' ? '#4ade80' : r === 'usdc' ? 'var(--accent)' : accentColor;
                 const disabled = isFreeSlot ? false : rails.length === 1; // sole rail isn't really a picker
                 return (
                   <button
@@ -587,7 +587,7 @@ export default function BookingForm(props: Props) {
                     <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 18, fontWeight: 700, color: selected ? railAccent : 'var(--casi-text)', letterSpacing: 0.5, marginTop: 2 }}>
                       {costLabel(r)}
                     </div>
-                    <div style={{ fontFamily: "var(--M), var(--font-casi-mono),monospace", fontSize: 9, color: '#666', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                    <div style={{ fontFamily: "var(--M), var(--font-casi-mono),monospace", fontSize: 9, color: 'var(--ink-45)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
                       {railSub(r)}
                     </div>
                   </button>
@@ -597,7 +597,7 @@ export default function BookingForm(props: Props) {
 
             {/* Sub-detail line — duration + rate breakdown, neutralized
                 visually so it doesn't compete with the rail cards above. */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, padding: '0 4px', fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: '#666', letterSpacing: 0.5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, padding: '0 4px', fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: 'var(--ink-45)', letterSpacing: 0.5 }}>
               <span>{formatTime(durationSeconds)} · {slot.price_unit === 'hr' ? 'hourly rate' : 'per-minute rate'}</span>
               <span>{paymentRail === 'free' ? 'no charge' : paymentRail === 'stripe' ? `${fiatSymbol(streamerCurrency)}${fiatRate}/${slot.price_unit}` : `${usdcRate} USDC/${slot.price_unit}`}</span>
             </div>
@@ -607,7 +607,7 @@ export default function BookingForm(props: Props) {
                 a card-paying viewer. */}
             {paymentRail === 'usdc' && walletConnected && usdcBalance !== null ? (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, padding: '0 4px', fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, letterSpacing: 0.5 }}>
-                <span style={{ color: '#666' }}>Your balance</span>
+                <span style={{ color: 'var(--ink-45)' }}>Your balance</span>
                 <span style={{ color: usdcBalance < usdcCost ? '#f87171' : '#6ee7b7', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <UsdcIcon size={10} />
                   {usdcBalance.toFixed(2)} USDC
@@ -618,10 +618,10 @@ export default function BookingForm(props: Props) {
               <div style={{ color: '#f87171', fontSize: 10, marginTop: 5, textAlign: 'right' }}>⚠ Insufficient balance</div>
             ) : null}
             {paymentRail === 'usdc' && walletConnected && usdcBalance === null ? (
-              <div style={{ color: '#555', fontSize: 10, marginTop: 6, textAlign: 'right' }}>Fetching balance…</div>
+              <div style={{ color: 'var(--ink-45)', fontSize: 10, marginTop: 6, textAlign: 'right' }}>Fetching balance…</div>
             ) : null}
             {paymentRail === 'usdc' && !walletConnected ? (
-              <div style={{ color: '#555', fontSize: 10, marginTop: 6, textAlign: 'right' }}>Connect wallet to pay with USDC on-chain</div>
+              <div style={{ color: 'var(--ink-45)', fontSize: 10, marginTop: 6, textAlign: 'right' }}>Connect wallet to pay with USDC on-chain</div>
             ) : null}
           </div>
         );
@@ -634,7 +634,7 @@ export default function BookingForm(props: Props) {
           <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 15, fontWeight: 700, color: 'var(--casi-accent)' }}>
             {queueWait.wait === null ? 'Unknown — waiting on streamer' : `~${queueWait.wait} min`}
           </div>
-          <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: '#555', marginTop: 2 }}>
+          <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'var(--ink-45)', marginTop: 2 }}>
             {queueWait.ahead} booking{queueWait.ahead !== 1 ? 's' : ''} ahead of you
           </div>
         </div>
@@ -655,7 +655,7 @@ export default function BookingForm(props: Props) {
         {(() => {
           const railAccent =
             paymentRail === 'free' ? '#4ade80'
-            : paymentRail === 'usdc' ? '#9945FF'
+            : paymentRail === 'usdc' ? 'var(--accent)'
             : accentColor;
           // For USDC rail with unconnected wallet, fall to ghost style so
           // the action reads as 'connect first' rather than 'commit now'.
@@ -668,7 +668,7 @@ export default function BookingForm(props: Props) {
               style={{
                 width: '100%',
                 background: ghost ? 'transparent' : railAccent,
-                color: ghost ? railAccent : (paymentRail === 'usdc' ? '#fff' : 'var(--casi-bg)'),
+                color: ghost ? railAccent : 'var(--casi-bg)',
                 border: ghost ? `1px solid ${railAccent}` : 'none',
                 display: 'flex',
                 alignItems: 'center',
@@ -686,7 +686,7 @@ export default function BookingForm(props: Props) {
               }}
             >
               {payButtonProps.icon === 'stripe' ? <StripeIcon size={12} mono="currentColor" />
-                : payButtonProps.icon === 'usdc' ? <UsdcIcon size={14} mono={ghost ? railAccent : '#fff'} />
+                : payButtonProps.icon === 'usdc' ? <UsdcIcon size={14} mono={ghost ? railAccent : 'var(--casi-bg)'} />
                 : <span style={{ fontSize: 14, lineHeight: 1 }}>★</span>}
               <span>{isExtend ? 'Extend slot' : payButtonProps.label}</span>
             </button>
@@ -697,7 +697,7 @@ export default function BookingForm(props: Props) {
             viewers know what 'pay' commits them to. The streamer's
             approval gate is the strongest reassurance and worth
             surfacing. */}
-        <div style={{ marginTop: 10, fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#555', textAlign: 'center' }}>
+        <div style={{ marginTop: 10, fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-45)', textAlign: 'center' }}>
           {paymentRail === 'free'
             ? 'Free flashes are rate-limited · streamer can deny'
             : paymentRail === 'usdc'
