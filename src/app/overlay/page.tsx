@@ -2283,9 +2283,9 @@ function OverlayContent() {
         .ov-nav-right { display:flex; align-items:center; gap:10px; }
         .notif { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:springPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
         .viewer-chip { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.04); border:1px solid var(--casi-border); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
-        .viewer-chip:hover { border-color:#333; }
+        .viewer-chip:hover { border-color:var(--border-strong); }
         .vdot { width:6px; height:6px; border-radius:50%; background:var(--casi-accent); animation:blink 1.5s infinite; flex-shrink:0; }
-        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:#888; }
+        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:var(--ink-70); }
         .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid rgba(var(--casi-accent-rgb),0.31); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--casi-text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
 
         /* ov-layout: 2-col grid wrapper (desktop only). Separates canvas/feeds
@@ -2330,7 +2330,7 @@ function OverlayContent() {
         .cancel-btn { background:none; border:none; font-family:var(--font-casi-mono),monospace; font-size:9px; color:rgba(248,113,113,0.5); cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:color .2s; padding:0; margin-left:4px; }
         .cancel-btn:hover { color:#f87171; }
 
-        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:#0a0a0a; position:relative; z-index:0; overflow:hidden; margin-bottom:10px; --line: rgba(255,255,255,0.06); }
+        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:var(--paper-2); position:relative; z-index:0; overflow:hidden; margin-bottom:10px; --line: rgba(255,255,255,0.06); }
 
         /* ── Slot list — v9 ── sharp borders, ink accent on hover/select,
            48px square thumb that adopts the slot shape via .s-thumb-* helpers
@@ -2518,13 +2518,13 @@ function OverlayContent() {
               <WalletPill />
               {notification && (
                 <div className="notif" style={
-                  notification.type==='success' ? { background:`rgba(${tcRgb},0.09)`, border:`1px solid rgba(${tcRgb},0.25)`, color:tc } :
-                  notification.type==='queue'   ? { background:`rgba(${tcRgb},0.08)`, border:`1px solid rgba(${tcRgb},0.21)`, color:tc } :
+                  notification.type==='success' ? { background:'var(--accent-soft)', border:'1px solid rgba(var(--casi-accent2-rgb),0.35)', color:'var(--accent)' } :
+                  notification.type==='queue'   ? { background:'rgba(var(--casi-accent2-rgb),0.08)', border:'1px solid rgba(var(--casi-accent2-rgb),0.28)', color:'var(--accent)' } :
                   notification.type==='denied'  ? { background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.25)', color:'#f87171' } :
                   { background:'rgba(234,179,8,0.1)', border:'1px solid rgba(234,179,8,0.25)', color:'#facc15' }
                 }>{notification.text}</div>
               )}
-              {selectedSlot && <button onClick={closeSlot} style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#555', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5 }}>Cancel</button>}
+              {selectedSlot && <button onClick={closeSlot} style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'var(--ink-70)', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5 }}>Cancel</button>}
               {savedViewerName && !selectedSlot && (
                 showChangeName ? (
                   <input type="text" defaultValue={savedViewerName} autoFocus className="name-edit-input"
@@ -2911,9 +2911,9 @@ function OverlayContent() {
                           : myIsExpiring
                             ? { color: '#facc15', borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.08)' }
                             : myBookingForSlot!.status === 'active'
-                              ? { color: tc, borderColor: `rgba(${tcRgb},0.3)`, background: `rgba(${tcRgb},0.08)` }
+                              ? { color: 'var(--accent)', borderColor: 'rgba(var(--casi-accent2-rgb),0.3)', background: 'rgba(var(--casi-accent2-rgb),0.08)' }
                               : myBookingForSlot!.status === 'approved_queued'
-                                ? { color: tc, borderColor: `rgba(${tcRgb},0.22)`, background: `rgba(${tcRgb},0.05)` }
+                                ? { color: 'var(--accent)', borderColor: 'rgba(var(--casi-accent2-rgb),0.22)', background: 'rgba(var(--casi-accent2-rgb),0.05)' }
                                 : { color: 'var(--casi-text-muted)', borderColor: 'var(--casi-border)', background: 'rgba(255,255,255,0.03)' }
                         ),
                       }}
