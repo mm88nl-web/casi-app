@@ -32,7 +32,7 @@ import {
   rememberFlashToken,
 } from './_components/viewerStorage';
 import NameEntryScreen from './_components/NameEntryScreen';
-import SolanaConfirmModal, { type TxStatus } from './_components/SolanaConfirmModal';
+import SolanaConfirmModal, { type TxStatus, type SwapQuoteState } from './_components/SolanaConfirmModal';
 import FlashFeed from './_components/FlashFeed';
 import MyBeamsSection from './_components/MyBeamsSection';
 import MyTransactionsSection, { type TxRow } from './_components/MyTransactionsSection';
@@ -106,11 +106,15 @@ function OverlayContent() {
   // Pulled from the shared wallet-balance store (same source the top-right
   // WalletNav reads from, so the booking-form "Your balance" line and the
   // nav are guaranteed in lockstep). One WS sub + 10s poll for the whole app.
-  const { usdc: usdcBalance } = useWalletBalances();
+  const { usdc: usdcBalance, sol: solBalance } = useWalletBalances();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [txStatus, setTxStatus]         = useState<TxStatus>('idle');
   const [txError, setTxError]           = useState<string|null>(null);
   const [confirmedTxId, setConfirmedTxId] = useState<string|null>(null);
+  // "Pay with SOL" — viewer opts in when USDC alone doesn't cover the
+  // booking. See jupiter-swap.ts + submitSolanaBooking's pre-flight branch.
+  const [paySol, setPaySol] = useState(false);
+  const [swapQuote, setSwapQuote] = useState<SwapQuoteState | null>(null);
   // Stripe Embedded Checkout — replaces the old redirect-to-checkout_url
   // flow. null = modal hidden. bookingId is kept alongside the secret so
   // onComplete/onClose know which booking they're reacting to without
@@ -1293,7 +1297,8 @@ function OverlayContent() {
         ? selectedSlot.price_value * durationMinutes
         : selectedSlot.price_value * (durationMinutes / 60);
 
-      // ── Pre-flight: verify viewer has SOL + a USDC ATA with enough balance ──
+      // ── Pre-flight: verify viewer has SOL + a USDC ATA with enough balance
+      // (or, on the pay-with-SOL path, enough SOL to cover a swap) ──
       const connection = new Connection(SOLANA_RPC);
 
       // SOL: initialize_escrow creates the EscrowState PDA (~0.00209 SOL
@@ -1307,46 +1312,81 @@ function OverlayContent() {
       // slack against the actual Beam requirement, thinner than intended.
       const solLamports = await connection.getBalance(effectivePublicKey);
       const MIN_SOL     = 0.015 * 1e9;
-      if (solLamports < MIN_SOL) {
-        showNotif(
-          IS_MAINNET
-            ? `Need SOL for rent + fees. You have ${(solLamports / 1e9).toFixed(4)} SOL — top up your wallet and try again.`
-            : `Need devnet SOL for rent + fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.quicknode.com/solana/devnet`,
-          'denied',
-        );
-        await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
-        setSubmitting(false);
-        return;
-      }
 
-      // USDC ATA balance check.
-      const { value: tokenAccounts } = await connection.getParsedTokenAccountsByOwner(
-        effectivePublicKey,
-        { mint: new PublicKey(USDC_MINT) },
-      );
-      if (tokenAccounts.length === 0) {
-        showNotif(
-          IS_MAINNET
-            ? 'No USDC found in your wallet. Buy or bridge USDC and try again.'
-            : 'No devnet USDC found (mint 4zMMC9…DU). Switch your wallet to Devnet then mint at spl-token-faucet.vercel.app',
-          'denied',
+      // Populated on the pay-with-SOL path; prepended to the deposit tx
+      // below. null on the default direct-USDC path — zero behavior change
+      // there.
+      let swapInstructions: import('@solana/web3.js').TransactionInstruction[] | null = null;
+
+      if (paySol) {
+        // Skip the USDC ATA/balance checks entirely — the viewer may not
+        // even have a USDC ATA yet, the swap creates one. Fetch a FRESH
+        // quote here rather than trust the modal's display quote, which can
+        // be up to 20s stale (see the display-quote effect near
+        // estimatedCost).
+        const usdcMicroTarget = Math.round(totalUsdc * 10 ** usdcDecimals);
+        try {
+          const { getSolToUsdcQuote, getSwapInstructions } = await import('@/lib/jupiter-swap');
+          const { quote, lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
+          if (solLamports < MIN_SOL + lamportsRequired) {
+            showNotif(
+              `Need ~${((MIN_SOL + lamportsRequired) / 1e9).toFixed(4)} SOL (swap + rent/fees). You have ${(solLamports / 1e9).toFixed(4)} SOL.`,
+              'denied',
+            );
+            await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
+            setSubmitting(false);
+            return;
+          }
+          swapInstructions = await getSwapInstructions({ quote, userPublicKey: effectivePublicKey });
+        } catch (err) {
+          showNotif(err instanceof Error ? err.message : 'Could not prepare SOL swap — try again', 'denied');
+          await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
+          setSubmitting(false);
+          return;
+        }
+        console.log('[solana] pre-flight passed (pay-with-SOL) — SOL:', (solLamports / 1e9).toFixed(4));
+      } else {
+        if (solLamports < MIN_SOL) {
+          showNotif(
+            IS_MAINNET
+              ? `Need SOL for rent + fees. You have ${(solLamports / 1e9).toFixed(4)} SOL — top up your wallet and try again.`
+              : `Need devnet SOL for rent + fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.quicknode.com/solana/devnet`,
+            'denied',
+          );
+          await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
+          setSubmitting(false);
+          return;
+        }
+
+        // USDC ATA balance check.
+        const { value: tokenAccounts } = await connection.getParsedTokenAccountsByOwner(
+          effectivePublicKey,
+          { mint: new PublicKey(USDC_MINT) },
         );
-        await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
-        setSubmitting(false);
-        return;
+        if (tokenAccounts.length === 0) {
+          showNotif(
+            IS_MAINNET
+              ? 'No USDC found in your wallet. Buy or bridge USDC and try again.'
+              : 'No devnet USDC found (mint 4zMMC9…DU). Switch your wallet to Devnet then mint at spl-token-faucet.vercel.app',
+            'denied',
+          );
+          await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
+          setSubmitting(false);
+          return;
+        }
+        const usdcBalance: number =
+          tokenAccounts[0].account.data.parsed.info.tokenAmount.uiAmount ?? 0;
+        if (usdcBalance < totalUsdc) {
+          showNotif(
+            `Insufficient USDC: you have ${usdcBalance.toFixed(2)}, need ${totalUsdc.toFixed(2)}`,
+            'denied',
+          );
+          await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
+          setSubmitting(false);
+          return;
+        }
+        console.log('[solana] pre-flight passed — SOL:', (solLamports / 1e9).toFixed(4), 'USDC:', usdcBalance);
       }
-      const usdcBalance: number =
-        tokenAccounts[0].account.data.parsed.info.tokenAmount.uiAmount ?? 0;
-      if (usdcBalance < totalUsdc) {
-        showNotif(
-          `Insufficient USDC: you have ${usdcBalance.toFixed(2)}, need ${totalUsdc.toFixed(2)}`,
-          'denied',
-        );
-        await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
-        setSubmitting(false);
-        return;
-      }
-      console.log('[solana] pre-flight passed — SOL:', (solLamports / 1e9).toFixed(4), 'USDC:', usdcBalance);
       // ──────────────────────────────────────────────────────────────────────
 
       // Lock full amount in the CASI escrow PDA. Settlement pays the
@@ -1428,6 +1468,19 @@ function OverlayContent() {
         durationSecs: durationSecsInt,
       });
       const escrowPda = escrowPdaPubkey.toBase58();
+
+      // Pay-with-SOL: splice the swap onto the FRONT of the deposit tx, one
+      // signature covers both. Solana transactions are all-or-nothing, so
+      // if the swap under-delivers, the deposit instruction (which pulls a
+      // fixed amount, unaffected by any of this) fails and the whole
+      // transaction reverts — the viewer keeps their SOL, nothing partial
+      // ever lands. Everything downstream (Phantom Connect deeplink signing,
+      // wallet-adapter signing, the mobile PDA-poll race, attach-solana-tx)
+      // is untouched — it just signs/submits a tx with a few extra
+      // instructions at the front.
+      if (swapInstructions?.length) {
+        tx.instructions.unshift(...swapInstructions);
+      }
 
       // ── Mobile (non-in-app) Phantom Connect deeplink path ──────────────
       // Mobile Chrome's Phantom-deeplink-via-wallet-adapter returns txs with
@@ -2196,6 +2249,45 @@ function OverlayContent() {
       ? (selectedSlot.price_value * (durationSeconds / 60)).toFixed(2)
       : (selectedSlot.price_value * (durationSeconds / 3600)).toFixed(2)
     : '0';
+
+  // Display-only quote for the "pay with SOL" toggle. submitSolanaBooking
+  // fetches its own fresh quote at actual submit time rather than trusting
+  // this one — Jupiter quotes go stale within seconds, this is purely so
+  // the modal can show "≈ X SOL" and gate the Confirm button.
+  useEffect(() => {
+    if (!paySol || !showConfirmModal) return;
+    let cancelled = false;
+    setSwapQuote({ loading: true, solRequired: null, error: null });
+    const usdcMicroTarget = Math.round(parseFloat(estimatedCost) * 1e6);
+    (async () => {
+      try {
+        const { getSolToUsdcQuote } = await import('@/lib/jupiter-swap');
+        const { lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
+        if (!cancelled) setSwapQuote({ loading: false, solRequired: lamportsRequired / 1e9, error: null });
+      } catch (err) {
+        if (!cancelled) {
+          setSwapQuote({ loading: false, solRequired: null, error: err instanceof Error ? err.message : 'Quote failed' });
+        }
+      }
+    })();
+    // Refresh periodically while the toggle is on and the modal is open, so
+    // a viewer who sits on the confirm screen doesn't submit against a
+    // long-stale quote.
+    const interval = setInterval(() => {
+      if (!cancelled) {
+        (async () => {
+          try {
+            const { getSolToUsdcQuote } = await import('@/lib/jupiter-swap');
+            const { lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
+            if (!cancelled) setSwapQuote({ loading: false, solRequired: lamportsRequired / 1e9, error: null });
+          } catch {
+            // Silent — keep showing the last good quote rather than flash an error on a transient refresh failure.
+          }
+        })();
+      }
+    }, 20_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [paySol, showConfirmModal, estimatedCost]);
 
   // True when the viewer has the content needed to submit a booking.
   // Banner slots use the scrolling message as their content (media is
@@ -3079,6 +3171,7 @@ function OverlayContent() {
                     openWalletModal();
                   } else {
                     setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
+                    setPaySol(false); setSwapQuote(null);
                   }
                 }}
               />
@@ -3137,12 +3230,16 @@ function OverlayContent() {
           username={username}
           recipientWallet={profile?.solana_wallet ?? null}
           usdcBalance={usdcBalance}
+          solBalance={solBalance}
+          paySol={paySol}
+          onTogglePaySol={setPaySol}
+          swapQuote={swapQuote}
           txStatus={txStatus}
           txError={txError}
           txId={confirmedTxId}
           submitting={submitting}
           onConfirm={submitSolanaBooking}
-          onCancel={() => { if (!submitting) { setShowConfirmModal(false); setTxStatus('idle'); setTxError(null); setConfirmedTxId(null); } }}
+          onCancel={() => { if (!submitting) { setShowConfirmModal(false); setTxStatus('idle'); setTxError(null); setConfirmedTxId(null); setPaySol(false); setSwapQuote(null); } }}
         />
       )}
     </>
