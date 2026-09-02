@@ -16,7 +16,7 @@ export default function StreamPreview() {
       className="relative overflow-hidden"
       style={{
         aspectRatio: '16/9',
-        background: '#0a0a0a',
+        background: 'var(--paper-2)',
         border: '1px solid var(--casi-border)',
         borderRadius: '14px',
       }}

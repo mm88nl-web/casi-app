@@ -322,7 +322,7 @@ function BookingHero({ username, isLive }: { username: string; isLive: boolean }
           gap: '12px',
           padding: '14px 22px',
           background: 'var(--casi-accent)',
-          color: '#0a0a0a',
+          color: 'var(--on-ink)',
           fontFamily: 'var(--font-casi-display), var(--font-casi-sans), sans-serif',
           fontSize: '12.5px',
           fontWeight: 700,
