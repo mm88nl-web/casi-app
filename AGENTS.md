@@ -227,7 +227,7 @@ The v9 design system replaces v7's 7-skin variable bag with a **two-color contra
 **Don'ts**:
 - Don't hardcode brand colors in components. Use `var(--ink)` (or v7-alias `var(--casi-accent)`) and the derived ladder. Known exceptions: yellow "Extend" mode button in `overlay/page.tsx` (`#eab308`), OAuth provider brand-color SVG icons in `login/page.tsx`.
 - Don't bypass `SkinProvider` for viewer-facing pages — the streamer's accent must propagate to the overlay or brand consistency breaks.
-- Don't reintroduce `--casi-accent2`. v9 is two-color only; the legacy purple is preserved as a static alias for any code that still reads it, but new code should compose with `--ink` only.
+- `accent2` (`--casi-accent2` / the redesign ladder's `--accent`) is a live, real per-skin third hue — see `src/lib/skins.ts`, `SkinProvider.tsx`, `UserSkinProvider.tsx`. It's state-only (live pip, flash ⚡, amount pills, "Live" badge, active/selected ring) — never body text, brand mark, or a primary fill; those stay `--ink`. Compose new viewer-facing code with both: `--ink` for brand/text/primary-fill, `--accent`/`--casi-accent2` for state.
 - Don't mount the dev tools (`DevScreenSwitcher` / `DevTweaksPanel`) anywhere outside `layout.tsx` — they auto-gate on `NODE_ENV` and would render twice.
 
 ## Studio conventions
