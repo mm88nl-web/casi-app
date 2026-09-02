@@ -9,8 +9,15 @@ const GROUPS: { id: string; label: string }[] = [
   { id: 'custom', label: 'Custom' },
 ];
 
+// Active-card chrome is fixed Casi chrome, not a skin value — this picker
+// lives in /studio/settings, which stays on the brand palette regardless of
+// which skin is selected/previewed. Matches the redesign handoff spec.
+const ACTIVE_BORDER = '#294B3C';
+const ACTIVE_FILL    = 'rgba(41, 75, 60, 0.07)';
+const CHECK_BG        = 'rgba(0, 0, 0, 0.55)';
+
 export default function SkinPicker() {
-  const { skinId, setSkinId, inkColor, paperColor } = useUserSkin();
+  const { skinId, setSkinId, inkColor, paperColor, accent2Color } = useUserSkin();
 
   return (
     <div className="flex flex-col gap-4">
@@ -45,59 +52,54 @@ export default function SkinPicker() {
                     className="flex items-center gap-3 transition-colors"
                     style={{
                       padding: '10px 12px',
-                      background: active
-                        ? 'rgba(var(--casi-accent-rgb), 0.06)'
-                        : 'var(--casi-bg)',
-                      border: `1px solid ${active ? 'var(--casi-accent)' : 'var(--casi-border-2)'}`,
-                      borderRadius: 0,
+                      background: active ? ACTIVE_FILL : 'var(--casi-bg)',
+                      border: `1px solid ${active ? ACTIVE_BORDER : 'var(--casi-border-2)'}`,
+                      borderRadius: 8,
                       cursor: 'pointer',
                       textAlign: 'left',
                     }}
                     aria-pressed={active}
                   >
-                    {/* Two-tone swatch — ink on the left, paper on the right.
-                        Custom tile shows the stored custom colours when set,
-                        otherwise a dotted placeholder. */}
+                    {/* Three-band swatch — paper / ink / accent2, top to
+                        bottom, per the redesign handoff spec. Custom tile
+                        shows the stored custom colours when set, otherwise
+                        a dotted placeholder. */}
                     {(() => {
-                      const swatchInk   = isCustom ? (inkColor   ?? skin.ink)   : skin.ink;
-                      const swatchPaper = isCustom ? (paperColor ?? skin.paper) : skin.paper;
-                      const hasCustomColors = isCustom && (inkColor || paperColor);
+                      const swatchPaper   = isCustom ? (paperColor   ?? skin.paper)   : skin.paper;
+                      const swatchInk     = isCustom ? (inkColor     ?? skin.ink)     : skin.ink;
+                      const swatchAccent2 = isCustom ? (accent2Color ?? skin.accent2) : skin.accent2;
+                      const hasCustomColors = isCustom && (inkColor || paperColor || accent2Color);
                       return (
                         <span
                           aria-hidden
-                          className="relative flex shrink-0 overflow-hidden"
+                          className="relative flex flex-col shrink-0 overflow-hidden"
                           style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: 0,
-                            background: swatchPaper,
+                            width: 34,
+                            height: 34,
+                            borderRadius: 10,
                             border: `1px solid ${skin.border}`,
                             outline: isCustom && !hasCustomColors ? '1px dashed var(--casi-text-faint)' : 'none',
                             outlineOffset: -3,
                           }}
                         >
-                          {hasCustomColors ? (
-                            <>
-                              <span style={{ flex: 1, background: swatchInk }} />
-                              <span style={{ flex: 1, background: swatchPaper }} />
-                            </>
-                          ) : isCustom ? (
+                          {isCustom && !hasCustomColors ? (
                             <span
-                              className="flex items-center justify-center w-full"
-                              style={{ color: 'var(--casi-text-muted)', fontSize: 14 }}
+                              className="flex items-center justify-center w-full h-full"
+                              style={{ color: 'var(--casi-text-muted)', fontSize: 14, background: skin.paper }}
                             >
                               ＋
                             </span>
                           ) : (
                             <>
-                              <span style={{ flex: 1, background: skin.ink }} />
-                              <span style={{ flex: 1, background: skin.paper }} />
+                              <span style={{ flex: 1, background: swatchPaper }} />
+                              <span style={{ flex: 1, background: swatchInk }} />
+                              <span style={{ flex: 1, background: swatchAccent2 }} />
                             </>
                           )}
                           {active && (
                             <span
                               className="absolute inset-0 flex items-center justify-center font-bold"
-                              style={{ background: 'rgba(0, 0, 0, 0.55)', color: '#fff', fontSize: 14 }}
+                              style={{ background: CHECK_BG, color: '#fff', fontSize: 14 }}
                             >
                               ✓
                             </span>
@@ -112,7 +114,7 @@ export default function SkinPicker() {
                         style={{
                           fontFamily: 'var(--font-casi-sans)',
                           fontSize: 13,
-                          color: active ? 'var(--casi-accent)' : 'var(--casi-text)',
+                          color: active ? ACTIVE_BORDER : 'var(--casi-text)',
                           letterSpacing: '-0.2px',
                         }}
                       >
