@@ -170,7 +170,7 @@ export default function MyTransactionsSection({ rows, username }: Props) {
           display: inline-flex; align-items: center; gap: 5px;
           flex-shrink: 0;
         }
-        .my-tx-amt.u { color: #c4a0ff; background: rgba(153,69,255,0.10); }
+        .my-tx-amt.u { color: var(--accent); background: var(--accent-soft); }
         .my-tx-amt.e { color: var(--casi-accent); background: rgba(var(--casi-accent-rgb), 0.07); }
         .my-tx-amt.f { color: var(--casi-text-dim); background: var(--casi-surface-2); }
         .my-tx-status {
@@ -180,7 +180,7 @@ export default function MyTransactionsSection({ rows, username }: Props) {
         }
         .my-tx-link {
           font-family: var(--M, var(--font-casi-mono), monospace);
-          font-size: 10px; color: #9945FF;
+          font-size: 10px; color: var(--accent);
           text-decoration: none;
           flex-shrink: 0;
         }

@@ -58,7 +58,7 @@ export default function SlotsList({
           const myBookingForSlot = getMyBookingForSlot(el.id);
           const isLocked         = !!el.locked;
           const isFree           = Number(el.price_value) === 0;
-          const priceColor       = isLocked ? '#555' : myBookingForSlot ? '#555' : isFree ? '#4ade80' : tc;
+          const priceColor       = isLocked ? 'var(--ink-45)' : myBookingForSlot ? 'var(--ink-45)' : isFree ? '#4ade80' : tc;
 
           return (
             <button
