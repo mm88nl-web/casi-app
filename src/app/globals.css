@@ -16,9 +16,47 @@
   --background: #ffffff;
   --foreground: #171717;
 
-  /* ── Brand roots: Casi Light is the default scheme ── */
+  /* ── Brand roots: Casi Light is the default scheme ──
+     NOTE: these two are mutated directly on <html> at runtime — by the
+     anti-FOUC script below, by SkinProvider/UserSkinProvider for a
+     streamer's chosen skin, and by DevTweaksPanel in dev builds. That's
+     correct for viewer-facing surfaces, but it means --ink/--paper are
+     NOT a safe reference for anything that must stay Casi's own fixed
+     identity regardless of skin (see --chrome-* just below). */
   --ink:   #294b3c;
   --paper: #f5e1d2;
+
+  /* ── Fixed chrome palette (design_handoff README "Chrome palette
+     (fixed)") — Casi's own brand identity, deliberately NOT the --ink/
+     --paper roots above, because those are live and mutable (see the note
+     above). Nothing in the app ever calls setProperty on these, so they
+     stay put no matter what skin is active on the page. The redesign
+     handoff says app chrome (nav, /studio, and the marketing landing page)
+     must never follow a streamer's skin; this is that guarantee. Landing
+     (src/app/page.tsx) is wired to these as of this pass.
+     Discovered while building that pass, NOT fixed here (out of scope —
+     would touch NavBar/studio chrome broadly, not just typography +
+     landing): the shared nav classes below (.casi-v9-nav etc.) still read
+     the mutable --ink/--paper directly, and BOTH `UserSkinProvider`
+     (mounted around the whole app in Providers.tsx, so it runs on every
+     page) and `DevTweaksPanel` (dev-only, defaults to the old teal/black
+     v9 scheme on every mount) write to those same two roots. A returning
+     streamer who has ever picked a skin in Settings → Appearance — or
+     anyone loading the app in `next dev` — will see that skin's colors on
+     the nav bar and any other surface still reading bare --ink/--paper,
+     contradicting AGENTS.md's "app chrome deliberately does NOT follow the
+     skin." Confirmed live while testing this pass: the very first render
+     of the redesigned landing (before it was pinned to --chrome-*) came
+     back teal-on-black from DevTweaksPanel's stale defaults instead of
+     Casi Light. Migrating nav/studio chrome to --chrome-* the same way is
+     a reasonable follow-up. Values match the Casi Light defaults above
+     1:1 today — declared separately so a future skin mutation can never
+     leak into them. */
+  --chrome-ink:    #294b3c;
+  --chrome-paper:  #f5e1d2;
+  --chrome-accent: #c04830;
+  --chrome-text:   #221a14;
+  --chrome-text-2: #6a574b;
 
   /* Derived — tints of ink against paper */
   --ink-04: color-mix(in oklab, var(--ink) 4%,  var(--paper));
@@ -89,6 +127,18 @@
   --accent:        var(--casi-accent2);
   --accent-soft:   color-mix(in oklab, var(--casi-accent2) 14%, var(--paper));
   --on-accent:     var(--paper);
+
+  /* ── Redesign radii ladder (design_handoff README "Typography and other
+     tokens", unchanged by skin): 999px pills, 12px chips, 14px rows,
+     16px cards, 20px panels. Declared once here so new redesign surfaces
+     reference a token instead of a bare pixel literal. Existing components
+     keep their own literals until individually migrated in a later phase —
+     this is additive, not a replacement of anything. */
+  --radius-pill:  999px;
+  --radius-chip:  12px;
+  --radius-row:   14px;
+  --radius-card:  16px;
+  --radius-panel: 20px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

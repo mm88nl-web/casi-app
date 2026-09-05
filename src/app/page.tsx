@@ -6,10 +6,6 @@ import { createClient } from '@/utils/supabase/client';
 import { CasiMark } from '@/components/v9/CasiMark';
 import { Wordmark } from '@/components/v9/Wordmark';
 
-const P = '#f5e1d2';
-const I = '#294b3c';
-const A = '#c04830';
-
 export default function HomePage() {
   const [liveCount, setLiveCount] = useState<number | null>(null);
   const supabase = createClient();
@@ -61,31 +57,31 @@ export default function HomePage() {
               display: 'inline-flex',
               alignItems: 'center',
               gap: '12px',
-              background: I,
-              color: P,
+              background: 'var(--ink)',
+              color: 'var(--paper)',
               padding: '15px 28px',
-              fontFamily: 'var(--font-casi-display), system-ui, sans-serif',
+              fontFamily: 'var(--H)',
               fontWeight: 700,
               fontSize: '16px',
-              border: `1.5px solid ${I}`,
-              borderRadius: '999px',
+              border: '1.5px solid var(--ink)',
+              borderRadius: 'var(--radius-pill)',
               textDecoration: 'none',
               letterSpacing: '-0.01em',
               whiteSpace: 'nowrap',
             }}
           >
             Create studio{' '}
-            <span style={{ fontFamily: 'var(--font-casi-serif), Georgia, serif', fontStyle: 'italic', fontSize: '20px', lineHeight: 1 }}>→</span>
+            <span style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: '20px', lineHeight: 1 }}>→</span>
           </Link>
           <Link
             href="/search"
             style={{
-              fontFamily: 'var(--font-casi-serif), Georgia, serif',
+              fontFamily: 'var(--S)',
               fontStyle: 'italic',
               fontSize: '19px',
-              color: I,
+              color: 'var(--ink)',
               textDecoration: 'none',
-              borderBottom: `1.5px solid rgba(41,75,60,0.35)`,
+              borderBottom: '1.5px solid color-mix(in oklab, var(--ink) 35%, transparent)',
               paddingBottom: '1px',
               opacity: 0.78,
               whiteSpace: 'nowrap',
@@ -120,7 +116,10 @@ export default function HomePage() {
 
       <footer className="foot">
         <div className="foot-left">
-          <span>© {new Date().getFullYear()} Casi</span>
+          <span className="foot-copy">
+            <CasiMark width={22} height={11} className="foot-mark" />
+            © {new Date().getFullYear()} Casi
+          </span>
           <a href="https://github.com/mm88nl-web/casi-app" target="_blank" rel="noopener noreferrer">
             github
           </a>
@@ -138,22 +137,27 @@ export default function HomePage() {
 
       <style jsx global>{`
         /* While the landing page is mounted, override the body/html background
-           so the dark default from globals.css doesn't flash during navigation. */
-        html, body { background: ${P}; }
+           so the dark default from globals.css doesn't flash during navigation.
+           --chrome-paper (not --paper) — landing is app chrome, not a
+           per-streamer skin surface, and --paper is a live root mutated by
+           SkinProvider / the anti-FOUC script / dev tools for whichever skin
+           is currently active. --chrome-paper is never touched by any of
+           those, so this can't bleed a streamer's (or a stray dev-tool)
+           skin onto the public marketing page. */
+        html, body { background: var(--chrome-paper); }
       `}</style>
       <style jsx>{`
         .casi-landing {
-          --paper: ${P};
-          --ink:   ${I};
-          --accent: ${A};
-          --type:   #221a14;
-          --type-2: #6a574b;
-          --H: var(--font-casi-display), 'Bricolage Grotesque', system-ui, sans-serif;
-          --S: var(--font-casi-serif), 'Instrument Serif', Georgia, serif;
-          --M: var(--font-casi-mono), 'JetBrains Mono', ui-monospace, monospace;
+          /* Pin the whole subtree to Casi's fixed brand identity, not the
+             mutable --ink/--paper roots — see --chrome-* in globals.css. */
+          --paper:   var(--chrome-paper);
+          --ink:     var(--chrome-ink);
+          --accent:  var(--chrome-accent);
+          --text:    var(--chrome-text);
+          --text-2:  var(--chrome-text-2);
 
           background: var(--paper);
-          color: var(--type);
+          color: var(--text);
           font-family: var(--H);
           min-height: 100vh;
           display: flex;
@@ -162,13 +166,13 @@ export default function HomePage() {
         }
 
         .casi-landing :global(.casi-v9-wordmark) {
-          color: var(--type);
+          color: var(--text);
           font-family: var(--H);
           font-weight: 800;
           font-size: 149px;
-          letter-spacing: -0.045em;
+          letter-spacing: -0.05em;
           line-height: 0.85;
-          font-variation-settings: 'opsz' 96;
+          font-stretch: 108%;
         }
         .casi-landing :global(.casi-v9-wordmark .casi-v9-dot) { color: var(--accent); }
         .casi-landing :global(.casi-v9-mark) {
@@ -200,7 +204,7 @@ export default function HomePage() {
           font-family: var(--S);
           font-style: italic;
           font-size: 17px;
-          color: var(--type-2);
+          color: var(--text-2);
           display: flex;
           align-items: center;
           gap: 10px;
@@ -216,14 +220,14 @@ export default function HomePage() {
           0%   { box-shadow: 0 0 0 0   color-mix(in oklab, var(--accent) 55%, transparent); }
           100% { box-shadow: 0 0 0 9px color-mix(in oklab, var(--accent)  0%, transparent); }
         }
-        .stamp .n { color: var(--type); font-style: normal; font-family: var(--H); font-weight: 700; font-size: 17px; }
-        .sep { width: 1px; height: 16px; background: color-mix(in oklab, var(--type) 22%, transparent); }
+        .stamp .n { color: var(--text); font-style: normal; font-family: var(--H); font-weight: 700; font-size: 17px; }
+        .sep { width: 1px; height: 16px; background: color-mix(in oklab, var(--text) 22%, transparent); }
         .login {
           font-family: var(--S);
           font-style: italic;
           font-size: 17px;
-          color: var(--type);
-          border-bottom: 1.5px solid color-mix(in oklab, var(--type) 30%, transparent);
+          color: var(--text);
+          border-bottom: 1.5px solid color-mix(in oklab, var(--text) 30%, transparent);
           padding-bottom: 1px;
           text-decoration: none;
           white-space: nowrap;
@@ -254,7 +258,7 @@ export default function HomePage() {
           font-weight: 500;
           font-size: 30px;
           letter-spacing: -0.022em;
-          color: var(--type);
+          color: var(--text);
           line-height: 1.18;
           margin: 30px 0 38px;
           max-width: 680px;
@@ -289,16 +293,16 @@ export default function HomePage() {
           aspect-ratio: 16 / 9;
           object-fit: cover;
           display: block;
-          border-radius: 16px;
+          border-radius: var(--radius-card);
           border: 1px solid color-mix(in oklab, var(--ink) 16%, transparent);
-          box-shadow: 0 22px 60px -24px rgba(41, 75, 60, 0.5);
+          box-shadow: 0 22px 60px -24px color-mix(in oklab, var(--ink) 50%, transparent);
           background: var(--ink);
         }
         .demo figcaption {
           font-family: var(--S);
           font-style: italic;
           font-size: 15px;
-          color: var(--type-2);
+          color: var(--text-2);
         }
         @media (max-width: 600px) {
           .demo { margin-top: 30px; }
@@ -314,7 +318,7 @@ export default function HomePage() {
           font-size: 10.5px;
           letter-spacing: 0.22em;
           text-transform: uppercase;
-          color: var(--type-2);
+          color: var(--text-2);
           padding: 0 40px 32px;
           white-space: nowrap;
           flex-wrap: wrap;
@@ -338,12 +342,14 @@ export default function HomePage() {
           font-family: var(--M);
           font-size: 11px;
           letter-spacing: 0.04em;
-          color: var(--type-2);
-          border-top: 1px solid color-mix(in oklab, var(--type) 10%, transparent);
+          color: var(--text-2);
+          border-top: 1px solid color-mix(in oklab, var(--text) 10%, transparent);
         }
         @media (max-width: 640px) { .foot { padding: 16px 22px 24px; } }
         .foot-left, .foot-mid, .foot-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
         .foot a { text-decoration: none; color: inherit; }
+        .foot-copy { display: inline-flex; align-items: center; gap: 8px; }
+        .foot-copy :global(.foot-mark) { color: var(--text); opacity: 0.55; flex-shrink: 0; }
       `}</style>
     </main>
   );
