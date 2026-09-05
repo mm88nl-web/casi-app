@@ -25,18 +25,21 @@ const CHROME_SCOPE: CSSProperties = {
 } as CSSProperties;
 
 const CSS = `
-  /* Disconnected CTA — v9 inverse-ink slab. Same palette as the v9
-     Connect-wallet pill in NavBar (.casi-v9-wlt-connect) but with the
-     Solana-purple accent kept on the icon for brand recognition. */
+  /* Disconnected CTA — terracotta fill, matching the design-source
+     prototype's "Connect wallet" pill exactly (background:#c04830 /
+     color:#f5e1d2 in Casi Live Preview.dc.html's shared nav template).
+     Uses --chrome-accent/-paper directly rather than the --ink shadow —
+     --ink here resolves to chrome-ink (dark green, the nav's own fill
+     color), which would make this button invisible against the nav. */
   .wp-connect {
     display: inline-flex; align-items: center; gap: 8px;
     padding: 9px 14px;
     font-family: var(--M);
     font-size: 11px; font-weight: 700;
     letter-spacing: 0.06em; text-transform: uppercase;
-    color: var(--on-ink);
-    background: var(--ink);
-    border: 1px solid var(--ink);
+    color: var(--chrome-paper);
+    background: var(--chrome-accent);
+    border: 1px solid var(--chrome-accent);
     cursor: pointer;
     transition: filter .14s;
     white-space: nowrap;

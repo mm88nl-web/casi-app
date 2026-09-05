@@ -158,7 +158,7 @@ const dashboardLinkStyle: React.CSSProperties = {
   fontFamily: 'var(--S)',
   fontStyle: 'italic',
   fontSize: '16px',
-  color: 'var(--chrome-text-2)',
+  color: 'var(--chrome-on-ink-2)',
   textDecoration: 'none',
   whiteSpace: 'nowrap',
 };

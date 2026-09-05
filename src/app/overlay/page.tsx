@@ -2283,10 +2283,14 @@ function OverlayContent() {
            as the shared .casi-v9-nav in globals.css (see the long comment
            above --chrome-* there). .notif just below stays on the mutable
            accent tokens on purpose: it's a moderation-state toast (queued/
-           denied/approved), not chrome, and correctly follows the skin. */
-        .ov-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; row-gap:8px; padding:10px 24px; min-height:56px; border-bottom:1px solid color-mix(in oklab, var(--chrome-ink) 8%, var(--chrome-paper)); background:color-mix(in srgb, var(--chrome-paper) 94%, transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
-        .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; --ink:var(--chrome-ink); --paper:var(--chrome-paper); }
-        .ov-wm { font-size:18px; font-weight:800; color:var(--chrome-ink); letter-spacing:-0.5px; }
+           denied/approved), not chrome, and correctly follows the skin.
+           Solid dark-green fill (not cream) — matches the design-source
+           prototype's shared nav template, which every color-mix() call
+           below inverts around (chrome-ink/chrome-paper swapped from
+           what a cream bar would use). */
+        .ov-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; row-gap:8px; padding:10px 24px; min-height:56px; border-bottom:none; background:var(--chrome-ink); position:sticky; top:0; z-index:200; }
+        .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; --ink:var(--chrome-paper); --paper:var(--chrome-ink); }
+        .ov-wm { font-size:18px; font-weight:800; color:var(--chrome-paper); letter-spacing:-0.5px; }
         /* flex-wrap here specifically -- on a narrow viewport the
            MobileWalletPicker deeplink buttons (Phantom/Solflare, shown when
            no wallet is connected) don't fit alongside the viewer-name chip
@@ -2296,11 +2300,11 @@ function OverlayContent() {
            real device screenshot, not a hypothetical. */
         .ov-nav-right { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:8px 10px; }
         .notif { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:springPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
-        .viewer-chip { display:flex; align-items:center; gap:6px; background:color-mix(in oklab, var(--chrome-ink) 4%, var(--chrome-paper)); border:1px solid color-mix(in oklab, var(--chrome-ink) 18%, var(--chrome-paper)); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
-        .viewer-chip:hover { border-color:color-mix(in oklab, var(--chrome-ink) 34%, var(--chrome-paper)); }
-        .vdot { width:6px; height:6px; border-radius:50%; background:var(--chrome-ink); animation:blink 1.5s infinite; flex-shrink:0; }
-        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:color-mix(in oklab, var(--chrome-ink) 70%, var(--chrome-paper)); }
-        .name-edit-input { background:color-mix(in oklab, var(--chrome-ink) 4%, var(--chrome-paper)); border:1px solid color-mix(in oklab, var(--chrome-ink) 34%, var(--chrome-paper)); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--chrome-text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
+        .viewer-chip { display:flex; align-items:center; gap:6px; background:var(--chrome-ink-hover); border:1px solid var(--chrome-ink-soft); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
+        .viewer-chip:hover { border-color:color-mix(in oklab, var(--chrome-paper) 34%, var(--chrome-ink)); }
+        .vdot { width:6px; height:6px; border-radius:50%; background:var(--chrome-accent); animation:blink 1.5s infinite; flex-shrink:0; }
+        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:var(--chrome-on-ink-2); }
+        .name-edit-input { background:var(--chrome-ink-hover); border:1px solid var(--chrome-ink-soft); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--chrome-paper); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
 
         /* ov-layout: 2-col grid wrapper (desktop only). Separates canvas/feeds
            (left col, <main>) from slots/booking (right col, .ov-booking-col).

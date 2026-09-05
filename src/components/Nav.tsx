@@ -45,19 +45,28 @@ export default function Nav({ brandHref = '/', left, right }: NavProps) {
     // background/border reference --chrome-paper/--chrome-ink directly
     // for the same reason, sidestepping the alias chain entirely instead
     // of trusting it isn't independently mutated somewhere.
+    //
+    // --paper/--ink are SWAPPED (chrome-ink for paper, chrome-paper for
+    // ink), not just pinned: the design-source prototype's shared nav
+    // template is a solid dark-green bar with cream content on every
+    // in-app screen (search, overlay, streamer profile, studio,
+    // settings), not the cream-bar/dark-content this used to render. The
+    // swap flips every var(--ink)/var(--paper)-derived read below
+    // (logo color, any --text/--line a caller's left/right content
+    // reads) in one place.
     <nav
       className={centered ? 'flex items-center justify-center' : 'flex items-center justify-between'}
       data-paper="light"
       style={{
-        '--paper': 'var(--chrome-paper)',
-        '--ink': 'var(--chrome-ink)',
+        '--paper': 'var(--chrome-ink)',
+        '--ink': 'var(--chrome-paper)',
         display: 'flex',
         flexWrap: 'wrap',
         rowGap: '8px',
         padding: '10px 36px',
         minHeight: '54px',
-        borderBottom: '1px solid color-mix(in oklab, var(--chrome-ink) 8%, var(--chrome-paper))',
-        background: 'var(--chrome-paper)',
+        borderBottom: 'none',
+        background: 'var(--chrome-ink)',
         position: centered ? 'relative' : undefined,
       } as CSSProperties}
     >

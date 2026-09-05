@@ -178,12 +178,15 @@ export default function StudioFrame({
 
 // Prototype's "Settings" nav link: plain italic Newsreader text, no
 // border/background -- same quiet-secondary-link treatment as /search's
-// "Log in" link (src/app/search/page.tsx .login-link).
+// "Log in" link (src/app/search/page.tsx .login-link). Color is
+// --chrome-on-ink-2 (not --chrome-text-2) because the nav itself sits on
+// the solid dark-green chrome fill now, not cream -- --chrome-text-2 is
+// tuned for text on paper and read as barely-visible on --chrome-ink.
 const settingsLinkStyle: CSSProperties = {
   fontFamily: 'var(--S)',
   fontStyle: 'italic',
   fontSize: '16px',
-  color: 'var(--chrome-text-2)',
+  color: 'var(--chrome-on-ink-2)',
   textDecoration: 'none',
   whiteSpace: 'nowrap',
 };

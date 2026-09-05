@@ -173,9 +173,18 @@
 /* Nav */
 .casi-v9-nav {
   /* Chrome pin — see the long comment above --chrome-* in :root. Also
-     needs data-paper="light" on the same <nav> element (NavBar.tsx). */
-  --paper: var(--chrome-paper);
-  --ink:   var(--chrome-ink);
+     needs data-paper="light" on the same <nav> element (NavBar.tsx).
+     Paper/ink are swapped (not just pinned) here: the design-source
+     prototype's shared nav template (the {{ inApp }} block in
+     Casi Live Preview.dc.html) is a SOLID dark-green bar with cream
+     content — every screen (search, overlay, streamer profile, studio,
+     settings), not just studio — the opposite of what shipped here
+     (cream bar, dark-green content). Swapping which chrome constant
+     --paper/--ink point to flips every var(--ink)/var(--paper)-derived
+     token in this subtree (logo, wordmark, text scale, lines) in one
+     place instead of chasing each child rule individually. */
+  --paper: var(--chrome-ink);
+  --ink:   var(--chrome-paper);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -183,7 +192,7 @@
   row-gap: 8px;
   padding: 10px var(--pad);
   min-height: 60px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: none;
   background: var(--paper);
   position: sticky;
   top: 0;

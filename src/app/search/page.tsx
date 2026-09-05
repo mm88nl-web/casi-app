@@ -224,17 +224,28 @@ export default function SearchPage() {
         .casi-search :global(.casi-v9-wordmark .casi-v9-dot) { color: var(--accent); }
         .casi-search :global(.casi-v9-mark) { color: var(--ink); width: 56px; height: 28px; }
 
-        /* NAV */
+        /* NAV — solid dark-green bar with cream content, matching the
+           design-source prototype's shared nav template (used on every
+           screen except landing: search included). Locally re-shadows the
+           page's own --paper/--ink/--type/--type-2 (all pinned to chrome
+           tokens already, see .casi-search above) so nav-logo/.viewer-chip/
+           .vname/.login-link below invert automatically without each
+           needing its own override. */
         .nav {
+          --paper:  var(--chrome-ink);
+          --ink:    var(--chrome-paper);
+          --type:   var(--chrome-paper);
+          --type-2: var(--chrome-on-ink-2);
           display: flex;
           align-items: center;
           justify-content: space-between;
           flex-wrap: wrap;
           row-gap: 12px;
-          padding: 28px 40px;
+          padding: 20px 40px;
+          background: var(--paper);
           flex-shrink: 0;
         }
-        @media (max-width: 640px) { .nav { padding: 22px 22px; } }
+        @media (max-width: 640px) { .nav { padding: 16px 22px; } }
         .nav-logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
         /* flex-wrap here specifically -- on a narrow viewport the viewer
            chip + MobileWalletPicker's two deeplink buttons + the login
