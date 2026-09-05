@@ -217,7 +217,7 @@ export default function FlashPanel({
     flexDirection: 'column',
     background: 'var(--casi-surface)',
     border: '1px solid var(--casi-border)',
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'visible',
     minHeight: compact ? 220 : 180,
     fontFamily: "var(--font-casi-sans), sans-serif",
@@ -271,7 +271,7 @@ export default function FlashPanel({
                   gap: 8,
                   alignItems: 'flex-start',
                   padding: '6px 8px',
-                  borderRadius: 8,
+                  borderRadius: 14,
                   background: amt ? 'rgba(var(--casi-accent-rgb),0.06)' : 'rgba(74,222,128,0.05)',
                   border: `1px solid ${amt ? 'rgba(var(--casi-accent-rgb),0.14)' : 'rgba(74,222,128,0.18)'}`,
                   fontSize: 13,
@@ -282,11 +282,11 @@ export default function FlashPanel({
                   {formatTs(f.created_at)}
                 </span>
                 {amt ? (
-                  <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, fontWeight: 700, color: 'var(--casi-accent)', background: 'rgba(var(--casi-accent-rgb),0.1)', padding: '2px 6px', borderRadius: 4, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                  <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, fontWeight: 700, color: 'var(--casi-accent)', background: 'rgba(var(--casi-accent-rgb),0.1)', padding: '2px 6px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap' }}>
                     {amt}
                   </span>
                 ) : (
-                  <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, fontWeight: 700, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>
+                  <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, fontWeight: 700, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 6px', borderRadius: 999, flexShrink: 0 }}>
                     FREE
                   </span>
                 )}

@@ -16,9 +16,72 @@
   --background: #ffffff;
   --foreground: #171717;
 
-  /* ── Brand roots: Casi Light is the default scheme ── */
+  /* ── Brand roots: Casi Light is the default scheme ──
+     NOTE: these two are mutated directly on <html> at runtime — by the
+     anti-FOUC script below, by SkinProvider/UserSkinProvider for a
+     streamer's chosen skin, and by DevTweaksPanel in dev builds. That's
+     correct for viewer-facing surfaces, but it means --ink/--paper are
+     NOT a safe reference for anything that must stay Casi's own fixed
+     identity regardless of skin (see --chrome-* just below). */
   --ink:   #294b3c;
   --paper: #f5e1d2;
+
+  /* ── Fixed chrome palette (design_handoff README "Chrome palette
+     (fixed)") — Casi's own brand identity, deliberately NOT the --ink/
+     --paper roots above, because those are live and mutable (see the note
+     above). Nothing in the app ever calls setProperty on these, so they
+     stay put no matter what skin is active on the page. The redesign
+     handoff says app chrome (nav, /studio, and the marketing landing page)
+     must never follow a streamer's skin; this is that guarantee. Landing
+     (src/app/page.tsx) is wired to these as of this pass.
+     Discovered while building that pass: the shared nav classes below
+     (.casi-v9-nav etc.) used to read the mutable --ink/--paper directly,
+     and BOTH `UserSkinProvider` (mounted around the whole app in
+     Providers.tsx, so it runs on every page) and `DevTweaksPanel` (dev-
+     only, defaults to the old teal/black v9 scheme on every mount) write
+     to those same two roots. A returning streamer who has ever picked a
+     skin in Settings → Appearance — or anyone loading the app in
+     `next dev` — would see that skin's colors on the nav bar and any
+     other surface still reading bare --ink/--paper, contradicting
+     AGENTS.md's "app chrome deliberately does NOT follow the skin."
+     Confirmed live while testing the landing-page pass: the very first
+     render of the redesigned landing (before it was pinned to
+     --chrome-*) came back teal-on-black from DevTweaksPanel's stale
+     defaults instead of Casi Light.
+
+     FIXED in the viewer-redesign pass: .casi-v9-nav / .casi-v9-marquee /
+     .casi-v9-foot now shadow --ink/--paper to --chrome-ink/--chrome-paper
+     on themselves (see each rule below), the same trick the landing page
+     uses on .casi-landing — every token derived from --ink/--paper in
+     :root (--line, --surf, --on-ink, --text*, the v7 --casi-* aliases,
+     even CasiMark's `fill="var(--paper)"` cutout) is stored as an
+     unresolved var() reference and re-resolves against whatever cascades
+     to the element actually USING it, not wherever it was declared — so
+     shadowing the two roots on the nav/marquee/footer container is
+     enough to pin their entire subtree. The one extra thing each of
+     those three also needs is a literal `data-paper="light"` attribute
+     on the same DOM node (see NavBar.tsx / Marquee.tsx / Footer.tsx) —
+     unlike --ink/--paper, `[data-paper="light"]` is a plain attribute
+     selector, not an inherited custom property, and several of the
+     derived tokens above (--text-3, --on-ink, --line, ...) read a
+     completely different color-mix direction depending on it. Since
+     Casi's own chrome is always the light scheme, that attribute has to
+     be forced on chrome's own root node rather than left to whatever
+     <html> currently carries for the streamer's own (possibly dark)
+     skin. `Nav.tsx` (the /s/[username] nav) and overlay/page.tsx's own
+     hand-rolled `.ov-nav` bits (logo + viewer-name pill; WalletPill is
+     self-pinned) got the same treatment directly at their call sites
+     since they don't share these CSS classes. Studio's OWN chrome
+     (StudioFrame.tsx header/tabs, EarningsBar, etc.) has this exact same
+     latent exposure and is NOT fixed here — out of scope for this pass,
+     left for whoever owns src/app/studio/**. Values match the Casi Light
+     defaults above 1:1 today — declared separately so a future skin
+     mutation can never leak into them. */
+  --chrome-ink:    #294b3c;
+  --chrome-paper:  #f5e1d2;
+  --chrome-accent: #c04830;
+  --chrome-text:   #221a14;
+  --chrome-text-2: #6a574b;
 
   /* Derived — tints of ink against paper */
   --ink-04: color-mix(in oklab, var(--ink) 4%,  var(--paper));
@@ -70,6 +133,37 @@
   --casi-text-mid:    var(--text-3);
   --casi-text-dim:    var(--text-4);
   --casi-text-faint:  color-mix(in oklab, var(--paper) 92%, white);
+
+  /* ── Redesign skin-token contract (casi-app AGENTS.md § skin token
+     contract) — additive to the ladder above, not a replacement. Consumed
+     by viewer-facing surfaces only: /s/[username], /overlay, /obs. Doesn't
+     touch --surf/--surf-2/--line/--line-2/--text*, which nav / /studio /
+     /studio/settings chrome keeps reading untouched.
+     --border defaults to a generated mix(paper, ink, 18%) here; Skin/User
+     providers override it inline with each preset's curated exact hex
+     (matching src/lib/skins.ts) and clear the override for the Custom skin
+     so it stays generated from whatever ink/paper the streamer picks. */
+  --paper-2:       var(--ink-04);
+  --paper-3:       var(--ink-08);
+  --border:        color-mix(in oklab, var(--ink) 18%, var(--paper));
+  --border-strong: color-mix(in oklab, var(--ink) 34%, var(--paper));
+  --ink-12:        color-mix(in oklab, var(--ink) 12%, var(--paper));
+  --ink-45:        color-mix(in oklab, var(--ink) 45%, var(--paper));
+  --accent:        var(--casi-accent2);
+  --accent-soft:   color-mix(in oklab, var(--casi-accent2) 14%, var(--paper));
+  --on-accent:     var(--paper);
+
+  /* ── Redesign radii ladder (design_handoff README "Typography and other
+     tokens", unchanged by skin): 999px pills, 12px chips, 14px rows,
+     16px cards, 20px panels. Declared once here so new redesign surfaces
+     reference a token instead of a bare pixel literal. Existing components
+     keep their own literals until individually migrated in a later phase —
+     this is additive, not a replacement of anything. */
+  --radius-pill:  999px;
+  --radius-chip:  12px;
+  --radius-row:   14px;
+  --radius-card:  16px;
+  --radius-panel: 20px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -78,11 +172,17 @@
 
 /* Nav */
 .casi-v9-nav {
+  /* Chrome pin — see the long comment above --chrome-* in :root. Also
+     needs data-paper="light" on the same <nav> element (NavBar.tsx). */
+  --paper: var(--chrome-paper);
+  --ink:   var(--chrome-ink);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--pad);
-  height: 60px;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  padding: 10px var(--pad);
+  min-height: 60px;
   border-bottom: 1px solid var(--line);
   background: var(--paper);
   position: sticky;
@@ -125,7 +225,9 @@
 .casi-v9-nav-r {
   display: flex;
   align-items: center;
-  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 14px;
 }
 .casi-v9-nav-live {
   display: flex;
@@ -199,6 +301,10 @@
 
 /* Marquee */
 .casi-v9-marquee {
+  /* Chrome pin — see the long comment above --chrome-* in :root. Also
+     needs data-paper="light" on the same element (Marquee.tsx). */
+  --paper: var(--chrome-paper);
+  --ink:   var(--chrome-ink);
   display: flex;
   overflow: hidden;
   white-space: nowrap;
@@ -236,6 +342,10 @@
 
 /* Footer */
 .casi-v9-foot {
+  /* Chrome pin — see the long comment above --chrome-* in :root. Also
+     needs data-paper="light" on the same element (Footer.tsx). */
+  --paper: var(--chrome-paper);
+  --ink:   var(--chrome-ink);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -727,11 +837,10 @@
   background: var(--ink);
   color: var(--on-ink);
   border: none;
-  font-family: var(--M);
-  font-size: 12px;
+  border-radius: var(--radius-pill);
+  font-family: var(--B);
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
   cursor: pointer;
   transition: filter 0.14s;
 }
@@ -756,56 +865,85 @@
 .casi-v9-lyr-panel {
   background: var(--surf);
   border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
 }
 .casi-v9-lyr-hd {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 11px 14px;
+  padding: 13px 14px;
   border-bottom: 1px solid var(--line);
-  font-family: var(--M);
-  font-size: 10px;
+  font-family: var(--B);
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  color: var(--text-2);
 }
+.casi-v9-lyr-add-wrap { position: relative; }
 .casi-v9-lyr-hd-add {
-  width: 20px;
-  height: 20px;
+  height: 26px;
+  padding: 0 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--ink);
   color: var(--on-ink);
   border: none;
-  font-family: var(--M);
+  border-radius: var(--radius-pill);
+  font-family: var(--B);
   font-weight: 700;
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   transition: filter 0.13s;
 }
 .casi-v9-lyr-hd-add:hover { filter: brightness(1.1); }
-.casi-v9-lyr-list { display: flex; flex-direction: column; }
+.casi-v9-lyr-add-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 6px;
+  gap: 2px;
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+.casi-v9-lyr-add-menu button {
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  border: none;
+  font-family: var(--B);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.13s;
+}
+.casi-v9-lyr-add-menu button:hover { background: var(--ink-04); }
+.casi-v9-lyr-list { display: flex; flex-direction: column; padding: 6px; gap: 4px; }
 .casi-v9-lyr-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--line);
+  padding: 9px 10px;
+  border-radius: var(--radius-row);
   cursor: pointer;
   background: transparent;
-  border-left: none;
-  border-right: none;
-  border-top: none;
+  border: none;
   width: 100%;
   text-align: left;
   font: inherit;
   color: inherit;
   transition: background 0.12s;
 }
-.casi-v9-lyr-item:last-child { border-bottom: none; }
 .casi-v9-lyr-item:hover { background: var(--ink-04); }
 .casi-v9-lyr-item.casi-v9-sel {
   background: var(--ink-08);
@@ -920,7 +1058,8 @@
 .casi-v9-cp-wrap {
   background: var(--surf);
   border: 1px solid var(--line);
-  padding: 16px 18px;
+  border-radius: var(--radius-panel);
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -941,32 +1080,36 @@
   letter-spacing: -0.02em;
 }
 
-/* Tabs inside the properties panel — Properties / Pricing / Behavior */
+/* Tabs inside the properties panel — Properties / Pricing / Behavior. Not
+   part of the design-source prototype (which flows all these controls in
+   one panel with no tabs) — a real structural feature, kept as-is and
+   reskinned to the pill-segmented language used elsewhere in the studio
+   redesign (StudioFrame's Dashboard/Live switch). */
 .casi-v9-cp-tabs {
   display: flex;
-  border-bottom: 1px solid var(--line);
-  margin: -2px -2px 0;
+  gap: 3px;
+  background: var(--surf-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 3px;
 }
 .casi-v9-cp-tab {
   flex: 1;
-  padding: 9px 4px;
-  font-family: var(--M);
-  font-size: 10.5px;
+  padding: 7px 4px;
+  border-radius: var(--radius-pill);
+  font-family: var(--B);
+  font-size: 12.5px;
   font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  color: var(--text-2);
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
   cursor: pointer;
   transition: all 0.13s;
 }
-.casi-v9-cp-tab:hover { color: var(--text-3); }
+.casi-v9-cp-tab:hover { color: var(--text); }
 .casi-v9-cp-tab.casi-v9-on {
-  color: var(--ink);
-  border-bottom-color: var(--ink);
+  color: var(--on-ink);
+  background: var(--ink);
   font-weight: 700;
 }
 
@@ -977,12 +1120,10 @@
   gap: 14px;
 }
 .casi-v9-cp-lbl {
-  font-family: var(--M);
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--text-3);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--B);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
 }
 .casi-v9-cp-row {
   display: flex;
@@ -990,13 +1131,25 @@
   justify-content: space-between;
   gap: 10px;
 }
+/* Inline field labels (Min/Max/Per/Free tier/…) inside a row read smaller
+   and secondary — matches the prototype's "Min"/"Max" duration-field
+   labels, distinct from the bold section headings (Rate/Shape) that share
+   the same .casi-v9-cp-lbl class elsewhere in this panel. */
+.casi-v9-cp-row .casi-v9-cp-lbl {
+  font-family: var(--M);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
 .casi-v9-cp-input {
-  background: var(--paper);
+  background: var(--surf-2);
   border: 1px solid var(--line-2);
-  border-radius: 0;
+  border-radius: var(--radius-chip);
   padding: 9px 11px;
   font-family: var(--M);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text);
   outline: none;
   transition: border-color 0.14s;
@@ -1015,15 +1168,14 @@
   gap: 5px;
 }
 .casi-v9-shape-b {
-  padding: 6px 11px;
-  font-family: var(--M);
-  font-size: 11px;
-  font-weight: 500;
+  padding: 8px 12px;
+  font-family: var(--B);
+  font-size: 13px;
+  font-weight: 600;
   background: transparent;
   border: 1px solid var(--line-2);
-  border-radius: 0;
-  color: var(--text-3);
-  letter-spacing: 0.04em;
+  border-radius: var(--radius-chip);
+  color: var(--text-2);
   cursor: pointer;
   transition: all 0.13s;
 }
@@ -1039,14 +1191,12 @@
 .casi-v9-cp-done,
 .casi-v9-cp-del {
   width: 100%;
-  padding: 11px;
-  font-family: var(--M);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  padding: 12px;
+  font-family: var(--B);
+  font-size: 14px;
+  font-weight: 700;
   background: transparent;
-  border-radius: 0;
+  border-radius: var(--radius-pill);
   cursor: pointer;
   transition: all 0.13s;
 }
@@ -1075,8 +1225,9 @@
   padding-top: 4px;
 }
 .casi-v9-rail-glyph {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-chip);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1103,9 +1254,9 @@
 }
 .casi-v9-rail-input {
   width: 80px;
-  background: var(--paper);
+  background: var(--surf-2);
   border: 1px solid var(--line-2);
-  border-radius: 0;
+  border-radius: var(--radius-chip);
   padding: 6px 8px;
   font-family: var(--M);
   font-size: 12px;
@@ -1136,6 +1287,18 @@
   --line:   color-mix(in oklab, var(--paper) 88%, black);
   --line-2: color-mix(in oklab, var(--paper) 75%, black);
   --on-ink: color-mix(in oklab, var(--paper) 90%, white);
+}
+
+/* Skin root — wraps viewer-facing surfaces only (/s/[username], /overlay,
+   /obs). Redefines --on-ink to the redesign contract's hard rule ("text on
+   an ink fill is always paper") *scoped to this subtree only*. It can't go
+   in :root above: nav / StudioFrame / WalletPill / EarningsBar / builders
+   all read var(--on-ink) directly off the document root already, so a
+   global redefinition would recolor app chrome too. Everything else in the
+   redesign ladder (--paper-2, --accent, --accent-soft, --border, …) has no
+   existing chrome consumer and lives in :root directly. */
+.skin-root {
+  --on-ink: var(--paper);
 }
 
 @theme inline {
@@ -1329,4 +1492,343 @@ body {
   font-size: 16px;
   letter-spacing: 1px;
   animation: bannerPreview 15s linear infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   STUDIO REDESIGN — CHROME PALETTE (agent-redesign-studio)
+   ───────────────────────────────────────────────────────────────────────
+   Per the design_handoff README ("App chrome deliberately does NOT follow
+   the skin"), /studio, /studio/live and /studio/settings must render on
+   Casi's own fixed identity — cream paper, forest-green ink, terracotta
+   accent — REGARDLESS of the signed-in streamer's own chosen skin.
+   `--chrome-ink/-paper/-accent/-text/-text-2` already existed (added for
+   the landing-page pass); extended here with the rest of the literal
+   "Chrome palette (fixed)" hex list from the handoff README, plus a few
+   in-between shades the studio/settings markup needs (raised card fill,
+   inset/input fill, divider, a third text shade, stronger border).
+   ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  /* Already declared near the top of this file: --chrome-ink #294b3c,
+     --chrome-paper #f5e1d2, --chrome-accent #c04830, --chrome-text #221a14,
+     --chrome-text-2 #6a574b. Extending here rather than editing that block
+     so the original landing-page comment/history stays intact. */
+  --chrome-ink-hover:   #35594a; /* pill/row hover fill on dark-green surfaces */
+  --chrome-ink-soft:    #4a6d5d; /* divider/border sitting ON a dark-green fill */
+  --chrome-on-ink-2:    #b9c6bd; /* secondary text ON a dark-green fill */
+  --chrome-accent-hover:#a63a24; /* terracotta hover/active */
+  --chrome-text-3:      #96806e; /* tertiary text — hints, placeholders, uppercase labels */
+  --chrome-surf:        #fbefe4; /* raised card fill (lighter than paper) */
+  --chrome-surf-2:      #f3e2d3; /* inset fill — inputs, pills, thumbnails */
+  --chrome-border:      #e3cdb9; /* card / row edge */
+  --chrome-border-2:    #d3b9a3; /* stronger border — ghost-button outline, dashed empties */
+  --chrome-line:        #e8d3c0; /* hairline divider inside a card */
+  --chrome-hover-wash:  #efdcca; /* hover background for ghost buttons/rows */
+
+  /* "Live skin" snapshot — captures the ACTUAL (mutable) --ink/--paper/
+     --casi-accent2/-rgb exactly as UserSkinProvider has them applied to
+     <html> right now. Declared once at :root, before any descendant can
+     shadow --ink/--paper for chrome purposes, so its *computed* value is
+     what inherits down — a later `.casi-studio-chrome` re-declaration of
+     --ink/--paper cannot retroactively change what --live-ink already
+     resolved to. This is the one legitimate escape hatch: the Appearance
+     settings' live preview tile (`PreviewTile` in AppearanceSection.tsx)
+     needs to show whatever skin colours the streamer is actively picking,
+     even while the rest of the page around it stays on fixed chrome. */
+  --live-ink:         var(--ink);
+  --live-paper:       var(--paper);
+  --live-accent2:     var(--casi-accent2);
+  --live-accent-rgb:  var(--casi-accent-rgb);
+  --live-accent2-rgb: var(--casi-accent2-rgb);
+}
+
+/* `.casi-studio-chrome` — apply to the outermost element of every studio
+   surface (StudioFrame.tsx wraps /studio + /studio/live; studio/settings/
+   page.tsx wraps settings). Re-derives the FULL v9/v7 token ladder against
+   the chrome palette instead of the mutable --ink/--paper roots. A plain
+   two-token override (--ink/--paper alone) is NOT enough here — unlike the
+   landing page (which only ever reads --paper/--ink/--accent/--text/
+   --text-2 directly in its own scoped styles), studio components read the
+   full derived ladder (--surf, --line, --ink-08, --text-3, --casi-text-*,
+   …) which is declared ONCE at :root and does not get silently re-derived
+   just because an ancestor shadowed --ink/--paper — CSS custom properties
+   only recompute where they're actually re-declared. So every derived
+   token studio code touches is redeclared here, sourced from
+   --chrome-ink/-paper instead. Chrome is always the light/cream scheme,
+   never the dark-mode formulas — hardcoded here rather than relying on
+   `[data-paper="light"]`, because that attribute reflects the STREAMER's
+   own (mutable) skin brightness, not chrome's. */
+.casi-studio-chrome {
+  --ink:    var(--chrome-ink);
+  --paper:  var(--chrome-paper);
+  --accent: var(--chrome-accent);
+  --text:   var(--chrome-text);
+  --text-2: var(--chrome-text-2);
+  --text-3: var(--chrome-text-3);
+  --text-4: var(--chrome-text-3);
+
+  --ink-04: color-mix(in oklab, var(--ink) 4%,  var(--paper));
+  --ink-08: color-mix(in oklab, var(--ink) 8%,  var(--paper));
+  --ink-14: color-mix(in oklab, var(--ink) 14%, var(--paper));
+  --ink-22: color-mix(in oklab, var(--ink) 22%, var(--paper));
+  --ink-40: color-mix(in oklab, var(--ink) 40%, var(--paper));
+  --ink-70: color-mix(in oklab, var(--ink) 70%, var(--paper));
+
+  --surf:   var(--chrome-surf);
+  --surf-2: var(--chrome-surf-2);
+  --line:   var(--chrome-border);
+  --line-2: var(--chrome-border-2);
+
+  --on-ink: var(--paper);
+
+  --casi-accent:      var(--ink);
+  --casi-accent-rgb:  41, 75, 60;
+  --casi-accent2:     var(--accent);
+  --casi-accent2-rgb: 192, 72, 48;
+  --casi-bg:          var(--paper);
+  --casi-surface:     var(--surf);
+  --casi-border:      var(--line);
+  --casi-text:        var(--text);
+  --casi-text-muted:  var(--text-2);
+
+  --casi-surface-2:   var(--surf-2);
+  --casi-border-2:    var(--line-2);
+  --casi-text-mid:    var(--text-2);
+  --casi-text-dim:    var(--text-3);
+  --casi-text-faint:  var(--text-3);
+
+  --paper-2: var(--chrome-surf);
+  --paper-3: var(--chrome-surf-2);
+  --border:        var(--chrome-border);
+  --border-strong: var(--chrome-border-2);
+  --ink-12: color-mix(in oklab, var(--ink) 12%, var(--paper));
+  --ink-45: var(--chrome-text-2);
+  --accent-soft: color-mix(in oklab, var(--accent) 14%, var(--paper));
+  --on-accent:   var(--paper);
+
+  background: var(--paper);
+  color: var(--text);
+}
+
+/* Escape hatch for the ONE place inside studio chrome that must show the
+   streamer's real, currently-selected skin: the Appearance live preview.
+   Nests inside `.casi-studio-chrome`, re-derives the ladder from the
+   `--live-*` snapshot above instead of --chrome-*. Mirrors the base +
+   `[data-paper="light"]` split that :root itself uses, so the preview
+   correctly flips light/dark to match whatever skin is being previewed —
+   not chrome's own always-light scheme. */
+.casi-live-skin {
+  --ink:   var(--live-ink);
+  --paper: var(--live-paper);
+  --casi-accent:      var(--live-ink);
+  --casi-accent-rgb:  var(--live-accent-rgb);
+  --casi-accent2:     var(--live-accent2);
+  --casi-accent2-rgb: var(--live-accent2-rgb);
+  --casi-bg:      var(--paper);
+  --casi-surface: color-mix(in oklab, var(--paper) 92%, white);
+  --casi-border-2: color-mix(in oklab, var(--paper) 65%, white);
+  --casi-text:        color-mix(in oklab, var(--paper) 6%,  white);
+  --casi-text-muted:  color-mix(in oklab, var(--paper) 50%, white);
+  --on-ink: color-mix(in oklab, var(--paper) 90%, black);
+}
+[data-paper="light"] .casi-live-skin {
+  --casi-surface: color-mix(in oklab, var(--paper) 96%, black);
+  --casi-border-2: color-mix(in oklab, var(--paper) 75%, black);
+  --casi-text:        color-mix(in oklab, var(--paper) 6%,  black);
+  --casi-text-muted:  color-mix(in oklab, var(--paper) 50%, black);
+  --on-ink: color-mix(in oklab, var(--paper) 90%, white);
+}
+
+/* Live-pip pulse — matches the prototype's `tally` keyframe name (used
+   throughout Casi Live Preview.dc.html for the live dot / status pips).
+   Self-authored here rather than reusing the existing `casi-v9-pulse`
+   keyframe near the nav chrome, to avoid any dependency on nav-owned CSS. */
+@keyframes tally {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* ── Studio card / row / pill primitives — chrome-scoped, radius-ladder
+   compliant. Used by ApprovalQueue, AiringNow, FlashesLog, EndStreamDialog
+   and the studio settings shell so those components can share one set of
+   card/row/pill classes instead of re-declaring border-radius literals
+   per file. All colour references are the mutable v9/v7 ladder, which
+   resolves against chrome automatically wherever `.casi-studio-chrome` is
+   an ancestor. */
+.casi-card {
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+}
+.casi-row-card {
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+}
+.casi-pill-solid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-family: var(--B);
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.14s;
+}
+.casi-pill-solid:hover { filter: brightness(1.06); }
+.casi-pill-solid:disabled { opacity: 0.5; cursor: not-allowed; }
+.casi-pill-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-2);
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--B);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s;
+}
+.casi-pill-ghost:hover { background: var(--surf-2); }
+.casi-pill-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+.casi-meta-italic {
+  font-family: var(--S);
+  font-style: italic;
+  color: var(--text-2);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   WALLET CONNECT MODAL — @solana/wallet-adapter-react-ui override
+   ───────────────────────────────────────────────────────────────────────
+   This modal ships from a third-party library (styles.css imported in
+   SolanaProvider.tsx) and had zero app-specific overrides before this —
+   it rendered in the library's stock dark/purple default theme, visually
+   disconnected from Casi entirely, in every one of the 5+ places it's
+   triggered from (overlay, profile/edit, WalletNav, WalletPill,
+   PayoutsSection).
+
+   Pinned to --chrome-* rather than --ink/--paper: like the nav, this is
+   Casi's own infrastructure chrome, not streamer-skinned content — it
+   should look identical whether opened from your own dashboard or a
+   streamer's skinned overlay page. !important on the color-bearing
+   properties because the library's own styles.css load order relative
+   to this file isn't guaranteed by import position alone.
+
+   Real per-wallet icons (Phantom/Solflare/Backpack logos) come from the
+   library itself and are kept as-is — swapping in the prototype's flat
+   colored-letter badges would trade a real, trusted brand mark for a
+   fake stand-in, which is a downgrade the "match the prototype" goal
+   doesn't actually call for once a real wallet icon already exists.
+   ═══════════════════════════════════════════════════════════════════════ */
+.wallet-adapter-modal-wrapper {
+  background: var(--chrome-paper) !important;
+  border: 1px solid rgba(41, 75, 60, 0.18);
+  border-radius: var(--radius-panel);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+  padding: 28px;
+}
+.wallet-adapter-modal-title {
+  font-family: var(--B);
+  font-weight: 800;
+  font-size: 20px;
+  color: var(--chrome-text) !important;
+  letter-spacing: -0.01em;
+  margin: 0 0 18px;
+  text-align: left;
+}
+.wallet-adapter-modal-list {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wallet-adapter-modal-list li { list-style: none; }
+.wallet-adapter-modal-wrapper .wallet-adapter-button {
+  height: auto;
+  padding: 14px 16px;
+  background: color-mix(in oklab, var(--chrome-paper) 96%, var(--chrome-ink)) !important;
+  border: 1px solid rgba(41, 75, 60, 0.14);
+  border-radius: var(--radius-row);
+  color: var(--chrome-text) !important;
+  font-family: var(--B);
+  font-weight: 600;
+  font-size: 15px;
+  justify-content: flex-start;
+  gap: 12px;
+  transition: border-color 0.14s, background 0.14s;
+}
+.wallet-adapter-modal-wrapper .wallet-adapter-button:hover {
+  background: color-mix(in oklab, var(--chrome-paper) 90%, var(--chrome-ink)) !important;
+  border-color: rgba(41, 75, 60, 0.3);
+}
+.wallet-adapter-button-start-icon img,
+.wallet-adapter-button-start-icon svg {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+/* The trailing "Detected" span WalletListItem renders for an installed
+   wallet — Newsreader italic, same treatment as .casi-meta-italic, to
+   match the prototype's "detected" label instead of the library's plain
+   bold-caps default. */
+.wallet-adapter-modal-wrapper .wallet-adapter-button > span:last-child {
+  margin-left: auto;
+  font-family: var(--S);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--chrome-text-2) !important;
+  font-weight: 400;
+  text-transform: none;
+}
+.wallet-adapter-modal-list-more {
+  color: var(--chrome-text-2) !important;
+  font-family: var(--S);
+  font-style: italic;
+  font-size: 13px;
+  margin-top: 10px;
+}
+.wallet-adapter-modal-button-close {
+  background: color-mix(in oklab, var(--chrome-paper) 92%, var(--chrome-ink)) !important;
+}
+.wallet-adapter-modal-button-close svg path { fill: var(--chrome-text); }
+.wallet-adapter-modal-overlay {
+  background: rgba(20, 20, 18, 0.55);
+}
+/* "No wallet detected" empty state (WalletSVG) — its circle/path fills
+   reference hardcoded gradient defs (Solana's purple-to-teal brand
+   gradient via fill="url(#...)"), not currentColor, so they can't be
+   swapped by recoloring a variable upstream. CSS fill/stroke still wins
+   over an SVG presentation attribute, so this flattens it to Casi's own
+   ink instead of a clashing third-party gradient. */
+.wallet-adapter-modal-middle svg circle {
+  /* Baseline none first: the outer ring circle has its own stroke but no
+     fill attribute in the source SVG, so an unscoped `fill` override here
+     would give it a solid default fill and paint over the icon glyph
+     entirely -- confirmed by screenshot, this was a real bug, not a
+     hypothetical one. */
+  fill: none !important;
+}
+.wallet-adapter-modal-middle svg circle[fill-opacity] {
+  /* Only the soft background halo circle sets its own fill-opacity in the
+     source -- re-apply ink there so it still reads as a tint, not a
+     solid disc. */
+  fill: var(--chrome-ink) !important;
+}
+.wallet-adapter-modal-middle svg circle[stroke] {
+  stroke: var(--chrome-ink) !important;
+}
+.wallet-adapter-modal-middle svg path {
+  fill: var(--chrome-ink) !important;
+}
+.wallet-adapter-modal-middle-button {
+  background-color: var(--chrome-ink) !important;
+  border-radius: var(--radius-pill);
+  font-family: var(--B);
+  font-weight: 700;
 }

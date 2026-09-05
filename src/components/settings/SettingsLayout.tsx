@@ -80,11 +80,11 @@ export default function SettingsLayout({ rail, children }: Props) {
       className="casi-st-layout"
       style={{
         display: 'grid',
-        gridTemplateColumns: '160px minmax(0, 1fr)',
-        gap: '40px',
-        maxWidth: '980px',
+        gridTemplateColumns: '200px minmax(0, 1fr)',
+        gap: '36px',
+        maxWidth: '1000px',
         margin: '0 auto',
-        padding: '36px 32px 80px',
+        padding: '32px 32px 80px',
         alignItems: 'start',
       }}
     >
@@ -102,71 +102,74 @@ export default function SettingsLayout({ rail, children }: Props) {
           top: '84px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '20px',
+          gap: '22px',
         }}
       >
+        <div>
+          <div
+            style={{
+              fontFamily: 'var(--H)',
+              fontWeight: 800,
+              fontVariationSettings: '"opsz" 64',
+              fontSize: '32px',
+              letterSpacing: '-0.03em',
+              color: 'var(--text)',
+            }}
+          >
+            Settings
+          </div>
+        </div>
         {rail.map(group => (
           <div key={group.title}>
             <div
               className="font-mono uppercase"
               style={{
-                fontFamily: 'var(--M), var(--font-casi-mono), monospace',
-                fontSize: '9.5px',
+                fontFamily: 'var(--M)',
+                fontSize: '10px',
                 fontWeight: 600,
                 letterSpacing: '0.12em',
-                color: 'var(--text-4, var(--casi-text-faint))',
-                padding: '0 8px 6px',
+                color: 'var(--text-3)',
+                padding: '0 12px 8px',
               }}
             >
               {group.title}
             </div>
-            {group.items.map(item => {
-              const isActive = active === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => scrollToSection(item.id)}
-                  className="casi-st-btn"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '7px 8px',
-                    borderRadius: 0,
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    color: isActive ? 'var(--text, var(--casi-text))' : 'var(--text-3, var(--casi-text-dim))',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    transition: 'color .13s, background .13s',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  {isActive ? (
-                    <span
-                      aria-hidden
-                      style={{
-                        color: 'var(--ink, var(--casi-accent))',
-                        fontSize: '18px',
-                        marginRight: '4px',
-                        lineHeight: 0,
-                        verticalAlign: 'middle',
-                      }}
-                    >
-                      ·
-                    </span>
-                  ) : null}
-                  {item.label}
-                </button>
-              );
-            })}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {group.items.map(item => {
+                const isActive = active === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => scrollToSection(item.id)}
+                    className="casi-st-btn"
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '9px 12px',
+                      borderRadius: 'var(--radius-row)',
+                      fontFamily: 'var(--B)',
+                      fontSize: '15px',
+                      fontWeight: 500,
+                      letterSpacing: '-0.01em',
+                      color: isActive ? 'var(--on-ink)' : 'var(--text-2)',
+                      background: isActive ? 'var(--ink)' : 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'color .13s, background .13s',
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ))}
       </aside>
 
-      <div style={{ display: 'flex', flexDirection: 'column' }}>{children}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>{children}</div>
     </div>
   );
 }

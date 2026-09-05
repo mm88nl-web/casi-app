@@ -2239,6 +2239,7 @@ function OverlayContent() {
         skin={profile?.skin}
         inkColor={profile?.skin === 'custom' ? (profile?.ink_color ?? profile?.theme_color) : null}
         paperColor={profile?.skin === 'custom' ? profile?.paper_color : null}
+        accent2Color={profile?.skin === 'custom' ? profile?.accent2_color : null}
       />
       <NameEntryScreen onConfirm={confirmName} tc={tc} />
     </>
@@ -2250,6 +2251,7 @@ function OverlayContent() {
         skin={profile?.skin}
         inkColor={profile?.skin === 'custom' ? (profile?.ink_color ?? profile?.theme_color) : null}
         paperColor={profile?.skin === 'custom' ? profile?.paper_color : null}
+        accent2Color={profile?.skin === 'custom' ? profile?.accent2_color : null}
       />
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2275,16 +2277,30 @@ function OverlayContent() {
         .beam-banner-track  { display:inline-block; padding-left:100%; color:var(--casi-accent); font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
         .ov { min-height:100vh; background:${isOBS?'transparent':'var(--casi-bg)'}; color:var(--casi-text); font-family:var(--font-casi-sans),sans-serif; }
 
-        .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid var(--casi-surface); background:color-mix(in srgb,var(--casi-bg) 94%,transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
-        .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; }
-        .ov-wm { font-size:18px; font-weight:800; color:var(--casi-accent); letter-spacing:-0.5px; }
-        .ov-nav-right { display:flex; align-items:center; gap:10px; }
+        /* Casi's own nav chrome (bar fill/hairline, logo, viewer-name pill)
+           is pinned to the fixed --chrome-* palette below, NOT the active
+           streamer skin's --casi-bg/--casi-accent/--ink-70/etc — same rule
+           as the shared .casi-v9-nav in globals.css (see the long comment
+           above --chrome-* there). .notif just below stays on the mutable
+           accent tokens on purpose: it's a moderation-state toast (queued/
+           denied/approved), not chrome, and correctly follows the skin. */
+        .ov-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; row-gap:8px; padding:10px 24px; min-height:56px; border-bottom:1px solid color-mix(in oklab, var(--chrome-ink) 8%, var(--chrome-paper)); background:color-mix(in srgb, var(--chrome-paper) 94%, transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
+        .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; --ink:var(--chrome-ink); --paper:var(--chrome-paper); }
+        .ov-wm { font-size:18px; font-weight:800; color:var(--chrome-ink); letter-spacing:-0.5px; }
+        /* flex-wrap here specifically -- on a narrow viewport the
+           MobileWalletPicker deeplink buttons (Phantom/Solflare, shown when
+           no wallet is connected) don't fit alongside the viewer-name chip
+           and any active notification toast. ov-nav's own min-height (was a
+           fixed height) lets this row actually grow instead of the
+           overflow spilling onto the content below it -- confirmed on a
+           real device screenshot, not a hypothetical. */
+        .ov-nav-right { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:8px 10px; }
         .notif { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:springPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
-        .viewer-chip { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.04); border:1px solid var(--casi-border); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
-        .viewer-chip:hover { border-color:#333; }
-        .vdot { width:6px; height:6px; border-radius:50%; background:var(--casi-accent); animation:blink 1.5s infinite; flex-shrink:0; }
-        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:#888; }
-        .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid rgba(var(--casi-accent-rgb),0.31); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--casi-text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
+        .viewer-chip { display:flex; align-items:center; gap:6px; background:color-mix(in oklab, var(--chrome-ink) 4%, var(--chrome-paper)); border:1px solid color-mix(in oklab, var(--chrome-ink) 18%, var(--chrome-paper)); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
+        .viewer-chip:hover { border-color:color-mix(in oklab, var(--chrome-ink) 34%, var(--chrome-paper)); }
+        .vdot { width:6px; height:6px; border-radius:50%; background:var(--chrome-ink); animation:blink 1.5s infinite; flex-shrink:0; }
+        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:color-mix(in oklab, var(--chrome-ink) 70%, var(--chrome-paper)); }
+        .name-edit-input { background:color-mix(in oklab, var(--chrome-ink) 4%, var(--chrome-paper)); border:1px solid color-mix(in oklab, var(--chrome-ink) 34%, var(--chrome-paper)); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--chrome-text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
 
         /* ov-layout: 2-col grid wrapper (desktop only). Separates canvas/feeds
            (left col, <main>) from slots/booking (right col, .ov-booking-col).
@@ -2321,14 +2337,22 @@ function OverlayContent() {
           color: var(--text-3, rgba(255,255,255,0.45));
         }
 
-        .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
+        .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:var(--radius-card, 16px); padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
         .my-beams-lbl { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; }
         .my-beams-list { display:flex; flex-wrap:wrap; gap:8px; }
-        .beam-chip { display:flex; align-items:center; gap:8px; border-radius:10px; padding:8px 12px; border:1px solid; font-size:12px; }
-        .cancel-btn { background:none; border:none; font-family:var(--font-casi-mono),monospace; font-size:9px; color:rgba(248,113,113,0.5); cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:color .2s; padding:0; margin-left:4px; }
+        .beam-chip { display:flex; align-items:center; gap:8px; border-radius:var(--radius-row, 14px); padding:8px 12px; border:1px solid; font-size:12px; }
+        /* Signature redesign move: the quiet "end early / cancel / recover"
+           action inside a beam chip reads as an italic Newsreader link
+           (matches the prototype's "end early"/"cancel" treatment) instead
+           of a mono uppercase caps label — this is what the prototype
+           calls the thing that makes secondary actions read warm rather
+           than technical. Colour is untouched (red/purple stay universal
+           status semantics, not brand — same precedent as the amber/purple
+           chip fills above). */
+        .cancel-btn { background:none; border:none; font-family:var(--S); font-style:italic; font-size:11.5px; color:rgba(248,113,113,0.6); cursor:pointer; text-decoration:underline; text-decoration-color:rgba(248,113,113,0.35); text-underline-offset:2px; transition:color .2s; padding:0; margin-left:4px; }
         .cancel-btn:hover { color:#f87171; }
 
-        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:#0a0a0a; position:relative; z-index:0; overflow:hidden; margin-bottom:10px; --line: rgba(255,255,255,0.06); }
+        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:var(--paper-2); position:relative; z-index:0; overflow:hidden; margin-bottom:10px; --line: rgba(255,255,255,0.06); }
 
         /* ── Slot list — v9 ── sharp borders, ink accent on hover/select,
            48px square thumb that adopts the slot shape via .s-thumb-* helpers
@@ -2346,7 +2370,7 @@ function OverlayContent() {
         .slot-card {
           display:flex; align-items:center; gap:14px;
           padding:14px 16px; background:var(--surf);
-          border:1px solid var(--line); border-radius:10px;
+          border:1px solid var(--line); border-radius:14px;
           cursor:pointer; text-align:left; width:100%; font:inherit; color:inherit;
           transition:border-color .15s, background .15s;
         }
@@ -2503,7 +2527,7 @@ function OverlayContent() {
         }
       `}</style>
 
-      <div className="ov">
+      <div className="ov skin-root">
         {!isOBS && (
           <nav className="ov-nav">
             <a href="/" className="ov-logo">
@@ -2516,13 +2540,13 @@ function OverlayContent() {
               <WalletPill />
               {notification && (
                 <div className="notif" style={
-                  notification.type==='success' ? { background:`rgba(${tcRgb},0.09)`, border:`1px solid rgba(${tcRgb},0.25)`, color:tc } :
-                  notification.type==='queue'   ? { background:`rgba(${tcRgb},0.08)`, border:`1px solid rgba(${tcRgb},0.21)`, color:tc } :
+                  notification.type==='success' ? { background:'var(--accent-soft)', border:'1px solid rgba(var(--casi-accent2-rgb),0.35)', color:'var(--accent)' } :
+                  notification.type==='queue'   ? { background:'rgba(var(--casi-accent2-rgb),0.08)', border:'1px solid rgba(var(--casi-accent2-rgb),0.28)', color:'var(--accent)' } :
                   notification.type==='denied'  ? { background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.25)', color:'#f87171' } :
                   { background:'rgba(234,179,8,0.1)', border:'1px solid rgba(234,179,8,0.25)', color:'#facc15' }
                 }>{notification.text}</div>
               )}
-              {selectedSlot && <button onClick={closeSlot} style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#555', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5 }}>Cancel</button>}
+              {selectedSlot && <button onClick={closeSlot} style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'var(--ink-70)', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5 }}>Cancel</button>}
               {savedViewerName && !selectedSlot && (
                 showChangeName ? (
                   <input type="text" defaultValue={savedViewerName} autoFocus className="name-edit-input"
@@ -2594,8 +2618,6 @@ function OverlayContent() {
               viewerWallet={viewerWalletRef.current}
               cleanupBusy={cleanupBusy}
               onStaleCleanup={runStaleSolanaCleanup}
-              tc={tc}
-              tcRgb={tcRgb}
               cancelling={cancelling}
               ending={endingBeams}
               onEndEarly={async (booking, activeBooking) => {
@@ -2911,9 +2933,9 @@ function OverlayContent() {
                           : myIsExpiring
                             ? { color: '#facc15', borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.08)' }
                             : myBookingForSlot!.status === 'active'
-                              ? { color: tc, borderColor: `rgba(${tcRgb},0.3)`, background: `rgba(${tcRgb},0.08)` }
+                              ? { color: 'var(--accent)', borderColor: 'rgba(var(--casi-accent2-rgb),0.3)', background: 'rgba(var(--casi-accent2-rgb),0.08)' }
                               : myBookingForSlot!.status === 'approved_queued'
-                                ? { color: tc, borderColor: `rgba(${tcRgb},0.22)`, background: `rgba(${tcRgb},0.05)` }
+                                ? { color: 'var(--accent)', borderColor: 'rgba(var(--casi-accent2-rgb),0.22)', background: 'rgba(var(--casi-accent2-rgb),0.05)' }
                                 : { color: 'var(--casi-text-muted)', borderColor: 'var(--casi-border)', background: 'rgba(255,255,255,0.03)' }
                         ),
                       }}
@@ -3109,7 +3131,7 @@ function OverlayContent() {
             {/* Activity history — always last */}
             {!selectedSlot && username && (
               <div style={{ marginTop: 24 }}>
-                <MyTransactionsSection rows={myHistory} username={username} />
+                <MyTransactionsSection rows={myHistory} username={username} streamerCurrency={profile?.settlement_currency ?? null} />
               </div>
             )}
           </div>

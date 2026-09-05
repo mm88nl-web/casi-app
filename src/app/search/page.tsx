@@ -5,10 +5,8 @@ import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 import { CasiMark } from '@/components/v9/CasiMark';
 import { Wordmark } from '@/components/v9/Wordmark';
-
-const P = '#f5e1d2';
-const I = '#294b3c';
-const A = '#c04830';
+import WalletPill from '@/components/WalletPill';
+import { VIEWER_NAME_KEY } from '@/app/overlay/_components/viewerStorage';
 
 type Profile = {
   username: string;
@@ -24,6 +22,14 @@ export default function SearchPage() {
   const supabase = createClient();
   const [profiles, setProfiles] = useState<Profile[] | null>(null);
   const [query, setQuery] = useState('');
+  // Read-only here — /search never prompts for a name (frictionless browsing
+  // is a hard product constraint), it only reflects one already set from a
+  // prior /overlay visit. Client-only read since localStorage isn't
+  // available during SSR.
+  const [savedViewerName, setSavedViewerName] = useState<string | null>(null);
+  useEffect(() => {
+    try { setSavedViewerName(localStorage.getItem(VIEWER_NAME_KEY)); } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,33 +66,33 @@ export default function SearchPage() {
           <Wordmark />
         </Link>
         <div className="nav-r">
-          {showLive && (
-            <>
-              <div className="stamp">
-                <span className="n">{liveCount}</span> live
-              </div>
-              <span className="sep" aria-hidden="true" />
-            </>
+          {savedViewerName && (
+            <div className="viewer-chip">
+              <span className="vdot" />
+              <span className="vname">@{savedViewerName}</span>
+            </div>
           )}
+          <WalletPill />
           <Link href="/login" className="login-link">Log in</Link>
         </div>
       </header>
 
       {/* HEAD */}
       <section className="head">
-        <div className="eyebrow">— find a stream</div>
-        <h1>Find a <em>live stream.</em></h1>
+        <h1>Find a streamer</h1>
+        <p className="head-sub">Take a slot on a live overlay for a few minutes.</p>
         <div className="search-wrap">
-          <span className="search-icon" aria-hidden="true">⌕</span>
+          <span className="search-icon" aria-hidden="true" />
           <input
             className="search-input"
             type="search"
-            placeholder="search by name or @handle"
+            placeholder="Search a streamer, game or tag"
             value={query}
             onChange={e => setQuery(e.target.value)}
             autoComplete="off"
             spellCheck={false}
           />
+          {showLive && <span className="search-live">{liveCount} live</span>}
         </div>
       </section>
 
@@ -107,7 +113,11 @@ export default function SearchPage() {
         ) : (
           <div className="grid">
             {filtered.map(p => {
-              const accent = p.ink_color || p.theme_color || I;
+              // Falls back to --ink, which .casi-search shadows to the
+              // fixed --chrome-ink below — /search is Casi's own browse
+              // chrome, not a per-streamer skin surface, so an unset
+              // streamer accent shouldn't fall back to a hardcoded hex.
+              const accent = p.ink_color || p.theme_color || 'var(--ink)';
               const initial = (p.display_name || p.username).charAt(0).toUpperCase();
               return (
                 <Link
@@ -175,18 +185,23 @@ export default function SearchPage() {
       </footer>
 
       <style jsx global>{`
-        html, body { background: ${P}; }
+        html, body { background: var(--chrome-paper); }
       `}</style>
       <style jsx>{`
         .casi-search {
-          --paper: ${P};
-          --ink:   ${I};
-          --accent: ${A};
-          --type:   #221a14;
-          --type-2: #6a574b;
-          --H: var(--font-casi-display), 'Bricolage Grotesque', system-ui, sans-serif;
-          --S: var(--font-casi-serif), 'Instrument Serif', Georgia, serif;
-          --M: var(--font-casi-mono), 'JetBrains Mono', ui-monospace, monospace;
+          /* Pin the whole subtree to Casi's fixed brand identity, not the
+             mutable --ink/--paper roots — /search lists many streamers, so
+             it's Casi's own browse chrome, never one streamer's skin. Same
+             pattern as .casi-landing in src/app/page.tsx — see --chrome-*
+             in globals.css. --H/--S/--M are intentionally left to inherit
+             the global :root definitions (already Archivo/Newsreader/
+             Spline Sans Mono) instead of redeclaring stale font-family
+             fallback names here. */
+          --paper:  var(--chrome-paper);
+          --ink:    var(--chrome-ink);
+          --accent: var(--chrome-accent);
+          --type:   var(--chrome-text);
+          --type-2: var(--chrome-text-2);
 
           background: var(--paper);
           color: var(--type);
@@ -214,34 +229,42 @@ export default function SearchPage() {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          flex-wrap: wrap;
+          row-gap: 12px;
           padding: 28px 40px;
           flex-shrink: 0;
         }
         @media (max-width: 640px) { .nav { padding: 22px 22px; } }
         .nav-logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
-        .nav-r { display: flex; align-items: center; gap: 18px; }
-        .stamp {
-          font-family: var(--S); font-style: italic; font-size: 17px;
-          color: var(--type-2); display: flex; align-items: center; gap: 10px;
-        }
-        .stamp::before {
-          content: ''; width: 8px; height: 8px; border-radius: 50%;
-          background: var(--accent); animation: blink 1.6s ease-out infinite;
-        }
+        /* flex-wrap here specifically -- on a narrow viewport the viewer
+           chip + MobileWalletPicker's two deeplink buttons + the login
+           link don't fit on one line. Before this they had nowhere to go
+           but overflow/collide instead of wrapping onto their own row --
+           confirmed on a real device screenshot, not a hypothetical. */
+        .nav-r { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px 14px; }
         @keyframes blink {
           0%   { box-shadow: 0 0 0 0   color-mix(in oklab, var(--accent) 55%, transparent); }
           100% { box-shadow: 0 0 0 9px color-mix(in oklab, var(--accent)  0%, transparent); }
         }
-        .stamp .n { color: var(--type); font-style: normal; font-family: var(--H); font-weight: 700; }
-        .sep { width: 1px; height: 16px; background: color-mix(in oklab, var(--type) 22%, transparent); }
+        /* Same read-only identity chip as /overlay's viewer-chip (see
+           src/app/overlay/page.tsx) -- kept view-only here, no inline
+           rename, since /search isn't where a viewer manages their name. */
+        .viewer-chip {
+          display: flex; align-items: center; gap: 6px;
+          background: color-mix(in oklab, var(--ink) 4%, var(--paper));
+          border: 1px solid color-mix(in oklab, var(--ink) 18%, var(--paper));
+          border-radius: 999px; padding: 6px 13px;
+        }
+        .vdot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.5s infinite; flex-shrink: 0; }
+        .vname { font-family: var(--M); font-size: 11px; color: var(--type-2); }
         .login-link {
-          font-family: var(--S); font-style: italic; font-size: 17px; color: var(--type);
-          border-bottom: 1.5px solid color-mix(in oklab, var(--type) 30%, transparent);
+          font-family: var(--S); font-style: italic; font-size: 16px; color: var(--type-2);
+          border-bottom: 1.5px solid color-mix(in oklab, var(--type) 24%, transparent);
           padding-bottom: 1px; text-decoration: none; white-space: nowrap;
         }
         @media (max-width: 540px) {
-          .sep { display: none; }
-          .stamp, .stamp .n, .login-link { font-size: 15px; }
+          .login-link { font-size: 14px; }
+          .vname { max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         }
 
         /* HEAD */
@@ -250,50 +273,44 @@ export default function SearchPage() {
           border-bottom: 1px solid color-mix(in oklab, var(--type) 10%, transparent);
         }
         @media (max-width: 640px) { .head { padding: 0 22px 36px; } }
-        .eyebrow {
-          font-family: var(--M);
-          font-size: 11px;
-          letter-spacing: 0.22em;
-          text-transform: uppercase;
-          color: var(--type-2);
-          margin-bottom: 12px;
-        }
         h1 {
           font-family: var(--H);
           font-weight: 800;
-          font-size: clamp(52px, 8vw, 84px);
-          letter-spacing: -0.035em;
-          line-height: 0.95;
+          font-size: clamp(44px, 6.5vw, 64px);
+          letter-spacing: -0.03em;
+          line-height: 1;
           color: var(--type);
-          font-variation-settings: 'opsz' 56;
         }
-        h1 :global(em) {
+        .head-sub {
           font-family: var(--S);
-          font-style: italic;
-          font-weight: 400;
-          color: var(--ink);
-          font-size: 0.94em;
-          letter-spacing: -0.015em;
+          font-size: 19px;
+          color: var(--type-2);
+          margin-top: 10px;
         }
 
         /* SEARCH INPUT */
         .search-wrap {
-          margin-top: 32px;
+          margin-top: 28px;
           position: relative;
-          max-width: 560px;
+          max-width: 640px;
+          display: flex;
+          align-items: center;
         }
         .search-icon {
           position: absolute;
           left: 22px;
           top: 50%;
           transform: translateY(-50%);
-          font-size: 20px;
-          color: var(--type-2);
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          border: 1.5px solid var(--type-2);
+          opacity: 0.6;
           pointer-events: none;
         }
         .search-input {
           width: 100%;
-          padding: 16px 22px 16px 48px;
+          padding: 16px 90px 16px 48px;
           background: color-mix(in oklab, var(--paper) 70%, white);
           color: var(--type);
           border: 1.5px solid color-mix(in oklab, var(--type) 18%, transparent);
@@ -310,6 +327,17 @@ export default function SearchPage() {
         .search-input::placeholder { color: var(--type-2); opacity: 0.6; }
         .search-input:focus { border-color: var(--ink); }
         .search-input::-webkit-search-cancel-button { display: none; }
+        .search-live {
+          position: absolute;
+          right: 22px;
+          top: 50%;
+          transform: translateY(-50%);
+          font-family: var(--M);
+          font-size: 12px;
+          color: var(--type-2);
+          pointer-events: none;
+          white-space: nowrap;
+        }
 
         /* BODY */
         .body { flex: 1; padding: 32px 40px 60px; }

@@ -3,7 +3,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import SlotMedia from '@/components/SlotMedia';
-import { getSkinById, hexToRgbStr } from '@/lib/skins';
+import SkinProvider from '@/components/SkinProvider';
 
 function OBSContent() {
   const searchParams = useSearchParams();
@@ -15,10 +15,15 @@ function OBSContent() {
   // their content from booking.message, not overlay_elements.image_url).
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [profileId, setProfileId] = useState<string | null>(null);
-  // Streamer accent colour — derived from their skin/theme so glow + banner
-  // match the streamer's brand instead of the default purple.
-  const [accentRgb, setAccentRgb] = useState('13, 207, 176'); // casi teal fallback
-  const [accentHex, setAccentHex] = useState('#0DCFB0');
+  // Streamer's skin — passed to <SkinProvider> below, which writes
+  // --ink / --casi-accent-rgb / --casi-accent2 / --casi-accent2-rgb onto
+  // <html>. glow + banner below read those CSS vars directly instead of
+  // interpolating colour into the <style> template, so they match the
+  // streamer's brand (and stay live if the skin changes) the same way
+  // /overlay and /s/[username] already do.
+  const [profileSkin, setProfileSkin] = useState<{
+    skin: string | null; inkColor: string | null; paperColor: string | null; accent2Color: string | null;
+  }>({ skin: null, inkColor: null, paperColor: null, accent2Color: null });
   const [supabase] = useState(() => createClient());
 
   useEffect(() => {
@@ -26,7 +31,7 @@ function OBSContent() {
       let prof: any = null;
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, ink_color, theme_color, skin')
+        .select('id, skin, theme_color, ink_color, paper_color, accent2_color')
         .eq('username', username)
         .single();
       prof = data;
@@ -41,12 +46,12 @@ function OBSContent() {
       }
       if (prof) {
         setProfileId(prof.id);
-        const hex = prof.skin === 'custom'
-          ? (prof.ink_color ?? prof.theme_color ?? getSkinById(prof.skin).ink)
-          : getSkinById(prof.skin).ink;
-        const rgb = hexToRgbStr(hex) ?? '13, 207, 176';
-        setAccentHex(hex);
-        setAccentRgb(rgb);
+        setProfileSkin({
+          skin: prof.skin ?? null,
+          inkColor: prof.skin === 'custom' ? (prof.ink_color ?? prof.theme_color ?? null) : null,
+          paperColor: prof.skin === 'custom' ? (prof.paper_color ?? null) : null,
+          accent2Color: prof.skin === 'custom' ? (prof.accent2_color ?? null) : null,
+        });
       }
     };
     load();
@@ -145,22 +150,31 @@ function OBSContent() {
   const getActive = (elId: string) => activeBookings.find(b => b.element_id === elId) || null;
 
   return (
-    <div className="w-screen h-screen bg-transparent overflow-hidden">
+    <div className="w-screen h-screen bg-transparent overflow-hidden skin-root">
+      <SkinProvider
+        skin={profileSkin.skin}
+        inkColor={profileSkin.inkColor}
+        paperColor={profileSkin.paperColor}
+        accent2Color={profileSkin.accent2Color}
+      />
       <style>{`
         /* Force the page transparent so OBS composites the beams over the
            streamer's video. globals.css paints the cream --paper on <html>
            (added in #148 to kill the mobile dark-flash); without this override
            that cream leaks into the browser source as a solid rectangle. */
         html, body { background: transparent !important; }
-        /* Shape mask + one-shot glow + banner marquee.
-           Accent colour is derived from the streamer's skin/theme at load time
-           so glow and banner edges match their brand colour. */
-        @keyframes beamGlow    { 0%{box-shadow:0 0 0 rgba(${accentRgb},0)} 15%{box-shadow:0 0 42px 8px rgba(${accentRgb},0.85)} 100%{box-shadow:0 0 0 rgba(${accentRgb},0)} }
+        /* Shape mask + one-shot glow + banner marquee. Colours read live off
+           the skin tokens SkinProvider writes onto <html> (--ink for brand/
+           label chrome, --casi-accent2-rgb for the "just went live" glow —
+           state, not brand, per the skin token contract) instead of being
+           baked into this template string, so they match the streamer's
+           brand and stay in sync if the skin changes underneath. */
+        @keyframes beamGlow    { 0%{box-shadow:0 0 0 rgba(var(--casi-accent2-rgb),0)} 15%{box-shadow:0 0 42px 8px rgba(var(--casi-accent2-rgb),0.85)} 100%{box-shadow:0 0 0 rgba(var(--casi-accent2-rgb),0)} }
         @keyframes beamMarquee { from{transform:translateX(100%)} to{transform:translateX(-100%)} }
         .obs-shape-circle  { clip-path: circle(50%); }
         .obs-glow          { animation: beamGlow 3s ease-out 1; will-change: box-shadow; }
-        .obs-banner        { display:flex; align-items:center; width:100%; height:100%; overflow:hidden; background:rgba(0,0,0,0.78); border-top:2px solid rgba(${accentRgb},0.4); border-bottom:2px solid rgba(${accentRgb},0.4); white-space:nowrap; }
-        .obs-banner-track  { display:inline-block; padding-left:100%; color:${accentHex}; font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
+        .obs-banner        { display:flex; align-items:center; width:100%; height:100%; overflow:hidden; background:rgba(0,0,0,0.78); border-top:2px solid rgba(var(--casi-accent-rgb),0.4); border-bottom:2px solid rgba(var(--casi-accent-rgb),0.4); white-space:nowrap; }
+        .obs-banner-track  { display:inline-block; padding-left:100%; color:var(--ink); font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
       `}</style>
       <div className="relative w-full h-full">
         {/* SVG clipPath defs for custom shapes */}
@@ -283,7 +297,7 @@ function OBSContent() {
               pointerEvents: 'none',
             }}
           >
-            <span style={{ color: accentHex, fontWeight: 800 }}>▸</span>
+            <span style={{ color: 'var(--ink)', fontWeight: 800 }}>▸</span>
             get on stream · casi.gg
           </div>
         )}

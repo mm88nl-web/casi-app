@@ -245,7 +245,10 @@ export default function DelegateKeyCard({
 
   return (
     <div>
-      <label className="pe-lbl">
+      <label
+        className="mb-2 block font-mono uppercase"
+        style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--casi-text-muted)' }}
+      >
         Session key
         <span style={{ letterSpacing: 0, textTransform: 'none', opacity: 0.6 }}>
           {' — '}server starts beams without wallet pop-ups
@@ -254,8 +257,8 @@ export default function DelegateKeyCard({
       <div style={{
         background: 'var(--casi-bg)',
         border: '1px solid var(--casi-border)',
-        borderRadius: 10,
-        padding: '12px 14px',
+        borderRadius: 'var(--radius-row)',
+        padding: '14px 16px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -263,10 +266,11 @@ export default function DelegateKeyCard({
       }}>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{
-            fontSize: 13,
+            fontFamily: 'var(--B)',
+            fontSize: 15,
             fontWeight: 700,
             color: accent,
-            marginBottom: 2,
+            marginBottom: 3,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -274,8 +278,8 @@ export default function DelegateKeyCard({
             {headline}
           </div>
           <div style={{
-            fontFamily: "var(--font-casi-mono),monospace",
-            fontSize: 10,
+            fontFamily: "var(--M)",
+            fontSize: 11,
             color: 'var(--casi-text-muted)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -284,7 +288,7 @@ export default function DelegateKeyCard({
             {sub}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           {status.kind !== 'loading' && (
             <button
               type="button"
@@ -292,14 +296,13 @@ export default function DelegateKeyCard({
               disabled={busy !== null || !walletReady}
               title={!walletReady ? 'Connect + save your Solana wallet first' : undefined}
               style={{
-                background: status.kind === 'healthy' ? 'rgba(255,255,255,0.04)' : 'var(--casi-accent)',
-                border: status.kind === 'healthy' ? '1px solid var(--casi-border)' : 'none',
-                borderRadius: 8,
-                padding: '8px 14px',
-                fontFamily: "var(--font-casi-sans),sans-serif",
-                fontWeight: 800,
-                fontSize: 11,
-                textTransform: 'uppercase',
+                background: status.kind === 'healthy' ? 'transparent' : 'var(--casi-accent)',
+                border: status.kind === 'healthy' ? '1px solid var(--casi-border-2)' : 'none',
+                borderRadius: 'var(--radius-pill)',
+                padding: '9px 16px',
+                fontFamily: "var(--B)",
+                fontWeight: 700,
+                fontSize: 13,
                 color: status.kind === 'healthy' ? 'var(--casi-text)' : 'var(--casi-bg)',
                 cursor: busy ? 'wait' : walletReady ? 'pointer' : 'not-allowed',
                 opacity: walletReady ? 1 : 0.5,
@@ -316,13 +319,12 @@ export default function DelegateKeyCard({
               style={{
                 background: 'rgba(239,68,68,0.08)',
                 border: '1px solid rgba(239,68,68,0.3)',
-                borderRadius: 8,
-                padding: '8px 14px',
-                fontFamily: "var(--font-casi-sans),sans-serif",
-                fontWeight: 800,
-                fontSize: 11,
-                textTransform: 'uppercase',
-                color: '#ef4444',
+                borderRadius: 'var(--radius-pill)',
+                padding: '9px 16px',
+                fontFamily: "var(--B)",
+                fontWeight: 700,
+                fontSize: 13,
+                color: '#dc4a3a',
                 cursor: busy ? 'wait' : 'pointer',
                 whiteSpace: 'nowrap',
               }}>
@@ -332,10 +334,11 @@ export default function DelegateKeyCard({
         </div>
       </div>
       <div style={{
-        fontFamily: "var(--font-casi-mono),monospace",
-        fontSize: 9,
-        color: err ? '#ef4444' : okLink ? '#4ade80' : 'var(--casi-text-muted)',
-        marginTop: 5,
+        fontFamily: "var(--S)",
+        fontStyle: 'italic',
+        fontSize: 13,
+        color: err ? '#dc4a3a' : okLink ? '#2f8f5b' : 'var(--casi-text-muted)',
+        marginTop: 8,
       }}>
         {err
           ? `✕ ${err}`

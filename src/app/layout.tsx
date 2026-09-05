@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
-import { Bricolage_Grotesque, JetBrains_Mono, Instrument_Serif } from "next/font/google";
+import { Archivo, Newsreader, Spline_Sans_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import ClientErrorReporter from "@/components/ClientErrorReporter";
@@ -8,35 +8,48 @@ import DevBanner from "@/components/DevBanner";
 import { CookieNotice } from "@/components/CookieNotice";
 import { DevScreenSwitcher, DevTweaksPanel } from "@/components/v9";
 
-// v9 type system: Bricolage Grotesque (display + body), JetBrains Mono (meta/labels),
-// Instrument Serif (italic accents). Variable names keep their `--font-casi-*` shape so
-// existing v7 components (`var(--font-casi-sans)` etc.) keep resolving — sans + display
-// both point at Bricolage now.
-const sans = Bricolage_Grotesque({
+// Redesign Phase 1 type system: Archivo (UI/display/body), Spline Sans Mono
+// (meta/labels/amounts), Newsreader italic (asides/notes/secondary captions).
+// Variable names keep their `--font-casi-*` shape so existing v7/v9 components
+// (`var(--font-casi-sans)` etc.) keep resolving unchanged — only the font
+// each variable points at has changed, not the variable names themselves.
+// Archivo and Spline Sans Mono are loaded as true variable fonts (weight
+// axis spans the full range) so every fontWeight already used across the
+// app — including callsites this phase didn't touch — renders at its exact
+// requested weight instead of the nearest static instance. Archivo also
+// requests its `wdth` axis so `font-stretch` (e.g. the landing wordmark's
+// 108% per the design handoff) actually widens the glyphs instead of
+// no-op'ing against a fixed-width static file. Newsreader requests its
+// `opsz` axis so italic asides pick the right optical cut across the sizes
+// they're used at (13px hex fields up to 30px taglines).
+const sans = Archivo({
   variable: "--font-casi-sans",
   subsets: ["latin"],
-  weight: ["400", "600", "700", "800"],
+  weight: "variable",
+  axes: ["wdth"],
   display: "swap",
 });
 
-const display = Bricolage_Grotesque({
+const display = Archivo({
   variable: "--font-casi-display",
   subsets: ["latin"],
-  weight: ["600", "700", "800"],
+  weight: "variable",
+  axes: ["wdth"],
   display: "swap",
 });
 
-const mono = JetBrains_Mono({
+const mono = Spline_Sans_Mono({
   variable: "--font-casi-mono",
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
+  weight: "variable",
   display: "swap",
 });
 
-const serif = Instrument_Serif({
+const serif = Newsreader({
   variable: "--font-casi-serif",
   subsets: ["latin"],
-  weight: ["400"],
+  weight: "variable",
+  axes: ["opsz"],
   style: ["normal", "italic"],
   display: "swap",
 });
@@ -185,18 +198,18 @@ export default function RootLayout({
 function h2rgb(h){h=h.replace('#','');if(h.length!==6)return null;return parseInt(h.slice(0,2),16)+', '+parseInt(h.slice(2,4),16)+', '+parseInt(h.slice(4,6),16);}
 function isLightHex(h){h=h.replace('#','');if(h.length!==6)return false;var r=parseInt(h.slice(0,2),16)/255,g=parseInt(h.slice(2,4),16)/255,b=parseInt(h.slice(4,6),16)/255;return (0.2126*r+0.7152*g+0.0722*b)>0.5;}
 var S={
-'casi-light':['#294b3c','41, 75, 60','#f5e1d2','#c04830','192, 72, 48',1],
-'rose':['#BE185D','190, 24, 93','#FDF2F8','#9333EA','147, 51, 234',1],
-'snow':['#2563EB','37, 99, 235','#F0F5FF','#7C3AED','124, 58, 237',1],
-'amber':['#B45309','180, 83, 9','#FFFBEB','#DC2626','220, 38, 38',1],
-'youtube':['#FF0000','255, 0, 0','#FFF8F8','#CC0000','204, 0, 0',1],
+'casi-light':['#294B3C','41, 75, 60','#F5E1D2','#C04830','192, 72, 48',1],
+'rose':['#9D174D','157, 23, 77','#FFF1F2','#0F766E','15, 118, 110',1],
+'snow':['#1D4ED8','29, 78, 216','#F4F7FD','#EA580C','234, 88, 12',1],
+'amber':['#92400E','146, 64, 14','#FFFAEC','#15803D','21, 128, 61',1],
+'youtube':['#E32118','227, 33, 24','#FFFFFF','#0F0F0F','15, 15, 15',1],
 'casi-dark':['#0DCFB0','13, 207, 176','#0C0D11','#9945FF','153, 69, 255',0],
-'twitch':['#9146FF','145, 70, 255','#0e0e1a','#772CE8','119, 44, 232',0],
-'kick':['#53FC18','83, 252, 24','#0a1a0a','#00cc00','0, 204, 0',0],
-'mono':['#E8E8E8','232, 232, 232','#0a0a0a','#888888','136, 136, 136',0],
-'apothecary':['#C8A45C','200, 164, 92','#0F0C07','#7C5C2A','124, 92, 42',0],
-'onlyfans':['#00AFF0','0, 175, 240','#0A1420','#0088CC','0, 136, 204',0],
-'custom':['#FFFFFF','255, 255, 255','#0A0A0A','#888888','136, 136, 136',0]
+'twitch':['#A970FF','169, 112, 255','#0E0E10','#00F5A0','0, 245, 160',0],
+'kick':['#53FC18','83, 252, 24','#0B0F0A','#FF3D71','255, 61, 113',0],
+'mono':['#F2F2F2','242, 242, 242','#0A0A0A','#FFB300','255, 179, 0',0],
+'apothecary':['#D9B36A','217, 179, 106','#100C08','#6E9E7C','110, 158, 124',0],
+'onlyfans':['#00AFF0','0, 175, 240','#0A1420','#FFC145','255, 193, 69',0],
+'custom':['#FFFFFF','255, 255, 255','#0A0A0A','#FFB300','255, 179, 0',0]
 };
 var id=localStorage.getItem('casi-skin-id')||'casi-light';
 var sk=S[id]||S['casi-light'];

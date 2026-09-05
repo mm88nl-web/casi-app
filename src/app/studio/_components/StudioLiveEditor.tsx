@@ -278,6 +278,36 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
     }
   }, [supabase, profileId, elements]);
 
+  // Mirrors addBeam, but inserts full-canvas and background from the start —
+  // and demotes any existing backdrop first, same invariant handleUpdateShape
+  // enforces when converting a slot to 'backdrop' (at most one is_background
+  // row). Without the demotion a streamer clicking "+ Backdrop" twice would
+  // end up with two full-canvas background layers stacked on top of each
+  // other with no way to tell them apart on the canvas.
+  const addBackdrop = useCallback(async () => {
+    const prior = elements.find((e) => e.is_background);
+    if (prior) await updateLayer(prior.id, { is_background: false, shape: 'rect' });
+    const insertData = {
+      profile_id: profileId, image_url: '',
+      pos_x: 0, pos_y: 0, width: 100, height: 100,
+      is_background: true, shape: 'backdrop',
+      price_value: 0, price_unit: 'min', max_duration_minutes: null, locked: false,
+    };
+    const { data, error } = await supabase.from('overlay_elements').insert(insertData).select().single();
+    if (data) {
+      setElements((prev) => [...prev, data]);
+      setSelectedSlotId(data.id);
+    } else if (error) {
+      const bypassed = await tryDirectMutate(supabase, { action: 'insert', data: insertData });
+      if (bypassed?.data) {
+        setElements((prev) => [...prev, bypassed.data]);
+        setSelectedSlotId(bypassed.data.id);
+      } else {
+        showToast('Could not add backdrop — save failed', 'err');
+      }
+    }
+  }, [supabase, profileId, elements, updateLayer]);
+
   // Expose addBeam to the parent (for an external toolbar button). Re-ref on
   // every dependency change so the handler captures the latest elements array.
   useEffect(() => {
@@ -375,16 +405,18 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
         }}>{toast.msg}</div>
       ) : null}
 
-      {/* v9 toolbar — status / +Beam. Edit/Preview toggle was removed —
+      {/* v9 toolbar — save status only. Edit/Preview toggle was removed —
           the editor is always in edit mode (grid + dashed outlines + delete
           handles). Streamers preview the live result via the OBS source URL
-          shown above, not via a fake in-app preview. */}
+          shown above, not via a fake in-app preview. Adding slots lives
+          entirely in the Layers panel's "+ Add" (Beam / Backdrop) menu below
+          — this toolbar used to duplicate that with its own +Beam button;
+          onAddHandler is never passed by the one real caller (studio/live/
+          page.tsx), so this row always renders alongside the Layers panel,
+          and two separate add affordances on screen was never intentional. */}
       {!onAddHandler ? (
         <div className="casi-v9-le-toolbar">
           <span className="casi-v9-le-save">{saveStatus} · auto-saved</span>
-          <button type="button" className="casi-v9-le-add" onClick={addBeam}>
-            + Beam
-          </button>
         </div>
       ) : null}
 
@@ -396,6 +428,7 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
         selectedId={selectedSlotId}
         onSelect={(id) => setSelectedSlotId(id)}
         onAdd={addBeam}
+        onAddBackdrop={addBackdrop}
         onToggleLock={setLayerLocked}
       />
 

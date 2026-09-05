@@ -25,7 +25,16 @@ export function NavBar({ liveLabel, right, chips, homeHref = '/' }: Props) {
   const centered = !right;
   const hasSecondary = !!(liveLabel || chips);
   return (
-    <nav className={`casi-v9-nav${centered ? ' casi-v9-nav-centered' : ''}`}>
+    // data-paper="light" pins the chrome-derived tokens (--text-3, --on-ink,
+    // --line, ...) to their light-scheme formula regardless of whatever
+    // skin/dark-mode the signed-in streamer (or viewer-scoped SkinProvider)
+    // has set on <html> — Casi's own chrome is always the light scheme. See
+    // the --chrome-* comment in globals.css and the .casi-v9-nav rule,
+    // which shadows --ink/--paper to match.
+    <nav
+      className={`casi-v9-nav${centered ? ' casi-v9-nav-centered' : ''}`}
+      data-paper="light"
+    >
       <Link href={homeHref} className="casi-v9-nav-logo">
         <CasiMark />
         <Wordmark />

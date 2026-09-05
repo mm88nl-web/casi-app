@@ -49,20 +49,24 @@ export default function SolanaConfirmModal({
 
         {/* Details receipt */}
         <div style={{ background:'var(--ink-04)', borderRadius:10, padding:'14px 16px', marginBottom:16 }}>
+          {/* Signature redesign move: receipt LABELS (not the mono values
+              opposite them) read in Newsreader, matching the prototype's
+              "Ampere receives" / "{{balanceLabel}}" row treatment — same
+              re-skin-only pass as the rest of this component. */}
           {[['Slot on', `@${username}${IS_MAINNET ? '' : ' (devnet)'}`], ['Duration', formatTime(Math.round(duration * 60))], ['Rate', formatSlotPrice(slot, { prefer: 'usdc' }).label]].map(([l, v]) => (
             <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'var(--text-3)', marginBottom:6 }}>
-              <span>{l}</span><span style={{ color:'var(--text)' }}>{v}</span>
+              <span style={{ fontFamily:'var(--S)' }}>{l}</span><span style={{ color:'var(--text)' }}>{v}</span>
             </div>
           ))}
           {shortWallet && (
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'var(--text-3)', marginBottom:6 }}>
-              <span>Recipient</span>
+              <span style={{ fontFamily:'var(--S)' }}>Recipient</span>
               <span style={{ color:'var(--text)', fontFamily:"var(--font-casi-mono),monospace" }}>{shortWallet}</span>
             </div>
           )}
           <div style={{ borderTop:'1px solid var(--line)', margin:'10px 0' }} />
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--text-4)', marginBottom:8 }}>
-            <span>@{username} receives</span>
+            <span style={{ fontFamily:'var(--S)' }}>@{username} receives</span>
             <span style={{ color:'var(--text)', display:'inline-flex', alignItems:'center', gap:5 }}>
               <UsdcIcon size={11} />
               {parseFloat(estimatedCost).toFixed(2)} USDC <span style={{ color:'var(--ink)' }}>(100%)</span>
@@ -70,7 +74,7 @@ export default function SolanaConfirmModal({
           </div>
           <div style={{ borderTop:'1px solid var(--line)', margin:'6px 0 8px' }} />
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'var(--text-3)' }}>
-            <span>Total</span>
+            <span style={{ fontFamily:'var(--S)' }}>Total</span>
             <span style={{ fontSize:18, fontWeight:800, color:'var(--ink)', display:'inline-flex', alignItems:'center', gap:6 }}>
               <UsdcIcon size={16} />
               {estimatedCost} USDC
@@ -78,7 +82,7 @@ export default function SolanaConfirmModal({
           </div>
           {usdcBalance !== null && (
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginTop:8 }}>
-              <span style={{ color:'var(--text-4)' }}>Your balance</span>
+              <span style={{ fontFamily:'var(--S)', color:'var(--text-4)' }}>Your balance</span>
               <span style={{ color: hasInsufficient ? '#f87171' : 'var(--ink)', display:'inline-flex', alignItems:'center', gap:5 }}>
                 <UsdcIcon size={10} />
                 {usdcBalance.toFixed(2)} USDC{hasInsufficient ? ' — insufficient' : ''}

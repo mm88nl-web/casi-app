@@ -36,11 +36,13 @@ export default function CopyRow({ label, value, hint, variant = 'solid' }: CopyR
     <div>
       {label ? (
         <div
-          className="mb-1.5 block font-mono uppercase"
+          className="mb-2 block"
           style={{
-            fontSize: '10px',
-            letterSpacing: '0.15em',
-            color: 'var(--casi-text-faint)',
+            fontFamily: 'var(--B)',
+            fontWeight: 700,
+            fontSize: '15px',
+            letterSpacing: '-0.01em',
+            color: 'var(--text)',
           }}
         >
           {label}
@@ -50,15 +52,15 @@ export default function CopyRow({ label, value, hint, variant = 'solid' }: CopyR
       <div
         className="flex items-center gap-2.5"
         style={{
-          background: 'var(--casi-bg)',
-          border: '1px solid var(--casi-border-2)',
-          borderRadius: '9px',
-          padding: '10px 14px',
+          background: 'var(--surf-2)',
+          border: '1px solid var(--line)',
+          borderRadius: 'var(--radius-chip)',
+          padding: '11px 14px',
         }}
       >
         <span
-          className="flex-1 truncate font-mono"
-          style={{ fontSize: '12px', color: 'var(--casi-text-dim)', whiteSpace: 'nowrap' }}
+          className="flex-1 truncate"
+          style={{ fontFamily: 'var(--M)', fontSize: '13px', color: 'var(--text-2)', whiteSpace: 'nowrap' }}
           title={value}
         >
           {value}
@@ -66,16 +68,16 @@ export default function CopyRow({ label, value, hint, variant = 'solid' }: CopyR
         <button
           type="button"
           onClick={onCopy}
-          className="cursor-pointer whitespace-nowrap font-bold"
+          className="cursor-pointer whitespace-nowrap"
           style={{
-            padding: '6px 12px',
-            borderRadius: '6px',
-            background: solid ? 'var(--casi-accent)' : 'transparent',
-            color: solid ? '#050505' : 'var(--casi-accent)',
-            fontFamily: 'var(--font-casi-sans)',
-            fontWeight: 800,
-            fontSize: '11px',
-            border: solid ? 'none' : '1px solid rgba(var(--casi-accent-rgb), 0.3)',
+            padding: '8px 14px',
+            borderRadius: 'var(--radius-pill)',
+            background: solid ? 'var(--ink)' : 'transparent',
+            color: solid ? 'var(--on-ink)' : 'var(--ink)',
+            fontFamily: 'var(--B)',
+            fontWeight: 700,
+            fontSize: '13px',
+            border: solid ? 'none' : '1px solid var(--ink)',
           }}
           aria-label={copied ? 'Copied' : 'Copy to clipboard'}
         >
@@ -85,11 +87,12 @@ export default function CopyRow({ label, value, hint, variant = 'solid' }: CopyR
 
       {hint ? (
         <div
-          className="mt-1.5 font-mono uppercase"
+          className="mt-1.5"
           style={{
-            fontSize: '10px',
-            letterSpacing: '0.1em',
-            color: 'var(--casi-text-faint)',
+            fontFamily: 'var(--S)',
+            fontStyle: 'italic',
+            fontSize: '13px',
+            color: 'var(--text-3)',
           }}
         >
           {hint}

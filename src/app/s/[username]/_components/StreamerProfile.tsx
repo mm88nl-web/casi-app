@@ -12,7 +12,7 @@ import StreamPreview from './StreamPreview';
 import FlashesFeed, { type Flash } from './FlashesFeed';
 import { formatFiat } from '@/lib/currency';
 
-const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, is_live, skin, theme_color, ink_color, paper_color, settlement_currency';
+const PROFILE_COLS = 'id, username, display_name, bio, avatar_url, is_live, skin, theme_color, ink_color, paper_color, accent2_color, settlement_currency';
 const FLASH_COLS = 'id, created_at, viewer_name, status, message, amount_cents, payment_method';
 
 type Profile = {
@@ -26,6 +26,7 @@ type Profile = {
   theme_color: string | null;
   ink_color: string | null;
   paper_color: string | null;
+  accent2_color: string | null;
   settlement_currency: string | null;
 };
 
@@ -180,12 +181,13 @@ export default function ViewerBookingPage() {
   const { profile } = state;
 
   return (
-    <main className="min-h-screen" style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}>
+    <main className="min-h-screen skin-root" style={{ background: 'var(--casi-bg)', color: 'var(--casi-text)' }}>
       {/* Inherit the streamer's skin + theme colour — this overrides the user-picked skin for this page. */}
       <SkinProvider
         skin={profile.skin}
         inkColor={profile.skin === 'custom' ? (profile.ink_color ?? profile.theme_color) : null}
         paperColor={profile.skin === 'custom' ? profile.paper_color : null}
+        accent2Color={profile.skin === 'custom' ? profile.accent2_color : null}
       />
 
       {/* v7 nav. The live badge moved into StreamerBar (vb-head) since v7
@@ -236,7 +238,7 @@ function BookingHero({ username, isLive }: { username: string; isLive: boolean }
         padding: '32px 28px',
         background: 'var(--casi-surface)',
         border: '1px solid var(--casi-border-2)',
-        borderRadius: '12px',
+        borderRadius: 'var(--radius-card, 16px)',
         position: 'relative',
       }}
     >
@@ -267,7 +269,11 @@ function BookingHero({ username, isLive }: { username: string; isLive: boolean }
       </h2>
       <p
         style={{
-          fontSize: '14px',
+          // Signature redesign move: the descriptive line under a headline
+          // reads in Newsreader, matching the prototype's tagline/aside
+          // treatment instead of the body sans.
+          fontFamily: 'var(--S)',
+          fontSize: '15.5px',
           lineHeight: 1.55,
           color: 'var(--casi-text-mid)',
           marginBottom: '22px',
@@ -320,7 +326,8 @@ function BookingHero({ username, isLive }: { username: string; isLive: boolean }
           gap: '12px',
           padding: '14px 22px',
           background: 'var(--casi-accent)',
-          color: '#0a0a0a',
+          color: 'var(--on-ink)',
+          borderRadius: 'var(--radius-pill, 999px)',
           fontFamily: 'var(--font-casi-display), var(--font-casi-sans), sans-serif',
           fontSize: '12.5px',
           fontWeight: 700,

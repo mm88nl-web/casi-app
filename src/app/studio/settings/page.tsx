@@ -8,6 +8,7 @@ import Nav from '@/components/Nav';
 import WalletPill from '@/components/WalletPill';
 import SignOutButton from '@/components/SignOutButton';
 import SettingsLayout, { type RailGroup } from '@/components/settings/SettingsLayout';
+import SettingsSection from '@/components/settings/SettingsSection';
 import ProfileSection, { type ProfileRow } from '@/components/settings/ProfileSection';
 import PayoutsSection from '@/components/settings/PayoutsSection';
 import AppearanceSection from '@/components/settings/AppearanceSection';
@@ -92,17 +93,29 @@ export default function StudioSettingsPage() {
   }
 
   return (
-    <main className="min-h-screen" style={{ background: 'var(--paper, var(--casi-bg))', color: 'var(--text, var(--casi-text))' }}>
+    <main className="casi-studio-chrome min-h-screen">
+      {/* Same fixed-chrome + anti-FOUC rationale as StudioFrame.tsx — see
+          the comment there. /studio/settings has its own top-level <main>
+          (it doesn't render inside StudioFrame), so it needs its own copy
+          of both the wrapper class and this style tag. */}
+      <style jsx global>{`
+        html, body { background: var(--chrome-paper); }
+      `}</style>
+      {/* Prototype's header is logo, a plain link, the wallet pill — nothing
+          more. This nav previously also rendered a bordered "↩ Dashboard"
+          chip, a redundant "Settings" label announcing the page you're
+          already on, and a sign-out chip, none of which exist there.
+          Sign-out isn't gone — see the Account section at the bottom of
+          this page, using SignOutButton's `variant="block"` style, which
+          the component already had a doc comment describing as built
+          "for settings sections" but was never actually used there until
+          now. */}
       <Nav
         right={
           <>
-            <Link href="/studio" className="font-mono uppercase" style={navChipStyle()}>
-              ↩ Dashboard
+            <Link href="/studio" style={dashboardLinkStyle}>
+              ← Dashboard
             </Link>
-            <span className="font-mono uppercase" style={navChipStyle({ active: true })}>
-              Settings
-            </span>
-            <SignOutButton />
             <WalletPill />
           </>
         }
@@ -130,31 +143,31 @@ export default function StudioSettingsPage() {
           supabase={supabase}
           savedSolanaWallet={state.profile.solana_wallet ?? null}
         />
+        <SettingsSection title="Account" desc="Signed in as this streamer account.">
+          <SignOutButton variant="block" />
+        </SettingsSection>
       </SettingsLayout>
     </main>
   );
 }
 
-function navChipStyle({ active = false }: { active?: boolean } = {}): React.CSSProperties {
-  return {
-    fontSize: '11px',
-    fontWeight: 500,
-    color: active ? 'var(--ink, var(--casi-accent))' : 'var(--text-3, var(--casi-text-dim))',
-    background: active ? 'var(--ink-08)' : 'transparent',
-    border: `1px solid ${active ? 'var(--ink-22)' : 'var(--line, var(--casi-border))'}`,
-    padding: '5px 11px',
-    borderRadius: '6px',
-    textDecoration: 'none',
-    transition: 'color .14s',
-    fontFamily: 'inherit',
-  };
-}
+// Same plain-italic quiet-link treatment as StudioFrame's "Settings" link
+// and /search's "Log in" link — the prototype's header has no bordered
+// chips at all.
+const dashboardLinkStyle: React.CSSProperties = {
+  fontFamily: 'var(--S)',
+  fontStyle: 'italic',
+  fontSize: '16px',
+  color: 'var(--chrome-text-2)',
+  textDecoration: 'none',
+  whiteSpace: 'nowrap',
+};
 
 function StatusScreen({ children }: { children: React.ReactNode }) {
   return (
     <main
-      className="min-h-screen flex items-center justify-center"
-      style={{ background: 'var(--paper, var(--casi-bg))', color: 'var(--text-3, var(--casi-text-dim))' }}
+      className="casi-studio-chrome min-h-screen flex items-center justify-center"
+      style={{ background: 'var(--paper)', color: 'var(--text-3)' }}
     >
       <div className="font-mono uppercase" style={{ fontSize: '11px', letterSpacing: '0.2em' }}>
         {children}

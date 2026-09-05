@@ -158,11 +158,19 @@ export default function BeamCtrlPanel({
 
   const durMins = activeBooking ? Number(activeBooking.duration_minutes) : 0;
   const elapsed = activeBooking && liveSeconds !== null ? Math.max(0, durMins * 60 - liveSeconds) : 0;
-  const earnedSoFar = activeBooking
+  const earnedSoFarValue = activeBooking
     ? activeBooking.price_unit === 'min'
-      ? ((elapsed / 60) * activeBooking.price_value).toFixed(2)
-      : ((elapsed / 3600) * activeBooking.price_value).toFixed(2)
+      ? (elapsed / 60) * activeBooking.price_value
+      : (elapsed / 3600) * activeBooking.price_value
     : null;
+  // Currency-aware label — activeBooking can settle on either rail, and a
+  // bare "$" (the earlier version here) hardcoded USD/fiat-shaped text even
+  // for a USDC booking or a non-USD streamer. See AGENTS.md "Common
+  // gotchas" — never hardcode $/€, use fiatSymbol()/formatFiat().
+  const activeIsUsdc = activeBooking?.payment_method === 'usdc' || activeBooking?.payment_method === 'solana';
+  const earnedSoFar = earnedSoFarValue === null ? null : activeIsUsdc
+    ? `${earnedSoFarValue.toFixed(2)} USDC`
+    : `${fiatSymbol(stripeCurrency)}${earnedSoFarValue.toFixed(2)}`;
 
   // "Free" mode = every visible rail is 0. The earlier definition keyed on
   // rateUsd alone, which mis-detected USDC-only slots (where rateUsd is
@@ -553,8 +561,8 @@ export default function BeamCtrlPanel({
             {formatTime(liveSeconds)} left
           </span>
           {earnedSoFar && (
-            <span style={{ fontFamily: 'var(--M)', fontSize: 10, color: '#4ade80' }}>
-              ${earnedSoFar} earned
+            <span style={{ fontFamily: 'var(--M)', fontSize: 10, color: '#2f8f5b' }}>
+              {earnedSoFar} earned
             </span>
           )}
           <button
