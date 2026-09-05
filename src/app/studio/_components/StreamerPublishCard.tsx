@@ -59,19 +59,19 @@ export default function StreamerPublishCard({
   };
 
   return (
-    <section className="flex flex-col gap-2 rounded-lg border p-4" style={{ borderColor: 'var(--line)' }}>
-      <h3 className="font-mono uppercase text-sm" style={{ color: 'var(--ink)' }}>
+    <section className="casi-card flex flex-col gap-2" style={{ padding: '20px 22px' }}>
+      <h3 style={{ fontFamily: 'var(--B)', fontWeight: 700, fontSize: '17px', letterSpacing: '-0.01em', color: 'var(--text)' }}>
         Publish my own content
       </h3>
-      <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+      <p style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: '14px', color: 'var(--text-2)' }}>
         Puts an image/video straight on your overlay — no payment, no approval step, no
         time limit. Stays up until you publish something else, or a viewer&apos;s approved
         booking takes the slot back over.
       </p>
 
       <select
-        className="rounded border px-2 py-1 text-sm bg-transparent"
-        style={{ borderColor: 'var(--line)' }}
+        className="text-sm bg-transparent"
+        style={{ borderRadius: 'var(--radius-chip)', border: '1px solid var(--line)', padding: '8px 10px', fontFamily: 'var(--B)', color: 'var(--text)' }}
         value={elementId}
         onChange={(e) => setElementId(e.target.value)}
       >
@@ -98,8 +98,8 @@ export default function StreamerPublishCard({
         <input
           type="text"
           placeholder="Image or video URL"
-          className="rounded border px-2 py-1 text-sm bg-transparent"
-          style={{ borderColor: 'var(--line)' }}
+          className="text-sm bg-transparent"
+          style={{ borderRadius: 'var(--radius-chip)', border: '1px solid var(--line)', padding: '8px 10px', fontFamily: 'var(--M)', color: 'var(--text)' }}
           value={imageUrl}
           onChange={(e) => setImageUrl(e.target.value)}
         />
@@ -120,8 +120,8 @@ export default function StreamerPublishCard({
       )}
 
       <select
-        className="rounded border px-2 py-1 text-sm bg-transparent w-fit"
-        style={{ borderColor: 'var(--line)' }}
+        className="text-sm bg-transparent w-fit"
+        style={{ borderRadius: 'var(--radius-chip)', border: '1px solid var(--line)', padding: '8px 10px', fontFamily: 'var(--B)', color: 'var(--text)' }}
         value={fileType}
         onChange={(e) => setFileType(e.target.value as 'image' | 'video')}
         disabled={mode === 'upload'}
@@ -134,8 +134,8 @@ export default function StreamerPublishCard({
         type="button"
         disabled={!canPublish}
         onClick={() => onPublish(elementId, activeUrl, fileType, mode === 'upload' ? uploadedPath : null)}
-        className="rounded px-3 py-2 text-sm font-semibold disabled:opacity-40"
-        style={{ background: 'var(--ink)', color: 'var(--paper)' }}
+        className="casi-pill-solid disabled:opacity-40"
+        style={{ padding: '10px 18px', fontSize: '14px', alignSelf: 'flex-start' }}
       >
         {publishing ? 'Publishing...' : 'Publish now'}
       </button>

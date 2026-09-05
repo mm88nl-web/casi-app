@@ -7,15 +7,17 @@ import CopyRow from '@/components/CopyRow';
 function SourceNum({ n }: { n: number }) {
   return (
     <span
-      className="mr-2 inline-block align-middle text-center font-mono font-bold"
+      className="mr-2 inline-block align-middle text-center"
       style={{
-        width: '18px',
-        height: '18px',
-        lineHeight: '18px',
-        borderRadius: 0,
-        background: 'rgba(var(--casi-accent-rgb), 0.14)',
-        color: 'var(--casi-accent)',
-        fontSize: '10px',
+        width: '22px',
+        height: '22px',
+        lineHeight: '22px',
+        borderRadius: 'var(--radius-chip)',
+        background: 'rgba(192, 72, 48, 0.16)',
+        color: 'var(--accent)',
+        fontFamily: 'var(--M)',
+        fontWeight: 600,
+        fontSize: '12px',
       }}
     >
       {n}

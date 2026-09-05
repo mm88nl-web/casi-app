@@ -48,19 +48,20 @@ function ConnectedCard({ logo, title, meta, action, wrapMeta = false }: Connecte
       className="flex items-center justify-between gap-4"
       style={{
         padding: '14px 16px',
-        background: 'var(--surf, var(--casi-bg))',
-        border: '1px solid var(--line-2, var(--casi-border-2))',
-        borderRadius: 0,
+        background: 'var(--casi-surface-2, var(--surf-2))',
+        border: '1px solid var(--line, var(--casi-border))',
+        borderRadius: 'var(--radius-row)',
       }}
     >
       <div className="flex items-center gap-3.5 min-w-0">
         {logo}
         <div className="min-w-0">
           <div
-            className="font-semibold"
             style={{
-              fontFamily: 'var(--B), var(--font-casi-sans), sans-serif',
-              fontSize: '14px',
+              fontFamily: 'var(--B)',
+              fontWeight: 700,
+              fontSize: '17px',
+              letterSpacing: '-0.01em',
               color: 'var(--text, var(--casi-text))',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -70,17 +71,16 @@ function ConnectedCard({ logo, title, meta, action, wrapMeta = false }: Connecte
             {title}
           </div>
           <div
-            className="mt-0.5 font-mono uppercase"
+            className="mt-1"
             style={{
-              fontFamily: 'var(--M), var(--font-casi-mono), monospace',
-              fontSize: '10px',
-              letterSpacing: '0.1em',
-              color: 'var(--text-3, var(--casi-text-dim))',
+              fontFamily: 'var(--S)',
+              fontStyle: 'italic',
+              fontSize: '13px',
+              color: 'var(--text-2, var(--casi-text-dim))',
               overflow: wrapMeta ? 'visible' : 'hidden',
               textOverflow: wrapMeta ? 'clip' : 'ellipsis',
               whiteSpace: wrapMeta ? 'normal' : 'nowrap',
               lineHeight: wrapMeta ? 1.45 : undefined,
-              textTransform: wrapMeta ? 'none' : undefined,
             }}
           >
             {meta}
@@ -167,10 +167,10 @@ const STRIPE_LOGO = (
   <div
     className="flex shrink-0 items-center justify-center"
     style={{
-      width: '40px',
-      height: '40px',
-      borderRadius: 0,
-      background: 'var(--surf-2, var(--ink-04))',
+      width: '44px',
+      height: '44px',
+      borderRadius: 'var(--radius-chip)',
+      background: 'var(--casi-bg)',
       border: '1px solid var(--line)',
     }}
   >
@@ -182,10 +182,10 @@ const SOLANA_LOGO = (
   <div
     className="flex shrink-0 items-center justify-center"
     style={{
-      width: '40px',
-      height: '40px',
-      borderRadius: 0,
-      background: 'var(--surf-2, var(--ink-04))',
+      width: '44px',
+      height: '44px',
+      borderRadius: 'var(--radius-chip)',
+      background: 'var(--casi-bg)',
       border: '1px solid var(--line)',
     }}
   >
@@ -548,28 +548,14 @@ export default function PayoutsSection({
       <div
         className="mb-3.5 flex items-start gap-3"
         style={{
-          background: 'var(--ink-04)',
-          border: '1px solid var(--ink-22)',
-          borderRadius: 0,
-          padding: '12px 14px',
+          background: 'color-mix(in oklab, var(--ink) 6%, var(--paper))',
+          border: '1px solid color-mix(in oklab, var(--ink) 18%, var(--paper))',
+          borderRadius: 'var(--radius-row)',
+          padding: '14px 16px',
         }}
       >
-        <div
-          className="flex shrink-0 items-center justify-center font-mono font-semibold"
-          style={{
-            width: '22px',
-            height: '22px',
-            borderRadius: 0,
-            background: 'var(--ink-14)',
-            color: 'var(--ink, var(--casi-accent2))',
-            fontSize: '12px',
-            marginTop: '1px',
-          }}
-        >
-          ♦
-        </div>
-        <div style={{ fontFamily: 'var(--B), var(--font-casi-sans), sans-serif', fontSize: '12.5px', lineHeight: 1.5, color: 'var(--text-3, var(--casi-text-mid))' }}>
-          <strong style={{ color: 'var(--text, var(--casi-text))' }}>
+        <div style={{ fontFamily: 'var(--S)', fontSize: '15px', lineHeight: 1.5, color: 'var(--text-2)' }}>
+          <strong style={{ fontFamily: 'var(--B)', fontStyle: 'normal', fontWeight: 700, color: 'var(--text)' }}>
             Casi never holds your money.
           </strong>{' '}
           Card payments flow directly to your Stripe account. USDC sits in an on-chain escrow contract
@@ -584,8 +570,8 @@ export default function PayoutsSection({
 
       {walletErr && (
         <div
-          className="mt-2 font-mono"
-          style={{ fontSize: '10px', color: '#ef4444' }}
+          className="mt-2"
+          style={{ fontFamily: 'var(--M)', fontSize: '12px', color: '#ef4444' }}
         >
           ✕ {walletErr}
         </div>

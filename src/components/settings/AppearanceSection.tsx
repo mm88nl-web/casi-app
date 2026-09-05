@@ -156,8 +156,7 @@ export default function AppearanceSection({
             warning={accent2Warning}
           />
           <div
-            className="font-mono uppercase"
-            style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--casi-text-faint)', marginTop: 4 }}
+            style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 13, color: 'var(--casi-text-faint)', marginTop: 6 }}
           >
             Tip: a bright Paper switches the dashboard to light mode automatically.
           </div>
@@ -174,16 +173,17 @@ export default function AppearanceSection({
           href={overlayHref}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-2 font-mono uppercase"
+          className="inline-flex items-center gap-2"
           style={{
-            marginTop: 10,
-            padding: '8px 12px',
-            borderRadius: 0,
-            background: 'var(--casi-bg)',
+            marginTop: 12,
+            padding: '9px 14px',
+            borderRadius: 'var(--radius-pill)',
+            background: 'transparent',
             border: '1px solid var(--casi-border-2)',
-            color: 'var(--casi-text)',
-            fontSize: 10,
-            letterSpacing: '0.15em',
+            color: 'var(--casi-text-mid)',
+            fontFamily: 'var(--B)',
+            fontWeight: 600,
+            fontSize: 13,
             textDecoration: 'none',
           }}
         >
@@ -268,21 +268,19 @@ function ColorPickerRow({
         <div
           aria-hidden
           style={{
-            width: 36, height: 36, flexShrink: 0,
-            borderRadius: 8,
+            width: 40, height: 40, flexShrink: 0,
+            borderRadius: 'var(--radius-chip)',
             background: value,
-            border: '1px solid rgba(255,255,255,0.15)',
-            boxShadow: `0 0 8px ${value}60`,
+            border: '1px solid var(--line-2)',
           }}
         />
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--casi-text)', lineHeight: 1.2 }}>
+          <div style={{ fontFamily: 'var(--B)', fontWeight: 700, fontSize: 17, color: 'var(--casi-text)', lineHeight: 1.2, letterSpacing: '-0.01em' }}>
             {label}
           </div>
           <div
-            className="font-mono uppercase"
-            style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--casi-text-dim)', marginTop: 2 }}
+            style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 13, color: 'var(--casi-text-dim)', marginTop: 3 }}
           >
             {desc}
           </div>
@@ -292,16 +290,17 @@ function ColorPickerRow({
           type="text"
           value={textVal}
           maxLength={7}
-          className="font-mono"
           style={{
-            width: 82,
-            fontSize: 11,
-            padding: '7px 8px',
-            borderRadius: 6,
+            width: 104,
+            fontFamily: 'var(--M)',
+            fontSize: 13,
+            padding: '10px 12px',
+            borderRadius: 'var(--radius-chip)',
             background: 'var(--casi-bg)',
             border: `1px solid ${warning ? '#C04830' : 'var(--casi-border-2)'}`,
             color: 'var(--casi-text)',
             outline: 'none',
+            textTransform: 'uppercase',
           }}
           onChange={(e) => {
             const raw = e.target.value;
@@ -325,10 +324,9 @@ function ColorPickerRow({
               aria-pressed={active}
               onClick={() => { onChange(hex); setTextVal(hex); }}
               style={{
-                width: 20, height: 20, borderRadius: 6,
+                width: 26, height: 26, borderRadius: 8,
                 background: hex,
-                border: active ? '2px solid var(--casi-text)' : '1px solid rgba(255,255,255,0.15)',
-                boxShadow: active ? '0 0 0 2px rgba(255,255,255,0.15)' : 'none',
+                border: active ? '2px solid var(--casi-text)' : '1px solid var(--casi-border-2)',
                 cursor: 'pointer', padding: 0,
               }}
             />
@@ -351,14 +349,13 @@ function ColorPickerRow({
 function SubHeading({ title, hint }: { title: string; hint?: string }) {
   return (
     <div
-      className="font-semibold"
-      style={{ fontSize: 13, color: 'var(--casi-text)', marginBottom: 8 }}
+      style={{ fontFamily: 'var(--B)', fontWeight: 700, fontSize: 15, letterSpacing: '-0.01em', color: 'var(--casi-text)', marginBottom: 10 }}
     >
       {title}
       {hint && (
         <span
-          className="ml-2 font-mono uppercase"
-          style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--casi-text-dim)' }}
+          className="ml-2"
+          style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontWeight: 400, fontSize: 13, color: 'var(--casi-text-dim)' }}
         >
           {hint}
         </span>
@@ -372,8 +369,7 @@ function Divider() {
     <div
       style={{
         height: 1,
-        background: 'var(--casi-border-2)',
-        opacity: 0.5,
+        background: 'var(--chrome-line, var(--casi-border-2))',
         margin: '20px 0 16px',
       }}
     />
@@ -381,12 +377,19 @@ function Divider() {
 }
 
 function PreviewTile() {
+  // .casi-live-skin re-derives --ink/--paper/--casi-accent*/--on-ink etc
+  // from the streamer's ACTUAL, currently-selected skin (see the block
+  // comment on that class in globals.css) — the one deliberate exception
+  // to studio chrome staying fixed. Without it, this preview would just
+  // show chrome green-on-cream regardless of which skin is picked, since
+  // it sits inside the chrome-pinned settings page.
   return (
     <div
+      className="casi-live-skin"
       style={{
         position: 'relative',
         width: '100%',
-        borderRadius: 0,
+        borderRadius: 'var(--radius-card)',
         overflow: 'hidden',
         background: 'var(--paper, var(--casi-bg))',
         border: '1px solid var(--casi-border-2)',
@@ -403,7 +406,7 @@ function PreviewTile() {
       >
         <span
           style={{
-            display: 'inline-block', width: 8, height: 8, borderRadius: 0,
+            display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
             background: 'var(--ink, var(--casi-accent))',
           }}
         />
@@ -434,7 +437,7 @@ function PreviewTile() {
             position: 'absolute',
             left: 16, top: 16,
             width: 100, height: 78,
-            borderRadius: 0,
+            borderRadius: 12,
             background: 'rgba(0,0,0,0.30)',
             border: '2px solid var(--ink, var(--casi-accent))',
             boxShadow: '0 0 18px rgba(var(--casi-accent-rgb), 0.45)',
@@ -448,15 +451,18 @@ function PreviewTile() {
         >
           beam ◉
         </div>
+        {/* Live badge — state colour (accent2), per the skin contract:
+            "accent2 = live pips, Live badge fill + paper text". This tile
+            previously used --ink here, which is wrong for any skin whose
+            accent2 is a genuinely different hue from its ink. */}
         <div
           style={{
             position: 'absolute',
             right: 14, top: 18,
             padding: '5px 10px',
             borderRadius: 999,
-            background: 'rgba(var(--casi-accent-rgb), 0.12)',
-            border: '1px solid rgba(var(--casi-accent-rgb), 0.35)',
-            color: 'var(--ink, var(--casi-accent))',
+            background: 'var(--casi-accent2, var(--ink))',
+            color: 'var(--paper, var(--casi-bg))',
             fontFamily: 'var(--font-casi-mono), monospace',
             fontSize: 9,
             letterSpacing: '0.15em',
@@ -470,7 +476,7 @@ function PreviewTile() {
             position: 'absolute',
             right: 14, bottom: 14,
             padding: '7px 12px',
-            borderRadius: 0,
+            borderRadius: 999,
             background: 'var(--ink, var(--casi-accent))',
             color: 'var(--on-ink, #0a0a0a)',
             fontFamily: 'var(--font-casi-sans)',

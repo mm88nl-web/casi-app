@@ -8,6 +8,19 @@ export type QueueItem = {
   kind: 'beam' | 'flash';
   name: string;
   subtitle: string;
+  /** Viewer display name alone (no snippet/duration baked in) — feeds the
+   *  card's avatar initial + handle line. Falls back to parsing `name` on
+   *  " · " when omitted, for any caller that hasn't been updated. */
+  who?: string;
+  /** "waiting 40s" / "waiting 2m" — same source as `subtitle`'s time-ago
+   *  segment, phrased to match the design handoff's card copy. */
+  waitingLabel?: string;
+  /** The message snippet / file-type descriptor on its own, without the
+   *  viewer name prefix — rendered as the card's request-text line. */
+  requestText?: string;
+  /** "5 min · square" style trailing meta (duration + shape/rail), shown
+   *  under the request text. */
+  metaLine?: string;
   /** Which rail this row settles on — drives the inline rail icon next to
    *  the price. 'usdc' covers both 'usdc' and 'solana' payment_methods. */
   rail?: 'usdc' | 'stripe' | null;
@@ -47,10 +60,15 @@ type Props = {
 };
 
 /**
- * v7 .q-r.beam / .q-r.flash flat-row list. The kind shows as a 3px
- * left-border rail (accent for beams, "live" green for flashes — both
- * the same teal in Casi Dark, but the alpha differs to keep them
- * visually distinct). Filter tabs from v3 dropped to match v7.
+ * "Waiting" queue — a stack of rounded cards, one per pending request,
+ * matching the design_handoff prototype (avatar initial + handle + italic
+ * "wants … · waiting Ns" meta + amount, thumbnail + request text + duration
+ * meta, then a quiet outline Deny next to a solid Approve — kept as "Deny"
+ * rather than the prototype's "Decline" label, matching the app's own
+ * established copy (denyBooking(), onDeny/onReject). Behaviour
+ * is untouched from the earlier flat-row version: same props, same
+ * payment-gating on Approve, same preview-on-click, same pendingIds/
+ * readOnly handling.
  */
 export default function ApprovalQueue({
   items,
@@ -62,75 +80,35 @@ export default function ApprovalQueue({
   emptyLabel,
 }: Props) {
   return (
-    <section className="flex flex-col">
-      <style>{`
-        .casi-q-r {
-          display: flex; align-items: center; gap: 14px;
-          padding: 13px 16px;
-          border-bottom: 1px solid var(--casi-border);
-          border-left: 3px solid transparent;
-          transition: background .12s, border-color .12s;
-        }
-        .casi-q-r:last-child { border-bottom: none; }
-        .casi-q-r:hover { background: rgba(255,255,255,0.01); }
-        .casi-q-r.beam { border-left-color: rgba(var(--casi-accent-rgb), 0.35); }
-        .casi-q-r.flash { border-left-color: rgba(var(--casi-accent-rgb), 0.15); }
-        .casi-q-no:hover { border-color: rgba(239,68,68,0.3) !important; color: #f87171 !important; }
-      `}</style>
-
+    <section className="flex flex-col" style={{ gap: '12px' }}>
       <div
-        className="font-mono uppercase flex items-center"
-        style={{
-          gap: '8px',
-          fontSize: '11px',
-          fontWeight: 600,
-          color: 'var(--casi-text-mid)',
-          letterSpacing: '0.08em',
-          paddingBottom: '10px',
-        }}
+        className="flex items-baseline"
+        style={{ gap: '10px' }}
       >
-        <span>Pending approval</span>
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minWidth: '18px',
-            height: '18px',
-            padding: '0 5px',
-            borderRadius: 0,
-            background: 'rgba(var(--casi-accent-rgb), 0.12)',
-            color: 'var(--casi-accent)',
-            fontFamily: 'var(--font-casi-mono), monospace',
-            fontSize: '10px',
-          }}
-        >
-          {items.length}
-        </span>
+        <div style={{ fontFamily: 'var(--H)', fontWeight: 800, fontVariationSettings: '"opsz" 64', fontSize: '24px', letterSpacing: '-0.02em', color: 'var(--text)' }}>
+          Waiting
+        </div>
+        <div className="casi-meta-italic" style={{ fontSize: '15px' }}>
+          {items.length} waiting
+        </div>
       </div>
 
-      <div
-        style={{
-          border: '1px solid var(--line)',
-          borderRadius: 0,
-          background: 'var(--surf)',
-          overflow: 'hidden',
-        }}
-      >
-        {items.length === 0 ? (
-          <div
-            className="font-mono uppercase text-center"
-            style={{
-              padding: '32px 16px',
-              fontSize: '10px',
-              letterSpacing: '0.15em',
-              color: 'var(--casi-text-faint)',
-            }}
-          >
+      {items.length === 0 ? (
+        <div
+          style={{
+            border: `1px dashed var(--line-2)`,
+            borderRadius: 'var(--radius-panel)',
+            padding: '26px',
+            textAlign: 'center',
+          }}
+        >
+          <span className="casi-meta-italic" style={{ fontSize: '15px' }}>
             {emptyLabel ?? 'Nothing waiting'}
-          </div>
-        ) : (
-          items.map(item => {
+          </span>
+        </div>
+      ) : (
+        <div className="flex flex-col" style={{ gap: '10px' }}>
+          {items.map(item => {
             const ro = item.readOnly ?? readOnly;
             const isPending = pendingIds?.has(item.id) ?? false;
             // Gate Approve on real payment. Both bookings and flashes pass
@@ -138,8 +116,18 @@ export default function ApprovalQueue({
             // for any future caller that omits it.
             const paid = item.paymentConfirmed !== false;
             const previewable = !!onPreview && !ro;
+
+            // Fall back to parsing `name`/`subtitle` for any caller that
+            // hasn't been updated to pass the split fields — keeps this
+            // component working even if a future consumer only sets the
+            // original two strings.
+            const who = item.who ?? item.name.split(' · ')[0] ?? item.name;
+            const waitingLabel = item.waitingLabel ?? item.subtitle;
+            const requestText = item.requestText ?? item.name.split(' · ').slice(1).join(' · ');
+            const initial = (who || '?').trim().slice(0, 1).toUpperCase();
+
             return (
-              <div key={item.id} className={`casi-q-r ${item.kind}`}>
+              <div key={item.id} className="casi-card" style={{ padding: '16px' }}>
                 <button
                   type="button"
                   onClick={previewable ? () => onPreview!(item.id) : undefined}
@@ -148,121 +136,128 @@ export default function ApprovalQueue({
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '14px',
-                    flex: 1,
-                    minWidth: 0,
+                    gap: '12px',
+                    width: '100%',
                     padding: 0,
                     border: 'none',
                     background: 'transparent',
                     color: 'inherit',
                     textAlign: 'left',
                     cursor: previewable ? 'zoom-in' : 'default',
-                    fontFamily: 'inherit',
                   }}
                 >
+                  <span
+                    aria-hidden
+                    style={{
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '999px',
+                      background: 'var(--ink)',
+                      color: 'var(--on-ink)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontFamily: 'var(--M)',
+                      fontWeight: 600,
+                      fontSize: '12px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {initial}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      className="truncate"
+                      style={{ fontFamily: 'var(--B)', fontWeight: 700, fontSize: '17px', letterSpacing: '-0.01em', color: 'var(--text)' }}
+                    >
+                      {who}
+                    </div>
+                    <div className="truncate casi-meta-italic" style={{ fontSize: '14px', marginTop: '3px' }}>
+                      {waitingLabel}
+                      {!paid ? (
+                        <>
+                          <span style={{ opacity: 0.5, margin: '0 6px' }}>·</span>
+                          <span style={{ color: '#c08a12', fontStyle: 'normal' }}>awaiting payment</span>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: 'var(--M)',
+                      fontWeight: 600,
+                      fontSize: '15px',
+                      color: 'var(--text-2)',
+                      whiteSpace: 'nowrap',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {item.rail ? <RailIcon method={item.rail} size={12} /> : null}
+                    {item.priceLabel}
+                  </div>
+                </button>
+
+                <div className="flex" style={{ gap: '12px', marginTop: '13px' }}>
                   <QueueThumb
                     mediaUrl={item.mediaUrl}
                     fileType={item.fileType}
                     shape={item.shape}
                     kind={item.kind}
                   />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      className="truncate"
-                      style={{
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        color: 'var(--casi-text)',
-                        marginBottom: '2px',
-                      }}
-                    >
-                      {item.name}
-                    </div>
-                    <div
-                      className="truncate"
-                      style={{ fontSize: '11.5px', color: 'var(--casi-text-mid)' }}
-                    >
-                      {item.subtitle}
-                      {!paid ? (
-                        <>
-                          <span style={{ opacity: 0.4, margin: '0 6px' }}>·</span>
-                          <span style={{ color: '#eab308' }}>awaiting payment</span>
-                        </>
-                      ) : null}
-                    </div>
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '6px' }}>
+                    {requestText ? (
+                      <div className="truncate" style={{ fontFamily: 'var(--S)', fontSize: '15px', color: 'var(--text)' }}>
+                        {requestText}
+                      </div>
+                    ) : null}
+                    {item.metaLine ? (
+                      <div className="casi-meta-italic truncate" style={{ fontSize: '13px' }}>
+                        {item.metaLine}
+                      </div>
+                    ) : null}
                   </div>
-                </button>
-                <div
-                  style={{
-                    fontFamily: 'var(--M), var(--font-casi-mono), monospace',
-                    fontSize: '14px',
-                    color: 'var(--ink)',
-                    whiteSpace: 'nowrap',
-                    marginRight: '4px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
-                  {item.rail ? <RailIcon method={item.rail} size={12} /> : null}
-                  {item.priceLabel}
                 </div>
-                {ro ? (
-                  // Read-only mode: no inline action button. Streamer needs
-                  // full studio controls (different tab / refresh) to act.
-                  null
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => onApprove?.(item.id)}
-                      disabled={isPending || !paid}
-                      title={paid ? 'Approve' : 'Awaiting viewer payment — refresh in a moment'}
-                      style={{
-                        padding: '7px 13px',
-                        borderRadius: 0,
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        background: paid ? 'rgba(var(--casi-accent-rgb), 0.07)' : 'transparent',
-                        border: `1px solid ${paid ? 'rgba(var(--casi-accent-rgb), 0.22)' : 'var(--casi-border)'}`,
-                        color: paid ? 'var(--casi-accent)' : 'var(--casi-text-faint)',
-                        cursor: isPending ? 'wait' : (paid ? 'pointer' : 'not-allowed'),
-                        opacity: isPending ? 0.5 : 1,
-                        fontFamily: 'inherit',
-                        transition: 'background .14s',
-                      }}
-                    >
-                      {isPending ? '…' : (paid ? 'Approve' : 'Awaiting payment')}
-                    </button>
+
+                {ro ? null : (
+                  <div className="flex" style={{ gap: '8px', marginTop: '14px' }}>
                     <button
                       type="button"
                       onClick={() => onReject?.(item.id)}
                       disabled={isPending}
                       title={`Deny · ${item.priceLabel} refunded`}
-                      className="casi-q-no"
-                      style={{
-                        padding: '7px 11px',
-                        borderRadius: 0,
-                        fontSize: '12px',
-                        fontWeight: 500,
-                        background: 'transparent',
-                        border: '1px solid var(--casi-border-2)',
-                        color: 'var(--casi-text-dim)',
-                        cursor: isPending ? 'wait' : 'pointer',
-                        opacity: isPending ? 0.5 : 1,
-                        fontFamily: 'inherit',
-                        transition: 'all .14s',
-                      }}
+                      className="casi-pill-ghost"
+                      style={{ flex: 1, height: '44px', fontSize: '15px', opacity: isPending ? 0.5 : 1, cursor: isPending ? 'wait' : 'pointer' }}
                     >
+                      {/* "Deny" (not the prototype's "Decline") — matches
+                          the app's own established copy; look changed,
+                          copy didn't. */}
                       Deny
                     </button>
-                  </>
+                    <button
+                      type="button"
+                      onClick={() => onApprove?.(item.id)}
+                      disabled={isPending || !paid}
+                      title={paid ? 'Approve' : 'Awaiting viewer payment — refresh in a moment'}
+                      className="casi-pill-solid"
+                      style={{
+                        flex: 2,
+                        height: '44px',
+                        fontSize: '15px',
+                        cursor: isPending ? 'wait' : (paid ? 'pointer' : 'not-allowed'),
+                      }}
+                    >
+                      {isPending ? '…' : (paid ? 'Approve' : 'Awaiting payment')}
+                    </button>
+                  </div>
                 )}
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
     </section>
   );
 }
@@ -287,15 +282,15 @@ function QueueThumb({
   kind: 'beam' | 'flash';
 }) {
   const baseTile: React.CSSProperties = {
-    width: '40px',
-    height: '40px',
-    borderRadius: 0,
+    width: '96px',
+    height: '66px',
+    borderRadius: 'var(--radius-chip)',
     background: 'var(--casi-surface-2)',
     border: '1px solid var(--casi-border)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '14px',
+    fontSize: '18px',
     color: 'var(--casi-accent)',
     flexShrink: 0,
     overflow: 'hidden',

@@ -14,15 +14,16 @@ export default function GhostButton({ variant = 'default', className, style, chi
   return (
     <button
       {...rest}
-      className={`font-mono uppercase transition-colors${className ? ` ${className}` : ''}`}
+      className={`transition-colors${className ? ` ${className}` : ''}`}
       style={{
-        padding: '8px 14px',
-        borderRadius: 0,
+        padding: '10px 16px',
+        borderRadius: 'var(--radius-pill)',
         background: 'transparent',
-        border: `1px solid ${danger ? 'rgba(239, 68, 68, 0.25)' : 'var(--casi-border-2)'}`,
-        color: danger ? '#f87171' : 'var(--casi-text-dim)',
-        fontSize: '11px',
-        letterSpacing: '0.12em',
+        border: `1px solid ${danger ? 'rgba(239, 68, 68, 0.3)' : 'var(--line-2)'}`,
+        color: danger ? '#dc4a3a' : 'var(--text-2)',
+        fontFamily: 'var(--B)',
+        fontWeight: 600,
+        fontSize: '14px',
         cursor: 'pointer',
         alignSelf: 'flex-start',
         ...style,

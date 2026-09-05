@@ -37,21 +37,25 @@ export default function StudioWelcome({ profileId }: Props) {
   return (
     <div className="casi-studio-welcome">
       <style>{`
-        /* Apothecary palette scoped to this banner so it always reads as
-           the onboarding surface regardless of the streamer's chosen skin. */
+        /* Chrome palette scoped to this banner so it always reads as the
+           onboarding surface regardless of the streamer's chosen skin —
+           already matched the fixed chrome hex 1:1 before this pass; now
+           sourced from --chrome-* directly instead of re-declaring the
+           same hex locally. */
         .casi-studio-welcome {
-          --sw-paper:  #f5e1d2;
-          --sw-surf:   #ede0cf;
-          --sw-line:   rgba(34, 26, 20, 0.12);
-          --sw-ink:    #294b3c;
-          --sw-accent: #c04830;
-          --sw-type:   #221a14;
-          --sw-type2:  #6a574b;
-          --sw-type3:  #8a7a5a;
+          --sw-paper:  var(--chrome-paper);
+          --sw-surf:   var(--chrome-surf-2);
+          --sw-line:   var(--chrome-border);
+          --sw-ink:    var(--chrome-ink);
+          --sw-accent: var(--chrome-accent);
+          --sw-type:   var(--chrome-text);
+          --sw-type2:  var(--chrome-text-2);
+          --sw-type3:  var(--chrome-text-3);
 
           position: relative;
           background: var(--sw-surf);
           border: 1px solid var(--sw-line);
+          border-radius: var(--radius-panel);
           padding: 22px 26px 26px;
           display: flex;
           flex-direction: column;
@@ -91,12 +95,12 @@ export default function StudioWelcome({ profileId }: Props) {
           flex-shrink: 0;
           background: transparent;
           border: 1px solid var(--sw-line);
+          border-radius: var(--radius-pill);
           color: var(--sw-type3);
-          font-family: var(--M);
-          font-size: 10px;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-          padding: 7px 12px;
+          font-family: var(--B);
+          font-weight: 600;
+          font-size: 13px;
+          padding: 8px 14px;
           cursor: pointer;
           transition: color 0.14s, border-color 0.14s;
         }
@@ -118,6 +122,7 @@ export default function StudioWelcome({ profileId }: Props) {
         .casi-studio-welcome-card {
           background: var(--sw-paper);
           border: 1px solid var(--sw-line);
+          border-radius: var(--radius-card);
           padding: 16px 16px 18px;
           display: flex;
           flex-direction: column;

@@ -99,9 +99,9 @@ export default function EndStreamDialog({ open, onClose, counts, delegate, progr
         style={{
           width: '100%',
           maxWidth: '460px',
-          background: 'var(--casi-surface)',
-          border: '1px solid var(--casi-border-2)',
-          borderRadius: '14px',
+          background: 'var(--casi-bg)',
+          border: '1px solid var(--casi-border)',
+          borderRadius: 'var(--radius-panel)',
           padding: '24px',
           color: 'var(--casi-text)',
         }}
@@ -109,16 +109,17 @@ export default function EndStreamDialog({ open, onClose, counts, delegate, progr
         <div
           id="end-stream-dialog-title"
           style={{
-            fontFamily: 'var(--font-casi-display), var(--font-casi-sans), sans-serif',
+            fontFamily: 'var(--H)',
             fontWeight: 800,
-            fontSize: '20px',
-            letterSpacing: '0.3px',
-            marginBottom: '6px',
+            fontVariationSettings: '"opsz" 64',
+            fontSize: '26px',
+            letterSpacing: '-0.025em',
+            marginBottom: '8px',
           }}
         >
           End stream?
         </div>
-        <div style={{ fontSize: '13px', color: 'var(--casi-text-mid)', lineHeight: 1.5 }}>
+        <div style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: '15px', color: 'var(--casi-text-mid)', lineHeight: 1.5 }}>
           This will end every active beam (prorated refund to viewers),
           deny pending requests, and clear the queue. Viewers always get
           their funds back — Solana queue refunds may finalize when the
@@ -142,15 +143,16 @@ export default function EndStreamDialog({ open, onClose, counts, delegate, progr
         <div
           style={{
             marginTop: '16px',
-            padding: '10px 12px',
-            borderRadius: '8px',
+            padding: '12px 14px',
+            borderRadius: 'var(--radius-row)',
             background: delegate === 'healthy'
-              ? 'rgba(var(--casi-accent-rgb), 0.05)'
-              : 'rgba(234, 179, 8, 0.06)',
-            border: `1px solid ${delegate === 'healthy' ? 'rgba(var(--casi-accent-rgb), 0.18)' : 'rgba(234, 179, 8, 0.22)'}`,
-            fontSize: '12px',
-            color: delegate === 'healthy' ? 'var(--casi-accent)' : '#eab308',
-            lineHeight: 1.45,
+              ? 'color-mix(in oklab, var(--ink) 6%, var(--paper))'
+              : 'rgba(234, 179, 8, 0.08)',
+            border: `1px solid ${delegate === 'healthy' ? 'color-mix(in oklab, var(--ink) 18%, var(--paper))' : 'rgba(234, 179, 8, 0.25)'}`,
+            fontFamily: 'var(--B)',
+            fontSize: '13px',
+            color: delegate === 'healthy' ? 'var(--casi-accent)' : '#8a6414',
+            lineHeight: 1.5,
           }}
         >
           {delegate === 'healthy' ? (
@@ -218,17 +220,12 @@ export default function EndStreamDialog({ open, onClose, counts, delegate, progr
             type="button"
             onClick={onClose}
             disabled={running}
+            className="casi-pill-ghost"
             style={{
-              padding: '8px 14px',
-              borderRadius: 0,
-              border: '1px solid var(--casi-border-2)',
-              background: 'transparent',
-              color: 'var(--casi-text-mid)',
-              fontSize: '12px',
-              fontWeight: 600,
+              padding: '11px 18px',
+              fontSize: '15px',
               cursor: running ? 'not-allowed' : 'pointer',
               opacity: running ? 0.4 : 1,
-              fontFamily: 'inherit',
             }}
           >
             Cancel
@@ -238,16 +235,16 @@ export default function EndStreamDialog({ open, onClose, counts, delegate, progr
             onClick={handleConfirm}
             disabled={running || confirming}
             style={{
-              padding: '8px 16px',
-              borderRadius: 0,
-              border: '1px solid rgba(239, 68, 68, 0.4)',
-              background: 'rgba(239, 68, 68, 0.08)',
-              color: '#f87171',
-              fontSize: '12px',
+              padding: '11px 20px',
+              borderRadius: 'var(--radius-pill)',
+              border: 'none',
+              background: 'var(--accent)',
+              color: 'var(--on-accent)',
+              fontFamily: 'var(--B)',
+              fontSize: '15px',
               fontWeight: 700,
               cursor: running || confirming ? 'wait' : 'pointer',
               opacity: running || confirming ? 0.7 : 1,
-              fontFamily: 'inherit',
             }}
           >
             {running ? 'Ending…' : 'End stream'}
@@ -270,24 +267,26 @@ function CountTile({ label, value, highlight = false }: { label: string; value: 
   return (
     <div
       style={{
-        padding: '10px 12px',
-        borderRadius: '8px',
-        background: highlight ? 'rgba(var(--casi-accent-rgb), 0.06)' : 'var(--casi-surface-2)',
-        border: `1px solid ${highlight ? 'rgba(var(--casi-accent-rgb), 0.18)' : 'var(--casi-border)'}`,
+        padding: '11px 13px',
+        borderRadius: 'var(--radius-chip)',
+        background: highlight ? 'color-mix(in oklab, var(--accent) 8%, var(--paper))' : 'var(--casi-surface-2)',
+        border: `1px solid ${highlight ? 'color-mix(in oklab, var(--accent) 22%, var(--paper))' : 'var(--casi-border)'}`,
       }}
     >
       <div
         className="font-mono uppercase"
-        style={{ fontSize: '10px', letterSpacing: '0.12em', color: 'var(--casi-text-mid)', marginBottom: '3px' }}
+        style={{ fontSize: '11px', letterSpacing: '0.12em', color: 'var(--casi-text-mid)', marginBottom: '6px' }}
       >
         {label}
       </div>
       <div
         style={{
-          fontFamily: 'var(--font-casi-display), var(--font-casi-sans), sans-serif',
+          fontFamily: 'var(--H)',
           fontWeight: 700,
-          fontSize: '20px',
-          color: highlight ? 'var(--casi-accent)' : 'var(--casi-text)',
+          fontVariationSettings: '"opsz" 64',
+          fontSize: '26px',
+          letterSpacing: '-0.02em',
+          color: highlight ? 'var(--accent)' : 'var(--casi-text)',
           lineHeight: 1,
         }}
       >

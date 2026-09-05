@@ -29,8 +29,9 @@ export default function SkinPicker() {
             <div
               className="font-mono uppercase"
               style={{
-                fontSize: 9,
-                letterSpacing: '0.18em',
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: '0.12em',
                 color: 'var(--casi-text-faint)',
                 marginLeft: 2,
               }}
@@ -51,10 +52,10 @@ export default function SkinPicker() {
                     onClick={() => setSkinId(skin.id)}
                     className="flex items-center gap-3 transition-colors"
                     style={{
-                      padding: '10px 12px',
+                      padding: '11px 13px',
                       background: active ? ACTIVE_FILL : 'var(--casi-bg)',
                       border: `1px solid ${active ? ACTIVE_BORDER : 'var(--casi-border-2)'}`,
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-card)',
                       cursor: 'pointer',
                       textAlign: 'left',
                     }}
