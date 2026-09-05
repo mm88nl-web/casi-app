@@ -4,7 +4,6 @@ import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { NavBar } from '@/components/v9';
 import WalletPill from '@/components/WalletPill';
-import SignOutButton from '@/components/SignOutButton';
 
 type StudioFrameProps = {
   /** Streamer handle, e.g. "@droptv" — rendered with leading "@" inside. */
@@ -50,12 +49,15 @@ export default function StudioFrame({
       `}</style>
       <NavBar
         chips={
-          <>
-            <Link href="/studio/settings" title="Profile, payouts, appearance" style={chipStyle()}>
-              ⚙ Settings
-            </Link>
-            <SignOutButton />
-          </>
+          // Prototype's header is three things: logo, a plain Settings
+          // link, the wallet pill -- no gear glyph, no separate sign-out
+          // control. Sign-out isn't dropped, just de-duplicated: it's
+          // already a real control inside /studio/settings (see
+          // SignOutButton there), so having a second copy of it in every
+          // studio screen's top bar was redundant, not load-bearing.
+          <Link href="/studio/settings" title="Profile, payouts, appearance" style={settingsLinkStyle}>
+            Settings
+          </Link>
         }
         right={<WalletPill />}
       />
@@ -224,21 +226,17 @@ export default function StudioFrame({
   );
 }
 
-function chipStyle({ active = false }: { active?: boolean } = {}): CSSProperties {
-  return {
-    fontFamily: 'var(--M)',
-    fontSize: '10.5px',
-    fontWeight: 500,
-    letterSpacing: '0.04em',
-    color: active ? 'var(--ink)' : 'var(--text-3)',
-    background: active ? 'var(--ink-08)' : 'transparent',
-    border: `1px solid ${active ? 'color-mix(in oklab, var(--ink) 30%, var(--paper))' : 'var(--line)'}`,
-    padding: '7px 12px',
-    borderRadius: '6px',
-    textDecoration: 'none',
-    transition: 'color .14s, border-color .14s',
-  };
-}
+// Prototype's "Settings" nav link: plain italic Newsreader text, no
+// border/background -- same quiet-secondary-link treatment as /search's
+// "Log in" link (src/app/search/page.tsx .login-link).
+const settingsLinkStyle: CSSProperties = {
+  fontFamily: 'var(--S)',
+  fontStyle: 'italic',
+  fontSize: '16px',
+  color: 'var(--chrome-text-2)',
+  textDecoration: 'none',
+  whiteSpace: 'nowrap',
+};
 
 function ModeTab({
   href,
