@@ -2277,16 +2277,23 @@ function OverlayContent() {
         .beam-banner-track  { display:inline-block; padding-left:100%; color:var(--casi-accent); font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
         .ov { min-height:100vh; background:${isOBS?'transparent':'var(--casi-bg)'}; color:var(--casi-text); font-family:var(--font-casi-sans),sans-serif; }
 
-        .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid var(--casi-surface); background:color-mix(in srgb,var(--casi-bg) 94%,transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
-        .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; }
-        .ov-wm { font-size:18px; font-weight:800; color:var(--casi-accent); letter-spacing:-0.5px; }
+        /* Casi's own nav chrome (bar fill/hairline, logo, viewer-name pill)
+           is pinned to the fixed --chrome-* palette below, NOT the active
+           streamer skin's --casi-bg/--casi-accent/--ink-70/etc — same rule
+           as the shared .casi-v9-nav in globals.css (see the long comment
+           above --chrome-* there). .notif just below stays on the mutable
+           accent tokens on purpose: it's a moderation-state toast (queued/
+           denied/approved), not chrome, and correctly follows the skin. */
+        .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid color-mix(in oklab, var(--chrome-ink) 8%, var(--chrome-paper)); background:color-mix(in srgb, var(--chrome-paper) 94%, transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
+        .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; --ink:var(--chrome-ink); --paper:var(--chrome-paper); }
+        .ov-wm { font-size:18px; font-weight:800; color:var(--chrome-ink); letter-spacing:-0.5px; }
         .ov-nav-right { display:flex; align-items:center; gap:10px; }
         .notif { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:springPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
-        .viewer-chip { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.04); border:1px solid var(--casi-border); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
-        .viewer-chip:hover { border-color:var(--border-strong); }
-        .vdot { width:6px; height:6px; border-radius:50%; background:var(--casi-accent); animation:blink 1.5s infinite; flex-shrink:0; }
-        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:var(--ink-70); }
-        .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid rgba(var(--casi-accent-rgb),0.31); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--casi-text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
+        .viewer-chip { display:flex; align-items:center; gap:6px; background:color-mix(in oklab, var(--chrome-ink) 4%, var(--chrome-paper)); border:1px solid color-mix(in oklab, var(--chrome-ink) 18%, var(--chrome-paper)); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
+        .viewer-chip:hover { border-color:color-mix(in oklab, var(--chrome-ink) 34%, var(--chrome-paper)); }
+        .vdot { width:6px; height:6px; border-radius:50%; background:var(--chrome-ink); animation:blink 1.5s infinite; flex-shrink:0; }
+        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:color-mix(in oklab, var(--chrome-ink) 70%, var(--chrome-paper)); }
+        .name-edit-input { background:color-mix(in oklab, var(--chrome-ink) 4%, var(--chrome-paper)); border:1px solid color-mix(in oklab, var(--chrome-ink) 34%, var(--chrome-paper)); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--chrome-text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
 
         /* ov-layout: 2-col grid wrapper (desktop only). Separates canvas/feeds
            (left col, <main>) from slots/booking (right col, .ov-booking-col).
@@ -2323,11 +2330,19 @@ function OverlayContent() {
           color: var(--text-3, rgba(255,255,255,0.45));
         }
 
-        .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
+        .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:var(--radius-card, 16px); padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
         .my-beams-lbl { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; }
         .my-beams-list { display:flex; flex-wrap:wrap; gap:8px; }
-        .beam-chip { display:flex; align-items:center; gap:8px; border-radius:10px; padding:8px 12px; border:1px solid; font-size:12px; }
-        .cancel-btn { background:none; border:none; font-family:var(--font-casi-mono),monospace; font-size:9px; color:rgba(248,113,113,0.5); cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:color .2s; padding:0; margin-left:4px; }
+        .beam-chip { display:flex; align-items:center; gap:8px; border-radius:var(--radius-row, 14px); padding:8px 12px; border:1px solid; font-size:12px; }
+        /* Signature redesign move: the quiet "end early / cancel / recover"
+           action inside a beam chip reads as an italic Newsreader link
+           (matches the prototype's "end early"/"cancel" treatment) instead
+           of a mono uppercase caps label — this is what the prototype
+           calls the thing that makes secondary actions read warm rather
+           than technical. Colour is untouched (red/purple stay universal
+           status semantics, not brand — same precedent as the amber/purple
+           chip fills above). */
+        .cancel-btn { background:none; border:none; font-family:var(--S); font-style:italic; font-size:11.5px; color:rgba(248,113,113,0.6); cursor:pointer; text-decoration:underline; text-decoration-color:rgba(248,113,113,0.35); text-underline-offset:2px; transition:color .2s; padding:0; margin-left:4px; }
         .cancel-btn:hover { color:#f87171; }
 
         .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:var(--paper-2); position:relative; z-index:0; overflow:hidden; margin-bottom:10px; --line: rgba(255,255,255,0.06); }
@@ -3109,7 +3124,7 @@ function OverlayContent() {
             {/* Activity history — always last */}
             {!selectedSlot && username && (
               <div style={{ marginTop: 24 }}>
-                <MyTransactionsSection rows={myHistory} username={username} />
+                <MyTransactionsSection rows={myHistory} username={username} streamerCurrency={profile?.settlement_currency ?? null} />
               </div>
             )}
           </div>

@@ -34,24 +34,49 @@
      handoff says app chrome (nav, /studio, and the marketing landing page)
      must never follow a streamer's skin; this is that guarantee. Landing
      (src/app/page.tsx) is wired to these as of this pass.
-     Discovered while building that pass, NOT fixed here (out of scope —
-     would touch NavBar/studio chrome broadly, not just typography +
-     landing): the shared nav classes below (.casi-v9-nav etc.) still read
-     the mutable --ink/--paper directly, and BOTH `UserSkinProvider`
-     (mounted around the whole app in Providers.tsx, so it runs on every
-     page) and `DevTweaksPanel` (dev-only, defaults to the old teal/black
-     v9 scheme on every mount) write to those same two roots. A returning
-     streamer who has ever picked a skin in Settings → Appearance — or
-     anyone loading the app in `next dev` — will see that skin's colors on
-     the nav bar and any other surface still reading bare --ink/--paper,
-     contradicting AGENTS.md's "app chrome deliberately does NOT follow the
-     skin." Confirmed live while testing this pass: the very first render
-     of the redesigned landing (before it was pinned to --chrome-*) came
-     back teal-on-black from DevTweaksPanel's stale defaults instead of
-     Casi Light. Migrating nav/studio chrome to --chrome-* the same way is
-     a reasonable follow-up. Values match the Casi Light defaults above
-     1:1 today — declared separately so a future skin mutation can never
-     leak into them. */
+     Discovered while building that pass: the shared nav classes below
+     (.casi-v9-nav etc.) used to read the mutable --ink/--paper directly,
+     and BOTH `UserSkinProvider` (mounted around the whole app in
+     Providers.tsx, so it runs on every page) and `DevTweaksPanel` (dev-
+     only, defaults to the old teal/black v9 scheme on every mount) write
+     to those same two roots. A returning streamer who has ever picked a
+     skin in Settings → Appearance — or anyone loading the app in
+     `next dev` — would see that skin's colors on the nav bar and any
+     other surface still reading bare --ink/--paper, contradicting
+     AGENTS.md's "app chrome deliberately does NOT follow the skin."
+     Confirmed live while testing the landing-page pass: the very first
+     render of the redesigned landing (before it was pinned to
+     --chrome-*) came back teal-on-black from DevTweaksPanel's stale
+     defaults instead of Casi Light.
+
+     FIXED in the viewer-redesign pass: .casi-v9-nav / .casi-v9-marquee /
+     .casi-v9-foot now shadow --ink/--paper to --chrome-ink/--chrome-paper
+     on themselves (see each rule below), the same trick the landing page
+     uses on .casi-landing — every token derived from --ink/--paper in
+     :root (--line, --surf, --on-ink, --text*, the v7 --casi-* aliases,
+     even CasiMark's `fill="var(--paper)"` cutout) is stored as an
+     unresolved var() reference and re-resolves against whatever cascades
+     to the element actually USING it, not wherever it was declared — so
+     shadowing the two roots on the nav/marquee/footer container is
+     enough to pin their entire subtree. The one extra thing each of
+     those three also needs is a literal `data-paper="light"` attribute
+     on the same DOM node (see NavBar.tsx / Marquee.tsx / Footer.tsx) —
+     unlike --ink/--paper, `[data-paper="light"]` is a plain attribute
+     selector, not an inherited custom property, and several of the
+     derived tokens above (--text-3, --on-ink, --line, ...) read a
+     completely different color-mix direction depending on it. Since
+     Casi's own chrome is always the light scheme, that attribute has to
+     be forced on chrome's own root node rather than left to whatever
+     <html> currently carries for the streamer's own (possibly dark)
+     skin. `Nav.tsx` (the /s/[username] nav) and overlay/page.tsx's own
+     hand-rolled `.ov-nav` bits (logo + viewer-name pill; WalletPill is
+     self-pinned) got the same treatment directly at their call sites
+     since they don't share these CSS classes. Studio's OWN chrome
+     (StudioFrame.tsx header/tabs, EarningsBar, etc.) has this exact same
+     latent exposure and is NOT fixed here — out of scope for this pass,
+     left for whoever owns src/app/studio/**. Values match the Casi Light
+     defaults above 1:1 today — declared separately so a future skin
+     mutation can never leak into them. */
   --chrome-ink:    #294b3c;
   --chrome-paper:  #f5e1d2;
   --chrome-accent: #c04830;
@@ -147,6 +172,10 @@
 
 /* Nav */
 .casi-v9-nav {
+  /* Chrome pin — see the long comment above --chrome-* in :root. Also
+     needs data-paper="light" on the same <nav> element (NavBar.tsx). */
+  --paper: var(--chrome-paper);
+  --ink:   var(--chrome-ink);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -268,6 +297,10 @@
 
 /* Marquee */
 .casi-v9-marquee {
+  /* Chrome pin — see the long comment above --chrome-* in :root. Also
+     needs data-paper="light" on the same element (Marquee.tsx). */
+  --paper: var(--chrome-paper);
+  --ink:   var(--chrome-ink);
   display: flex;
   overflow: hidden;
   white-space: nowrap;
@@ -305,6 +338,10 @@
 
 /* Footer */
 .casi-v9-foot {
+  /* Chrome pin — see the long comment above --chrome-* in :root. Also
+     needs data-paper="light" on the same element (Footer.tsx). */
+  --paper: var(--chrome-paper);
+  --ink:   var(--chrome-ink);
   display: flex;
   align-items: center;
   justify-content: space-between;

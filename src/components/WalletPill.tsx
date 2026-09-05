@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
@@ -13,6 +13,16 @@ import { useWalletBalances } from '@/lib/wallet-balances';
 import UsdcIcon from './icons/UsdcIcon';
 import SolanaIcon from './icons/SolanaIcon';
 
+// Shadows --ink/--paper to the fixed --chrome-* palette on whichever root
+// element carries it, so every var(--ink)/var(--paper) (and everything
+// derived from them — --surf, --line, --on-ink, --text*) inside this
+// component's CSS resolves to Casi's own chrome instead of the active
+// streamer skin mutating <html>. Always pair with data-paper="light" on
+// the same element — see the --chrome-* comment in globals.css.
+const CHROME_SCOPE: CSSProperties = {
+  ['--ink' as string]: 'var(--chrome-ink)',
+  ['--paper' as string]: 'var(--chrome-paper)',
+} as CSSProperties;
 
 const CSS = `
   /* Disconnected CTA — v9 inverse-ink slab. Same palette as the v9
@@ -282,7 +292,18 @@ export default function WalletPill() {
     return (
       <>
         <style>{CSS}</style>
-        <button className="wp-connect" onClick={openWalletModal} disabled={connecting}>
+        {/* data-paper="light" + the --ink/--paper shadow pin this to Casi's
+            fixed chrome palette — README calls the wallet/balance pill out
+            by name as chrome that never follows the active streamer skin,
+            wherever it's mounted (nav, /overlay, /studio/settings). See the
+            --chrome-* comment in globals.css for the mechanism. */}
+        <button
+          className="wp-connect"
+          data-paper="light"
+          style={CHROME_SCOPE}
+          onClick={openWalletModal}
+          disabled={connecting}
+        >
           <SolanaIcon size={12} />
           {connecting ? 'Connecting…' : 'Connect Wallet'}
         </button>
@@ -299,7 +320,18 @@ export default function WalletPill() {
   return (
     <>
       <style>{CSS}</style>
-      <div className={`wp-row${dropOpen ? ' open' : ''}`} ref={rowRef}>
+      {/* Chrome pin — see the comment on the disconnected .wp-connect button
+          above. The dropdown (.wp-drop) is `position: fixed` for viewport
+          placement but stays a JSX/DOM child of .wp-row below, so it
+          inherits this shadow + data-paper via normal CSS custom-property
+          inheritance — fixed positioning only affects layout, not the DOM
+          tree custom properties cascade through. */}
+      <div
+        className={`wp-row${dropOpen ? ' open' : ''}`}
+        data-paper="light"
+        style={CHROME_SCOPE}
+        ref={rowRef}
+      >
 
         <div className="wp-net">
           <span className="wp-net-dot" />
