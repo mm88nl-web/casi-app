@@ -44,6 +44,41 @@ const CSS = `
   .wp-connect:hover { filter: brightness(1.1); }
   .wp-connect:disabled { opacity: 0.6; cursor: not-allowed; }
 
+  /* Mobile deeplink picker — single .wp-connect button (below) reveals this
+     panel rather than showing every wallet's anchor inline in the nav.
+     Matches the prototype: one "Connect wallet" pill, tap opens a small
+     list of wallet rows. */
+  .wp-picker-wrap { position: relative; display: inline-block; }
+  .wp-picker-panel {
+    position: fixed; min-width: 220px;
+    background: var(--surf);
+    border: 1px solid var(--line-2);
+    overflow: hidden;
+    z-index: 9999;
+    box-shadow: 0 20px 50px color-mix(in oklab, var(--paper) 60%, black);
+    animation: wp-drop-in .14s ease;
+  }
+  .wp-picker-head {
+    padding: 12px 16px 10px;
+    font-family: var(--M);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--text-4);
+    border-bottom: 1px solid var(--line);
+  }
+  .wp-picker-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 13px 16px;
+    font-family: var(--B);
+    font-size: 13.5px; font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+    border-bottom: 1px solid var(--line);
+    transition: background .12s;
+  }
+  .wp-picker-row:last-child { border-bottom: none; }
+  .wp-picker-row:hover { background: var(--ink-04); }
+
   /* Connected pill — three segments separated by --line dividers,
      ink-04 wash on the network segment, sharp corners. Mirrors v9
      .wlt-btn / .wlt-net / .wlt-balance / .wlt-identity. */
@@ -233,6 +268,32 @@ export default function WalletPill() {
   useEffect(() => { setUseDeeplink(needsMobileHandoff()); }, []);
   const rowRef = useRef<HTMLDivElement>(null);
 
+  // Disconnected + mobile-deeplink picker panel — single button (below)
+  // toggles this, rather than the old always-visible two-anchor row. Must
+  // be declared unconditionally alongside the other hooks above since the
+  // disconnected branch returns early.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerPos, setPickerPos] = useState<{ top: number; right: number }>({ top: 56, right: 12 });
+  const pickerWrapRef = useRef<HTMLDivElement>(null);
+
+  const openPicker = () => {
+    if (pickerWrapRef.current) {
+      const rect = pickerWrapRef.current.getBoundingClientRect();
+      setPickerPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    }
+    setPickerOpen(o => !o);
+  };
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (pickerWrapRef.current && !pickerWrapRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   // Wallet Standard auto-registers Phantom into `wallet` on page load. Only
   // call connect() in response to a user click — never silently.
   const userInitiatedConnect = useRef(false);
@@ -278,13 +339,29 @@ export default function WalletPill() {
 
   /* ── Disconnected ── */
   if (!isConnected || !effectivePublicKey) {
-    // See WalletNav for rationale. Mobile-not-in-wallet-browser users get a
-    // small picker of .wp-connect anchors, one per supported deeplink wallet.
+    // Mobile-not-in-wallet-browser users still get exactly ONE button here —
+    // matches the prototype, which never shows more than one "Connect
+    // wallet" pill in the nav regardless of platform. Tapping it reveals a
+    // small panel with the real per-wallet deeplink anchors (still genuine
+    // <a href> elements from MobileWalletPicker, so the Android
+    // user-gesture requirement for opening a wallet app via deeplink is
+    // preserved — only the reveal step changed, not the anchors themselves).
     if (useDeeplink && typeof window !== 'undefined') {
       return (
         <>
           <style>{CSS}</style>
-          <MobileWalletPicker anchorClassName="wp-connect" />
+          <div className="wp-picker-wrap" data-paper="light" style={CHROME_SCOPE} ref={pickerWrapRef}>
+            <button type="button" className="wp-connect" onClick={openPicker} aria-expanded={pickerOpen}>
+              <SolanaIcon size={12} />
+              Connect Wallet
+            </button>
+            {pickerOpen ? (
+              <div className="wp-picker-panel" style={{ top: pickerPos.top, right: pickerPos.right }}>
+                <div className="wp-picker-head">Connect a wallet</div>
+                <MobileWalletPicker anchorClassName="wp-picker-row" stacked />
+              </div>
+            ) : null}
+          </div>
         </>
       );
     }

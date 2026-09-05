@@ -5,7 +5,7 @@ import { getFiatConfig, fiatSymbol, stripeMinAmount, toStripeAmount } from '@/li
 import ShapePresetsPanel from './ShapePresetsPanel';
 import { formatTime, getSecondsRemaining } from './time';
 
-type Tab = 'properties' | 'pricing' | 'behavior';
+type Tab = 'properties' | 'pricing';
 
 function RailRow({
   glyph,
@@ -35,6 +35,16 @@ function RailRow({
    *  to zero is misleading. */
   disabled?: boolean;
 }) {
+  // Explicit +/− stepper buttons — matches the design-source prototype's
+  // Rate control instead of relying on the browser's native (small,
+  // inconsistent-across-browsers) number-input spinner.
+  const bump = (delta: number) => {
+    const n = parseFloat(value);
+    const base = Number.isFinite(n) ? n : 0;
+    const next = Math.max(0, base + delta);
+    onChange(String(Math.round(next * 100) / 100));
+  };
+
   return (
     <div className="casi-v9-rail-row" style={disabled ? { opacity: 0.45 } : undefined}>
       <span className="casi-v9-rail-glyph">{glyph}</span>
@@ -42,33 +52,60 @@ function RailRow({
         {name}
         <small>{sub}</small>
       </span>
-      <input
-        type="number"
-        min={0}
-        step={step}
-        value={value}
-        placeholder={placeholder}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className="casi-v9-rail-input"
-        style={disabled ? { cursor: 'not-allowed' } : undefined}
-      />
+      <div className="casi-v9-rail-stepper">
+        <button
+          type="button"
+          className="casi-v9-rail-step"
+          disabled={disabled}
+          onClick={() => bump(-step)}
+          aria-label={`Decrease ${name} rate`}
+        >
+          −
+        </button>
+        <input
+          type="number"
+          min={0}
+          step={step}
+          value={value}
+          placeholder={placeholder}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+          className="casi-v9-rail-input"
+          style={disabled ? { cursor: 'not-allowed' } : undefined}
+        />
+        <button
+          type="button"
+          className="casi-v9-rail-step"
+          disabled={disabled}
+          onClick={() => bump(step)}
+          aria-label={`Increase ${name} rate`}
+        >
+          +
+        </button>
+      </div>
       <span className="casi-v9-rail-unit">/{unit}</span>
     </div>
   );
 }
 
-/* v9 Properties panel — three tabs (Properties / Pricing / Behavior).
- * Used inline by /admin and inside .casi-v9-cp-wrap on /studio/live.
+/* v9 Properties panel — two tabs (Properties / Pricing). Mounted inside
+ * .casi-v9-cp-wrap on /studio/live; the caller renders the slot's identity
+ * header (label + inline delete link) above this panel — see
+ * StudioLiveEditor.tsx — so BeamCtrlPanel only owns the tab controls.
  *
  * Distributes the existing controls into v9's tabs:
- *   - Properties: Shape pills.
- *   - Pricing:    Price + unit + free toggle + Save.
- *   - Behavior:   Glow on start + Lock toggle.
+ *   - Properties: Shape pills + Lock toggle.
+ *   - Pricing:    Per-rail rate + mode pills (minute/hour/free) + duration.
  *
- * The Done + Delete buttons live below the tabs (v9 .cp-done / .cp-del).
- * The active-booking strip stays at the very bottom — it's a status row,
- * not a control, and shouldn't move when tabs change.
+ * There used to be a third Behavior tab (glow-on-start + lock) — glow was
+ * removed per user request (every beam just glows now, matching the
+ * pre-existing `el.glow_on_start ?? true` fallback everywhere it's read:
+ * overlay/page.tsx, obs/page.tsx) and Lock moved in here so a two-tab panel
+ * doesn't need its own tab for one toggle.
+ *
+ * The Done button lives below the tabs (v9 .cp-done). The active-booking
+ * strip stays at the very bottom — it's a status row, not a control, and
+ * shouldn't move when tabs change.
  */
 export default function BeamCtrlPanel({
   el,
@@ -76,11 +113,9 @@ export default function BeamCtrlPanel({
   updateSlider, // eslint-disable-line @typescript-eslint/no-unused-vars
   updateLayer,
   toggleLock,
-  deleteLayer,
   kickBeam,
   onDone,
   onUpdateShape,
-  onUpdateGlow,
   stripeCurrency = 'usd',
 }: {
   el: any;
@@ -88,11 +123,9 @@ export default function BeamCtrlPanel({
   updateSlider: (id: string, updates: any) => void;
   updateLayer: (id: string, updates: any) => void;
   toggleLock: (id: string, locked: boolean) => void;
-  deleteLayer: (id: string) => void;
   kickBeam: (booking: any) => void;
   onDone: () => void;
   onUpdateShape?: (id: string, shape: string, extra?: { corner_radius?: number; clip_path_svg?: string | null }) => void;
-  onUpdateGlow?: (id: string, glow: boolean) => void;
   /** Stripe Connect's default currency (lowercase ISO-4217) for this
    *  streamer. Drives the Stripe row on the slot Pricing tab — the rate
    *  input is in whatever Stripe will actually charge in, eliminating the
@@ -182,7 +215,6 @@ export default function BeamCtrlPanel({
     return Number.isFinite(n) ? n : 0;
   };
   const beamFree = numOr0(rateFiat) === 0 && numOr0(rateUsdc) === 0;
-  const glowOn = el.glow_on_start ?? true;
 
   const saveRates = () => {
     const num = (s: string) => {
@@ -241,13 +273,6 @@ export default function BeamCtrlPanel({
           className={`casi-v9-cp-tab${tab === 'pricing' ? ' casi-v9-on' : ''}`}
         >
           Pricing
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('behavior')}
-          className={`casi-v9-cp-tab${tab === 'behavior' ? ' casi-v9-on' : ''}`}
-        >
-          Behavior
         </button>
       </div>
 
@@ -329,6 +354,22 @@ export default function BeamCtrlPanel({
               </>
             );
           })()}
+
+          <div className="casi-v9-cp-row" style={{ marginTop: 4 }}>
+            <span className="casi-v9-cp-lbl">Lock position</span>
+            <button
+              type="button"
+              onClick={() => toggleLock(el.id, !el.locked)}
+              className={`casi-v9-shape-b${el.locked ? ' casi-v9-on' : ''}`}
+              style={
+                el.locked
+                  ? { background: '#f87171', borderColor: '#f87171', color: 'var(--paper)' }
+                  : undefined
+              }
+            >
+              {el.locked ? '🔒 Locked' : '🔓 Unlocked'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -368,43 +409,85 @@ export default function BeamCtrlPanel({
               disabled={beamFree}
             />
           </div>
-          <div className="casi-v9-cp-row">
-            <span className="casi-v9-cp-lbl">Per</span>
-            <select
-              value={editUnit}
-              onChange={(e) => setEditUnit(e.target.value)}
-              className="casi-v9-cp-input"
-              style={{ width: 'auto' }}
+          {/* Rate mode — unit + free-tier as one segmented pill row, matching
+              the design-source prototype's [per minute] [per hour]
+              [Make free] group instead of a separate unit <select> and a
+              standalone Free-tier row below. */}
+          <div className="casi-v9-shape-btns">
+            <button
+              type="button"
+              onClick={() => setEditUnit('min')}
+              className={`casi-v9-shape-b${editUnit === 'min' && !beamFree ? ' casi-v9-on' : ''}`}
             >
-              <option value="min">/ minute</option>
-              <option value="hr">/ hour</option>
-            </select>
+              Per minute
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditUnit('hr')}
+              className={`casi-v9-shape-b${editUnit === 'hr' && !beamFree ? ' casi-v9-on' : ''}`}
+            >
+              Per hour
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (beamFree) {
+                  // Coming back from free → restore whatever the streamer
+                  // last had pre-free. Falls back to '1' across the board
+                  // only when no snapshot exists (e.g. the slot was
+                  // already free in the DB at load time).
+                  const prev = preFreeRatesRef.current;
+                  setRateFiat(prev?.fiat ?? '1');
+                  setRateUsdc(prev?.usdc ?? '1');
+                  preFreeRatesRef.current = null;
+                } else {
+                  // Going free → snapshot current rates so un-toggling
+                  // restores them, then zero everything.
+                  preFreeRatesRef.current = { fiat: rateFiat, usdc: rateUsdc };
+                  setRateFiat('0');
+                  setRateUsdc('0');
+                }
+              }}
+              className={`casi-v9-shape-b${beamFree ? ' casi-v9-on' : ''}`}
+              style={{
+                background: beamFree ? '#4ade80' : undefined,
+                borderColor: beamFree ? '#4ade80' : undefined,
+                color: beamFree ? 'var(--paper)' : undefined,
+              }}
+            >
+              {beamFree ? '★ Free' : 'Make free'}
+            </button>
           </div>
+
+          {/* Duration bounds — Min/Max grouped in one compact row, matching
+              the prototype's side-by-side MIN/MAX fields instead of two
+              stacked full-width rows. */}
           <div className="casi-v9-cp-row">
-            <span className="casi-v9-cp-lbl">Min duration</span>
-            <input
-              type="number"
-              min={0}
-              step={0.5}
-              placeholder="—"
-              value={minMin}
-              onChange={(e) => setMinMin(e.target.value)}
-              className="casi-v9-cp-input"
-              style={{ width: 80, textAlign: 'right' }}
-            />
-          </div>
-          <div className="casi-v9-cp-row">
-            <span className="casi-v9-cp-lbl">Max duration</span>
-            <input
-              type="number"
-              min={0}
-              step={0.5}
-              placeholder="—"
-              value={maxMin}
-              onChange={(e) => setMaxMin(e.target.value)}
-              className="casi-v9-cp-input"
-              style={{ width: 80, textAlign: 'right' }}
-            />
+            <span className="casi-v9-cp-lbl">Duration</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="number"
+                min={0}
+                step={0.5}
+                placeholder="Min"
+                value={minMin}
+                onChange={(e) => setMinMin(e.target.value)}
+                className="casi-v9-cp-input"
+                style={{ width: 60, textAlign: 'right' }}
+              />
+              <span style={{ color: 'var(--text-4)', fontSize: 11 }}>–</span>
+              <input
+                type="number"
+                min={0}
+                step={0.5}
+                placeholder="Max"
+                value={maxMin}
+                onChange={(e) => setMaxMin(e.target.value)}
+                className="casi-v9-cp-input"
+                style={{ width: 60, textAlign: 'right' }}
+              />
+              <span className="casi-v9-rail-unit">min</span>
+            </div>
           </div>
 
           {/* Quiet inline hint when the per-minute rate falls below Stripe's
@@ -434,38 +517,6 @@ export default function BeamCtrlPanel({
               </div>
             );
           })()}
-          <div className="casi-v9-cp-row">
-            <span className="casi-v9-cp-lbl">Free tier</span>
-            <button
-              type="button"
-              onClick={() => {
-                if (beamFree) {
-                  // Coming back from free → restore whatever the streamer
-                  // last had pre-free. Falls back to '1' across the board
-                  // only when no snapshot exists (e.g. the slot was
-                  // already free in the DB at load time).
-                  const prev = preFreeRatesRef.current;
-                  setRateFiat(prev?.fiat ?? '1');
-                  setRateUsdc(prev?.usdc ?? '1');
-                  preFreeRatesRef.current = null;
-                } else {
-                  // Going free → snapshot current rates so un-toggling
-                  // restores them, then zero everything.
-                  preFreeRatesRef.current = { fiat: rateFiat, usdc: rateUsdc };
-                  setRateFiat('0');
-                  setRateUsdc('0');
-                }
-              }}
-              className={`casi-v9-shape-b${beamFree ? ' casi-v9-on' : ''}`}
-              style={{
-                background: beamFree ? '#4ade80' : undefined,
-                borderColor: beamFree ? '#4ade80' : undefined,
-                color: beamFree ? 'var(--paper)' : undefined,
-              }}
-            >
-              {beamFree ? '★ Free' : '★ Make free'}
-            </button>
-          </div>
           <button
             type="button"
             onClick={saveRates}
@@ -482,46 +533,11 @@ export default function BeamCtrlPanel({
         </div>
       )}
 
-      {/* Behavior — glow + lock + active strip */}
-      {tab === 'behavior' && (
-        <div className="casi-v9-cp-pane">
-          {onUpdateGlow && (
-            <div className="casi-v9-cp-row">
-              <span className="casi-v9-cp-lbl">Glow on start</span>
-              <button
-                type="button"
-                onClick={() => onUpdateGlow(el.id, !glowOn)}
-                className={`casi-v9-shape-b${glowOn ? ' casi-v9-on' : ''}`}
-              >
-                {glowOn ? '✦ On' : '○ Off'}
-              </button>
-            </div>
-          )}
-          <div className="casi-v9-cp-row">
-            <span className="casi-v9-cp-lbl">Lock position</span>
-            <button
-              type="button"
-              onClick={() => toggleLock(el.id, !el.locked)}
-              className={`casi-v9-shape-b${el.locked ? ' casi-v9-on' : ''}`}
-              style={
-                el.locked
-                  ? { background: '#f87171', borderColor: '#f87171', color: 'var(--paper)' }
-                  : undefined
-              }
-            >
-              {el.locked ? '🔒 Locked' : '🔓 Unlocked'}
-            </button>
-          </div>
-        </div>
-      )}
 
       <hr className="casi-v9-cp-sep" />
 
       <button type="button" onClick={onDone} className="casi-v9-cp-done">
         Done
-      </button>
-      <button type="button" onClick={() => deleteLayer(el.id)} className="casi-v9-cp-del">
-        Delete slot
       </button>
 
       {/* Active booking strip — stays below the tabs as a status row. */}

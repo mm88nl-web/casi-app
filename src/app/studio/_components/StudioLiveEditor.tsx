@@ -237,10 +237,6 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
     await updateLayer(id, patch);
   }, [elements, updateLayer]);
 
-  const handleUpdateGlow = useCallback((id: string, glow: boolean) => {
-    updateLayer(id, { glow_on_start: glow });
-  }, [updateLayer]);
-
   const toggleLock = useCallback(async (id: string, locked: boolean) => {
     let prevEl: any = null;
     setElements((prev) => prev.map((el) => {
@@ -339,7 +335,16 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
   }, [supabase]);
 
   // Layers panel data — derived from elements + slotState.
+  //
+  // Labels are sequential ("Beam 1", "Beam 2", …) rather than shape-derived
+  // ("Rect", "Circle") — matches the design-source prototype and gives a
+  // streamer with multiple slots of the same shape a way to tell them apart
+  // at a glance. Purely a display label recomputed from z-order on every
+  // render — not persisted, so it's safe to shift when a slot is added,
+  // reordered, or deleted. The shape glyph in the row (LayerIcon) still
+  // reflects the real shape independently of this label.
   const layers: LayerItem[] = useMemo(() => {
+    let beamNumber = 0;
     return elements.map((el) => {
       const live = slotState[el.id] === 'active';
       const queued = slotState[el.id] === 'queued';
@@ -349,14 +354,11 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
       // USDC-only and EUR-only slots as "$0/min" or hides them. The
       // helper falls back to price_value for slots predating the JSONB.
       const price = formatSlotPrice(el).label;
+      const label = el.is_background ? 'Backdrop' : `Beam ${++beamNumber}`;
       return {
         id: el.id,
         shape: (el.shape as LayerItem['shape']) ?? 'rect',
-        label: el.is_background
-          ? 'Backdrop'
-          : el.shape
-          ? el.shape.charAt(0).toUpperCase() + el.shape.slice(1)
-          : 'Beam',
+        label,
         meta: `${price} · ${status}`,
         isLive: live,
         isLocked: !!el.locked,
@@ -745,10 +747,28 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
       <div className="casi-v9-cp-wrap">
         {selectedEl ? (
           <>
-            <div className="casi-v9-cp-head">
-              {selectedEl.is_background
-                ? 'Backdrop'
-                : `${(selectedEl.shape || 'beam').charAt(0).toUpperCase() + (selectedEl.shape || 'beam').slice(1)} slot`}
+            {/* Identity header — label matches the Layers list row exactly
+                (see the `layers` memo above) so a streamer never loses
+                track of which slot they clicked, plus an inline delete
+                link matching the design-source prototype's header pattern
+                (a single delete affordance instead of also repeating one
+                at the bottom of the panel). */}
+            <div className="casi-v9-cp-head-row">
+              <div>
+                <div className="casi-v9-cp-head">
+                  {layers.find((l) => l.id === selectedEl.id)?.label ?? 'Beam'}
+                </div>
+                <div className="casi-v9-cp-head-sub">
+                  {selectedEl.is_background ? 'full-bleed backdrop' : `${selectedEl.shape || 'rect'} slot`}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="casi-v9-cp-head-del"
+                onClick={() => deleteLayer(selectedEl.id)}
+              >
+                delete
+              </button>
             </div>
             <BeamCtrlPanel
               el={selectedEl}
@@ -756,11 +776,9 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
               updateSlider={updateSlider}
               updateLayer={updateLayer}
               toggleLock={toggleLock}
-              deleteLayer={deleteLayer}
               kickBeam={() => showToast('Use Dashboard to end a running beam', 'err')}
               onDone={() => setSelectedSlotId(null)}
               onUpdateShape={handleUpdateShape}
-              onUpdateGlow={handleUpdateGlow}
               stripeCurrency={stripeCurrency}
             />
           </>

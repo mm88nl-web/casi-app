@@ -1072,6 +1072,12 @@
   margin: 0;
   animation: none;
 }
+.casi-v9-cp-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
 .casi-v9-cp-head {
   font-family: var(--H);
   font-weight: 700;
@@ -1079,6 +1085,30 @@
   color: var(--text);
   letter-spacing: -0.02em;
 }
+/* Italic muted descriptor under the identity header — mirrors the
+   prototype's "rounded slot" subtitle under the beam name. */
+.casi-v9-cp-head-sub {
+  font-family: var(--S);
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+.casi-v9-cp-head-del {
+  font-family: var(--B);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  background: none;
+  border: none;
+  padding: 2px 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.13s;
+}
+.casi-v9-cp-head-del:hover { color: #ef4444; }
 
 /* Tabs inside the properties panel — Properties / Pricing / Behavior. Not
    part of the design-source prototype (which flows all these controls in
@@ -1214,7 +1244,7 @@
 /* Per-rail price row — Pricing tab. Glyph + name + input + unit. */
 .casi-v9-rail-row {
   display: grid;
-  grid-template-columns: 26px 1fr 80px auto;
+  grid-template-columns: 26px 1fr auto auto;
   gap: 10px;
   align-items: center;
   padding: 9px 0;
@@ -1252,12 +1282,39 @@
   margin-top: 1px;
   text-transform: uppercase;
 }
-.casi-v9-rail-input {
-  width: 80px;
+/* Wraps the −/input/+ trio as one visual group — prototype shows explicit
+   stepper buttons flanking the rate amount rather than relying on the
+   browser's native (small, inconsistent) number-input spinner. */
+.casi-v9-rail-stepper {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.casi-v9-rail-step {
+  width: 19px;
+  height: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--surf-2);
   border: 1px solid var(--line-2);
   border-radius: var(--radius-chip);
-  padding: 6px 8px;
+  color: var(--text-2);
+  font-family: var(--M);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.13s, color 0.13s;
+}
+.casi-v9-rail-step:hover { border-color: var(--ink-40); color: var(--ink); }
+.casi-v9-rail-step:disabled { opacity: 0.5; cursor: not-allowed; }
+.casi-v9-rail-input {
+  width: 52px;
+  background: var(--surf-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-chip);
+  padding: 6px 6px;
   font-family: var(--M);
   font-size: 12px;
   font-weight: 600;
