@@ -18,7 +18,7 @@ export default function StreamPreview() {
         aspectRatio: '16/9',
         background: 'var(--paper-2)',
         border: '1px solid var(--casi-border)',
-        borderRadius: '14px',
+        borderRadius: 'var(--radius-card, 16px)',
       }}
     >
       <div

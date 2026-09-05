@@ -238,7 +238,7 @@ function BookingHero({ username, isLive }: { username: string; isLive: boolean }
         padding: '32px 28px',
         background: 'var(--casi-surface)',
         border: '1px solid var(--casi-border-2)',
-        borderRadius: '12px',
+        borderRadius: 'var(--radius-card, 16px)',
         position: 'relative',
       }}
     >
@@ -269,7 +269,11 @@ function BookingHero({ username, isLive }: { username: string; isLive: boolean }
       </h2>
       <p
         style={{
-          fontSize: '14px',
+          // Signature redesign move: the descriptive line under a headline
+          // reads in Newsreader, matching the prototype's tagline/aside
+          // treatment instead of the body sans.
+          fontFamily: 'var(--S)',
+          fontSize: '15.5px',
           lineHeight: 1.55,
           color: 'var(--casi-text-mid)',
           marginBottom: '22px',
@@ -323,6 +327,7 @@ function BookingHero({ username, isLive }: { username: string; isLive: boolean }
           padding: '14px 22px',
           background: 'var(--casi-accent)',
           color: 'var(--on-ink)',
+          borderRadius: 'var(--radius-pill, 999px)',
           fontFamily: 'var(--font-casi-display), var(--font-casi-sans), sans-serif',
           fontSize: '12.5px',
           fontWeight: 700,

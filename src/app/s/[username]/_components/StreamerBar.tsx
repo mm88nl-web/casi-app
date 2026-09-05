@@ -25,7 +25,7 @@ export default function StreamerBar({ username, displayName, avatarUrl, bio, isL
         padding: '28px 32px',
         background: 'linear-gradient(to bottom, var(--casi-surface-2), var(--casi-bg))',
         border: '1px solid var(--casi-border)',
-        borderRadius: '14px',
+        borderRadius: 'var(--radius-card, 16px)',
       }}
     >
       {avatarUrl ? (
@@ -81,7 +81,12 @@ export default function StreamerBar({ username, displayName, avatarUrl, bio, isL
         {bio ? (
           <div
             style={{
-              fontSize: '13px',
+              // Signature redesign move: bios/taglines read in Newsreader,
+              // not the body sans, matching the prototype's streamer-page
+              // tagline treatment ("Speedruns and bad decisions, six
+              // nights a week.").
+              fontFamily: 'var(--S)',
+              fontSize: '14.5px',
               color: 'var(--casi-text-mid)',
               lineHeight: 1.5,
               overflow: 'hidden',
