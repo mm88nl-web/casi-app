@@ -240,19 +240,23 @@ export default function SearchPage() {
           align-items: center;
           justify-content: space-between;
           flex-wrap: wrap;
-          row-gap: 12px;
-          padding: 20px 40px;
+          row-gap: 14px;
+          padding: 26px 48px;
           background: var(--paper);
           flex-shrink: 0;
         }
-        @media (max-width: 640px) { .nav { padding: 16px 22px; } }
+        @media (max-width: 640px) { .nav { padding: 20px 24px; } }
         .nav-logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
         /* flex-wrap here specifically -- on a narrow viewport the viewer
            chip + MobileWalletPicker's two deeplink buttons + the login
            link don't fit on one line. Before this they had nowhere to go
            but overflow/collide instead of wrapping onto their own row --
-           confirmed on a real device screenshot, not a hypothetical. */
-        .nav-r { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px 14px; }
+           confirmed on a real device screenshot, not a hypothetical.
+           gap widened from 10px/14px to match the design-source
+           prototype's nav-right cluster (gap:20px in the .dc.html shared
+           nav template) -- "CONNECT WALLET" and "Log in" were sitting
+           almost flush against each other. */
+        .nav-r { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 14px 22px; }
         @keyframes blink {
           0%   { box-shadow: 0 0 0 0   color-mix(in oklab, var(--accent) 55%, transparent); }
           100% { box-shadow: 0 0 0 9px color-mix(in oklab, var(--accent)  0%, transparent); }
