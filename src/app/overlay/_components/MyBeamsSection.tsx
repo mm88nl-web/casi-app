@@ -80,6 +80,7 @@ export default function MyBeamsSection({
           const isPending  = booking.status === 'pending';
           const isDenied   = booking.status === 'denied';
           const isExpired  = booking.status === 'expired';
+          const isCancelled = booking.status === 'cancelled';
           const isSolanaLocked = isDenied && booking.payment_method === 'solana' && booking.escrow_pda;
           // Kick-leaked: streamer ended the beam but the on-chain settle
           // didn't go through, so the PDA still holds funds. Visually
@@ -113,6 +114,15 @@ export default function MyBeamsSection({
             : isSolanaKickLeaked ? '⚡ Ended early — USDC recoverable'
             : isSolanaLocked ? '✕ Denied — USDC locked'
             : isDenied ? '✕ Denied — refund on the way'
+            // `expired` = the beam ran its full duration and finished, and
+            // `cancelled` = the viewer pulled it before it aired. Neither had
+            // a case here, so both fell through to the '⌛ Pending' default —
+            // which is why a viewer's finished history rendered as a wall of
+            // identical "Pending" chips for beams that were long since done.
+            // isSolanaKickLeaked (expired + unsettled escrow) is checked above
+            // and must stay there; it's a more specific expired state.
+            : isExpired ? '✓ Aired'
+            : isCancelled ? '✕ Cancelled'
             : '⌛ Pending';
 
           return (
