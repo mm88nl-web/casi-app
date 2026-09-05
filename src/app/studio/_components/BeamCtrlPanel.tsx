@@ -3,6 +3,7 @@ import SlotMedia from '@/components/SlotMedia';
 import UsdcIcon from '@/components/icons/UsdcIcon';
 import { getFiatConfig, fiatSymbol, stripeMinAmount, toStripeAmount } from '@/lib/currency';
 import ShapePresetsPanel from './ShapePresetsPanel';
+import StreamerPublishCard from './StreamerPublishCard';
 import { formatTime, getSecondsRemaining } from './time';
 
 type Tab = 'properties' | 'pricing';
@@ -89,12 +90,12 @@ function RailRow({
 }
 
 /* v9 Properties panel — two tabs (Properties / Pricing). Mounted inside
- * .casi-v9-cp-wrap on /studio/live; the caller renders the slot's identity
+ * .casi-v9-cp-wrap on /studio (Layers tab); the caller renders the slot's identity
  * header (label + inline delete link) above this panel — see
  * StudioLiveEditor.tsx — so BeamCtrlPanel only owns the tab controls.
  *
  * Distributes the existing controls into v9's tabs:
- *   - Properties: Shape pills + Lock toggle.
+ *   - Properties: Shape pills + Lock toggle + Publish my own content.
  *   - Pricing:    Per-rail rate + mode pills (minute/hour/free) + duration.
  *
  * There used to be a third Behavior tab (glow-on-start + lock) — glow was
@@ -102,6 +103,12 @@ function RailRow({
  * pre-existing `el.glow_on_start ?? true` fallback everywhere it's read:
  * overlay/page.tsx, obs/page.tsx) and Lock moved in here so a two-tab panel
  * doesn't need its own tab for one toggle.
+ *
+ * StreamerPublishCard also moved in here (was a standalone dashboard
+ * section with its own "choose a slot" dropdown) — publishing is
+ * inherently per-slot, so it belongs in that slot's own properties, not a
+ * separate global card. `el.id` is the target slot implicitly; no picker
+ * needed anymore.
  *
  * The Done button lives below the tabs (v9 .cp-done). The active-booking
  * strip stays at the very bottom — it's a status row, not a control, and
@@ -117,6 +124,8 @@ export default function BeamCtrlPanel({
   onDone,
   onUpdateShape,
   stripeCurrency = 'usd',
+  publishing,
+  onPublish,
 }: {
   el: any;
   activeBooking: any | null;
@@ -134,6 +143,12 @@ export default function BeamCtrlPanel({
    *  entirely and the streamer prices in USDC only. Unknown currencies
    *  fall back to a generic $ render via getFiatConfig. */
   stripeCurrency?: string | null;
+  /** True while a publish-my-own-content request is in flight for this
+   *  streamer (shared across whichever slot they last published to). */
+  publishing?: boolean;
+  /** Publish-my-own-content handler — omit to hide that block entirely
+   *  (e.g. a future read-only render of this panel). */
+  onPublish?: (elementId: string, imageUrl: string, fileType: 'image' | 'video', storagePath: string | null) => void;
 }) {
   const [tab, setTab] = useState<Tab>('properties');
   // Per-rail rates — fall back to price_value when a rail isn't set on the row.
@@ -370,6 +385,16 @@ export default function BeamCtrlPanel({
               {el.locked ? '🔒 Locked' : '🔓 Unlocked'}
             </button>
           </div>
+
+          {onPublish && (
+            <div style={{ borderTop: '1px solid var(--line)', paddingTop: 16, marginTop: 4 }}>
+              <StreamerPublishCard
+                elementId={el.id}
+                publishing={!!publishing}
+                onPublish={onPublish}
+              />
+            </div>
+          )}
         </div>
       )}
 

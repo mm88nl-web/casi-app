@@ -12,10 +12,6 @@ type StudioFrameProps = {
   /** Toggling-live state — disables the End/Go-live button while in flight. */
   togglingLive?: boolean;
   onToggleLive?: () => void;
-  /** Which dashboard mode is active. Tabs render as <Link> so reload + bookmark work. */
-  activeMode: 'dashboard' | 'live';
-  /** Pending count badge on the Dashboard tab. Hidden when 0. */
-  pendingCount?: number;
   /** Inline error banner — string with a Dismiss handler. */
   error?: string | null;
   onDismissError?: () => void;
@@ -27,8 +23,6 @@ export default function StudioFrame({
   isLive,
   togglingLive = false,
   onToggleLive,
-  activeMode,
-  pendingCount = 0,
   error,
   onDismissError,
   children,
@@ -64,10 +58,9 @@ export default function StudioFrame({
 
       <div
         className="mx-auto flex flex-col"
-        // /studio/live needs more horizontal room for the 3-col Layers ·
-        // Canvas · Properties grid; everywhere else stays at 1280.
+        // Wide enough for the canvas + Waiting/Layers sidebar grid.
         style={{
-          maxWidth: activeMode === 'live' ? '1480px' : '1280px',
+          maxWidth: '1480px',
           padding: '28px var(--pad) 80px',
           gap: '20px',
         }}
@@ -140,49 +133,6 @@ export default function StudioFrame({
           </button>
         </div>
 
-        {/* Header — real page identity + mode switch. Not in the single-
-            screen prototype (which has no dashboard/live split), styled to
-            match its Archivo + pill-tab language. */}
-        <header
-          className="flex flex-wrap items-end justify-between"
-          style={{ gap: '16px' }}
-        >
-          <h2
-            style={{
-              fontFamily: 'var(--H)',
-              fontWeight: 800,
-              fontVariationSettings: '"opsz" 64',
-              fontSize: 'clamp(26px, 3.6vw, 38px)',
-              letterSpacing: '-0.03em',
-              lineHeight: 1,
-              color: 'var(--text)',
-              margin: 0,
-            }}
-          >
-            Welcome back
-          </h2>
-
-          {/* Mode tabs — pill segmented control, matches the prototype's
-              Waiting/Layers tab treatment. */}
-          <div
-            className="flex items-center"
-            style={{
-              gap: '4px',
-              background: 'var(--surf-2)',
-              border: '1px solid var(--line)',
-              borderRadius: 'var(--radius-pill)',
-              padding: '4px',
-            }}
-          >
-            <ModeTab href="/studio" active={activeMode === 'dashboard'} count={pendingCount}>
-              Dashboard
-            </ModeTab>
-            <ModeTab href="/studio/live" active={activeMode === 'live'}>
-              Live
-            </ModeTab>
-          </div>
-        </header>
-
         {error ? (
           <div
             className="flex items-center justify-between"
@@ -237,59 +187,3 @@ const settingsLinkStyle: CSSProperties = {
   textDecoration: 'none',
   whiteSpace: 'nowrap',
 };
-
-function ModeTab({
-  href,
-  active,
-  count,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  count?: number;
-  children: ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-current={active ? 'page' : undefined}
-      style={{
-        padding: '9px 18px',
-        fontFamily: 'var(--H)',
-        fontWeight: 700,
-        fontSize: '15px',
-        letterSpacing: '-0.01em',
-        borderRadius: 'var(--radius-pill)',
-        color: active ? 'var(--on-ink)' : 'var(--text-2)',
-        background: active ? 'var(--ink)' : 'transparent',
-        textDecoration: 'none',
-        transition: 'color .14s, background .14s',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '8px',
-      }}
-    >
-      {children}
-      {count && count > 0 ? (
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minWidth: '20px',
-            height: '20px',
-            padding: '0 6px',
-            borderRadius: 'var(--radius-pill)',
-            background: active ? 'var(--on-ink)' : 'var(--ink)',
-            color: active ? 'var(--ink)' : 'var(--on-ink)',
-            fontFamily: 'var(--M)',
-            fontSize: '10px',
-            fontWeight: 700,
-          }}
-        >
-          {count}
-        </span>
-      ) : null}
-    </Link>
-  );
-}

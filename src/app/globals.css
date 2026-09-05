@@ -804,7 +804,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   v9 STUDIO LIVE EDITOR — screen 04
+   v9 STUDIO — canvas editor (part of the single /studio screen)
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* Editor toolbar — status / mode toggle / +Beam */
@@ -846,19 +846,76 @@
 }
 .casi-v9-le-add:hover { filter: brightness(1.1); }
 
-/* 3-col editor: Layers · Canvas · Properties */
-.casi-v9-le-grid3 {
+/* 2-col studio: Canvas (+ On air/Flashes below) · Waiting/Layers sidebar.
+   Matches the design-source prototype's single-screen layout — Layers and
+   Properties share one column (see .casi-v9-le-side), and the approval
+   queue lives in the same column as an alternate tab rather than a
+   separate always-visible list elsewhere on the page. */
+.casi-v9-le-grid2 {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr) 280px;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 20px;
   align-items: start;
 }
-@media (max-width: 1100px) {
-  .casi-v9-le-grid3 { grid-template-columns: 180px minmax(0, 1fr); }
-  .casi-v9-le-grid3 > .casi-v9-cp-wrap { grid-column: 1 / -1; }
+@media (max-width: 900px) {
+  .casi-v9-le-grid2 { grid-template-columns: 1fr; }
 }
-@media (max-width: 760px) {
-  .casi-v9-le-grid3 { grid-template-columns: 1fr; }
+
+.casi-v9-le-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 20px;
+}
+
+/* Waiting / Layers segmented switch — same pill-tab language as
+   .casi-v9-cp-tabs, scoped separately since this one carries a count
+   badge per tab (the prototype's studioTabs). */
+.casi-v9-side-tabs {
+  display: flex;
+  gap: 3px;
+  background: var(--surf-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 3px;
+  flex-shrink: 0;
+}
+.casi-v9-side-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 8px;
+  border-radius: var(--radius-pill);
+  font-family: var(--H);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  color: var(--text-2);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.13s;
+}
+.casi-v9-side-tab:hover { color: var(--text); }
+.casi-v9-side-tab.casi-v9-on {
+  color: var(--on-ink);
+  background: var(--ink);
+}
+.casi-v9-side-tab-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--ink-12);
+  color: var(--text-2);
+  font-family: var(--M);
+  font-size: 11px;
+  font-weight: 600;
+}
+.casi-v9-side-tab.casi-v9-on .casi-v9-side-tab-badge {
+  background: var(--on-ink);
+  color: var(--ink);
 }
 
 /* Layers panel */

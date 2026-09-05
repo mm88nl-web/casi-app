@@ -9,10 +9,9 @@ type Screen = { num: string; name: string; href: string };
 const SCREENS: Screen[] = [
   { num: '01', name: 'Landing',       href: '/' },
   { num: '02', name: 'Viewer · book', href: '/overlay' },
-  { num: '03', name: 'Studio · dash', href: '/studio' },
-  { num: '04', name: 'Studio · live', href: '/studio/live' },
-  { num: '05', name: 'Settings',      href: '/studio/settings' },
-  { num: '06', name: 'Auth',          href: '/login' },
+  { num: '03', name: 'Studio',        href: '/studio' },
+  { num: '04', name: 'Settings',      href: '/studio/settings' },
+  { num: '05', name: 'Auth',          href: '/login' },
 ];
 
 /**

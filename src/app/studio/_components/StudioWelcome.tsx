@@ -191,7 +191,7 @@ export default function StudioWelcome({ profileId }: Props) {
           <span className="casi-studio-welcome-num">2</span>
           <h3 className="casi-studio-welcome-h">Set up your slots</h3>
           <p className="casi-studio-welcome-p">
-            On the <Link href="/studio/live">Live tab</Link>, place hex / circle / rect / banner shapes anywhere on your scene and set a price per minute. That&apos;s what viewers will book.
+            On the canvas below, place hex / circle / rect / banner shapes anywhere on your scene and set a price per minute. That&apos;s what viewers will book.
           </p>
         </div>
 

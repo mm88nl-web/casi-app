@@ -3,27 +3,26 @@
 import { useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 
-export type PublishableElement = {
-  id: string;
-  shape: string | null;
-  is_background: boolean | null;
-};
-
 // Hard bucket limit (see supabase/migrations/20260415360000_create_beams_bucket.sql) —
 // the bucket itself rejects anything over 5 MB regardless of type.
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
+/**
+ * Publish-my-own-content — lives inside a beam's own Properties panel now
+ * (one specific slot, already selected in the Layers tab) rather than as a
+ * standalone dashboard card with its own "choose a slot" dropdown. The
+ * slot is implicit: whichever beam this panel is currently showing.
+ */
 export default function StreamerPublishCard({
-  elements,
+  elementId,
   publishing,
   onPublish,
 }: {
-  elements: PublishableElement[];
+  elementId: string;
   publishing: boolean;
   onPublish: (elementId: string, imageUrl: string, fileType: 'image' | 'video', storagePath: string | null) => void;
 }) {
   const supabase = createClient();
-  const [elementId, setElementId] = useState('');
   const [mode, setMode] = useState<'link' | 'upload'>('link');
   const [imageUrl, setImageUrl] = useState('');
   const [uploadedUrl, setUploadedUrl] = useState('');
@@ -59,29 +58,13 @@ export default function StreamerPublishCard({
   };
 
   return (
-    <section className="casi-card flex flex-col gap-2" style={{ padding: '20px 22px' }}>
-      <h3 style={{ fontFamily: 'var(--B)', fontWeight: 700, fontSize: '17px', letterSpacing: '-0.01em', color: 'var(--text)' }}>
-        Publish my own content
-      </h3>
-      <p style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: '14px', color: 'var(--text-2)' }}>
-        Puts an image/video straight on your overlay — no payment, no approval step, no
+    <div className="flex flex-col gap-2">
+      <div className="casi-v9-cp-lbl">Publish my own content</div>
+      <p style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: '13px', color: 'var(--text-3)' }}>
+        Puts an image/video straight on this slot — no payment, no approval step, no
         time limit. Stays up until you publish something else, or a viewer&apos;s approved
         booking takes the slot back over.
       </p>
-
-      <select
-        className="text-sm bg-transparent"
-        style={{ borderRadius: 'var(--radius-chip)', border: '1px solid var(--line)', padding: '8px 10px', fontFamily: 'var(--B)', color: 'var(--text)' }}
-        value={elementId}
-        onChange={(e) => setElementId(e.target.value)}
-      >
-        <option value="">Choose a slot...</option>
-        {elements.map((el) => (
-          <option key={el.id} value={el.id}>
-            {el.is_background ? 'Backdrop' : (el.shape ?? 'slot')} ({el.id.slice(0, 8)})
-          </option>
-        ))}
-      </select>
 
       <div className="flex gap-3 text-xs" style={{ color: 'var(--text-3)' }}>
         <label className="flex items-center gap-1">
@@ -139,6 +122,6 @@ export default function StreamerPublishCard({
       >
         {publishing ? 'Publishing...' : 'Publish now'}
       </button>
-    </section>
+    </div>
   );
 }

@@ -15,7 +15,7 @@ import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
 import PreviewBookingModal, { type PreviewBooking } from './_components/PreviewBookingModal';
 import StudioWelcome from './_components/StudioWelcome';
 import StudioFrame from './_components/StudioFrame';
-import StreamerPublishCard from './_components/StreamerPublishCard';
+import StudioLiveEditor from './_components/StudioLiveEditor';
 import { fiatSymbol, formatFiat } from '@/lib/currency';
 
 // Explicit column lists. BOOKING_COLS adds the moderation-critical fields the
@@ -1055,8 +1055,6 @@ function StudioPageInner() {
       isLive={profile.is_live}
       togglingLive={togglingLive}
       onToggleLive={toggleLive}
-      activeMode="dashboard"
-      pendingCount={queue.length}
       error={errorMsg}
       onDismissError={() => setErrorMsg(null)}
     >
@@ -1067,28 +1065,38 @@ function StudioPageInner() {
         pending={queue.length}
       />
 
-      {airing.length > 0 ? <AiringNow items={airing} /> : null}
-
-      <ApprovalQueue
-        items={queue}
-        onApprove={handleApprove}
-        onReject={handleReject}
-        onPreview={setPreviewId}
-        pendingIds={moderating}
-        emptyLabel="Nothing pending · share your viewer link above to get your first beam"
-      />
-
-      <StreamerPublishCard
-        elements={Object.entries(elementsById).map(([id, el]) => ({
-          id, shape: el.shape, is_background: el.is_background,
-        }))}
+      {/* Canvas + Waiting/Layers sidebar — the merged single-screen studio
+          (was split across /studio + /studio/live). StudioLiveEditor owns
+          the canvas + layers state; the queue and below-canvas (On air /
+          Flashes) content are handed in as pre-rendered slots since the
+          real booking/flash data + moderation handlers live here, not in
+          the editor. Publish-my-own-content also threads through to
+          whichever beam's properties panel is open — it's a per-slot
+          action now, not a standalone card with its own slot picker. */}
+      <StudioLiveEditor
+        supabase={supabase}
+        profileId={profile.id}
+        username={profile.username}
+        stripeCurrency={stripeCurrency}
+        queueBadgeCount={queue.length}
         publishing={publishing}
         onPublish={handleStreamerPublish}
-      />
-
-      <FlashesLog
-        items={flashLog}
-        total={todayTotal}
+        queueSlot={
+          <ApprovalQueue
+            items={queue}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            onPreview={setPreviewId}
+            pendingIds={moderating}
+            emptyLabel="Nothing pending · share your viewer link above to get your first beam"
+          />
+        }
+        belowCanvasSlot={
+          <>
+            {airing.length > 0 ? <AiringNow items={airing} /> : null}
+            <FlashesLog items={flashLog} total={todayTotal} />
+          </>
+        }
       />
 
       <EndStreamDialog

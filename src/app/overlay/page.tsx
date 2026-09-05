@@ -2397,40 +2397,59 @@ function OverlayContent() {
         .bf {
           position:static;
           width:100%;
-          overflow:hidden;
-          border-radius:14px;
-          border:1px solid var(--ink) !important;
-          background:var(--surf);
+          overflow:visible;
+          border-radius:0;
+          border:none;
+          background:transparent;
           padding:0;
+          display:flex;
+          flex-direction:column;
+          gap:14px;
           animation:slideInV9 .25s ease;
         }
         @keyframes slideInV9 { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
         @keyframes slotGlow { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
+        /* Header — tag pill + heading, on the page's own paper background,
+           matching the design-source prototype's slotTagUpper + slotHeading
+           pattern instead of a boxed ink-colored title strip. */
         .bf-hdr {
-          display:flex; align-items:center; justify-content:space-between;
-          padding:18px 22px; margin-bottom:0; border-bottom:none;
-          background:var(--ink); color:var(--on-ink);
-          border-radius:13px 13px 0 0;
+          display:flex; align-items:flex-start; justify-content:space-between;
+          gap:16px;
+          padding:0;
+          margin-bottom:0; border-bottom:none;
+          background:transparent; color:var(--text);
         }
         .bf-type {
-          font-family:var(--H); font-weight:700; font-size:15px; letter-spacing:-0.015em;
-          color:var(--on-ink) !important;  /* override per-component accent inline style */
+          display:inline-flex; align-items:center;
+          font-family:var(--B); font-weight:600; font-size:12px; letter-spacing:0.03em;
+          padding:6px 12px; border-radius:var(--radius-pill);
+          background:var(--ink); color:var(--on-ink) !important;
         }
         .bf-price {
-          font-family:var(--M); font-size:11px; font-weight:600;
-          letter-spacing:0.16em; text-transform:uppercase;
-          padding:5px 9px; background:rgba(0,0,0,0.18);
-          color:var(--on-ink) !important;
+          font-family:var(--H); font-weight:800; font-size:26px; letter-spacing:-0.02em;
+          margin-top:10px;
+          padding:0; background:none;
+          color:var(--ink) !important;
         }
         .bf-x {
-          background:none; border:none; color:var(--on-ink); opacity:.7;
-          cursor:pointer; font-size:14px; padding:0 6px; transition:opacity .14s;
-          font-family:var(--M);
+          background:none; border:none; color:var(--text-3); opacity:.8;
+          cursor:pointer; font-size:14px; padding:4px 6px; transition:opacity .14s, color .14s;
+          font-family:var(--M); flex-shrink:0;
         }
-        .bf-x:hover { opacity:1; color:var(--on-ink); }
+        .bf-x:hover { opacity:1; color:var(--text); }
         .bf-grid {
-          display:grid; grid-template-columns:1fr; gap:16px;
-          padding:20px 22px;
+          display:flex; flex-direction:column; gap:14px;
+          padding:0;
+        }
+        /* Section card — each logical block (media, viewing-as, duration,
+           message) gets its own soft card, matching the prototype's
+           individually-carded sub-sections instead of one big bordered
+           form. */
+        .bf-section {
+          background:var(--surf);
+          border:1px solid var(--line);
+          border-radius:var(--radius-panel);
+          padding:16px 18px;
         }
         .bf-lbl {
           font-family:var(--M); font-size:10px; font-weight:700; color:var(--text-3);

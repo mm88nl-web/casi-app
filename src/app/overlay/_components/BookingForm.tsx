@@ -245,13 +245,13 @@ export default function BookingForm(props: Props) {
   })();
 
   return (
-    <div className="bf" style={{ border: `1px solid rgba(${accentColorRgb},0.13)` }}>
+    <div className="bf">
       <div className="bf-hdr">
         <div>
-          <div className="bf-type" style={{ color: accentColor }}>
+          <div className="bf-type">
             {isExtend ? '⏱ Extend slot' : isQueue ? '⏳ Join queue' : '🎯 Tip for slot'}
           </div>
-          <div className="bf-price" style={{ color: isFreeSlot ? '#4ade80' : accentColor }}>
+          <div className="bf-price" style={{ color: isFreeSlot ? '#4ade80' : undefined }}>
             {isFreeSlot ? '★ Free' : formatSlotPrice(slot).label}
           </div>
         </div>
@@ -259,8 +259,7 @@ export default function BookingForm(props: Props) {
       </div>
 
       <div className="bf-grid">
-        <div>
-          <div style={{ marginBottom: 14 }}>
+        <div className="bf-section">
             <label className="bf-lbl">Beam media</label>
             <div className="casi-v9-media-tabs">
               {(['upload', 'url'] as const).map(m => (
@@ -392,7 +391,7 @@ export default function BookingForm(props: Props) {
             />
           )}
 
-          <div>
+        <div className="bf-section">
             <label className="bf-lbl">Viewing as</label>
             <div className="casi-v9-viewing-as">
               <span className="casi-v9-va-avatar" aria-hidden />
@@ -408,11 +407,9 @@ export default function BookingForm(props: Props) {
                 Change
               </button>
             </div>
-          </div>
         </div>
 
-        <div>
-          <div style={{ marginBottom: 14 }}>
+        <div className="bf-section">
             <label className="bf-lbl">Duration{maxSecs && slot.max_duration_minutes ? ` — max ${fmtMaxDur(slot.max_duration_minutes)}` : ''}</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <button
@@ -462,9 +459,9 @@ export default function BookingForm(props: Props) {
               />
               <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: 'var(--ink-45)' }}>min</span>
             </div>
-          </div>
+        </div>
 
-          <div>
+        <div className="bf-section">
             {/* Banner slots render the viewer's message as a scrolling marquee on
                 the overlay, so text becomes load-bearing content (not optional).
                 Server-side validation at /api/bookings/create-* also requires
@@ -507,7 +504,6 @@ export default function BookingForm(props: Props) {
                 />
               </>
             )}
-          </div>
         </div>
       </div>
 
