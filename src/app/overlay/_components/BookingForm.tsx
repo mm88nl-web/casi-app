@@ -26,6 +26,11 @@ type Slot = {
   prices?: Record<string, number | string | null | undefined> | null;
   max_duration_minutes?: number | null;
   shape?: string | null;
+  /** Percent of the 16:9 stream canvas — the slot's real on-stream
+   *  footprint. Needed so the crop/zoom preview box can match the
+   *  actual aspect ratio instead of guessing from `shape` alone. */
+  width?: number | string | null;
+  height?: number | string | null;
 };
 
 type Booking = { id: string | number; element_id?: string | null; duration_minutes?: number | string | null };
@@ -128,6 +133,18 @@ export default function BookingForm(props: Props) {
     uploadMode === 'upload' ? uploadedUrl : (imageValid && imageUrl ? imageUrl : null);
   const customizePreviewFileType: 'image' | 'video' | null =
     uploadMode === 'upload' ? uploadedFileType : (imageUrl ? getUrlFileType(imageUrl) : null);
+
+  // slot.width/height are percent-of-canvas on a 16:9 stream canvas, so the
+  // slot's real on-stream aspect ratio is (width% * 16) / (height% * 9) —
+  // NOT a fixed 16:9 or 1:1 guessed from `shape`. This matters for every
+  // shape, including circle/custom: their clip-path is applied to whatever
+  // box the streamer sized, so a non-square "circle" slot renders as an
+  // ellipse on stream, not a true circle. Clamped to a sane display range
+  // so a pathological slot config can't collapse the preview box to an
+  // unusable sliver; real slots stay well inside this range.
+  const w = Number(slot.width), h = Number(slot.height);
+  const rawSlotAspectRatio = w > 0 && h > 0 ? (w * 16) / (h * 9) : 16 / 9;
+  const slotAspectRatio = Math.min(6, Math.max(1 / 6, rawSlotAspectRatio));
 
   const isFreeSlot = Number(slot.price_value) === 0;
   const freeBlocked = isFreeSlot && !turnstileToken;
@@ -355,6 +372,7 @@ export default function BookingForm(props: Props) {
           {slot.shape !== 'backdrop' && (
             <CustomizePanel
               shape={slot.shape}
+              slotAspectRatio={slotAspectRatio}
               open={customizeOpen}
               onToggle={onCustomizeToggle}
               accentColor={accentColor}

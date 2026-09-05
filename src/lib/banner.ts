@@ -87,7 +87,7 @@ export function validateMediaUrl(
 export const BANNER_FONT_PX_RANGE   = { min: 16, max: 96, default: 28 } as const;
 export const BANNER_SPEED_SECS_RANGE = { min: 5,  max: 60, default: 20 } as const;
 export const MEDIA_OFFSET_RANGE     = { min: 0,  max: 100, default: 50 } as const;
-export const MEDIA_ZOOM_RANGE       = { min: 1,  max: 4,   default: 1  } as const;
+export const MEDIA_ZOOM_RANGE       = { min: 1,  max: 6,   default: 1  } as const;
 
 function clampOrNull(v: unknown, lo: number, hi: number): number | null {
   const n = Number(v);

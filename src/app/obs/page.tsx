@@ -216,8 +216,12 @@ function OBSContent() {
           const offX = Number(active?.media_offset_x ?? 50);
           const offY = Number(active?.media_offset_y ?? 50);
           const zoom = Number(active?.media_zoom     ?? 1);
-          const hasCustomCrop = offX !== 50 || offY !== 50 || zoom !== 1;
-          const useCover = el.is_background || el.shape === 'circle' || el.shape === 'custom' || hasCustomCrop;
+          // Must match overlay/page.tsx's objectFitCss exactly (cover once
+          // zoom > 1, not on pan alone) — otherwise a beam whose viewer only
+          // panned at 1x renders identically in the booking preview/overlay
+          // (pan has no visible effect at scale 1) but jumps to a completely
+          // different cover-cropped frame here on the actual broadcast.
+          const useCover = el.is_background || el.shape === 'circle' || el.shape === 'custom' || zoom > 1;
 
           return (
             <div key={el.id} style={{
@@ -245,7 +249,12 @@ function OBSContent() {
                     // the mask fills (edges crop, not stretch). Plain
                     // rect/rounded preserves aspect ratio with contain.
                     objectFit: useCover ? 'cover' : 'contain',
-                    objectPosition: `${offX}% ${offY}%`,
+                    // Pan is encoded as transform-origin, NOT objectPosition —
+                    // combining objectPosition with scale() double-offsets the
+                    // pan (see overlay/page.tsx). Keep this block identical to
+                    // overlay/page.tsx and CustomizePanel.tsx's preview or the
+                    // live broadcast drifts from what the viewer cropped.
+                    transformOrigin: `${offX}% ${offY}%`,
                     transform: zoom !== 1 ? `scale(${zoom})` : undefined,
                     pointerEvents: 'none',
                     filter: el.is_background ? undefined : 'drop-shadow(0 10px 30px rgba(0,0,0,0.5))',
