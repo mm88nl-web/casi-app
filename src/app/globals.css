@@ -1697,3 +1697,134 @@ body {
   font-style: italic;
   color: var(--text-2);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   WALLET CONNECT MODAL — @solana/wallet-adapter-react-ui override
+   ───────────────────────────────────────────────────────────────────────
+   This modal ships from a third-party library (styles.css imported in
+   SolanaProvider.tsx) and had zero app-specific overrides before this —
+   it rendered in the library's stock dark/purple default theme, visually
+   disconnected from Casi entirely, in every one of the 5+ places it's
+   triggered from (overlay, profile/edit, WalletNav, WalletPill,
+   PayoutsSection).
+
+   Pinned to --chrome-* rather than --ink/--paper: like the nav, this is
+   Casi's own infrastructure chrome, not streamer-skinned content — it
+   should look identical whether opened from your own dashboard or a
+   streamer's skinned overlay page. !important on the color-bearing
+   properties because the library's own styles.css load order relative
+   to this file isn't guaranteed by import position alone.
+
+   Real per-wallet icons (Phantom/Solflare/Backpack logos) come from the
+   library itself and are kept as-is — swapping in the prototype's flat
+   colored-letter badges would trade a real, trusted brand mark for a
+   fake stand-in, which is a downgrade the "match the prototype" goal
+   doesn't actually call for once a real wallet icon already exists.
+   ═══════════════════════════════════════════════════════════════════════ */
+.wallet-adapter-modal-wrapper {
+  background: var(--chrome-paper) !important;
+  border: 1px solid rgba(41, 75, 60, 0.18);
+  border-radius: var(--radius-panel);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+  padding: 28px;
+}
+.wallet-adapter-modal-title {
+  font-family: var(--B);
+  font-weight: 800;
+  font-size: 20px;
+  color: var(--chrome-text) !important;
+  letter-spacing: -0.01em;
+  margin: 0 0 18px;
+  text-align: left;
+}
+.wallet-adapter-modal-list {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wallet-adapter-modal-list li { list-style: none; }
+.wallet-adapter-modal-wrapper .wallet-adapter-button {
+  height: auto;
+  padding: 14px 16px;
+  background: color-mix(in oklab, var(--chrome-paper) 96%, var(--chrome-ink)) !important;
+  border: 1px solid rgba(41, 75, 60, 0.14);
+  border-radius: var(--radius-row);
+  color: var(--chrome-text) !important;
+  font-family: var(--B);
+  font-weight: 600;
+  font-size: 15px;
+  justify-content: flex-start;
+  gap: 12px;
+  transition: border-color 0.14s, background 0.14s;
+}
+.wallet-adapter-modal-wrapper .wallet-adapter-button:hover {
+  background: color-mix(in oklab, var(--chrome-paper) 90%, var(--chrome-ink)) !important;
+  border-color: rgba(41, 75, 60, 0.3);
+}
+.wallet-adapter-button-start-icon img,
+.wallet-adapter-button-start-icon svg {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+/* The trailing "Detected" span WalletListItem renders for an installed
+   wallet — Newsreader italic, same treatment as .casi-meta-italic, to
+   match the prototype's "detected" label instead of the library's plain
+   bold-caps default. */
+.wallet-adapter-modal-wrapper .wallet-adapter-button > span:last-child {
+  margin-left: auto;
+  font-family: var(--S);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--chrome-text-2) !important;
+  font-weight: 400;
+  text-transform: none;
+}
+.wallet-adapter-modal-list-more {
+  color: var(--chrome-text-2) !important;
+  font-family: var(--S);
+  font-style: italic;
+  font-size: 13px;
+  margin-top: 10px;
+}
+.wallet-adapter-modal-button-close {
+  background: color-mix(in oklab, var(--chrome-paper) 92%, var(--chrome-ink)) !important;
+}
+.wallet-adapter-modal-button-close svg path { fill: var(--chrome-text); }
+.wallet-adapter-modal-overlay {
+  background: rgba(20, 20, 18, 0.55);
+}
+/* "No wallet detected" empty state (WalletSVG) — its circle/path fills
+   reference hardcoded gradient defs (Solana's purple-to-teal brand
+   gradient via fill="url(#...)"), not currentColor, so they can't be
+   swapped by recoloring a variable upstream. CSS fill/stroke still wins
+   over an SVG presentation attribute, so this flattens it to Casi's own
+   ink instead of a clashing third-party gradient. */
+.wallet-adapter-modal-middle svg circle {
+  /* Baseline none first: the outer ring circle has its own stroke but no
+     fill attribute in the source SVG, so an unscoped `fill` override here
+     would give it a solid default fill and paint over the icon glyph
+     entirely -- confirmed by screenshot, this was a real bug, not a
+     hypothetical one. */
+  fill: none !important;
+}
+.wallet-adapter-modal-middle svg circle[fill-opacity] {
+  /* Only the soft background halo circle sets its own fill-opacity in the
+     source -- re-apply ink there so it still reads as a tint, not a
+     solid disc. */
+  fill: var(--chrome-ink) !important;
+}
+.wallet-adapter-modal-middle svg circle[stroke] {
+  stroke: var(--chrome-ink) !important;
+}
+.wallet-adapter-modal-middle svg path {
+  fill: var(--chrome-ink) !important;
+}
+.wallet-adapter-modal-middle-button {
+  background-color: var(--chrome-ink) !important;
+  border-radius: var(--radius-pill);
+  font-family: var(--B);
+  font-weight: 700;
+}
