@@ -268,10 +268,10 @@ export default function AuthPage() {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 28px 40px;
+          padding: 40px 56px;
           flex-shrink: 0;
         }
-        @media (max-width: 640px) { .ap-nav { padding: 22px 22px; } }
+        @media (max-width: 640px) { .ap-nav { padding: 28px 24px; } }
         .ap-logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
         .nav-link {
           font-family: var(--S);

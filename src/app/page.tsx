@@ -194,10 +194,10 @@ export default function HomePage() {
           display: flex;
           align-items: center;
           justify-content: flex-end;
-          padding: 28px 40px 0;
+          padding: 40px 56px 0;
           flex-shrink: 0;
         }
-        @media (max-width: 640px) { .top { padding: 22px 22px 0; } }
+        @media (max-width: 640px) { .top { padding: 28px 24px 0; } }
         .top-r { display: flex; align-items: center; gap: 18px; }
 
         .stamp {
@@ -222,7 +222,16 @@ export default function HomePage() {
         }
         .stamp .n { color: var(--text); font-style: normal; font-family: var(--H); font-weight: 700; font-size: 17px; }
         .sep { width: 1px; height: 16px; background: color-mix(in oklab, var(--text) 22%, transparent); }
-        .login {
+        /* :global() — styled-jsx only auto-scopes classNames on native DOM
+           elements, never on custom components (next/link included), even
+           though Link forwards className straight to the anchor it
+           renders. Without it this rule's compiled selector requires a
+           jsx-hash class the element never receives, so it silently never
+           matches — this "Log in" link was rendering as plain unstyled
+           text (no italic, no underline, default link color) instead of
+           matching the "find a streamer" link right next to it. Same bug
+           found and fixed the same way in search/page.tsx. */
+        :global(.login) {
           font-family: var(--S);
           font-style: italic;
           font-size: 17px;

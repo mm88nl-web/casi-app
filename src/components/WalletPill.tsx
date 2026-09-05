@@ -33,13 +33,14 @@ const CSS = `
      color), which would make this button invisible against the nav. */
   .wp-connect {
     display: inline-flex; align-items: center; gap: 8px;
-    padding: 9px 14px;
+    padding: 9px 16px;
     font-family: var(--M);
     font-size: 11px; font-weight: 700;
     letter-spacing: 0.06em; text-transform: uppercase;
     color: var(--chrome-paper);
     background: var(--chrome-accent);
     border: 1px solid var(--chrome-accent);
+    border-radius: var(--radius-pill);
     cursor: pointer;
     transition: filter .14s;
     white-space: nowrap;
@@ -56,6 +57,7 @@ const CSS = `
     position: fixed; min-width: 220px;
     background: var(--surf);
     border: 1px solid var(--line-2);
+    border-radius: var(--radius-panel);
     overflow: hidden;
     z-index: 9999;
     box-shadow: 0 20px 50px color-mix(in oklab, var(--paper) 60%, black);
@@ -83,12 +85,18 @@ const CSS = `
   .wp-picker-row:hover { background: var(--ink-04); }
 
   /* Connected pill — three segments separated by --line dividers,
-     ink-04 wash on the network segment, sharp corners. Mirrors v9
-     .wlt-btn / .wlt-net / .wlt-balance / .wlt-identity. */
+     ink-04 wash on the network segment, rounded to a pill (was sharp
+     corners) to match the prototype's rounded wallet button. Mirrors v9
+     .wlt-btn / .wlt-net / .wlt-balance / .wlt-identity. overflow:hidden
+     clips the three segments' own square backgrounds to the pill shape —
+     safe with the dropdown below since that's position:fixed and escapes
+     ancestor overflow clipping. */
   .wp-row {
     display: inline-flex; align-items: stretch; gap: 0;
     background: var(--surf);
     border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
     font-family: var(--M);
     font-size: 11px;
     position: relative;
@@ -162,6 +170,7 @@ const CSS = `
     position: fixed; min-width: 260px;
     background: var(--surf);
     border: 1px solid var(--line-2);
+    border-radius: var(--radius-panel);
     overflow: hidden;
     z-index: 9999;
     box-shadow: 0 20px 50px color-mix(in oklab, var(--paper) 60%, black);
