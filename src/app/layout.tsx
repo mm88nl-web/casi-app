@@ -92,11 +92,27 @@ export const metadata: Metadata = {
   // Explicit icon metadata so wallet popups (Phantom/Solflare/etc.) reliably
   // pick up the filled-square brand mark instead of falling back to a default
   // glyph when the auto-detected SVG renders thin against their dark theme.
+  // Raster icons are load-bearing here, not just a nicety: Solana wallet
+  // extensions render the requesting site's icon on every connect and
+  // signature prompt, and several of them (Solflare confirmed) won't rasterise
+  // an SVG favicon — they showed a generic globe placeholder next to a
+  // real-money transaction. The SVG stays first for browsers that prefer it;
+  // the PNG/ICO entries are what the wallets actually resolve.
+  //
+  // /favicon.ico is served from public/ rather than the app-dir file
+  // convention so the path stays stable and unhashed — extensions fetch it by
+  // convention rather than by reading <link> tags.
   icons: {
-    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
-    shortcut: '/icon.svg',
-    apple: '/icon.svg',
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+      { url: '/favicon.ico', sizes: 'any' },
+    ],
+    shortcut: '/favicon.ico',
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
+  manifest: '/manifest.webmanifest',
 };
 
 // Site-wide structured data: who casi is, the site itself, and the product.
