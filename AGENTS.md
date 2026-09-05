@@ -32,7 +32,7 @@ CASI lets livestream viewers pay to put their image / video / message **on strea
 
 **Monetization posture**: **no protocol fees, ever** — 100% of every booking flows directly viewer→streamer on both rails. CASI never holds, routes, or skims funds (legal posture: software company, not a payment processor). Future revenue is planned via streamer SaaS (Streamlabs Ultra-style $10–30/mo Pro tier with custom branding, auto-approve rules, team accounts, analytics) and possibly brand-deal advertising once there's enough streamer inventory. None of that is shipped yet.
 
-**Design system**: `v9` two-color contract (`--ink` + `--paper`) — full detail in "Theme system" below. Fonts: Bricolage Grotesque + JetBrains Mono + Instrument Serif. v7 `--casi-*` tokens are aliased onto v9 in `globals.css` so legacy code keeps rendering. Dev tools (`DevScreenSwitcher` + `DevTweaksPanel`) are mounted in `layout.tsx`, gated to `NODE_ENV !== 'production'`.
+**Design system**: `v9` two-color contract (`--ink` + `--paper`) — full detail in "Theme system" below. Fonts: Archivo + Spline Sans Mono + Newsreader (switched from Bricolage Grotesque + JetBrains Mono + Instrument Serif in the redesign Phase 1 typography pass — same `--font-casi-*` CSS variable names, only the underlying `next/font/google` family changed, so existing `var(--font-casi-mono)`-style callsites keep resolving unchanged). v7 `--casi-*` tokens are aliased onto v9 in `globals.css` so legacy code keeps rendering. Dev tools (`DevScreenSwitcher` + `DevTweaksPanel`) are mounted in `layout.tsx`, gated to `NODE_ENV !== 'production'`.
 
 **Already shipped** (history compressed — the operative rules live in the sections below; trust those over this list):
 - `/studio` dashboard ⁄ live-editor split, both sharing `src/lib/streamer-moderation.ts`; per-slot queue + Play-now + End-Stream dialog; payment-gated Approve.
@@ -186,7 +186,7 @@ The v9 design system replaces v7's 7-skin variable bag with a **two-color contra
 | Ink ladder | `--ink-04`, `--ink-08`, `--ink-14`, `--ink-22`, `--ink-40`, `--ink-70` |
 | Text scale | `--text`, `--text-2`, `--text-3`, `--text-4` |
 | Surfaces / lines | `--surf`, `--surf-2`, `--line`, `--line-2`, `--on-ink` |
-| Type | `--H` (Bricolage display), `--B` (Bricolage body), `--M` (JetBrains Mono), `--S` (Instrument Serif) |
+| Type | `--H` (Archivo display), `--B` (Archivo body), `--M` (Spline Sans Mono), `--S` (Newsreader italic) |
 | Density | `--gap`, `--pad` |
 
 **Light/dark**: opt-in via `[data-paper="light"]` on a wrapper element. The `DevTweaksPanel` flips it automatically when paper is bright.

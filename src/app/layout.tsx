@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
-import { Bricolage_Grotesque, JetBrains_Mono, Instrument_Serif } from "next/font/google";
+import { Archivo, Newsreader, Spline_Sans_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import ClientErrorReporter from "@/components/ClientErrorReporter";
@@ -8,35 +8,48 @@ import DevBanner from "@/components/DevBanner";
 import { CookieNotice } from "@/components/CookieNotice";
 import { DevScreenSwitcher, DevTweaksPanel } from "@/components/v9";
 
-// v9 type system: Bricolage Grotesque (display + body), JetBrains Mono (meta/labels),
-// Instrument Serif (italic accents). Variable names keep their `--font-casi-*` shape so
-// existing v7 components (`var(--font-casi-sans)` etc.) keep resolving — sans + display
-// both point at Bricolage now.
-const sans = Bricolage_Grotesque({
+// Redesign Phase 1 type system: Archivo (UI/display/body), Spline Sans Mono
+// (meta/labels/amounts), Newsreader italic (asides/notes/secondary captions).
+// Variable names keep their `--font-casi-*` shape so existing v7/v9 components
+// (`var(--font-casi-sans)` etc.) keep resolving unchanged — only the font
+// each variable points at has changed, not the variable names themselves.
+// Archivo and Spline Sans Mono are loaded as true variable fonts (weight
+// axis spans the full range) so every fontWeight already used across the
+// app — including callsites this phase didn't touch — renders at its exact
+// requested weight instead of the nearest static instance. Archivo also
+// requests its `wdth` axis so `font-stretch` (e.g. the landing wordmark's
+// 108% per the design handoff) actually widens the glyphs instead of
+// no-op'ing against a fixed-width static file. Newsreader requests its
+// `opsz` axis so italic asides pick the right optical cut across the sizes
+// they're used at (13px hex fields up to 30px taglines).
+const sans = Archivo({
   variable: "--font-casi-sans",
   subsets: ["latin"],
-  weight: ["400", "600", "700", "800"],
+  weight: "variable",
+  axes: ["wdth"],
   display: "swap",
 });
 
-const display = Bricolage_Grotesque({
+const display = Archivo({
   variable: "--font-casi-display",
   subsets: ["latin"],
-  weight: ["600", "700", "800"],
+  weight: "variable",
+  axes: ["wdth"],
   display: "swap",
 });
 
-const mono = JetBrains_Mono({
+const mono = Spline_Sans_Mono({
   variable: "--font-casi-mono",
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
+  weight: "variable",
   display: "swap",
 });
 
-const serif = Instrument_Serif({
+const serif = Newsreader({
   variable: "--font-casi-serif",
   subsets: ["latin"],
-  weight: ["400"],
+  weight: "variable",
+  axes: ["opsz"],
   style: ["normal", "italic"],
   display: "swap",
 });
