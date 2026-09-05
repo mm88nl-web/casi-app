@@ -153,6 +153,13 @@ function bookingToQueueItem(
     kind: 'beam',
     name: `${who} · ${snippet}`,
     subtitle: `${timeAgo(b.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · ${durationLabel}${b.file_type === 'video' ? ' · video' : ''}${rate > 0 ? ` · ${rate}/${b.price_unit}` : ''}`,
+    // Split-out presentational fields for ApprovalQueue's card layout —
+    // pure re-derivations of the same data name/subtitle already encode,
+    // not new state.
+    who,
+    waitingLabel: `waiting ${timeAgo(b.created_at).replace(/ ago$/, '')}`,
+    requestText: snippet,
+    metaLine: [durationLabel, shape].filter(Boolean).join(' · '),
     rail: b.payment_method === 'free' ? null : (isUsdc ? 'usdc' : 'stripe'),
     priceLabel,
     readOnly: false,
@@ -176,6 +183,10 @@ function flashToQueueItem(f: FlashRow, currency: string | null = null): QueueIte
     kind: 'flash',
     name: `${who} · "${snippet}${overflow ? '…' : ''}"`,
     subtitle: `${logTime(f.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · text`,
+    who,
+    waitingLabel: `waiting ${timeAgo(f.created_at).replace(/ ago$/, '')}`,
+    requestText: snippet ? `"${snippet}${overflow ? '…' : ''}"` : undefined,
+    metaLine: 'flash',
     rail: f.payment_method === 'free' ? null : (isUsdc ? 'usdc' : 'stripe'),
     priceLabel,
     paymentConfirmed: isFlashPaymentConfirmed(f),
@@ -1185,7 +1196,7 @@ function buildPreview(
 function StatusScreen({ children }: { children: React.ReactNode }) {
   return (
     <main
-      className="min-h-screen flex items-center justify-center"
+      className="casi-studio-chrome min-h-screen flex items-center justify-center"
       style={{ background: 'var(--casi-bg)', color: 'var(--casi-text-dim)' }}
     >
       <div className="font-mono uppercase" style={{ fontSize: '11px', letterSpacing: '0.2em' }}>

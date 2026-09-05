@@ -92,7 +92,14 @@ export default function StudioSettingsPage() {
   }
 
   return (
-    <main className="min-h-screen" style={{ background: 'var(--paper, var(--casi-bg))', color: 'var(--text, var(--casi-text))' }}>
+    <main className="casi-studio-chrome min-h-screen">
+      {/* Same fixed-chrome + anti-FOUC rationale as StudioFrame.tsx — see
+          the comment there. /studio/settings has its own top-level <main>
+          (it doesn't render inside StudioFrame), so it needs its own copy
+          of both the wrapper class and this style tag. */}
+      <style jsx global>{`
+        html, body { background: var(--chrome-paper); }
+      `}</style>
       <Nav
         right={
           <>
@@ -153,8 +160,8 @@ function navChipStyle({ active = false }: { active?: boolean } = {}): React.CSSP
 function StatusScreen({ children }: { children: React.ReactNode }) {
   return (
     <main
-      className="min-h-screen flex items-center justify-center"
-      style={{ background: 'var(--paper, var(--casi-bg))', color: 'var(--text-3, var(--casi-text-dim))' }}
+      className="casi-studio-chrome min-h-screen flex items-center justify-center"
+      style={{ background: 'var(--paper)', color: 'var(--text-3)' }}
     >
       <div className="font-mono uppercase" style={{ fontSize: '11px', letterSpacing: '0.2em' }}>
         {children}

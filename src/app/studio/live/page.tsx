@@ -189,7 +189,7 @@ export default function StudioLivePage() {
 function StatusScreen({ children }: { children: React.ReactNode }) {
   return (
     <main
-      className="min-h-screen flex items-center justify-center"
+      className="casi-studio-chrome min-h-screen flex items-center justify-center"
       style={{ background: 'var(--casi-bg)', color: 'var(--casi-text-dim)' }}
     >
       <div className="font-mono uppercase" style={{ fontSize: '11px', letterSpacing: '0.2em' }}>
