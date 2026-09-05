@@ -51,8 +51,11 @@ export default function Nav({ brandHref = '/', left, right }: NavProps) {
       style={{
         '--paper': 'var(--chrome-paper)',
         '--ink': 'var(--chrome-ink)',
-        padding: '0 36px',
-        height: '54px',
+        display: 'flex',
+        flexWrap: 'wrap',
+        rowGap: '8px',
+        padding: '10px 36px',
+        minHeight: '54px',
         borderBottom: '1px solid color-mix(in oklab, var(--chrome-ink) 8%, var(--chrome-paper))',
         background: 'var(--chrome-paper)',
         position: centered ? 'relative' : undefined,
@@ -70,7 +73,12 @@ export default function Nav({ brandHref = '/', left, right }: NavProps) {
         {left ?? null}
       </div>
       {right ? (
-        <div className="flex items-center" style={{ gap: '14px' }}>
+        // flex-wrap here specifically -- on a narrow viewport the
+        // MobileWalletPicker deeplink buttons don't fit alongside the
+        // Dashboard link. min-height above (was a fixed height) lets this
+        // whole bar grow instead of the overflow spilling onto the page
+        // content below it -- confirmed on a real device screenshot.
+        <div className="flex items-center" style={{ gap: '8px 14px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {right}
         </div>
       ) : null}

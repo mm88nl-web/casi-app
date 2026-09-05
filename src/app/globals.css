@@ -179,8 +179,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--pad);
-  height: 60px;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  padding: 10px var(--pad);
+  min-height: 60px;
   border-bottom: 1px solid var(--line);
   background: var(--paper);
   position: sticky;
@@ -223,7 +225,9 @@
 .casi-v9-nav-r {
   display: flex;
   align-items: center;
-  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 14px;
 }
 .casi-v9-nav-live {
   display: flex;

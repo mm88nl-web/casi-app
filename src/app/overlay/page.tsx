@@ -2284,10 +2284,17 @@ function OverlayContent() {
            above --chrome-* there). .notif just below stays on the mutable
            accent tokens on purpose: it's a moderation-state toast (queued/
            denied/approved), not chrome, and correctly follows the skin. */
-        .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid color-mix(in oklab, var(--chrome-ink) 8%, var(--chrome-paper)); background:color-mix(in srgb, var(--chrome-paper) 94%, transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
+        .ov-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; row-gap:8px; padding:10px 24px; min-height:56px; border-bottom:1px solid color-mix(in oklab, var(--chrome-ink) 8%, var(--chrome-paper)); background:color-mix(in srgb, var(--chrome-paper) 94%, transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
         .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; --ink:var(--chrome-ink); --paper:var(--chrome-paper); }
         .ov-wm { font-size:18px; font-weight:800; color:var(--chrome-ink); letter-spacing:-0.5px; }
-        .ov-nav-right { display:flex; align-items:center; gap:10px; }
+        /* flex-wrap here specifically -- on a narrow viewport the
+           MobileWalletPicker deeplink buttons (Phantom/Solflare, shown when
+           no wallet is connected) don't fit alongside the viewer-name chip
+           and any active notification toast. ov-nav's own min-height (was a
+           fixed height) lets this row actually grow instead of the
+           overflow spilling onto the content below it -- confirmed on a
+           real device screenshot, not a hypothetical. */
+        .ov-nav-right { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:8px 10px; }
         .notif { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:springPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
         .viewer-chip { display:flex; align-items:center; gap:6px; background:color-mix(in oklab, var(--chrome-ink) 4%, var(--chrome-paper)); border:1px solid color-mix(in oklab, var(--chrome-ink) 18%, var(--chrome-paper)); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
         .viewer-chip:hover { border-color:color-mix(in oklab, var(--chrome-ink) 34%, var(--chrome-paper)); }

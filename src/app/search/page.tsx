@@ -229,12 +229,19 @@ export default function SearchPage() {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          flex-wrap: wrap;
+          row-gap: 12px;
           padding: 28px 40px;
           flex-shrink: 0;
         }
         @media (max-width: 640px) { .nav { padding: 22px 22px; } }
         .nav-logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
-        .nav-r { display: flex; align-items: center; gap: 14px; }
+        /* flex-wrap here specifically -- on a narrow viewport the viewer
+           chip + MobileWalletPicker's two deeplink buttons + the login
+           link don't fit on one line. Before this they had nowhere to go
+           but overflow/collide instead of wrapping onto their own row --
+           confirmed on a real device screenshot, not a hypothetical. */
+        .nav-r { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px 14px; }
         @keyframes blink {
           0%   { box-shadow: 0 0 0 0   color-mix(in oklab, var(--accent) 55%, transparent); }
           100% { box-shadow: 0 0 0 9px color-mix(in oklab, var(--accent)  0%, transparent); }
