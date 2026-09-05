@@ -875,9 +875,10 @@
   font-weight: 700;
   color: var(--text-2);
 }
+.casi-v9-lyr-add-wrap { position: relative; }
 .casi-v9-lyr-hd-add {
-  width: 22px;
-  height: 22px;
+  height: 26px;
+  padding: 0 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -887,12 +888,42 @@
   border-radius: var(--radius-pill);
   font-family: var(--B);
   font-weight: 700;
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   transition: filter 0.13s;
 }
 .casi-v9-lyr-hd-add:hover { filter: brightness(1.1); }
+.casi-v9-lyr-add-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 6px;
+  gap: 2px;
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+.casi-v9-lyr-add-menu button {
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  border: none;
+  font-family: var(--B);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.13s;
+}
+.casi-v9-lyr-add-menu button:hover { background: var(--ink-04); }
 .casi-v9-lyr-list { display: flex; flex-direction: column; padding: 6px; gap: 4px; }
 .casi-v9-lyr-item {
   display: flex;

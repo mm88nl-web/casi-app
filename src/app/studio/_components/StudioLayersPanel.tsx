@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 // Eye / lock SVGs are inlined to match the v9 mockup exactly without pulling
 // in an icon library. stroke-width is consumed via currentColor so the v9
@@ -46,6 +46,7 @@ type Props = {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onAdd?: () => void;
+  onAddBackdrop?: () => void;
   onToggleLock?: (id: string, current: boolean) => void;
 };
 
@@ -65,16 +66,65 @@ export default function StudioLayersPanel({
   selectedId,
   onSelect,
   onAdd,
+  onAddBackdrop,
   onToggleLock,
 }: Props) {
+  // One "+ Add" entry point with Beam/Backdrop as the two types to pick from,
+  // rather than two separate top-level buttons — a streamer adds a slot far
+  // more often than they add a backdrop (at most one backdrop ever exists at
+  // a time), so it shouldn't take equal billing in the header.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('mousedown', onOutside);
+    document.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('mousedown', onOutside);
+      document.removeEventListener('keydown', onEscape);
+    };
+  }, [menuOpen]);
+
   return (
     <aside className="casi-v9-lyr-panel">
       <div className="casi-v9-lyr-hd">
         <span>Layers · {layers.length}</span>
         {onAdd ? (
-          <button type="button" className="casi-v9-lyr-hd-add" title="Add slot" onClick={onAdd}>
-            +
-          </button>
+          <div className="casi-v9-lyr-add-wrap" ref={menuRef}>
+            <button
+              type="button"
+              className="casi-v9-lyr-hd-add"
+              title="Add slot"
+              onClick={() => (onAddBackdrop ? setMenuOpen((v) => !v) : onAdd())}
+              aria-expanded={menuOpen}
+              aria-haspopup={onAddBackdrop ? 'menu' : undefined}
+            >
+              + Add
+            </button>
+            {menuOpen && onAddBackdrop ? (
+              <div className="casi-v9-lyr-add-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setMenuOpen(false); onAdd(); }}
+                >
+                  Beam
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setMenuOpen(false); onAddBackdrop(); }}
+                >
+                  Backdrop
+                </button>
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
       <div className="casi-v9-lyr-list">
