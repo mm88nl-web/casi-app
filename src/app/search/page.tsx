@@ -268,13 +268,24 @@ export default function SearchPage() {
         }
         .vdot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.5s infinite; flex-shrink: 0; }
         .vname { font-family: var(--M); font-size: 11px; color: var(--type-2); }
-        .login-link {
+        /* :global() — styled-jsx only auto-scopes classNames on native DOM
+           elements, never on custom components (next/link included), even
+           though Link forwards className straight to the anchor it renders.
+           Without :global() this rule's compiled selector requires a
+           jsx-hash class the element never receives, so the rule silently
+           never matches and the link falls back to Tailwind's plain anchor
+           color:inherit rule — inherits whatever dark chrome-text color the
+           page body set, invisible on the now-dark-green nav. Confirmed via
+           CSS.getMatchedStylesForNode on the deployed page: every other nav
+           child (plain div/span) got the scope hash; this Link-rendered
+           anchor didn't. */
+        :global(.login-link) {
           font-family: var(--S); font-style: italic; font-size: 16px; color: var(--type-2);
           border-bottom: 1.5px solid color-mix(in oklab, var(--type) 24%, transparent);
           padding-bottom: 1px; text-decoration: none; white-space: nowrap;
         }
         @media (max-width: 540px) {
-          .login-link { font-size: 14px; }
+          :global(.login-link) { font-size: 14px; }
           .vname { max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         }
 
@@ -366,7 +377,11 @@ export default function SearchPage() {
           letter-spacing: -0.025em; color: var(--type);
         }
         .empty p { margin-top: 12px; font-size: 15px; color: var(--type-2); }
-        .empty-cta {
+        /* :global() — see the long comment on .login-link above; same
+           next/link scoping gap (confirmed the same way: this rule's
+           background/color never applied, an unstyled inherited-blue link
+           instead of the intended ink-filled pill). */
+        :global(.empty-cta) {
           display: inline-flex; align-items: center; gap: 10px; margin-top: 20px;
           background: var(--ink); color: var(--paper);
           padding: 13px 22px; border-radius: 999px;
