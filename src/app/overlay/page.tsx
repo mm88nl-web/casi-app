@@ -2363,7 +2363,7 @@ function OverlayContent() {
         .slot-card {
           display:flex; align-items:center; gap:14px;
           padding:14px 16px; background:var(--surf);
-          border:1px solid var(--line); border-radius:10px;
+          border:1px solid var(--line); border-radius:14px;
           cursor:pointer; text-align:left; width:100%; font:inherit; color:inherit;
           transition:border-color .15s, background .15s;
         }
