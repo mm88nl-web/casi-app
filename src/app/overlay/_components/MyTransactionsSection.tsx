@@ -2,6 +2,7 @@
 
 import UsdcIcon from '@/components/icons/UsdcIcon';
 import { EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
+import { formatFiat } from '@/lib/currency';
 
 export type TxRow = {
   kind: 'beam' | 'flash';
@@ -67,6 +68,11 @@ type Props = {
   rows: TxRow[];
   /** Streamer handle for the section header. */
   username: string;
+  /** Streamer's Stripe Connect settlement currency (lowercase ISO-4217).
+   *  Every card row for a given streamer settles in this currency (see
+   *  AGENTS.md "Charge currency = streamer's account.default_currency").
+   *  null falls back to USD-style '$' rendering via formatFiat. */
+  streamerCurrency?: string | null;
 };
 
 function fmtTime(iso: string): string {
@@ -114,13 +120,13 @@ function spendTotals(rows: TxRow[]): { usdc: number; card: number } {
   return { usdc: usdc / 100, card: card / 100 };
 }
 
-export default function MyTransactionsSection({ rows, username }: Props) {
+export default function MyTransactionsSection({ rows, username, streamerCurrency = null }: Props) {
   if (!rows.length) return null;
 
   const { usdc, card } = spendTotals(rows);
   const totalParts: string[] = [];
   if (usdc > 0) totalParts.push(`${usdc.toFixed(2)} USDC`);
-  if (card > 0) totalParts.push(`€${card.toFixed(2)}`);
+  if (card > 0) totalParts.push(formatFiat(streamerCurrency, card));
 
   return (
     <div className="my-tx" style={{ marginTop: 16 }}>
@@ -136,7 +142,7 @@ export default function MyTransactionsSection({ rows, username }: Props) {
           display: flex; flex-direction: column;
           background: var(--casi-surface);
           border: 1px solid var(--casi-border);
-          border-radius: 0;
+          border-radius: var(--radius-card, 16px);
           overflow: hidden;
         }
         .my-tx-row {
@@ -159,6 +165,10 @@ export default function MyTransactionsSection({ rows, username }: Props) {
           flex-shrink: 0; width: 44px;
         }
         .my-tx-msg {
+          /* Signature redesign move: the activity-row description reads in
+             Newsreader, matching the flash-feed message treatment, instead
+             of the default body sans. */
+          font-family: var(--S, var(--font-casi-sans));
           flex: 1; min-width: 0;
           color: var(--casi-text-mid);
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -212,7 +222,7 @@ export default function MyTransactionsSection({ rows, username }: Props) {
             ? 'free'
             : r.payment_method === 'solana'
               ? `${(cents / 100).toFixed(2)}`
-              : `€${(cents / 100).toFixed(2)}`;
+              : formatFiat(streamerCurrency, cents / 100);
           // Beam description: prefer aired duration when we know it (started)
           // — falls back to the booked duration for pending/cancelled rows.
           const durationLabel = r.duration_minutes != null ? `${r.duration_minutes}m` : '∞';

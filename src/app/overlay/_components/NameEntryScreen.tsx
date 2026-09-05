@@ -43,7 +43,10 @@ export default function NameEntryScreen({ onConfirm, tc }: Props) {
                 ↺ random
               </button>
             </div>
-            <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'var(--ink-45)', marginBottom:20 }}>A random name was generated — change it or keep it.</div>
+            {/* Signature redesign move: this full-sentence aside reads in
+                Newsreader italic, not mono — mono stays reserved for the
+                short caps labels/buttons around it. */}
+            <div style={{ fontFamily:'var(--S)', fontStyle:'italic', fontSize:13, color:'var(--ink-45)', marginBottom:20 }}>A random name was generated — change it or keep it.</div>
             <button
               onClick={() => name.trim() && onConfirm(name.trim())}
               disabled={!name.trim()}
@@ -60,7 +63,7 @@ export default function NameEntryScreen({ onConfirm, tc }: Props) {
           </button>
           {showNote && (
             <div style={{ background:'var(--paper-2)', border:'1px solid var(--ink-12)', borderRadius:10, padding:16, textAlign:'center', marginTop:8 }}>
-              <div style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:11, color:'var(--ink-45)', lineHeight:1.7 }}>Viewers don&apos;t need one. Your name lives on this device so we can show your bookings here. Clear cookies to reset.<br /><br />Streamer? <a href="/login" style={{ color:'var(--ink-70)', textDecoration:'underline' }}>Sign in</a>.</div>
+              <div style={{ fontFamily:'var(--S)', fontStyle:'italic', fontSize:14, color:'var(--ink-45)', lineHeight:1.6 }}>Viewers don&apos;t need one. Your name lives on this device so we can show your bookings here. Clear cookies to reset.<br /><br />Streamer? <a href="/login" style={{ color:'var(--ink-70)', textDecoration:'underline' }}>Sign in</a>.</div>
             </div>
           )}
         </div>

@@ -207,7 +207,10 @@ export default function CustomizePanel({
         }}
       >
         <span>{open ? '▾' : '▸'} Customize</span>
-        <span style={{ color: 'var(--ink-45)' }}>{isBanner ? 'size · speed' : 'drag · scroll to zoom'}</span>
+        {/* Signature redesign move: this is exactly the "5 min · square"
+            style metadata caption the handoff calls out — Newsreader
+            italic instead of inheriting the button's mono caps. */}
+        <span style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 12.5, textTransform: 'none', letterSpacing: 'normal', color: 'var(--ink-45)' }}>{isBanner ? 'size · speed' : 'drag · scroll to zoom'}</span>
       </button>
 
       {open && (
@@ -363,7 +366,7 @@ export default function CustomizePanel({
                       />
                       <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 12, color: 'var(--ink-45)', userSelect: 'none' }}>+</span>
                     </div>
-                    <div style={{ marginTop: 5, fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: 'var(--ink-45)', letterSpacing: 0.5 }}>
+                    <div style={{ marginTop: 5, fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 12.5, color: 'var(--ink-45)' }}>
                       Drag to pan · scroll, pinch, or the slider to zoom
                     </div>
                   </>

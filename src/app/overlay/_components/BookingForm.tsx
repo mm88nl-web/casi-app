@@ -596,8 +596,11 @@ export default function BookingForm(props: Props) {
             </div>
 
             {/* Sub-detail line — duration + rate breakdown, neutralized
-                visually so it doesn't compete with the rail cards above. */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, padding: '0 4px', fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: 'var(--ink-45)', letterSpacing: 0.5 }}>
+                visually so it doesn't compete with the rail cards above.
+                Signature redesign move: this is exactly the "5 min · square"
+                style metadata row the handoff calls out — Newsreader
+                italic instead of mono caps, no logic touched. */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, padding: '0 4px', fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 12.5, color: 'var(--ink-45)' }}>
               <span>{formatTime(durationSeconds)} · {slot.price_unit === 'hr' ? 'hourly rate' : 'per-minute rate'}</span>
               <span>{paymentRail === 'free' ? 'no charge' : paymentRail === 'stripe' ? `${fiatSymbol(streamerCurrency)}${fiatRate}/${slot.price_unit}` : `${usdcRate} USDC/${slot.price_unit}`}</span>
             </div>
@@ -634,7 +637,10 @@ export default function BookingForm(props: Props) {
           <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 15, fontWeight: 700, color: 'var(--casi-accent)' }}>
             {queueWait.wait === null ? 'Unknown — waiting on streamer' : `~${queueWait.wait} min`}
           </div>
-          <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: 'var(--ink-45)', marginTop: 2 }}>
+          {/* Signature redesign move: the queue-position aside reads in
+              Newsreader italic, not mono — same "wants Beam 1 · waiting
+              40s" pattern the handoff calls out. */}
+          <div style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 12.5, color: 'var(--ink-45)', marginTop: 2 }}>
             {queueWait.ahead} booking{queueWait.ahead !== 1 ? 's' : ''} ahead of you
           </div>
         </div>
