@@ -55,6 +55,11 @@ const SHAPE_CSS: Record<string, string> = {
 // (the booking form for whichever slot the viewer currently has selected).
 const CUSTOM_CLIP_ID = 'casi-customize-preview-clip';
 
+// Target height for the position/zoom preview box — width is derived from
+// this + the slot's real aspect ratio (see the box's style below) so the
+// ratio itself is never independently clamped.
+const PREVIEW_MAX_HEIGHT = 200;
+
 const FONT_PRESETS = [
   { label: 'S', px: 18 },
   { label: 'M', px: 28 },
@@ -311,9 +316,22 @@ export default function CustomizePanel({
                   onPointerUp={onPointerUp}
                   onPointerCancel={onPointerUp}
                   style={{
-                    width: '100%',
+                    // Was width:100% + aspectRatio + a separate maxHeight —
+                    // whenever the ratio-correct height exceeded 200px, the
+                    // browser clamped height but left width at 100%,
+                    // silently distorting the box into the WRONG aspect
+                    // ratio. That meant this preview was cropping a
+                    // different window into the image than the real canvas
+                    // slot, at any zoom/pan — the more you zoomed, the more
+                    // the two visibly diverged. Deriving width FROM the
+                    // height cap (instead of capping height independently)
+                    // means the aspect-ratio math is never overridden: this
+                    // box always shows exactly the same crop the canvas
+                    // does, just possibly narrower on screen for a tall/
+                    // portrait custom shape.
+                    width: `min(100%, ${PREVIEW_MAX_HEIGHT * slotAspectRatio}px)`,
                     aspectRatio: slotAspectRatio,
-                    maxHeight: 200,
+                    margin: '0 auto',
                     background: 'var(--paper-2)',
                     border: `1px solid rgba(${accentColorRgb},0.2)`,
                     borderRadius: 8,

@@ -2322,7 +2322,20 @@ function OverlayContent() {
             padding:24px 48px 60px;
           }
           .ov-layout.ov-v9 > .ov-main { grid-column:1; padding:0; }
-          .ov-layout.ov-v9 > .ov-booking-col { grid-column:2; align-self:start; padding:0; }
+          /* Sticky + internally scrolling instead of just aligning to the
+             top: the booking form (many stacked cards — media, customize,
+             duration, payment) routinely runs taller than the canvas
+             column, which used to push the whole PAGE down well past
+             where the canvas ends. Capping it to the viewport and letting
+             IT scroll means the canvas / "My beams" / browse-streams
+             column stays in view the whole time you're filling the form
+             out, instead of scrolling out of reach. */
+          .ov-layout.ov-v9 > .ov-booking-col {
+            grid-column:2; padding:0;
+            position:sticky; top:80px;
+            max-height:calc(100vh - 100px);
+            overflow-y:auto;
+          }
         }
         .ov-browse-link {
           display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -2363,7 +2376,14 @@ function OverlayContent() {
            applied by SlotsList.tsx (none today, so it stays a square — fine
            visually, the type text already conveys shape). */
         .slots-sec { margin-top:0; }
-        @media (max-width:899px) { .slots-sec { margin-top:16px; } }
+        @media (max-width:899px) {
+          .slots-sec { margin-top:16px; }
+          /* Below the 2-col breakpoint, My Beams sits above the canvas +
+             booking form in one stacked column — showing it while a slot
+             is selected would push the form further down, the opposite
+             of the desktop fix below. See the render-site comment. */
+          .ov-mybeams-slotopen { display:none; }
+        }
         .slots-lbl {
           font-family:var(--M); font-size:11px; font-weight:600; color:var(--text-3);
           text-transform:uppercase; letter-spacing:0.16em; margin-bottom:14px;
@@ -2435,12 +2455,19 @@ function OverlayContent() {
           padding:0; background:none;
           color:var(--ink) !important;
         }
+        /* Was a bare 14px glyph with no background — easy to miss as an
+           actual button rather than decorative text. Real circular chip
+           now, sized like a proper tap target. */
         .bf-x {
-          background:none; border:none; color:var(--text-3); opacity:.8;
-          cursor:pointer; font-size:14px; padding:4px 6px; transition:opacity .14s, color .14s;
-          font-family:var(--M); flex-shrink:0;
+          width:34px; height:34px; flex-shrink:0;
+          display:flex; align-items:center; justify-content:center;
+          background:var(--surf-2); border:1px solid var(--line-2);
+          border-radius:var(--radius-pill);
+          color:var(--text-2);
+          cursor:pointer; font-size:18px; line-height:1;
+          transition:background .14s, color .14s, border-color .14s;
         }
-        .bf-x:hover { opacity:1; color:var(--text); }
+        .bf-x:hover { background:var(--surf); color:var(--text); border-color:var(--ink-40); }
         .bf-grid {
           display:flex; flex-direction:column; gap:14px;
           padding:0;
@@ -2723,9 +2750,16 @@ function OverlayContent() {
         <div className={isOBS ? '' : 'ov-layout ov-v9'}>
         <main className={isOBS ? '' : 'ov-main'}>
 
-          {/* MY BEAMS */}
-          {!isOBS && !selectedSlot && (
-            <div className="ov-full-row">
+          {/* MY BEAMS — was hidden entirely whenever a slot was selected,
+              so a viewer mid-booking lost all visibility into their own
+              active/queued beams ("history"). Kept hidden on mobile while
+              a slot is open (there it sits ABOVE the canvas+form in one
+              stacked column, so showing it would push the form even
+              further down the page — the opposite of what's wanted). On
+              desktop it's a separate column from the booking form
+              entirely, so there's no such tradeoff — always show it. */}
+          {!isOBS && (
+            <div className={`ov-full-row${selectedSlot ? ' ov-mybeams-slotopen' : ''}`}>
             <MyBeamsSection
               bookings={visibleMyBookings}
               activeBookings={activeBookings}
@@ -3168,6 +3202,20 @@ function OverlayContent() {
             {selectedSlot && (
               <BookingForm
                 slot={selectedSlot}
+                slotLabel={
+                  selectedSlot.is_background
+                    ? 'Backdrop'
+                    // Same numbering scheme as Studio's Layers panel
+                    // (StudioLiveEditor's `layers` memo) — increments over
+                    // non-backdrop elements in their original fetch order,
+                    // computed independently here but landing on the same
+                    // number since both sides fetch with no explicit
+                    // .order() and don't resort before counting. Lets a
+                    // viewer say "the Beam 2 slot" and have the streamer
+                    // know exactly which one, instead of a generic label
+                    // neither side can point at.
+                    : `Beam ${elements.filter((el) => !el.is_background).findIndex((el) => el.id === selectedSlot.id) + 1}`
+                }
                 accentColor={accentColor}
                 accentColorRgb={accentColorRgb}
                 isExtend={isExtend}

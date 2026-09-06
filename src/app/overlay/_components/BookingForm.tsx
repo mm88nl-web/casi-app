@@ -41,6 +41,10 @@ type Booking = { id: string | number; element_id?: string | null; duration_minut
 
 type Props = {
   slot: Slot;
+  /** "Beam 1" / "Backdrop" etc — same identifying label Studio's Layers
+   *  panel uses, so a viewer can reference the exact slot the streamer
+   *  sees. Replaces the old generic "Tip for slot" tag. */
+  slotLabel: string;
   accentColor: string;
   accentColorRgb: string;
   isExtend: boolean;
@@ -111,7 +115,7 @@ type Props = {
 
 export default function BookingForm(props: Props) {
   const {
-    slot, accentColor, accentColorRgb,
+    slot, slotLabel, accentColor, accentColorRgb,
     isExtend, isQueue, savedViewerName, onChangeNameClick, onClose,
     uploadMode, onUploadModeChange,
     uploadedUrl, uploadedFileType, uploading, onFileSelect, onRemoveUpload,
@@ -253,9 +257,12 @@ export default function BookingForm(props: Props) {
     <div className="bf">
       <div className="bf-hdr">
         <div>
-          <div className="bf-type">
-            {isExtend ? 'Extend slot' : isQueue ? 'Join queue' : 'Tip for slot'}
-          </div>
+          {/* Identifies the actual slot ("Beam 1", "Backdrop") instead of
+              a generic "Tip for slot" tag that told a viewer nothing they
+              could reference back to the streamer. Extend/queue context
+              still shows up in the pay button below ("Extend slot" /
+              "Join queue"), so it isn't lost — just not duplicated here. */}
+          <div className="bf-type">{slotLabel}</div>
           <div className="bf-price" style={{ color: isFreeSlot ? '#4ade80' : undefined }}>
             {isFreeSlot ? '★ Free' : formatSlotPrice(slot).label}
           </div>
