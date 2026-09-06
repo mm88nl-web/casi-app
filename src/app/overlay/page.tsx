@@ -2684,16 +2684,13 @@ function OverlayContent() {
               {/* Wallet pill — net dot, USDC + SOL balances, identity dropdown.
                   v7-styled twin of WalletNav; same useWalletBalances store. */}
               <WalletPill />
-              {notification && (
-                <div className="notif" style={
-                  notification.type==='success' ? { background:'var(--accent-soft)', border:'1px solid rgba(var(--casi-accent2-rgb),0.35)', color:'var(--accent)' } :
-                  notification.type==='queue'   ? { background:'rgba(var(--casi-accent2-rgb),0.08)', border:'1px solid rgba(var(--casi-accent2-rgb),0.28)', color:'var(--accent)' } :
-                  notification.type==='denied'  ? { background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.25)', color:'#f87171' } :
-                  { background:'rgba(234,179,8,0.1)', border:'1px solid rgba(234,179,8,0.25)', color:'#facc15' }
-                }>{notification.text}</div>
-              )}
-              {selectedSlot && <button onClick={closeSlot} style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'var(--ink-70)', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5 }}>Cancel</button>}
-              {savedViewerName && !selectedSlot && (
+              {/* Viewer identity chip — moved to sit directly beside the
+                  wallet pill and shown regardless of selectedSlot (it used
+                  to hide the moment a slot opened, forcing a second,
+                  bulkier "Viewing as" card inside the booking form itself —
+                  removed from BookingForm.tsx in favor of this one, always-
+                  visible copy). */}
+              {savedViewerName && (
                 showChangeName ? (
                   <input type="text" defaultValue={savedViewerName} autoFocus className="name-edit-input"
                     onKeyDown={(e) => { if(e.key==='Enter'){const v=(e.target as HTMLInputElement).value.trim(); if(v){confirmName(v);setShowChangeName(false);}} if(e.key==='Escape')setShowChangeName(false); }}
@@ -2705,6 +2702,15 @@ function OverlayContent() {
                   </div>
                 )
               )}
+              {notification && (
+                <div className="notif" style={
+                  notification.type==='success' ? { background:'var(--accent-soft)', border:'1px solid rgba(var(--casi-accent2-rgb),0.35)', color:'var(--accent)' } :
+                  notification.type==='queue'   ? { background:'rgba(var(--casi-accent2-rgb),0.08)', border:'1px solid rgba(var(--casi-accent2-rgb),0.28)', color:'var(--accent)' } :
+                  notification.type==='denied'  ? { background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.25)', color:'#f87171' } :
+                  { background:'rgba(234,179,8,0.1)', border:'1px solid rgba(234,179,8,0.25)', color:'#facc15' }
+                }>{notification.text}</div>
+              )}
+              {selectedSlot && <button onClick={closeSlot} style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'var(--ink-70)', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5 }}>Cancel</button>}
             </div>
           </nav>
         )}
@@ -3009,13 +3015,19 @@ function OverlayContent() {
                               : el.is_background
                                 ? 'rgba(168,85,247,0.85)'
                                 : `rgba(${tcRgb},0.85)`}`,
+                          // Fill alpha bumped 0.02-0.03 → 0.14 — the very
+                          // faint fill made empty slots read as "not really
+                          // there," almost fully see-through to whatever
+                          // backdrop sat behind them. Border stays at 0.85
+                          // (unchanged) since that was already clearly
+                          // visible; only the interior fill was the problem.
                           background: isLocked
-                            ? 'rgba(248,113,113,0.03)'
+                            ? 'rgba(248,113,113,0.14)'
                             : isOccupied
-                              ? `rgba(${tcRgb},0.02)`
+                              ? `rgba(${tcRgb},0.14)`
                               : el.is_background
-                                ? 'rgba(168,85,247,0.03)'
-                                : `rgba(${tcRgb},0.02)`,
+                                ? 'rgba(168,85,247,0.14)'
+                                : `rgba(${tcRgb},0.14)`,
                           boxShadow: '0 0 0 1px rgba(0,0,0,0.55)',
                         }}
                       >
@@ -3235,8 +3247,6 @@ function OverlayContent() {
                 accentColorRgb={accentColorRgb}
                 isExtend={isExtend}
                 isQueue={isQueue}
-                savedViewerName={savedViewerName ?? ''}
-                onChangeNameClick={() => setShowChangeName(true)}
                 onClose={closeSlot}
                 uploadMode={uploadMode}
                 onUploadModeChange={setUploadMode}

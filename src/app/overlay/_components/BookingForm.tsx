@@ -49,8 +49,6 @@ type Props = {
   accentColorRgb: string;
   isExtend: boolean;
   isQueue: boolean;
-  savedViewerName: string;
-  onChangeNameClick: () => void;
   onClose: () => void;
 
   // Media
@@ -116,7 +114,7 @@ type Props = {
 export default function BookingForm(props: Props) {
   const {
     slot, slotLabel, accentColor, accentColorRgb,
-    isExtend, isQueue, savedViewerName, onChangeNameClick, onClose,
+    isExtend, isQueue, onClose,
     uploadMode, onUploadModeChange,
     uploadedUrl, uploadedFileType, uploading, onFileSelect, onRemoveUpload,
     imageUrl, imageValid, onImageUrlChange, onImageValidChange, getUrlFileType,
@@ -403,24 +401,6 @@ export default function BookingForm(props: Props) {
               onMediaZoomChange={onMediaZoomChange}
             />
           )}
-
-        <div className="bf-section">
-            <label className="bf-lbl">Viewing as</label>
-            <div className="casi-v9-viewing-as">
-              <span className="casi-v9-va-avatar" aria-hidden />
-              <div className="casi-v9-va-info">
-                <span className="casi-v9-va-name">@{savedViewerName}</span>
-                <span className="casi-v9-va-tag">Local session</span>
-              </div>
-              <button
-                type="button"
-                onClick={onChangeNameClick}
-                className="casi-v9-va-change"
-              >
-                Change
-              </button>
-            </div>
-        </div>
 
         <div className="bf-section">
             {/* Slider, matching the design-source prototype's "How long"

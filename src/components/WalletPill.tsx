@@ -19,9 +19,23 @@ import SolanaIcon from './icons/SolanaIcon';
 // component's CSS resolves to Casi's own chrome instead of the active
 // streamer skin mutating <html>. Always pair with data-paper="light" on
 // the same element — see the --chrome-* comment in globals.css.
+//
+// --ink-04/-08/-40 need their OWN explicit override here too, not just
+// --ink/--paper: those ladder tokens are declared once at :root as
+// color-mix(var(--ink), var(--paper)) formulas, and a custom property's
+// var()-substitution happens at the element that DECLARES it, not the one
+// that consumes it — so a descendant shadowing --ink/--paper alone doesn't
+// retroactively change what --ink-04 already resolved to at :root. Without
+// this, .wp-net / .wp-drop-head (both `background: var(--ink-04)`) rendered
+// as a dark teal-on-near-black tint from the streamer's real skin instead of
+// a green-on-cream chrome tint — same bug class .casi-studio-chrome exists
+// to fix for the studio surfaces.
 const CHROME_SCOPE: CSSProperties = {
   ['--ink' as string]: 'var(--chrome-ink)',
   ['--paper' as string]: 'var(--chrome-paper)',
+  ['--ink-04' as string]: 'color-mix(in oklab, var(--chrome-ink) 4%, var(--chrome-paper))',
+  ['--ink-08' as string]: 'color-mix(in oklab, var(--chrome-ink) 8%, var(--chrome-paper))',
+  ['--ink-40' as string]: 'color-mix(in oklab, var(--chrome-ink) 40%, var(--chrome-paper))',
 } as CSSProperties;
 
 const CSS = `
