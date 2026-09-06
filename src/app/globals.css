@@ -933,12 +933,15 @@
   color: var(--ink);
 }
 
-/* Layers panel */
+/* Layers panel. No overflow:hidden here (nothing inside actually scrolls) —
+   it was clipping the "+ Add" dropdown menu, which positions itself below
+   the header and got cut off against this panel's own bottom edge on a
+   short list. Header/list items carry their own border-radius already, so
+   dropping this doesn't reopen a square-corner bug. */
 .casi-v9-lyr-panel {
   background: var(--surf);
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
-  overflow: hidden;
 }
 .casi-v9-lyr-hd {
   display: flex;
@@ -946,6 +949,7 @@
   justify-content: space-between;
   padding: 13px 14px;
   border-bottom: 1px solid var(--line);
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
   font-family: var(--B);
   font-size: 13px;
   font-weight: 700;
@@ -1077,8 +1081,11 @@
   flex-shrink: 0;
 }
 .casi-v9-lyr-tog {
-  width: 22px;
-  height: 22px;
+  /* Bumped up from 22px/12px icon — this is now the only toggle in the row
+     (the non-functional eye toggle was removed), so it can afford to be a
+     properly-sized tap target instead of splitting space with a dead one. */
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1090,7 +1097,7 @@
 }
 .casi-v9-lyr-tog:hover { color: var(--text); }
 .casi-v9-lyr-tog.casi-v9-off { color: var(--line-2); }
-.casi-v9-lyr-tog svg { width: 12px; height: 12px; }
+.casi-v9-lyr-tog svg { width: 16px; height: 16px; }
 .casi-v9-lyr-live-pip {
   flex-shrink: 0;
   width: 6px;

@@ -2,17 +2,9 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
-// Eye / lock SVGs are inlined to match the v9 mockup exactly without pulling
-// in an icon library. stroke-width is consumed via currentColor so the v9
+// Lock SVGs are inlined to match the v9 mockup exactly without pulling in an
+// icon library. stroke-width is consumed via currentColor so the v9
 // .casi-v9-lyr-tog hover/off states drive color naturally.
-function EyeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
 function LockOpenIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -54,12 +46,13 @@ type Props = {
  * v9 Layers panel — sits to the left of the canvas in the 3-col editor.
  * Read-only listing of overlay_elements with z-order grip, a v9 shape glyph
  * adapted to the slot's shape, the slot's price meta, a live pip when a
- * booking is currently airing on it, and visibility / lock toggles.
- *
- * Visibility toggle is currently visual only (the editor doesn't actually
- * hide slots from the canvas — they always render). Lock wires through to
+ * booking is currently airing on it, and a lock toggle (wired through to
  * `onToggleLock` so streamers can pin a slot in place from the Layers list
- * without selecting it on the canvas.
+ * without selecting it on the canvas). Backdrops always sort last — see the
+ * `layers` memo in StudioLiveEditor.tsx — since there's at most one and it
+ * conceptually sits "under" every beam. An eye/visibility toggle used to sit
+ * here too but never actually hid anything (the editor always renders every
+ * slot) — removed rather than left as dead UI.
  */
 export default function StudioLayersPanel({
   layers,
@@ -159,9 +152,6 @@ export default function StudioLayersPanel({
                 <small>{l.meta}</small>
               </span>
               <div className="casi-v9-lyr-toggles">
-                <span className="casi-v9-lyr-tog" title="Visible" aria-hidden>
-                  <EyeIcon />
-                </span>
                 <button
                   type="button"
                   className={`casi-v9-lyr-tog${l.isLocked ? '' : ' casi-v9-off'}`}

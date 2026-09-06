@@ -89,20 +89,64 @@ function RailRow({
   );
 }
 
+// Duration-bound presets, in minutes, spanning seconds through a full day.
+// Used for both the Min and Max dropdowns on the Pricing tab — a dropdown
+// jumps straight to any of these in one click, unlike a +/− stepper ticking
+// by 0.5min at a time (fine for "2 min", painfully slow for "2 hr").
+const DURATION_PRESETS: { value: string; label: string }[] = [
+  { value: '0.5', label: '30 sec' },
+  { value: '1', label: '1 min' },
+  { value: '2', label: '2 min' },
+  { value: '3', label: '3 min' },
+  { value: '5', label: '5 min' },
+  { value: '10', label: '10 min' },
+  { value: '15', label: '15 min' },
+  { value: '20', label: '20 min' },
+  { value: '30', label: '30 min' },
+  { value: '45', label: '45 min' },
+  { value: '60', label: '1 hr' },
+  { value: '90', label: '1.5 hr' },
+  { value: '120', label: '2 hr' },
+  { value: '180', label: '3 hr' },
+  { value: '240', label: '4 hr' },
+  { value: '360', label: '6 hr' },
+  { value: '480', label: '8 hr' },
+  { value: '720', label: '12 hr' },
+  { value: '1440', label: '24 hr' },
+];
+
+// Inserts the slot's current value into the preset list if it's a legacy/
+// custom number that isn't one of the presets, so the dropdown shows the
+// real saved value instead of silently falling back to a blank selection.
+function durationOptions(current: string): { value: string; label: string }[] {
+  const options = [{ value: '', label: 'No limit' }, ...DURATION_PRESETS];
+  if (current === '' || options.some((o) => o.value === current)) return options;
+  const n = parseFloat(current);
+  if (!Number.isFinite(n)) return options;
+  const label = n < 1 ? `${Math.round(n * 60)} sec` : n < 60 ? `${n} min` : `${n % 60 === 0 ? n / 60 : (n / 60).toFixed(1)} hr`;
+  const insertAt = options.findIndex((o) => o.value !== '' && parseFloat(o.value) > n);
+  const entry = { value: current, label };
+  if (insertAt === -1) options.push(entry); else options.splice(insertAt, 0, entry);
+  return options;
+}
+
 /* v9 Properties panel — two tabs (Properties / Pricing). Mounted inside
  * .casi-v9-cp-wrap on /studio (Layers tab); the caller renders the slot's identity
  * header (label + inline delete link) above this panel — see
  * StudioLiveEditor.tsx — so BeamCtrlPanel only owns the tab controls.
  *
  * Distributes the existing controls into v9's tabs:
- *   - Properties: Shape pills + Lock toggle + Publish my own content.
+ *   - Properties: Shape pills + Publish my own content.
  *   - Pricing:    Per-rail rate + mode pills (minute/hour/free) + duration.
  *
  * There used to be a third Behavior tab (glow-on-start + lock) — glow was
  * removed per user request (every beam just glows now, matching the
  * pre-existing `el.glow_on_start ?? true` fallback everywhere it's read:
- * overlay/page.tsx, obs/page.tsx) and Lock moved in here so a two-tab panel
- * doesn't need its own tab for one toggle.
+ * overlay/page.tsx, obs/page.tsx). Lock briefly lived here too, but the
+ * Layers list already has its own lock toggle per row (StudioLayersPanel,
+ * wired to setLayerLocked) — having the same control in two places was
+ * redundant, so this one was removed and the Layers-list one was made
+ * bigger instead of splitting attention between two lock buttons.
  *
  * StreamerPublishCard also moved in here (was a standalone dashboard
  * section with its own "choose a slot" dropdown) — publishing is
@@ -119,7 +163,6 @@ export default function BeamCtrlPanel({
   activeBooking,
   updateSlider, // eslint-disable-line @typescript-eslint/no-unused-vars
   updateLayer,
-  toggleLock,
   kickBeam,
   onDone,
   onUpdateShape,
@@ -131,7 +174,6 @@ export default function BeamCtrlPanel({
   activeBooking: any | null;
   updateSlider: (id: string, updates: any) => void;
   updateLayer: (id: string, updates: any) => void;
-  toggleLock: (id: string, locked: boolean) => void;
   kickBeam: (booking: any) => void;
   onDone: () => void;
   onUpdateShape?: (id: string, shape: string, extra?: { corner_radius?: number; clip_path_svg?: string | null }) => void;
@@ -390,22 +432,6 @@ export default function BeamCtrlPanel({
             );
           })()}
 
-          <div className="casi-v9-cp-row" style={{ marginTop: 4 }}>
-            <span className="casi-v9-cp-lbl">Lock position</span>
-            <button
-              type="button"
-              onClick={() => toggleLock(el.id, !el.locked)}
-              className={`casi-v9-shape-b${el.locked ? ' casi-v9-on' : ''}`}
-              style={
-                el.locked
-                  ? { background: '#f87171', borderColor: '#f87171', color: 'var(--paper)' }
-                  : undefined
-              }
-            >
-              {el.locked ? 'Locked' : 'Unlocked'}
-            </button>
-          </div>
-
           {onPublish && (
             <div style={{ borderTop: '1px solid var(--line)', paddingTop: 16, marginTop: 4 }}>
               <StreamerPublishCard
@@ -499,63 +525,35 @@ export default function BeamCtrlPanel({
             </button>
           </div>
 
-          {/* Duration bounds — Min/Max grouped in one compact row, matching
-              the prototype's side-by-side MIN/MAX fields. Reuses the
-              +/− stepper from the rate rows above instead of bare native
-              number inputs — those were only 60px wide, and once a
-              browser's own spinner arrows ate into that the "Min"/"Max"
-              placeholder had no room left and rendered clipped. */}
+          {/* Duration bounds — a dropdown per bound instead of a +/− stepper.
+              The stepper only moved in 0.5min ticks, so reaching anything
+              past a few minutes meant clicking it dozens of times — a
+              dropdown gets there in one click regardless of how far up the
+              scale the value is. */}
           <div className="casi-v9-cp-row">
             <span className="casi-v9-cp-lbl">Duration</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div className="casi-v9-rail-stepper">
-                <button
-                  type="button"
-                  className="casi-v9-rail-step"
-                  onClick={() => setMinMin(String(Math.max(0, (parseFloat(minMin) || 0) - 0.5)))}
-                  aria-label="Decrease minimum duration"
-                >−</button>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  placeholder="Min"
-                  value={minMin}
-                  onChange={(e) => setMinMin(e.target.value)}
-                  className="casi-v9-rail-input"
-                />
-                <button
-                  type="button"
-                  className="casi-v9-rail-step"
-                  onClick={() => setMinMin(String((parseFloat(minMin) || 0) + 0.5))}
-                  aria-label="Increase minimum duration"
-                >+</button>
-              </div>
+              <select
+                value={minMin}
+                onChange={(e) => setMinMin(e.target.value)}
+                className="casi-v9-cp-input"
+                aria-label="Minimum duration"
+              >
+                {durationOptions(minMin).map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
               <span style={{ color: 'var(--text-4)', fontSize: 11 }}>–</span>
-              <div className="casi-v9-rail-stepper">
-                <button
-                  type="button"
-                  className="casi-v9-rail-step"
-                  onClick={() => setMaxMin(String(Math.max(0, (parseFloat(maxMin) || 0) - 0.5)))}
-                  aria-label="Decrease maximum duration"
-                >−</button>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  placeholder="Max"
-                  value={maxMin}
-                  onChange={(e) => setMaxMin(e.target.value)}
-                  className="casi-v9-rail-input"
-                />
-                <button
-                  type="button"
-                  className="casi-v9-rail-step"
-                  onClick={() => setMaxMin(String((parseFloat(maxMin) || 0) + 0.5))}
-                  aria-label="Increase maximum duration"
-                >+</button>
-              </div>
-              <span className="casi-v9-rail-unit">min</span>
+              <select
+                value={maxMin}
+                onChange={(e) => setMaxMin(e.target.value)}
+                className="casi-v9-cp-input"
+                aria-label="Maximum duration"
+              >
+                {durationOptions(maxMin).map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
             </div>
           </div>
 

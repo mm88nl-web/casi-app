@@ -269,20 +269,6 @@ export default function StudioLiveEditor({
     await updateLayer(id, patch);
   }, [elements, updateLayer]);
 
-  const toggleLock = useCallback(async (id: string, locked: boolean) => {
-    let prevEl: any = null;
-    setElements((prev) => prev.map((el) => {
-      if (el.id !== id) return el;
-      prevEl = el;
-      return { ...el, locked };
-    }));
-    const { error } = await supabase.from('overlay_elements').update({ locked }).eq('id', id);
-    if (error) {
-      if (prevEl) setElements((prev) => prev.map((el) => (el.id === id ? prevEl : el)));
-      showToast('Save failed — change was not saved', 'err');
-    }
-  }, [supabase]);
-
   const addBeam = useCallback(async () => {
     const freePos = findFreePosition(elements);
     const insertData = {
@@ -377,7 +363,7 @@ export default function StudioLiveEditor({
   // reflects the real shape independently of this label.
   const layers: LayerItem[] = useMemo(() => {
     let beamNumber = 0;
-    return elements.map((el) => {
+    const items = elements.map((el) => {
       const live = slotState[el.id] === 'active';
       const queued = slotState[el.id] === 'queued';
       const status = live ? 'LIVE' : queued ? 'queued' : 'idle';
@@ -397,6 +383,12 @@ export default function StudioLiveEditor({
         isBackground: !!el.is_background,
       };
     });
+    // Backdrop always sorts to the bottom of the list — it sits conceptually
+    // "under" every beam, and there's at most one, so it shouldn't compete
+    // for top billing just because of when it happened to be created. Beam
+    // numbering above is computed BEFORE this sort so it still reflects
+    // creation order, not this display order.
+    return items.sort((a, b) => (a.isBackground === b.isBackground ? 0 : a.isBackground ? 1 : -1));
   }, [elements, slotState]);
 
   // Build the OBS source URL the streamer drops into OBS browser source.
@@ -842,7 +834,6 @@ export default function StudioLiveEditor({
                   activeBooking={null}
                   updateSlider={updateSlider}
                   updateLayer={updateLayer}
-                  toggleLock={toggleLock}
                   kickBeam={() => showToast('Use Dashboard to end a running beam', 'err')}
                   onDone={() => setSelectedSlotId(null)}
                   onUpdateShape={handleUpdateShape}
