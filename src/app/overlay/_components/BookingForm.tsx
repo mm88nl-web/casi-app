@@ -39,7 +39,6 @@ type Props = {
   slot: Slot;
   accentColor: string;
   accentColorRgb: string;
-  tcRgb: string;
   isExtend: boolean;
   isQueue: boolean;
   savedViewerName: string;
@@ -108,7 +107,7 @@ type Props = {
 
 export default function BookingForm(props: Props) {
   const {
-    slot, accentColor, accentColorRgb, tcRgb,
+    slot, accentColor, accentColorRgb,
     isExtend, isQueue, savedViewerName, onChangeNameClick, onClose,
     uploadMode, onUploadModeChange,
     uploadedUrl, uploadedFileType, uploading, onFileSelect, onRemoveUpload,
@@ -411,42 +410,45 @@ export default function BookingForm(props: Props) {
 
         <div className="bf-section">
             <label className="bf-lbl">Duration{maxSecs && slot.max_duration_minutes ? ` — max ${fmtMaxDur(slot.max_duration_minutes)}` : ''}</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div className="bf-dur-stepper">
               <button
+                type="button"
+                className="bf-dur-step"
                 onClick={() => onDurationChange(durationSeconds - 5)}
-                style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'var(--casi-text)', fontSize: 15, cursor: 'pointer', flexShrink: 0 }}
+                aria-label="Decrease duration"
               >−</button>
-              <div style={{ flex: 1, textAlign: 'center', fontFamily: "var(--font-casi-mono),monospace", fontSize: 20, fontWeight: 700, color: 'var(--casi-text)', letterSpacing: 1 }}>
+              <div className="bf-dur-readout">
                 {formatTime(durationSeconds)}
               </div>
               <button
+                type="button"
+                className="bf-dur-step"
                 onClick={() => onDurationChange(durationSeconds + 5)}
-                style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'var(--casi-text)', fontSize: 15, cursor: 'pointer', flexShrink: 0 }}
+                aria-label="Increase duration"
               >+</button>
             </div>
-            <div className="dur-row">
+            <div className="casi-v9-shape-btns">
               {presets.map(p => (
                 <button
                   key={p.secs}
-                  className="dur-btn"
-                  style={durationSeconds === p.secs ? { background: accentColor, borderColor: accentColor, color: 'var(--casi-bg)', fontWeight: 700 } : {}}
+                  type="button"
+                  className={`casi-v9-shape-b${durationSeconds === p.secs ? ' casi-v9-on' : ''}`}
+                  style={durationSeconds === p.secs ? { background: accentColor, borderColor: accentColor, color: 'var(--casi-bg)' } : undefined}
                   onClick={() => onDurationChange(p.secs)}
                 >
                   {p.label}
                 </button>
               ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-              <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, letterSpacing: 1, color: 'var(--ink-45)', textTransform: 'uppercase' }}>Custom</span>
+            <div className="bf-dur-custom">
+              <span className="bf-dur-custom-lbl">Custom</span>
               <input
                 type="number"
                 min="0.5"
                 step="0.5"
                 placeholder="minutes"
-                style={{ width: 80, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, padding: '5px 8px', fontSize: 12, color: 'var(--casi-text)', fontFamily: "var(--font-casi-mono),monospace", outline: 'none', textAlign: 'center', MozAppearance: 'textfield' } as React.CSSProperties}
-                onFocus={(e) => (e.target.style.borderColor = 'rgba(var(--casi-accent-rgb),0.38)')}
+                className="bf-dur-custom-input"
                 onBlur={(e) => {
-                  e.target.style.borderColor = 'rgba(255,255,255,0.08)';
                   const mins = parseFloat(e.target.value);
                   if (!isNaN(mins) && mins > 0) { onDurationChange(Math.round(mins * 60)); e.target.value = ''; }
                 }}
@@ -457,7 +459,7 @@ export default function BookingForm(props: Props) {
                   }
                 }}
               />
-              <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: 'var(--ink-45)' }}>min</span>
+              <span className="bf-dur-custom-unit">min</span>
             </div>
         </div>
 
@@ -535,8 +537,9 @@ export default function BookingForm(props: Props) {
           );
 
         return (
-          <div className="bf-rail" style={{ margin: '14px 0 12px' }}>
-            <div className="bf-rail-row" style={{ display: 'grid', gridTemplateColumns: `repeat(${rails.length}, minmax(0, 1fr))`, gap: 8 }}>
+          <div className="bf-section">
+            <label className="bf-lbl">Payment</label>
+            <div className="bf-rail-row" style={{ gridTemplateColumns: `repeat(${rails.length}, minmax(0, 1fr))` }}>
               {rails.map((r) => {
                 const selected = paymentRail === r;
                 const railAccent = r === 'free' ? '#4ade80' : r === 'usdc' ? 'var(--accent)' : accentColor;
@@ -545,58 +548,38 @@ export default function BookingForm(props: Props) {
                   <button
                     key={r}
                     type="button"
+                    className="bf-rail-card"
                     onClick={() => !disabled && setPaymentRail(r)}
                     disabled={disabled}
                     style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      gap: 6,
-                      padding: '12px 14px',
-                      background: selected ? `color-mix(in oklab, ${railAccent} 12%, transparent)` : 'rgba(255,255,255,0.03)',
-                      border: `1px solid ${selected ? railAccent : 'rgba(255,255,255,0.08)'}`,
-                      borderRadius: 10,
+                      background: selected ? `color-mix(in oklab, ${railAccent} 12%, var(--surf-2))` : undefined,
+                      borderColor: selected ? railAccent : undefined,
                       cursor: disabled ? 'default' : 'pointer',
-                      color: 'var(--casi-text)',
-                      textAlign: 'left',
-                      fontFamily: "var(--B), var(--font-casi-sans), sans-serif",
-                      transition: 'border-color 0.14s, background 0.14s',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                    <div className="bf-rail-top">
                       <span
                         aria-hidden
-                        style={{
-                          width: 14, height: 14, borderRadius: '50%',
-                          border: `1.5px solid ${selected ? railAccent : 'rgba(255,255,255,0.25)'}`,
-                          background: selected ? railAccent : 'transparent',
-                          flexShrink: 0,
-                          display: 'inline-block',
-                          boxShadow: selected ? `inset 0 0 0 2px var(--casi-bg, #0c0d11)` : 'none',
-                        }}
+                        className="bf-rail-dot"
+                        style={selected ? { borderColor: railAccent, background: railAccent } : undefined}
                       />
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: railAccent, fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700 }}>
+                      <span className="bf-rail-name" style={{ color: railAccent }}>
                         {railIcon(r)}
                         {railName(r)}
                       </span>
                     </div>
-                    <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 18, fontWeight: 700, color: selected ? railAccent : 'var(--casi-text)', letterSpacing: 0.5, marginTop: 2 }}>
+                    <div className="bf-rail-cost" style={selected ? { color: railAccent } : undefined}>
                       {costLabel(r)}
                     </div>
-                    <div style={{ fontFamily: "var(--M), var(--font-casi-mono),monospace", fontSize: 9, color: 'var(--ink-45)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-                      {railSub(r)}
-                    </div>
+                    <div className="bf-rail-sub">{railSub(r)}</div>
                   </button>
                 );
               })}
             </div>
 
-            {/* Sub-detail line — duration + rate breakdown, neutralized
-                visually so it doesn't compete with the rail cards above.
-                Signature redesign move: this is exactly the "5 min · square"
-                style metadata row the handoff calls out — Newsreader
-                italic instead of mono caps, no logic touched. */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, padding: '0 4px', fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 12.5, color: 'var(--ink-45)' }}>
+            {/* Sub-detail line — duration + rate breakdown, in the same
+                Newsreader-italic voice as the queue-wait aside below. */}
+            <div className="bf-rail-meta">
               <span>{formatTime(durationSeconds)} · {slot.price_unit === 'hr' ? 'hourly rate' : 'per-minute rate'}</span>
               <span>{paymentRail === 'free' ? 'no charge' : paymentRail === 'stripe' ? `${fiatSymbol(streamerCurrency)}${fiatRate}/${slot.price_unit}` : `${usdcRate} USDC/${slot.price_unit}`}</span>
             </div>
@@ -605,8 +588,8 @@ export default function BookingForm(props: Props) {
                 rail is the active one. No more showing USDC balance to
                 a card-paying viewer. */}
             {paymentRail === 'usdc' && walletConnected && usdcBalance !== null ? (
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, padding: '0 4px', fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, letterSpacing: 0.5 }}>
-                <span style={{ color: 'var(--ink-45)' }}>Your balance</span>
+              <div className="bf-rail-balance">
+                <span>Your balance</span>
                 <span style={{ color: usdcBalance < usdcCost ? '#f87171' : '#6ee7b7', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <UsdcIcon size={10} />
                   {usdcBalance.toFixed(2)} USDC
@@ -614,99 +597,88 @@ export default function BookingForm(props: Props) {
               </div>
             ) : null}
             {paymentRail === 'usdc' && walletConnected && usdcBalance !== null && usdcBalance < usdcCost ? (
-              <div style={{ color: '#f87171', fontSize: 10, marginTop: 5, textAlign: 'right' }}>⚠ Insufficient balance</div>
+              <div className="bf-rail-note" style={{ color: '#f87171' }}>⚠ Insufficient balance</div>
             ) : null}
             {paymentRail === 'usdc' && walletConnected && usdcBalance === null ? (
-              <div style={{ color: 'var(--ink-45)', fontSize: 10, marginTop: 6, textAlign: 'right' }}>Fetching balance…</div>
+              <div className="bf-rail-note">Fetching balance…</div>
             ) : null}
             {paymentRail === 'usdc' && !walletConnected ? (
-              <div style={{ color: 'var(--ink-45)', fontSize: 10, marginTop: 6, textAlign: 'right' }}>Connect wallet to pay with USDC on-chain</div>
+              <div className="bf-rail-note">Connect wallet to pay with USDC on-chain</div>
             ) : null}
+
+            {/* Queue wait estimate */}
+            {queueWait && (
+              <div className="bf-queue" style={{ marginTop: 14 }}>
+                <div className="bf-queue-lbl">Estimated wait</div>
+                <div className="bf-queue-val">
+                  {queueWait.wait === null ? 'Unknown — waiting on streamer' : `~${queueWait.wait} min`}
+                </div>
+                <div className="bf-queue-sub">
+                  {queueWait.ahead} booking{queueWait.ahead !== 1 ? 's' : ''} ahead of you
+                </div>
+              </div>
+            )}
+
+            {/* Free-slot Turnstile (paid slots skip it) */}
+            {isFreeSlot && (
+              <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
+                <TurnstileWidget onVerify={onTurnstileVerify} onExpire={onTurnstileExpire} theme="dark" compact />
+              </div>
+            )}
+
+            {/* Single pay button — the rail picker above already named the
+                chosen rail + its cost, so the button is just the commit
+                action. Color matches the selected rail so the visual link
+                between picker and CTA is obvious. */}
+            <div style={{ marginTop: 14 }}>
+              {(() => {
+                const railAccent =
+                  paymentRail === 'free' ? '#4ade80'
+                  : paymentRail === 'usdc' ? 'var(--accent)'
+                  : accentColor;
+                // For USDC rail with unconnected wallet, fall to ghost style so
+                // the action reads as 'connect first' rather than 'commit now'.
+                const ghost = paymentRail === 'usdc' && !walletConnected;
+                return (
+                  <button
+                    onClick={payButtonProps.onClick}
+                    disabled={payButtonProps.disabled}
+                    className="bf-sub"
+                    style={{
+                      width: '100%',
+                      background: ghost ? 'transparent' : railAccent,
+                      color: ghost ? railAccent : 'var(--casi-bg)',
+                      border: ghost ? `1px solid ${railAccent}` : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      opacity: payButtonProps.disabled ? 0.5 : 1,
+                    }}
+                  >
+                    {payButtonProps.icon === 'stripe' ? <StripeIcon size={12} mono="currentColor" />
+                      : payButtonProps.icon === 'usdc' ? <UsdcIcon size={14} mono={ghost ? railAccent : 'var(--casi-bg)'} />
+                      : <span style={{ fontSize: 14, lineHeight: 1 }}>★</span>}
+                    <span>{isExtend ? 'Extend slot' : payButtonProps.label}</span>
+                  </button>
+                );
+              })()}
+
+              {/* Trust copy — small footnote below the button so first-time
+                  viewers know what 'pay' commits them to. The streamer's
+                  approval gate is the strongest reassurance and worth
+                  surfacing. */}
+              <div className="bf-trust">
+                {paymentRail === 'free'
+                  ? 'Free flashes are rate-limited · streamer can deny'
+                  : paymentRail === 'usdc'
+                    ? 'USDC held in escrow until streamer approves · 100% refund on deny'
+                    : 'Authorized until streamer approves · 100% refund on deny · CASI 0%'}
+              </div>
+            </div>
           </div>
         );
       })()}
-
-      {/* Queue wait estimate */}
-      {queueWait && (
-        <div style={{ background: `rgba(${tcRgb},0.06)`, border: `1px solid rgba(${tcRgb},0.15)`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
-          <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 4 }}>Estimated wait</div>
-          <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 15, fontWeight: 700, color: 'var(--casi-accent)' }}>
-            {queueWait.wait === null ? 'Unknown — waiting on streamer' : `~${queueWait.wait} min`}
-          </div>
-          {/* Signature redesign move: the queue-position aside reads in
-              Newsreader italic, not mono — same "wants Beam 1 · waiting
-              40s" pattern the handoff calls out. */}
-          <div style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 12.5, color: 'var(--ink-45)', marginTop: 2 }}>
-            {queueWait.ahead} booking{queueWait.ahead !== 1 ? 's' : ''} ahead of you
-          </div>
-        </div>
-      )}
-
-      {/* Free-slot Turnstile (paid slots skip it) */}
-      {isFreeSlot && (
-        <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'flex-end' }}>
-          <TurnstileWidget onVerify={onTurnstileVerify} onExpire={onTurnstileExpire} theme="dark" compact />
-        </div>
-      )}
-
-      {/* Single pay button — the rail picker above already named the
-          chosen rail + its cost, so the button is just the commit
-          action. Color matches the selected rail so the visual link
-          between picker and CTA is obvious. */}
-      <div style={{ marginTop: 4 }}>
-        {(() => {
-          const railAccent =
-            paymentRail === 'free' ? '#4ade80'
-            : paymentRail === 'usdc' ? 'var(--accent)'
-            : accentColor;
-          // For USDC rail with unconnected wallet, fall to ghost style so
-          // the action reads as 'connect first' rather than 'commit now'.
-          const ghost = paymentRail === 'usdc' && !walletConnected;
-          return (
-            <button
-              onClick={payButtonProps.onClick}
-              disabled={payButtonProps.disabled}
-              className="bf-sub"
-              style={{
-                width: '100%',
-                background: ghost ? 'transparent' : railAccent,
-                color: ghost ? railAccent : 'var(--casi-bg)',
-                border: ghost ? `1px solid ${railAccent}` : 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                padding: '14px 18px',
-                fontFamily: "var(--font-casi-sans), sans-serif",
-                fontWeight: 800,
-                fontSize: 14,
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em',
-                opacity: payButtonProps.disabled ? 0.5 : 1,
-                cursor: payButtonProps.disabled ? 'not-allowed' : 'pointer',
-                transition: 'opacity 0.16s',
-              }}
-            >
-              {payButtonProps.icon === 'stripe' ? <StripeIcon size={12} mono="currentColor" />
-                : payButtonProps.icon === 'usdc' ? <UsdcIcon size={14} mono={ghost ? railAccent : 'var(--casi-bg)'} />
-                : <span style={{ fontSize: 14, lineHeight: 1 }}>★</span>}
-              <span>{isExtend ? 'Extend slot' : payButtonProps.label}</span>
-            </button>
-          );
-        })()}
-
-        {/* Trust copy — small footnote below the button so first-time
-            viewers know what 'pay' commits them to. The streamer's
-            approval gate is the strongest reassurance and worth
-            surfacing. */}
-        <div style={{ marginTop: 10, fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-45)', textAlign: 'center' }}>
-          {paymentRail === 'free'
-            ? 'Free flashes are rate-limited · streamer can deny'
-            : paymentRail === 'usdc'
-              ? 'USDC held in escrow until streamer approves · 100% refund on deny'
-              : 'Authorized until streamer approves · 100% refund on deny · CASI 0%'}
-        </div>
-      </div>
     </div>
   );
 }

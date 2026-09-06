@@ -2455,16 +2455,19 @@ function OverlayContent() {
           border-radius:var(--radius-panel);
           padding:16px 18px;
         }
+        /* Matches .casi-v9-cp-lbl (BeamCtrlPanel's section headers, e.g.
+           "Slot type" / "Per-rail rates") -- .bf-lbl used to be small
+           uppercase mono with letter-spacing + a dash prefix, which reads
+           as dashboard-utility rather than the softer editorial voice the
+           rest of the redesign uses for section headers. */
         .bf-lbl {
-          font-family:var(--M); font-size:10px; font-weight:700; color:var(--text-3);
-          text-transform:uppercase; letter-spacing:0.2em;
-          display:flex; align-items:center; gap:8px;
+          font-family:var(--B); font-size:15px; font-weight:700; color:var(--text);
+          display:block;
           margin-bottom:12px;
         }
-        .bf-lbl::before { content:""; display:block; width:14px; height:1.5px; background:var(--ink); }
         .bf-inp {
           width:100%; background:var(--paper);
-          border:1px solid var(--line-2); border-radius:8px;
+          border:1px solid var(--line-2); border-radius:var(--radius-chip);
           padding:11px 14px; font-size:13.5px; color:var(--text); outline:none;
           font-family:var(--B); transition:border-color .14s;
         }
@@ -2475,44 +2478,121 @@ function OverlayContent() {
           letter-spacing:0.04em;
         }
 
-        /* Duration row — segmented presets, ink-active. Component renders six
-           buttons in a flex row; we promote them to v9's edge-to-edge segment. */
-        .dur-row {
-          display:flex; align-items:stretch; gap:0; flex-wrap:nowrap;
-          margin-top:8px;
+        /* Duration presets now reuse .casi-v9-shape-btns/.casi-v9-shape-b
+           (BeamCtrlPanel's Slot-type/Shape pill row) instead of their own
+           sharp edge-to-edge segmented strip — individual rounded pills
+           with real gaps, matching the softer language used everywhere
+           else instead of a dashboard-style segmented control. */
+        .casi-v9-shape-btns { margin-top: 8px; }
+        /* Duration stepper (-/+ + big readout) and the custom-minutes
+           input reuse BeamCtrlPanel's rail-stepper/rail-input look
+           (rounded chip buttons on design tokens) instead of raw
+           hardcoded rgba(255,255,255,...) rectangles -- those never got
+           touched in the redesign pass and read as a completely
+           different, older UI dropped into the same form. */
+        .bf-dur-stepper {
+          display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
         }
-        .dur-btn {
-          flex:1; padding:9px 4px;
-          font-family:var(--M); font-size:11px; font-weight:600; letter-spacing:0.06em;
-          background:transparent;
-          border:1px solid var(--line-2); border-right:none; border-radius:0;
-          color:var(--text-3); cursor:pointer; transition:all .12s;
+        .bf-dur-step {
+          width: 36px; height: 36px; flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
+          border-radius: var(--radius-chip);
+          border: 1px solid var(--line-2);
+          background: var(--surf-2);
+          color: var(--text-2);
+          font-family: var(--M); font-size: 15px;
+          cursor: pointer; transition: border-color .13s, color .13s;
         }
-        .dur-btn:last-child { border-right:1px solid var(--line-2); }
-        .dur-btn:hover { background:var(--ink-04); color:var(--ink); border-color:var(--ink-40); }
+        .bf-dur-step:hover { border-color: var(--ink-40); color: var(--ink); }
+        .bf-dur-readout {
+          flex: 1; text-align: center;
+          font-family: var(--M); font-size: 20px; font-weight: 700;
+          color: var(--text); letter-spacing: 0.02em;
+          font-variant-numeric: tabular-nums;
+        }
+        .bf-dur-custom {
+          display: flex; align-items: center; gap: 8px; margin-top: 10px;
+        }
+        .bf-dur-custom-lbl {
+          font-family: var(--M); font-size: 10px; letter-spacing: 0.1em;
+          text-transform: uppercase; color: var(--text-4);
+        }
+        .bf-dur-custom-input {
+          width: 80px; background: var(--surf-2);
+          border: 1px solid var(--line-2); border-radius: var(--radius-chip);
+          padding: 6px 10px; font-size: 12px; color: var(--text);
+          font-family: var(--M); outline: none; text-align: center;
+          transition: border-color .13s;
+        }
+        .bf-dur-custom-input:focus { border-color: var(--ink); }
+        .bf-dur-custom-unit { font-family: var(--M); font-size: 10px; color: var(--text-4); }
 
-        /* Footer — receipt panel with the cost on the left, primary action on the right */
-        .bf-footer {
-          display:flex; align-items:center; justify-content:space-between;
-          padding:18px 22px;
-          border-top:1.5px solid var(--ink);
-          background:var(--paper);
-          gap:12px;
+        /* Rail picker — payment-method cards inside the payment .bf-section.
+           Replaces a fully inline-styled grid (hardcoded rgba borders,
+           10px radius, uppercase mono everywhere) with the same rounded
+           card language the rest of the form already uses. Per-rail accent
+           (railAccent) stays inline since it's genuinely data-driven —
+           same pattern as the duration preset's selected-state override. */
+        .bf-rail-row { display:grid; gap:8px; }
+        .bf-rail-card {
+          display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+          padding:12px 14px;
+          background:var(--surf-2);
+          border:1px solid var(--line-2);
+          border-radius:var(--radius-card);
+          text-align:left;
+          font-family:var(--B);
+          transition:border-color .14s, background .14s;
         }
-        @media (min-width:900px) { .bf-footer { border-radius:0 0 13px 13px; } }
-        .bf-cost-lbl {
-          font-family:var(--H); font-weight:800; font-size:13px;
-          text-transform:uppercase; letter-spacing:0.16em; color:var(--text);
+        .bf-rail-card:disabled { cursor:default; }
+        .bf-rail-dot {
+          width:14px; height:14px; border-radius:50%; flex-shrink:0;
+          border:1.5px solid var(--line-2);
+          background:transparent;
         }
-        .bf-cost-val {
-          font-family:var(--H); font-weight:800; font-variation-settings:"opsz" 96;
-          font-size:32px; letter-spacing:-0.035em; color:var(--ink) !important;
-          font-variant-numeric:tabular-nums; margin-top:2px;
+        .bf-rail-name {
+          display:inline-flex; align-items:center; gap:6px;
+          font-family:var(--M); font-size:11px; font-weight:700;
         }
+        .bf-rail-top { display:flex; align-items:center; gap:8px; width:100%; }
+        .bf-rail-cost {
+          font-family:var(--M); font-size:17px; font-weight:700;
+          color:var(--text); font-variant-numeric:tabular-nums;
+        }
+        .bf-rail-sub { font-family:var(--M); font-size:9.5px; color:var(--text-4); }
+        .bf-rail-meta {
+          display:flex; justify-content:space-between; margin-top:10px; padding:0 2px;
+          font-family:var(--S); font-style:italic; font-size:12.5px; color:var(--text-3);
+        }
+        .bf-rail-balance {
+          display:flex; justify-content:space-between; margin-top:8px; padding:0 2px;
+          font-family:var(--M); font-size:10px; color:var(--text-4);
+        }
+        .bf-rail-note {
+          font-size:10px; margin-top:5px; text-align:right; color:var(--text-4);
+        }
+
+        /* Queue-wait card — same .bf-section treatment as every other block. */
+        .bf-queue {
+          background:var(--surf); border:1px solid var(--line);
+          border-radius:var(--radius-panel); padding:14px 18px;
+        }
+        .bf-queue-lbl {
+          font-family:var(--B); font-size:13px; font-weight:600; color:var(--text-3);
+          margin-bottom:4px;
+        }
+        .bf-queue-val {
+          font-family:var(--H); font-size:16px; font-weight:800; color:var(--ink);
+        }
+        .bf-queue-sub {
+          font-family:var(--S); font-style:italic; font-size:12.5px; color:var(--text-3);
+          margin-top:2px;
+        }
+
         .bf-sub {
           font-family:var(--M); font-weight:700; font-size:12px;
           letter-spacing:0.16em; text-transform:uppercase;
-          padding:15px 18px; border:1px solid var(--ink); border-radius:8px;
+          padding:15px 18px; border:1px solid var(--ink); border-radius:var(--radius-chip);
           background:var(--ink); color:var(--on-ink);
           cursor:pointer; transition:transform .14s, filter .14s;
           white-space:nowrap;
@@ -2522,6 +2602,10 @@ function OverlayContent() {
           border-color:var(--line) !important; cursor:not-allowed;
         }
         .bf-sub:hover:not(:disabled) { transform:translateY(-1px); filter:brightness(1.1); }
+        .bf-trust {
+          margin-top:10px; font-family:var(--M); font-size:9px; letter-spacing:0.1em;
+          text-transform:uppercase; color:var(--text-4); text-align:center;
+        }
 
         @media (max-width:640px) {
           .ov-nav { padding:0 16px; }
@@ -3074,7 +3158,6 @@ function OverlayContent() {
                 slot={selectedSlot}
                 accentColor={accentColor}
                 accentColorRgb={accentColorRgb}
-                tcRgb={tcRgb}
                 isExtend={isExtend}
                 isQueue={isQueue}
                 savedViewerName={savedViewerName ?? ''}
