@@ -2978,60 +2978,75 @@ function OverlayContent() {
                       </span>
                     </div>
                   ) : isOBS ? null : (
-                    <div
-                      className={shapeClass}
-                      style={{
-                        width:'100%', height:'100%', display:'flex', flexDirection:'column',
-                        alignItems:'center', justifyContent:'center',
-                        borderRadius: el.is_background ? 12 : 6,
-                        // Bumped alpha 0.25 → 0.85 and added an outer dark
-                        // stroke (box-shadow) so the dashed slot boundary
-                        // survives a bright backdrop image — without it,
-                        // slot edges vanish on beach/sky/snow canvases.
-                        border: `1.5px dashed ${isLocked
-                          ? 'rgba(248,113,113,0.85)'
-                          : isOccupied
-                            ? `rgba(${tcRgb},0.85)`
-                            : el.is_background
-                              ? 'rgba(168,85,247,0.85)'
-                              : `rgba(${tcRgb},0.85)`}`,
-                        background: isLocked
-                          ? 'rgba(248,113,113,0.03)'
-                          : isOccupied
-                            ? `rgba(${tcRgb},0.02)`
-                            : el.is_background
-                              ? 'rgba(168,85,247,0.03)'
-                              : `rgba(${tcRgb},0.02)`,
-                        boxShadow: '0 0 0 1px rgba(0,0,0,0.55)',
-                      }}
-                    >
-                      {/* Dark scrim chip behind the icon + countdown so they
-                          stay legible against any backdrop. Mirrors the
-                          studio/live editor treatment. */}
+                    // Was a single div carrying both the clip AND the
+                    // border/background/flex-centering styling — a
+                    // custom-shaped slot (star, heart, etc.) rendered as a
+                    // plain dashed rectangle until a viewer actually added
+                    // media, since only the displayImage branch above ever
+                    // applied the clip. Simply adding it here didn't fix
+                    // it either: a flex/bordered/static-position element
+                    // silently failed to resolve the objectBoundingBox
+                    // clip correctly. Restructured to match the exact
+                    // shape of the proven-working displayImage wrapper —
+                    // an outer position:relative div carrying ONLY the
+                    // clip, with all the visual styling moved to a nested
+                    // child — which clips correctly.
+                    <div style={{ position:'relative', width:'100%', height:'100%', ...customClip }}>
                       <div
+                        className={shapeClass}
                         style={{
-                          display:'inline-flex', flexDirection:'column', alignItems:'center',
-                          padding: el.is_background ? '8px 14px' : '5px 10px',
-                          borderRadius: 6,
-                          background: 'rgba(0,0,0,0.55)',
-                          backdropFilter: 'blur(4px)',
-                          WebkitBackdropFilter: 'blur(4px)',
-                          border: `1px solid ${isLocked
-                            ? 'rgba(248,113,113,0.4)'
-                            : el.is_background
-                              ? 'rgba(168,85,247,0.4)'
-                              : `rgba(${tcRgb},0.4)`}`,
-                          maxWidth: '90%',
+                          width:'100%', height:'100%', display:'flex', flexDirection:'column',
+                          alignItems:'center', justifyContent:'center',
+                          borderRadius: el.is_background ? 12 : 6,
+                          // Bumped alpha 0.25 → 0.85 and added an outer dark
+                          // stroke (box-shadow) so the dashed slot boundary
+                          // survives a bright backdrop image — without it,
+                          // slot edges vanish on beach/sky/snow canvases.
+                          border: `1.5px dashed ${isLocked
+                            ? 'rgba(248,113,113,0.85)'
+                            : isOccupied
+                              ? `rgba(${tcRgb},0.85)`
+                              : el.is_background
+                                ? 'rgba(168,85,247,0.85)'
+                                : `rgba(${tcRgb},0.85)`}`,
+                          background: isLocked
+                            ? 'rgba(248,113,113,0.03)'
+                            : isOccupied
+                              ? `rgba(${tcRgb},0.02)`
+                              : el.is_background
+                                ? 'rgba(168,85,247,0.03)'
+                                : `rgba(${tcRgb},0.02)`,
+                          boxShadow: '0 0 0 1px rgba(0,0,0,0.55)',
                         }}
                       >
-                        <span style={{ fontSize: el.is_background ? 18 : 14, marginBottom: isOccupied ? 3 : 0, color: 'rgba(255,255,255,0.9)' }}>
-                          {isLocked ? '▨' : isOccupied ? (el.shape==='banner' ? '▰' : '') : el.is_background ? '▢' : el.shape==='banner' ? '▰' : '✦'}
-                        </span>
-                        {isOccupied && (
-                          <span style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#fff', opacity: 0.85 }}>
-                            <Countdown booking={activeBooking} onExpire={() => clientExpireBooking(activeBooking)} />
+                        {/* Dark scrim chip behind the icon + countdown so they
+                            stay legible against any backdrop. Mirrors the
+                            studio/live editor treatment. */}
+                        <div
+                          style={{
+                            display:'inline-flex', flexDirection:'column', alignItems:'center',
+                            padding: el.is_background ? '8px 14px' : '5px 10px',
+                            borderRadius: 6,
+                            background: 'rgba(0,0,0,0.55)',
+                            backdropFilter: 'blur(4px)',
+                            WebkitBackdropFilter: 'blur(4px)',
+                            border: `1px solid ${isLocked
+                              ? 'rgba(248,113,113,0.4)'
+                              : el.is_background
+                                ? 'rgba(168,85,247,0.4)'
+                                : `rgba(${tcRgb},0.4)`}`,
+                            maxWidth: '90%',
+                          }}
+                        >
+                          <span style={{ fontSize: el.is_background ? 18 : 14, marginBottom: isOccupied ? 3 : 0, color: 'rgba(255,255,255,0.9)' }}>
+                            {isLocked ? '▨' : isOccupied ? (el.shape==='banner' ? '▰' : '') : el.is_background ? '▢' : el.shape==='banner' ? '▰' : '✦'}
                           </span>
-                        )}
+                          {isOccupied && (
+                            <span style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#fff', opacity: 0.85 }}>
+                              <Countdown booking={activeBooking} onExpire={() => clientExpireBooking(activeBooking)} />
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
