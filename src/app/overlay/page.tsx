@@ -2595,10 +2595,16 @@ function OverlayContent() {
           margin-top:2px;
         }
 
+        /* Matches the design-source prototype's CTA exactly (same button
+           SolanaConfirmModal already uses) — a big 56px pill in Archivo
+           bold, not small uppercase mono in a 12px chip. Sitting right
+           below that modal's identical-purpose button, the old version
+           read as visibly weaker for no reason — same action, half the
+           visual weight. */
         .bf-sub {
-          font-family:var(--M); font-weight:700; font-size:12px;
-          letter-spacing:0.16em; text-transform:uppercase;
-          padding:15px 18px; border:1px solid var(--ink); border-radius:var(--radius-chip);
+          font-family:var(--B); font-weight:700; font-size:17px;
+          letter-spacing:-0.01em;
+          height:56px; padding:0 18px; border:1px solid var(--ink); border-radius:var(--radius-pill);
           background:var(--ink); color:var(--on-ink);
           cursor:pointer; transition:transform .14s, filter .14s;
           white-space:nowrap;

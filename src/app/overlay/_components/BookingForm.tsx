@@ -26,6 +26,10 @@ type Slot = {
   prices?: Record<string, number | string | null | undefined> | null;
   max_duration_minutes?: number | null;
   shape?: string | null;
+  /** SVG path data for a custom-shaped slot (shape === 'custom'). Lets the
+   *  Customize position/zoom preview clip to the real shape instead of a
+   *  circle stand-in — see CustomizePanel's clipPathSvg prop. */
+  clip_path_svg?: string | null;
   /** Percent of the 16:9 stream canvas — the slot's real on-stream
    *  footprint. Needed so the crop/zoom preview box can match the
    *  actual aspect ratio instead of guessing from `shape` alone. */
@@ -372,6 +376,7 @@ export default function BookingForm(props: Props) {
           {slot.shape !== 'backdrop' && (
             <CustomizePanel
               shape={slot.shape}
+              clipPathSvg={slot.clip_path_svg ?? null}
               slotAspectRatio={slotAspectRatio}
               open={customizeOpen}
               onToggle={onCustomizeToggle}

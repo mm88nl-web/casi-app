@@ -10,6 +10,12 @@ import {
 
 type Props = {
   shape: string | null | undefined;
+  /** SVG path data for a custom shape (shape === 'custom'). Without this,
+   *  the preview fell back to a plain circle regardless of the slot's real
+   *  shape (a star, heart, etc.) — so positioning media here didn't match
+   *  what actually appears on stream at all once the real shape wasn't a
+   *  circle. */
+  clipPathSvg?: string | null;
   /** The real slot's on-stream aspect ratio (width/height). Drives the
    *  preview box shape so drag/zoom operates on the actual crop region
    *  instead of a guessed 16:9 or 1:1 box. */
@@ -40,10 +46,14 @@ const SHAPE_CSS: Record<string, string> = {
   rect:    'none',
   rounded: 'inset(0 round 14px)',
   circle:  'circle(50%)',
-  // custom is handled via SVG clipPath on the actual canvas;
-  // the preview panel falls back to circle for simplicity.
-  custom:  'circle(50%)',
+  // 'custom' isn't in this table — it's resolved at render time from the
+  // slot's real clip_path_svg (see previewMaskCss below), same technique
+  // the actual canvas uses (an SVG <clipPath> referenced by url()).
 };
+
+// Fixed id is fine: only one CustomizePanel is ever mounted/open at a time
+// (the booking form for whichever slot the viewer currently has selected).
+const CUSTOM_CLIP_ID = 'casi-customize-preview-clip';
 
 const FONT_PRESETS = [
   { label: 'S', px: 18 },
@@ -59,7 +69,7 @@ const SPEED_PRESETS = [
 ] as const;
 
 export default function CustomizePanel({
-  shape, slotAspectRatio, open, onToggle,
+  shape, clipPathSvg, slotAspectRatio, open, onToggle,
   accentColor, accentColorRgb,
   message, bannerFontPx, onBannerFontPxChange, bannerSpeedSecs, onBannerSpeedSecsChange,
   mediaPreviewUrl, mediaPreviewFileType,
@@ -170,7 +180,15 @@ export default function CustomizePanel({
   const zoomDef   = MEDIA_ZOOM_RANGE.default;
   const resetBanner = () => { onBannerFontPxChange(fontDef); onBannerSpeedSecsChange(speedDef); };
 
-  const previewMaskCss = SHAPE_CSS[shape ?? 'rect'] ?? 'none';
+  // Custom shapes clip via the same SVG-clipPath url() technique the real
+  // canvas uses (see overlay/page.tsx's `beam-clip-${el.id}` defs) instead
+  // of the old hardcoded circle(50%) stand-in. Falls back to a circle only
+  // if a custom slot somehow has no clip_path_svg yet (shouldn't happen in
+  // practice — BeamCtrlPanel requires picking a preset to go Custom).
+  const previewMaskCss =
+    shape === 'custom'
+      ? (clipPathSvg ? `url(#${CUSTOM_CLIP_ID})` : 'circle(50%)')
+      : SHAPE_CSS[shape ?? 'rect'] ?? 'none';
 
   // Mirror the stream's objectFit logic: contain at zoom=1 (full image visible),
   // switch to cover once zoomed so transform-origin controls the visible region.
@@ -273,6 +291,15 @@ export default function CustomizePanel({
 
           {!isBanner && isShapedMedia && (
             <>
+              {shape === 'custom' && clipPathSvg && (
+                <svg width={0} height={0} style={{ position: 'absolute' }} aria-hidden>
+                  <defs>
+                    <clipPath id={CUSTOM_CLIP_ID} clipPathUnits="objectBoundingBox">
+                      <path d={clipPathSvg} />
+                    </clipPath>
+                  </defs>
+                </svg>
+              )}
               <div>
                 <label className="bf-lbl" style={{ marginBottom: 6, display: 'block' }}>
                   Position {mediaPreviewUrl ? '· drag to pan · scroll to zoom' : ''}
