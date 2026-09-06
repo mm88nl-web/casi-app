@@ -2682,8 +2682,12 @@ function OverlayContent() {
             </a>
             <div className="ov-nav-right">
               {/* Wallet pill — net dot, USDC + SOL balances, identity dropdown.
-                  v7-styled twin of WalletNav; same useWalletBalances store. */}
-              <WalletPill />
+                  v7-styled twin of WalletNav; same useWalletBalances store.
+                  chrome={false}: /overlay's nav follows the streamer's own
+                  skin (unlike /studio's fixed-chrome nav), so the pill must
+                  too — it was rendering as a cream chrome blob clashing
+                  against the streamer's dark nav before this. */}
+              <WalletPill chrome={false} />
               {/* Viewer identity chip — moved to sit directly beside the
                   wallet pill and shown regardless of selectedSlot (it used
                   to hide the moment a slot opened, forcing a second,

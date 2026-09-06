@@ -291,7 +291,21 @@ function clampPanelRight(desiredRight: number, panelWidth: number): number {
   return Math.max(EDGE_MARGIN, Math.min(desiredRight, maxRight));
 }
 
-export default function WalletPill() {
+type Props = {
+  /** Pin the pill/dropdown to Casi's fixed cream+green chrome palette
+   *  regardless of the active skin. Defaults to true — correct everywhere
+   *  the surrounding nav is ALSO fixed chrome (landing/search nav,
+   *  /studio, /studio/settings). /overlay is the one exception: its nav
+   *  follows the STREAMER's own SkinProvider-set --ink/--paper (per
+   *  AGENTS.md, viewer-facing pages must not bypass SkinProvider), so a
+   *  forced-chrome pill there rendered as a cream blob floating on a dark
+   *  nav instead of matching the rest of the bar — pass chrome={false}
+   *  there to let it inherit the real skin like everything else on the
+   *  page already does. */
+  chrome?: boolean;
+};
+
+export default function WalletPill({ chrome = true }: Props) {
   const { connected, publicKey, disconnect, wallet, connect, connecting } = useWallet();
   const { setVisible } = useWalletModal();
   const { sol: solBal, usdc: usdcBal } = useWalletBalances();
@@ -398,7 +412,7 @@ export default function WalletPill() {
       return (
         <>
           <style>{CSS}</style>
-          <div className="wp-picker-wrap" data-paper="light" style={CHROME_SCOPE} ref={pickerWrapRef}>
+          <div className="wp-picker-wrap" data-paper={chrome ? 'light' : undefined} style={chrome ? CHROME_SCOPE : undefined} ref={pickerWrapRef}>
             <button type="button" className="wp-connect" onClick={openPicker} aria-expanded={pickerOpen}>
               <SolanaIcon size={12} />
               Connect Wallet
@@ -445,16 +459,19 @@ export default function WalletPill() {
   return (
     <>
       <style>{CSS}</style>
-      {/* Chrome pin — see the comment on the disconnected .wp-connect button
-          above. The dropdown (.wp-drop) is `position: fixed` for viewport
-          placement but stays a JSX/DOM child of .wp-row below, so it
-          inherits this shadow + data-paper via normal CSS custom-property
-          inheritance — fixed positioning only affects layout, not the DOM
-          tree custom properties cascade through. */}
+      {/* Chrome pin (when chrome=true) — see the Props comment above and
+          the comment on the disconnected .wp-connect button below. The
+          dropdown (.wp-drop) is `position: fixed` for viewport placement
+          but stays a JSX/DOM child of .wp-row below, so it inherits this
+          shadow + data-paper via normal CSS custom-property inheritance —
+          fixed positioning only affects layout, not the DOM tree custom
+          properties cascade through. When chrome=false, --ink/--paper (and
+          everything derived from them) fall through untouched to whatever
+          SkinProvider already set higher up — i.e. the real streamer skin. */}
       <div
         className={`wp-row${dropOpen ? ' open' : ''}`}
-        data-paper="light"
-        style={CHROME_SCOPE}
+        data-paper={chrome ? 'light' : undefined}
+        style={chrome ? CHROME_SCOPE : undefined}
         ref={rowRef}
       >
 
