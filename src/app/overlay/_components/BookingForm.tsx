@@ -221,14 +221,16 @@ export default function BookingForm(props: Props) {
   })();
 
   const maxSecs = slot.max_duration_minutes ? slot.max_duration_minutes * 60 : null;
-  const presets = [
-    { label: '30s', secs: 30 },
-    { label: '1m',  secs: 60 },
-    { label: '2m',  secs: 120 },
-    { label: '5m',  secs: 300 },
-    { label: '10m', secs: 600 },
-    { label: '30m', secs: 1800 },
-  ].filter(p => !maxSecs || p.secs <= maxSecs);
+
+  // Duration slider bounds. 30s floor matches the parent's own clamp
+  // (see overlay/page.tsx's setDurationSecsClamped); 30min ceiling for
+  // unbounded slots matches the old preset row's highest option.
+  const sliderMin = 30;
+  const sliderMax = maxSecs ?? 1800;
+  const sliderRange = Math.max(1, sliderMax - sliderMin);
+  const sliderMid = Math.round((sliderMin + sliderMax) / 2 / 5) * 5;
+  const sliderPct = Math.min(100, Math.max(0, ((durationSeconds - sliderMin) / sliderRange) * 100));
+  const tickLabel = (secs: number): string => (secs < 60 ? `${secs}s` : fmtMaxDur(Math.round(secs / 60)));
 
   const queueWait = (() => {
     if (!isQueue) return null;
@@ -409,57 +411,33 @@ export default function BookingForm(props: Props) {
         </div>
 
         <div className="bf-section">
-            <label className="bf-lbl">Duration{maxSecs && slot.max_duration_minutes ? ` — max ${fmtMaxDur(slot.max_duration_minutes)}` : ''}</label>
-            <div className="bf-dur-stepper">
-              <button
-                type="button"
-                className="bf-dur-step"
-                onClick={() => onDurationChange(durationSeconds - 5)}
-                aria-label="Decrease duration"
-              >−</button>
-              <div className="bf-dur-readout">
-                {formatTime(durationSeconds)}
+            {/* Slider, matching the design-source prototype's "How long"
+                card exactly (track + fill + thumb + min/mid/max ticks)
+                instead of a stepper + preset-pill row. The slider's own
+                min/max ticks communicate the range, so the old "— max Xm"
+                text callout is redundant here and was dropped. */}
+            <div className="bf-dur-head">
+              <div>
+                <div className="bf-dur-label">How long</div>
+                <div className="bf-dur-value">{formatTime(durationSeconds)}</div>
               </div>
-              <button
-                type="button"
-                className="bf-dur-step"
-                onClick={() => onDurationChange(durationSeconds + 5)}
-                aria-label="Increase duration"
-              >+</button>
+              <div className="bf-dur-total">{costLabel(paymentRail)}</div>
             </div>
-            <div className="casi-v9-shape-btns">
-              {presets.map(p => (
-                <button
-                  key={p.secs}
-                  type="button"
-                  className={`casi-v9-shape-b${durationSeconds === p.secs ? ' casi-v9-on' : ''}`}
-                  style={durationSeconds === p.secs ? { background: accentColor, borderColor: accentColor, color: 'var(--casi-bg)' } : undefined}
-                  onClick={() => onDurationChange(p.secs)}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <div className="bf-dur-custom">
-              <span className="bf-dur-custom-lbl">Custom</span>
-              <input
-                type="number"
-                min="0.5"
-                step="0.5"
-                placeholder="minutes"
-                className="bf-dur-custom-input"
-                onBlur={(e) => {
-                  const mins = parseFloat(e.target.value);
-                  if (!isNaN(mins) && mins > 0) { onDurationChange(Math.round(mins * 60)); e.target.value = ''; }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const mins = parseFloat((e.target as HTMLInputElement).value);
-                    if (!isNaN(mins) && mins > 0) { onDurationChange(Math.round(mins * 60)); (e.target as HTMLInputElement).value = ''; }
-                  }
-                }}
-              />
-              <span className="bf-dur-custom-unit">min</span>
+            <input
+              type="range"
+              className="bf-dur-slider"
+              min={sliderMin}
+              max={sliderMax}
+              step={5}
+              value={Math.min(sliderMax, Math.max(sliderMin, durationSeconds))}
+              onChange={(e) => onDurationChange(Number(e.target.value))}
+              style={{ background: `linear-gradient(to right, ${accentColor} ${sliderPct}%, var(--line-2) ${sliderPct}%)` }}
+              aria-label="Duration"
+            />
+            <div className="bf-dur-ticks">
+              <span>{tickLabel(sliderMin)}</span>
+              <span>{tickLabel(sliderMid)}</span>
+              <span>{tickLabel(sliderMax)}</span>
             </div>
         </div>
 

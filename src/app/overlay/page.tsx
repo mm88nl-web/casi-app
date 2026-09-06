@@ -2478,54 +2478,60 @@ function OverlayContent() {
           letter-spacing:0.04em;
         }
 
-        /* Duration presets now reuse .casi-v9-shape-btns/.casi-v9-shape-b
-           (BeamCtrlPanel's Slot-type/Shape pill row) instead of their own
-           sharp edge-to-edge segmented strip — individual rounded pills
-           with real gaps, matching the softer language used everywhere
-           else instead of a dashboard-style segmented control. */
-        .casi-v9-shape-btns { margin-top: 8px; }
-        /* Duration stepper (-/+ + big readout) and the custom-minutes
-           input reuse BeamCtrlPanel's rail-stepper/rail-input look
-           (rounded chip buttons on design tokens) instead of raw
-           hardcoded rgba(255,255,255,...) rectangles -- those never got
-           touched in the redesign pass and read as a completely
-           different, older UI dropped into the same form. */
-        .bf-dur-stepper {
-          display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+        /* Duration slider — matches the design-source prototype's "How
+           long" card exactly: label + big value on the left, big total
+           price on the right, then a track/fill/thumb slider with
+           min/mid/max tick labels underneath. Replaces the stepper +
+           preset-pill row, which never matched the prototype at all. */
+        .bf-dur-head {
+          display: flex; align-items: flex-end; justify-content: space-between;
+          margin-bottom: 14px;
         }
-        .bf-dur-step {
-          width: 36px; height: 36px; flex-shrink: 0;
-          display: flex; align-items: center; justify-content: center;
-          border-radius: var(--radius-chip);
-          border: 1px solid var(--line-2);
-          background: var(--surf-2);
-          color: var(--text-2);
-          font-family: var(--M); font-size: 15px;
-          cursor: pointer; transition: border-color .13s, color .13s;
+        .bf-dur-label {
+          font-family: var(--S); font-style: italic; font-size: 15px; color: var(--text-3);
         }
-        .bf-dur-step:hover { border-color: var(--ink-40); color: var(--ink); }
-        .bf-dur-readout {
-          flex: 1; text-align: center;
-          font-family: var(--M); font-size: 20px; font-weight: 700;
-          color: var(--text); letter-spacing: 0.02em;
+        .bf-dur-value {
+          font-family: var(--H); font-weight: 700; font-size: 28px;
+          letter-spacing: -0.02em; color: var(--text); margin-top: 6px;
           font-variant-numeric: tabular-nums;
         }
-        .bf-dur-custom {
-          display: flex; align-items: center; gap: 8px; margin-top: 10px;
+        .bf-dur-total {
+          font-family: var(--H); font-weight: 700; font-size: 28px;
+          letter-spacing: -0.02em; color: var(--text);
+          font-variant-numeric: tabular-nums;
         }
-        .bf-dur-custom-lbl {
-          font-family: var(--M); font-size: 10px; letter-spacing: 0.1em;
-          text-transform: uppercase; color: var(--text-4);
+        .bf-dur-slider {
+          -webkit-appearance: none; appearance: none;
+          width: 100%; height: 8px; border-radius: var(--radius-pill);
+          background: var(--line-2);
+          outline: none; cursor: pointer; margin: 0; display: block;
         }
-        .bf-dur-custom-input {
-          width: 80px; background: var(--surf-2);
-          border: 1px solid var(--line-2); border-radius: var(--radius-chip);
-          padding: 6px 10px; font-size: 12px; color: var(--text);
-          font-family: var(--M); outline: none; text-align: center;
-          transition: border-color .13s;
+        .bf-dur-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 26px; height: 26px; border-radius: 50%;
+          background: var(--ink);
+          border: 3px solid var(--paper);
+          box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+          cursor: grab;
         }
-        .bf-dur-custom-input:focus { border-color: var(--ink); }
-        .bf-dur-custom-unit { font-family: var(--M); font-size: 10px; color: var(--text-4); }
+        .bf-dur-slider::-webkit-slider-thumb:active { cursor: grabbing; }
+        .bf-dur-slider::-moz-range-track {
+          height: 8px; border-radius: var(--radius-pill); background: transparent;
+        }
+        .bf-dur-slider::-moz-range-progress {
+          height: 8px; border-radius: var(--radius-pill); background: var(--ink);
+        }
+        .bf-dur-slider::-moz-range-thumb {
+          width: 26px; height: 26px; border-radius: 50%;
+          background: var(--ink);
+          border: 3px solid var(--paper);
+          box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+          cursor: grab;
+        }
+        .bf-dur-ticks {
+          display: flex; justify-content: space-between; margin-top: 8px;
+          font-family: var(--M); font-size: 12px; color: var(--text-4);
+        }
 
         /* Rail picker — payment-method cards inside the payment .bf-section.
            Replaces a fully inline-styled grid (hardcoded rgba borders,
