@@ -861,11 +861,11 @@
 }
 .casi-v9-le-add:hover { filter: brightness(1.1); }
 
-/* 2-col studio: Canvas (+ On air/Flashes below) · Waiting/Layers sidebar.
-   Matches the design-source prototype's single-screen layout — Layers and
+/* 2-col studio: Canvas (+ On air below) · Waiting/Layers sidebar. Matches
+   the design-source prototype's single-screen layout — Layers and
    Properties share one column (see .casi-v9-le-side), and the approval
-   queue lives in the same column as an alternate tab rather than a
-   separate always-visible list elsewhere on the page. */
+   queue + Flashes live in the same column as an alternate tab (Waiting)
+   rather than a separate always-visible list elsewhere on the page. */
 .casi-v9-le-grid2 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 420px;

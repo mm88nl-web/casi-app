@@ -1067,12 +1067,15 @@ function StudioPageInner() {
 
       {/* Canvas + Waiting/Layers sidebar — the merged single-screen studio
           (was split across /studio + /studio/live). StudioLiveEditor owns
-          the canvas + layers state; the queue and below-canvas (On air /
-          Flashes) content are handed in as pre-rendered slots since the
-          real booking/flash data + moderation handlers live here, not in
-          the editor. Publish-my-own-content also threads through to
-          whichever beam's properties panel is open — it's a per-slot
-          action now, not a standalone card with its own slot picker. */}
+          the canvas + layers state; the queue/flashes (Waiting tab) and
+          below-canvas (On air) content are handed in as pre-rendered slots
+          since the real booking/flash data + moderation handlers live
+          here, not in the editor. Flashes sits under the approval queue in
+          the Waiting tab, not below the canvas, so both "things to react
+          to" live in one place. Publish-my-own-content also threads
+          through to whichever beam's properties panel is open — it's a
+          per-slot action now, not a standalone card with its own slot
+          picker. */}
       <StudioLiveEditor
         supabase={supabase}
         profileId={profile.id}
@@ -1082,21 +1085,19 @@ function StudioPageInner() {
         publishing={publishing}
         onPublish={handleStreamerPublish}
         queueSlot={
-          <ApprovalQueue
-            items={queue}
-            onApprove={handleApprove}
-            onReject={handleReject}
-            onPreview={setPreviewId}
-            pendingIds={moderating}
-            emptyLabel="Nothing pending · share your viewer link above to get your first beam"
-          />
-        }
-        belowCanvasSlot={
           <>
-            {airing.length > 0 ? <AiringNow items={airing} /> : null}
+            <ApprovalQueue
+              items={queue}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              onPreview={setPreviewId}
+              pendingIds={moderating}
+              emptyLabel="Nothing pending · share your viewer link above to get your first beam"
+            />
             <FlashesLog items={flashLog} total={todayTotal} />
           </>
         }
+        belowCanvasSlot={airing.length > 0 ? <AiringNow items={airing} /> : null}
       />
 
       <EndStreamDialog
