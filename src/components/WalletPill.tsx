@@ -273,6 +273,24 @@ function truncate(pk: PublicKey): string {
   return `${s.slice(0, 4)}…${s.slice(-4)}`;
 }
 
+// Both dropdown/picker panels are `position:fixed; right:<computed>` so they
+// hang off whichever element opened them — fine when that element sits
+// flush against the viewport's right edge, but WalletPill is often followed
+// by other nav siblings (viewer chip, Cancel link) that eat into the gap
+// between it and the true edge. Naively using `right: window.innerWidth -
+// rect.right` then pushes the panel's LEFT edge off-screen on a narrow
+// phone viewport — exactly what happened once the viewer chip started
+// showing next to the wallet pill unconditionally. Clamping the right
+// offset to `window.innerWidth - panelWidth - EDGE_MARGIN` guarantees the
+// panel's left edge never goes past EDGE_MARGIN from the screen edge,
+// falling back to a flush-right position instead of true under-the-button
+// alignment only in that overflow case.
+const EDGE_MARGIN = 8;
+function clampPanelRight(desiredRight: number, panelWidth: number): number {
+  const maxRight = window.innerWidth - panelWidth - EDGE_MARGIN;
+  return Math.max(EDGE_MARGIN, Math.min(desiredRight, maxRight));
+}
+
 export default function WalletPill() {
   const { connected, publicKey, disconnect, wallet, connect, connecting } = useWallet();
   const { setVisible } = useWalletModal();
@@ -305,7 +323,9 @@ export default function WalletPill() {
   const openPicker = () => {
     if (pickerWrapRef.current) {
       const rect = pickerWrapRef.current.getBoundingClientRect();
-      setPickerPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+      const desiredRight = window.innerWidth - rect.right;
+      // 220px matches .wp-picker-panel's min-width.
+      setPickerPos({ top: rect.bottom + 6, right: clampPanelRight(desiredRight, 220) });
     }
     setPickerOpen(o => !o);
   };
@@ -339,7 +359,9 @@ export default function WalletPill() {
   const openDrop = () => {
     if (rowRef.current) {
       const rect = rowRef.current.getBoundingClientRect();
-      setDropPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+      const desiredRight = window.innerWidth - rect.right;
+      // 260px matches .wp-drop's min-width.
+      setDropPos({ top: rect.bottom + 6, right: clampPanelRight(desiredRight, 260) });
     }
     setDropOpen(o => !o);
   };
