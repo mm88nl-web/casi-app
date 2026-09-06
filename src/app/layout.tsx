@@ -56,7 +56,19 @@ const serif = Newsreader({
 
 // Casi Light is the only scheme — pin the browser to light so mobile dark-mode
 // devices never paint a dark canvas/chrome before our CSS applies (no dark flash).
+//
+// width/initialScale were missing here — Next.js builds the <meta
+// name="viewport"> tag from exactly the fields given in this object, with no
+// implicit device-width/initial-scale defaults merged in once ANY custom
+// viewport export exists in the tree. Without them, mobile browsers fell
+// back to laying the page out at a virtual ~980px desktop-class viewport and
+// scaling the result down to fit the screen — everything render tiny,
+// forcing a pinch-zoom to read anything, which is what produced a
+// scrolled/cropped view (text missing its left portion) on every mobile
+// screenshot taken of the app, not just /studio/settings.
 export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
   themeColor: "#f5e1d2",
   colorScheme: "light",
 };
