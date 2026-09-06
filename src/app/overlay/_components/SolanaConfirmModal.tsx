@@ -53,13 +53,13 @@ export default function SolanaConfirmModal({
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
       onClick={() => { if (!inProgress) onCancel(); }}
     >
       <style>{`@keyframes scm-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ background: 'var(--surf)', border: '1px solid var(--line)', borderRadius: 'var(--radius-panel)', width: '100%', maxWidth: 420, overflow: 'hidden', boxShadow: '0 40px 90px -30px rgba(0,0,0,0.5)' }}
+        style={{ background: 'var(--surf)', border: '1px solid var(--line)', borderRadius: 'var(--radius-panel)', width: '100%', maxWidth: 420, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 40px 90px -30px rgba(0,0,0,0.5)' }}
       >
         {/* Header band — ink-filled, big total, matches the prototype's
             modalOpen header exactly. */}

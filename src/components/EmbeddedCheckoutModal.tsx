@@ -105,7 +105,7 @@ export default function EmbeddedCheckoutModal({ clientSecret, onComplete, onClos
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 9500,
+        zIndex: 10000,
         padding: '24px',
       }}
       onClick={onClose}
