@@ -183,6 +183,12 @@ export default function BeamCtrlPanel({
   // useEffect below) so a stale snapshot from another slot can't leak in.
   const preFreeRatesRef = useRef<{ fiat: string; usdc: string } | null>(null);
 
+  // Skips the very next auto-save pass right after (re)seeding pricing
+  // fields from `el` below — otherwise selecting a slot (or the initial
+  // mount) would immediately re-write its own just-loaded, unchanged
+  // values as a spurious save.
+  const skipNextPricingSaveRef = useRef(true);
+
   // Sync editor state + reset to Properties when a different element is selected
   useEffect(() => {
     const fb = String(el.price_value ?? 0);
@@ -192,6 +198,7 @@ export default function BeamCtrlPanel({
     setMinMin(String(el.prices?.min_min ?? el.min_duration_minutes ?? ''));
     setMaxMin(String(el.prices?.max_min ?? el.max_duration_minutes ?? ''));
     preFreeRatesRef.current = null;
+    skipNextPricingSaveRef.current = true;
     setTab('properties');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [el.id, fiatKey]);
@@ -270,6 +277,19 @@ export default function BeamCtrlPanel({
       max_duration_minutes: maxN,
     });
   };
+
+  // Auto-save pricing changes — debounced so typing/stepping doesn't fire a
+  // write per keystroke. Replaces a manual "Save pricing" button that gave
+  // no feedback when pressed; updateLayer already drives the canvas
+  // toolbar's Saving…/Saved status + error toast, the same feedback every
+  // other control on this panel (corner radius, shape presets) already
+  // gets for free by saving on change instead of on a separate click.
+  useEffect(() => {
+    if (skipNextPricingSaveRef.current) { skipNextPricingSaveRef.current = false; return; }
+    const t = setTimeout(saveRates, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rateFiat, rateUsdc, editUnit, minMin, maxMin]);
 
   return (
     <div className="beam-ctrl casi-v9-cp-inner">
@@ -474,43 +494,67 @@ export default function BeamCtrlPanel({
                 }
               }}
               className={`casi-v9-shape-b${beamFree ? ' casi-v9-on' : ''}`}
-              style={{
-                background: beamFree ? '#4ade80' : undefined,
-                borderColor: beamFree ? '#4ade80' : undefined,
-                color: beamFree ? 'var(--paper)' : undefined,
-              }}
             >
               {beamFree ? '★ Free' : 'Make free'}
             </button>
           </div>
 
           {/* Duration bounds — Min/Max grouped in one compact row, matching
-              the prototype's side-by-side MIN/MAX fields instead of two
-              stacked full-width rows. */}
+              the prototype's side-by-side MIN/MAX fields. Reuses the
+              +/− stepper from the rate rows above instead of bare native
+              number inputs — those were only 60px wide, and once a
+              browser's own spinner arrows ate into that the "Min"/"Max"
+              placeholder had no room left and rendered clipped. */}
           <div className="casi-v9-cp-row">
             <span className="casi-v9-cp-lbl">Duration</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                placeholder="Min"
-                value={minMin}
-                onChange={(e) => setMinMin(e.target.value)}
-                className="casi-v9-cp-input"
-                style={{ width: 60, textAlign: 'right' }}
-              />
+              <div className="casi-v9-rail-stepper">
+                <button
+                  type="button"
+                  className="casi-v9-rail-step"
+                  onClick={() => setMinMin(String(Math.max(0, (parseFloat(minMin) || 0) - 0.5)))}
+                  aria-label="Decrease minimum duration"
+                >−</button>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  placeholder="Min"
+                  value={minMin}
+                  onChange={(e) => setMinMin(e.target.value)}
+                  className="casi-v9-rail-input"
+                />
+                <button
+                  type="button"
+                  className="casi-v9-rail-step"
+                  onClick={() => setMinMin(String((parseFloat(minMin) || 0) + 0.5))}
+                  aria-label="Increase minimum duration"
+                >+</button>
+              </div>
               <span style={{ color: 'var(--text-4)', fontSize: 11 }}>–</span>
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                placeholder="Max"
-                value={maxMin}
-                onChange={(e) => setMaxMin(e.target.value)}
-                className="casi-v9-cp-input"
-                style={{ width: 60, textAlign: 'right' }}
-              />
+              <div className="casi-v9-rail-stepper">
+                <button
+                  type="button"
+                  className="casi-v9-rail-step"
+                  onClick={() => setMaxMin(String(Math.max(0, (parseFloat(maxMin) || 0) - 0.5)))}
+                  aria-label="Decrease maximum duration"
+                >−</button>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  placeholder="Max"
+                  value={maxMin}
+                  onChange={(e) => setMaxMin(e.target.value)}
+                  className="casi-v9-rail-input"
+                />
+                <button
+                  type="button"
+                  className="casi-v9-rail-step"
+                  onClick={() => setMaxMin(String((parseFloat(maxMin) || 0) + 0.5))}
+                  aria-label="Increase maximum duration"
+                >+</button>
+              </div>
               <span className="casi-v9-rail-unit">min</span>
             </div>
           </div>
@@ -542,19 +586,6 @@ export default function BeamCtrlPanel({
               </div>
             );
           })()}
-          <button
-            type="button"
-            onClick={saveRates}
-            className="casi-v9-cp-done"
-            style={{
-              background: beamFree ? '#4ade80' : 'var(--ink)',
-              color: beamFree ? 'var(--paper)' : 'var(--on-ink)',
-              borderColor: beamFree ? '#4ade80' : 'var(--ink)',
-              fontWeight: 700,
-            }}
-          >
-            Save pricing
-          </button>
         </div>
       )}
 

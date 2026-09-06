@@ -255,7 +255,7 @@ export default function DelegateKeyCard({
         </span>
       </label>
       <div style={{
-        background: 'var(--casi-bg)',
+        background: 'var(--casi-surface-2)',
         border: '1px solid var(--casi-border)',
         borderRadius: 'var(--radius-row)',
         padding: '14px 16px',
