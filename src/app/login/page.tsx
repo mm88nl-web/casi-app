@@ -764,7 +764,7 @@ export default function AuthPage() {
                       <div className="avatar-circle">
                         {avatarValid && avatarUrl
                           ? <img src={avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                          : '👤'}
+                          : (username.charAt(0).toUpperCase() || '?')}
                       </div>
                       <input type="text" placeholder="https://your-image.png" className="ap-input"
                         maxLength={AVATAR_MAX_LEN} style={{ flex: 1 }}

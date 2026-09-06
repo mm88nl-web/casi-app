@@ -193,7 +193,7 @@ export default function ViewerBookingPage() {
       {/* v7 nav. The live badge moved into StreamerBar (vb-head) since v7
           surfaces it there next to the streamer's avatar; keeping it in the
           nav too would be redundant. */}
-      <Nav />
+      <Nav followSkin />
 
       <div
         className="mx-auto casi-grid-viewer casi-page-pad"

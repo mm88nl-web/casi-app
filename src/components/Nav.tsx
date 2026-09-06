@@ -11,6 +11,13 @@ type NavProps = {
   left?: ReactNode;
   /** Right-side actions — chips, wallet pill, etc. Caller composes. */
   right?: ReactNode;
+  /** True on viewer-facing per-streamer surfaces (StreamerProfile) — the
+   *  nav adopts that streamer's own --ink/--paper (already mutated by
+   *  SkinProvider higher up the tree) instead of Casi's fixed chrome.
+   *  Studio/settings (the only other caller) omit this and keep the fixed
+   *  chrome — that's Casi's own control room, not a viewer-facing brand
+   *  surface, per explicit user confirmation this stays fixed. */
+  followSkin?: boolean;
 };
 
 /**
@@ -19,54 +26,58 @@ type NavProps = {
  * minor right-side variations; this consolidates the shell so each surface
  * only renders the bits that differ.
  */
-export default function Nav({ brandHref = '/', left, right }: NavProps) {
+export default function Nav({ brandHref = '/', left, right, followSkin = false }: NavProps) {
   // Center the logo when there's no right-side action (wallet pill, etc.) —
   // mirrors NavBar's centered variant. With wallet present, fall back to
   // the original space-between layout.
   const centered = !right;
   return (
-    // Casi's own nav chrome — pinned to the fixed --chrome-* palette, not
-    // whichever streamer skin is currently mutating --ink/--paper on
-    // <html> (this page mounts SkinProvider for the profile it's showing —
-    // see StreamerProfile.tsx). Shadowing --ink/--paper here (plus
-    // data-paper="light") is the same trick globals.css's .casi-v9-nav
-    // uses, and covers CasiMark/Wordmark below via the `color: var(--ink)`
-    // read. It does NOT cover background/border here, though: unlike
-    // --text/--line/--surf (pure color-mix formulas that re-resolve
-    // against whichever --paper cascades to a given element),
-    // UserSkinProvider/SkinProvider/the anti-FOUC script also write
-    // --casi-bg directly as its own inline style on <html> (see
-    // applySkinToRoot in UserSkinProvider.tsx) — that bypasses the
-    // --paper shadow entirely since it's never re-derived through it, and
-    // inherits straight down to any descendant that doesn't ALSO
-    // redeclare --casi-bg itself. Confirmed live: simulating a dark skin
-    // and screenshotting showed the nav bar go black instead of staying
-    // chrome cream before this was pinned to the literal token below.
-    // background/border reference --chrome-paper/--chrome-ink directly
-    // for the same reason, sidestepping the alias chain entirely instead
-    // of trusting it isn't independently mutated somewhere.
+    // Two modes, chosen by the caller via `followSkin`:
     //
-    // --paper/--ink are SWAPPED (chrome-ink for paper, chrome-paper for
-    // ink), not just pinned: the design-source prototype's shared nav
-    // template is a solid dark-green bar with cream content on every
-    // in-app screen (search, overlay, streamer profile, studio,
-    // settings), not the cream-bar/dark-content this used to render. The
-    // swap flips every var(--ink)/var(--paper)-derived read below
-    // (logo color, any --text/--line a caller's left/right content
-    // reads) in one place.
+    // Fixed chrome (studio/settings, followSkin=false — the default):
+    // pinned to the --chrome-* palette regardless of whichever streamer
+    // skin is mutating --ink/--paper on <html>. --paper/--ink are SWAPPED
+    // (chrome-ink for paper, chrome-paper for ink), not just pinned: the
+    // design-source prototype's shared nav template is a solid dark-green
+    // bar with cream content. data-paper="light" pins the derived scale
+    // (--text/--line/--surf/etc, which UserSkinProvider/SkinProvider/the
+    // anti-FOUC script mutate via --ink/--paper AND a separate --casi-bg
+    // override on <html>) to Casi's own light formula regardless of the
+    // active skin — confirmed live: without this a dark skin turned the
+    // nav black instead of staying chrome green.
+    //
+    // Skin-following (StreamerProfile, followSkin=true — this streamer's
+    // own viewer-facing brand surface, not Casi's chrome): no shadow, no
+    // data-paper pin — inherits the real skin's --ink/--paper exactly as
+    // SkinProvider set them, so the nav reads as part of that streamer's
+    // own page instead of Casi's chrome bleeding into their brand.
     <nav
       className={centered ? 'flex items-center justify-center' : 'flex items-center justify-between'}
-      data-paper="light"
+      data-paper={followSkin ? undefined : 'light'}
       style={{
-        '--paper': 'var(--chrome-ink)',
-        '--ink': 'var(--chrome-paper)',
+        ...(followSkin
+          ? {
+              // No chrome shadow, no data-paper pin — inherit the real
+              // streamer skin's --ink/--paper (and their derived --line/
+              // --text/etc) exactly as SkinProvider set them higher up.
+              // Background matches the page's own paper (nav blends into
+              // the page rather than sitting in its own colored bar) with
+              // a subtle ink-tinted hairline so it's still legible as a
+              // distinct bar.
+              background: 'var(--paper)',
+              borderBottom: '1px solid color-mix(in oklab, var(--ink) 12%, var(--paper))',
+            }
+          : {
+              '--paper': 'var(--chrome-ink)',
+              '--ink': 'var(--chrome-paper)',
+              borderBottom: 'none',
+              background: 'var(--chrome-ink)',
+            }),
         display: 'flex',
         flexWrap: 'wrap',
         rowGap: '8px',
         padding: '10px 36px',
         minHeight: '54px',
-        borderBottom: 'none',
-        background: 'var(--chrome-ink)',
         position: centered ? 'relative' : undefined,
       } as CSSProperties}
     >

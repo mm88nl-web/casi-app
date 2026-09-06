@@ -295,10 +295,10 @@ export default function SearchPage() {
 
         /* HEAD */
         .head {
-          padding: 0 40px 48px;
+          padding: 44px 40px 48px;
           border-bottom: 1px solid color-mix(in oklab, var(--type) 10%, transparent);
         }
-        @media (max-width: 640px) { .head { padding: 0 22px 36px; } }
+        @media (max-width: 640px) { .head { padding: 32px 22px 36px; } }
         h1 {
           font-family: var(--H);
           font-weight: 800;

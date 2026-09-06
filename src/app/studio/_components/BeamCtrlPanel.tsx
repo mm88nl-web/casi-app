@@ -382,7 +382,7 @@ export default function BeamCtrlPanel({
                   : undefined
               }
             >
-              {el.locked ? '🔒 Locked' : '🔓 Unlocked'}
+              {el.locked ? 'Locked' : 'Unlocked'}
             </button>
           </div>
 

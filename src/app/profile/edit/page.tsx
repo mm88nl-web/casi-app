@@ -276,7 +276,7 @@ export default function ProfileEditPage() {
                 <div className="pe-avatar" style={{ border: `2px solid ${tc}30` }}>
                   {avatarValid && avatarUrl
                     ? <img src={avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                    : '👤'}
+                    : (displayName.charAt(0).toUpperCase() || '?')}
                 </div>
                 <input type="text" value={avatarUrl} placeholder="https://your-image.png"
                   className="pe-input" style={{ flex: 1 }}

@@ -152,7 +152,7 @@ export default function MyBeamsSection({
                   disabled={isEnding}
                   style={isEnding ? { opacity: 0.6, cursor: 'default' } : undefined}
                 >
-                  {isEnding ? '⏳ ending…' : '✕ end early'}
+                  {isEnding ? 'ending…' : '✕ end early'}
                 </button>
               )}
               {canCancel && (

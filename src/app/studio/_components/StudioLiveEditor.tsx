@@ -637,10 +637,10 @@ export default function StudioLiveEditor({
                             maxWidth: '90%',
                           }}>
                             {el.locked ? (
-                              <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, color: 'rgba(248,113,113,0.85)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>🔒 Locked</span>
+                              <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, color: 'rgba(248,113,113,0.85)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Locked</span>
                             ) : null}
                             <span style={{ fontSize: el.is_background ? 22 : 16, marginBottom: 2, opacity: 0.95 }}>
-                              {el.is_background ? '🖼️' : el.shape === 'banner' ? '▰' : '✦'}
+                              {el.is_background ? '▢' : el.shape === 'banner' ? '▰' : '✦'}
                             </span>
                             <span style={{
                               fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.5,

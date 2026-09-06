@@ -798,7 +798,7 @@ function OverlayContent() {
           });
         }, 60_000);
       }
-      if (old.status === 'pending' && booking.status === 'active')          showNotif('Your beam is live! 🎉', 'success');
+      if (old.status === 'pending' && booking.status === 'active')          showNotif('Your beam is live!', 'success');
       if (old.status === 'pending' && booking.status === 'approved_queued') showNotif("Approved — you're in the queue!", 'queue');
       // Admin kicked an active beam. Two possibilities for Solana:
       //   - settle_beam landed on-chain → the webhook clears escrow_pda, the
@@ -823,7 +823,7 @@ function OverlayContent() {
     const bookingId = params.get('booking_id');
 
     if (payment === 'success' && bookingId) {
-      showNotif('Payment successful — request sent! 🎉', 'success');
+      showNotif('Payment successful — request sent!', 'success');
       // Clean up the URL so the viewer doesn't see Stripe parameters
       const clean = `${window.location.pathname}?s=${profile.username}`;
       window.history.replaceState({}, '', clean);
@@ -1141,7 +1141,7 @@ function OverlayContent() {
   // requires), so don't delete it when reading this.
   const handleStripeCheckoutComplete = () => {
     setStripeCheckout(null);
-    showNotif('Payment successful — request sent! 🎉', 'success');
+    showNotif('Payment successful — request sent!', 'success');
   };
 
   // Viewer dismissed the modal without paying. Mirrors the old
@@ -2277,20 +2277,20 @@ function OverlayContent() {
         .beam-banner-track  { display:inline-block; padding-left:100%; color:var(--casi-accent); font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
         .ov { min-height:100vh; background:${isOBS?'transparent':'var(--casi-bg)'}; color:var(--casi-text); font-family:var(--font-casi-sans),sans-serif; }
 
-        /* Casi's own nav chrome (bar fill/hairline, logo, viewer-name pill)
-           is pinned to the fixed --chrome-* palette below, NOT the active
-           streamer skin's --casi-bg/--casi-accent/--ink-70/etc — same rule
-           as the shared .casi-v9-nav in globals.css (see the long comment
-           above --chrome-* there). .notif just below stays on the mutable
-           accent tokens on purpose: it's a moderation-state toast (queued/
-           denied/approved), not chrome, and correctly follows the skin.
-           Solid dark-green fill (not cream) — matches the design-source
-           prototype's shared nav template, which every color-mix() call
-           below inverts around (chrome-ink/chrome-paper swapped from
-           what a cream bar would use). */
-        .ov-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; row-gap:8px; padding:10px 24px; min-height:56px; border-bottom:none; background:var(--chrome-ink); position:sticky; top:0; z-index:200; }
-        .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; --ink:var(--chrome-paper); --paper:var(--chrome-ink); }
-        .ov-wm { font-size:18px; font-weight:800; color:var(--chrome-paper); letter-spacing:-0.5px; }
+        /* Nav follows this streamer's own skin (--ink/--paper, already
+           mutated by SkinProvider higher up the tree) — /overlay is a
+           viewer-facing per-streamer brand surface, not Casi's own chrome,
+           per explicit user confirmation. Background matches the page's
+           own paper (nav blends into the page) with a subtle ink-tinted
+           hairline so it's still legible as a distinct bar; logo/wordmark
+           render in the streamer's ink. .notif below already correctly
+           follows the mutable accent tokens (it's a moderation-state
+           toast, not chrome) — this just brings the rest of the nav in
+           line with that same rule instead of pinning it to Casi's fixed
+           --chrome-* palette. */
+        .ov-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; row-gap:8px; padding:10px 24px; min-height:56px; border-bottom:1px solid color-mix(in oklab, var(--ink) 12%, var(--paper)); background:var(--paper); position:sticky; top:0; z-index:200; }
+        .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; }
+        .ov-wm { font-size:18px; font-weight:800; color:var(--ink); letter-spacing:-0.5px; }
         /* flex-wrap here specifically -- on a narrow viewport the
            MobileWalletPicker deeplink buttons (Phantom/Solflare, shown when
            no wallet is connected) don't fit alongside the viewer-name chip
@@ -2300,11 +2300,11 @@ function OverlayContent() {
            real device screenshot, not a hypothetical. */
         .ov-nav-right { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:8px 10px; }
         .notif { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:springPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
-        .viewer-chip { display:flex; align-items:center; gap:6px; background:var(--chrome-ink-hover); border:1px solid var(--chrome-ink-soft); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
-        .viewer-chip:hover { border-color:color-mix(in oklab, var(--chrome-paper) 34%, var(--chrome-ink)); }
-        .vdot { width:6px; height:6px; border-radius:50%; background:var(--chrome-accent); animation:blink 1.5s infinite; flex-shrink:0; }
-        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:var(--chrome-on-ink-2); }
-        .name-edit-input { background:var(--chrome-ink-hover); border:1px solid var(--chrome-ink-soft); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--chrome-paper); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
+        .viewer-chip { display:flex; align-items:center; gap:6px; background:var(--ink-04); border:1px solid var(--ink-22); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
+        .viewer-chip:hover { border-color:var(--ink-40); }
+        .vdot { width:6px; height:6px; border-radius:50%; background:var(--accent); animation:blink 1.5s infinite; flex-shrink:0; }
+        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:var(--text-3); }
+        .name-edit-input { background:var(--ink-04); border:1px solid var(--ink-40); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
 
         /* ov-layout: 2-col grid wrapper (desktop only). Separates canvas/feeds
            (left col, <main>) from slots/booking (right col, .ov-booking-col).
@@ -2895,7 +2895,7 @@ function OverlayContent() {
                         }}
                       >
                         <span style={{ fontSize: el.is_background ? 18 : 14, marginBottom: isOccupied ? 3 : 0, color: 'rgba(255,255,255,0.9)' }}>
-                          {isLocked ? '🔒' : isOccupied ? (el.shape==='banner' ? '▰' : '') : el.is_background ? '🖼' : el.shape==='banner' ? '▰' : '✦'}
+                          {isLocked ? '▨' : isOccupied ? (el.shape==='banner' ? '▰' : '') : el.is_background ? '▢' : el.shape==='banner' ? '▰' : '✦'}
                         </span>
                         {isOccupied && (
                           <span style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#fff', opacity: 0.85 }}>
@@ -2964,14 +2964,14 @@ function OverlayContent() {
                       }}
                     >
                       {isLocked
-                        ? '🔒 Locked'
+                        ? 'Locked'
                         : myIsExpiring
                           ? '⚠ Expiring'
                           : myBookingForSlot!.status === 'active'
                             ? '● Your beam'
                             : myBookingForSlot!.status === 'approved_queued'
-                              ? '⏳ Queued'
-                              : '⌛ Pending'}
+                              ? '○ Queued'
+                              : '○ Pending'}
                     </div>
                   )}
 

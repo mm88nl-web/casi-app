@@ -24,7 +24,7 @@ const DEFAULT_GLYPH: Record<SlotShape, string> = {
   circle: '●',
   custom: '✦',
   banner: '▰▰▰',
-  backdrop: '🖼',
+  backdrop: '▢',
 };
 
 /**

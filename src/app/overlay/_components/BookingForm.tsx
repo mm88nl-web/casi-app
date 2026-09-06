@@ -249,7 +249,7 @@ export default function BookingForm(props: Props) {
       <div className="bf-hdr">
         <div>
           <div className="bf-type">
-            {isExtend ? '⏱ Extend slot' : isQueue ? '⏳ Join queue' : '🎯 Tip for slot'}
+            {isExtend ? 'Extend slot' : isQueue ? 'Join queue' : 'Tip for slot'}
           </div>
           <div className="bf-price" style={{ color: isFreeSlot ? '#4ade80' : undefined }}>
             {isFreeSlot ? '★ Free' : formatSlotPrice(slot).label}

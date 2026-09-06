@@ -78,7 +78,7 @@ export default function SlotsList({
               <div className="s-thumb" style={{ borderColor: isFree ? 'rgba(74,222,128,0.25)' : isOccupied ? `rgba(${tcRgb},0.21)` : `rgba(${tcRgb},0.14)` }}>
                 {el.image_url
                   ? <SlotMedia src={el.image_url} fileType={null} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                  : <span>{isLocked ? '🔒' : el.is_background ? '🖼' : '✦'}</span>}
+                  : <span>{isLocked ? '▨' : el.is_background ? '▢' : '✦'}</span>}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="s-type">

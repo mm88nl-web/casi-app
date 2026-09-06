@@ -226,7 +226,7 @@ export default function SearchDropdown() {
               shown.map(p => (
                 <a key={p.username} href={`/overlay?s=${p.username}`} className="sd-result">
                   <div className="sd-avatar">
-                    {p.avatar_url ? <img src={p.avatar_url} alt="" /> : '👤'}
+                    {p.avatar_url ? <img src={p.avatar_url} alt="" /> : (p.display_name || p.username).charAt(0).toUpperCase()}
                   </div>
                   <div className="sd-info">
                     <div className="sd-name-row">
@@ -268,7 +268,7 @@ export default function SearchDropdown() {
             <a key={p.username} href={`/overlay?s=${p.username}`} className="sd-chip">
               <span className="sd-chip-dot" />
               <div className="sd-chip-av">
-                {p.avatar_url ? <img src={p.avatar_url} alt="" /> : '👤'}
+                {p.avatar_url ? <img src={p.avatar_url} alt="" /> : (p.display_name || p.username).charAt(0).toUpperCase()}
               </div>
               <span className="sd-chip-name">{p.display_name || p.username}</span>
             </a>
