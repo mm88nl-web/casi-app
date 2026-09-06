@@ -105,7 +105,7 @@ export default function EmbeddedCheckoutModal({ clientSecret, onComplete, onClos
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 9500,
+        zIndex: 10000,
         padding: '24px',
       }}
       onClick={onClose}
@@ -117,9 +117,9 @@ export default function EmbeddedCheckoutModal({ clientSecret, onComplete, onClos
           maxWidth: '480px',
           maxHeight: '90vh',
           overflowY: 'auto',
-          background: 'var(--casi-surface)',
-          border: '1px solid var(--casi-border-2)',
-          borderRadius: '14px',
+          background: 'var(--surf)',
+          border: '1px solid var(--line-2)',
+          borderRadius: 'var(--radius-panel)',
           padding: '16px',
           position: 'relative',
         }}
@@ -135,9 +135,9 @@ export default function EmbeddedCheckoutModal({ clientSecret, onComplete, onClos
             width: '28px',
             height: '28px',
             borderRadius: '50%',
-            border: '1px solid var(--casi-border-2)',
-            background: 'var(--casi-surface-2)',
-            color: 'var(--casi-text-mid)',
+            border: '1px solid var(--line-2)',
+            background: 'var(--surf-2)',
+            color: 'var(--text-2)',
             cursor: 'pointer',
             fontSize: '14px',
             lineHeight: 1,
@@ -148,7 +148,7 @@ export default function EmbeddedCheckoutModal({ clientSecret, onComplete, onClos
         </button>
 
         {error ? (
-          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--casi-text-mid)', fontSize: '13px' }}>
+          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-2)', fontSize: '13px' }}>
             {error}
           </div>
         ) : (

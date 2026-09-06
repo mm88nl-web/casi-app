@@ -184,8 +184,8 @@ export async function notifyBeam(input: BeamNotifyInput): Promise<void> {
 
   const kind = input.is_backdrop ? 'Backdrop' : 'Beam';
   const title = input.event === 'purchased'
-    ? `💰 New ${kind} Purchase`
-    : `🔴 ${kind} Started`;
+    ? `New ${kind} Purchase`
+    : `${kind} Started`;
 
   const fields: DiscordField[] = [];
   if (input.viewer_name)

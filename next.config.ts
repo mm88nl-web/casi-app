@@ -34,7 +34,12 @@ const nextConfig: NextConfig = {
               // <script src="..."> injection from other origins.
               // Cloudflare Turnstile (challenges.cloudflare.com) is needed for captcha on
               // free-tier submit paths.
-              `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com${isDev ? " 'unsafe-eval'" : ''}`,
+              // js.stripe.com is required here (not just frame-src) — the
+              // client loads Stripe.js itself via <script src>, which CSP
+              // gates through script-src regardless of the frame-src entry
+              // below. Without it, loadStripe() throws "Failed to load
+              // Stripe.js" and every card payment dies before it starts.
+              `script-src 'self' 'unsafe-inline' https://js.stripe.com https://challenges.cloudflare.com${isDev ? " 'unsafe-eval'" : ''}`,
 
               // Inline styles are used throughout (CSS string pattern).
               // Google Fonts stylesheet is loaded via @import in Header.

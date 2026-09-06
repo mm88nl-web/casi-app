@@ -48,19 +48,20 @@ function ConnectedCard({ logo, title, meta, action, wrapMeta = false }: Connecte
       className="flex items-center justify-between gap-4"
       style={{
         padding: '14px 16px',
-        background: 'var(--surf, var(--casi-bg))',
-        border: '1px solid var(--line-2, var(--casi-border-2))',
-        borderRadius: 0,
+        background: 'var(--casi-surface-2, var(--surf-2))',
+        border: '1px solid var(--line, var(--casi-border))',
+        borderRadius: 'var(--radius-row)',
       }}
     >
       <div className="flex items-center gap-3.5 min-w-0">
         {logo}
         <div className="min-w-0">
           <div
-            className="font-semibold"
             style={{
-              fontFamily: 'var(--B), var(--font-casi-sans), sans-serif',
-              fontSize: '14px',
+              fontFamily: 'var(--B)',
+              fontWeight: 700,
+              fontSize: '17px',
+              letterSpacing: '-0.01em',
               color: 'var(--text, var(--casi-text))',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -70,17 +71,16 @@ function ConnectedCard({ logo, title, meta, action, wrapMeta = false }: Connecte
             {title}
           </div>
           <div
-            className="mt-0.5 font-mono uppercase"
+            className="mt-1"
             style={{
-              fontFamily: 'var(--M), var(--font-casi-mono), monospace',
-              fontSize: '10px',
-              letterSpacing: '0.1em',
-              color: 'var(--text-3, var(--casi-text-dim))',
+              fontFamily: 'var(--S)',
+              fontStyle: 'italic',
+              fontSize: '13px',
+              color: 'var(--text-2, var(--casi-text-dim))',
               overflow: wrapMeta ? 'visible' : 'hidden',
               textOverflow: wrapMeta ? 'clip' : 'ellipsis',
               whiteSpace: wrapMeta ? 'normal' : 'nowrap',
               lineHeight: wrapMeta ? 1.45 : undefined,
-              textTransform: wrapMeta ? 'none' : undefined,
             }}
           >
             {meta}
@@ -167,10 +167,10 @@ const STRIPE_LOGO = (
   <div
     className="flex shrink-0 items-center justify-center"
     style={{
-      width: '40px',
-      height: '40px',
-      borderRadius: 0,
-      background: 'var(--surf-2, var(--ink-04))',
+      width: '44px',
+      height: '44px',
+      borderRadius: 'var(--radius-chip)',
+      background: 'var(--casi-bg)',
       border: '1px solid var(--line)',
     }}
   >
@@ -182,10 +182,10 @@ const SOLANA_LOGO = (
   <div
     className="flex shrink-0 items-center justify-center"
     style={{
-      width: '40px',
-      height: '40px',
-      borderRadius: 0,
-      background: 'var(--surf-2, var(--ink-04))',
+      width: '44px',
+      height: '44px',
+      borderRadius: 'var(--radius-chip)',
+      background: 'var(--casi-bg)',
       border: '1px solid var(--line)',
     }}
   >
@@ -377,7 +377,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={STRIPE_LOGO}
-          title="Stripe ·checking…"
+          title="Stripe · checking…"
           meta={<><StatusDot kind="off" />loading account status</>}
           action={null}
         />
@@ -387,7 +387,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={STRIPE_LOGO}
-          title="Stripe ·not connected"
+          title="Stripe · not connected"
           meta={<><StatusDot kind="off" />card payments + EUR payouts</>}
           action={
             <GhostButton type="button" onClick={handleStripeAction} disabled={busy === 'stripe'}>
@@ -401,7 +401,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={STRIPE_LOGO}
-          title="Stripe ·status unavailable"
+          title="Stripe · status unavailable"
           // Wrap the meta line so streamers actually see the full Stripe
           // error message (typically a sentence ending in a dashboard URL
           // that they need to click). Linkify any URL in the message.
@@ -427,9 +427,9 @@ export default function PayoutsSection({
       : stripe.kind === 'restricted' ? `${shortAcct(stripe.accountId)} · review required`
       :                                `${shortAcct(stripe.accountId)} · ${stripe.dueCount} step${stripe.dueCount === 1 ? '' : 's'} remaining`;
     const title =
-      stripe.kind === 'active'     ? 'Stripe ·connected'
-      : stripe.kind === 'restricted' ? 'Stripe ·restricted'
-      :                                'Stripe ·onboarding incomplete';
+      stripe.kind === 'active'     ? 'Stripe · connected'
+      : stripe.kind === 'restricted' ? 'Stripe · restricted'
+      :                                'Stripe · onboarding incomplete';
     return (
       <ConnectedCard
         logo={STRIPE_LOGO}
@@ -458,7 +458,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={SOLANA_LOGO}
-          title="Solana wallet ·setup incomplete"
+          title="Solana wallet · setup incomplete"
           meta={<><StatusDot kind="warn" />{shortPk(savedWallet)} · one more signature needed to receive Solana payments</>}
           action={
             <GhostButton type="button" onClick={registerOnChain} disabled={busy === 'register'}>
@@ -472,7 +472,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={SOLANA_LOGO}
-          title="Solana wallet ·linked"
+          title="Solana wallet · linked"
           meta={<><StatusDot kind="ok" />{shortPk(savedWallet)} · USDC auto-claim on</>}
           action={
             <GhostButton type="button" onClick={() => setWalletModalVisible(true)}>
@@ -486,7 +486,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={SOLANA_LOGO}
-          title="Solana wallet ·linked (not connected)"
+          title="Solana wallet · linked (not connected)"
           meta={<><StatusDot kind="warn" />{shortPk(savedWallet)} · connect wallet to sign</>}
           action={
             <GhostButton type="button" onClick={() => setWalletModalVisible(true)}>
@@ -500,7 +500,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={SOLANA_LOGO}
-          title="Solana wallet ·different wallet connected"
+          title="Solana wallet · different wallet connected"
           meta={<><StatusDot kind="warn" />saved {shortPk(savedWallet)} · connected {shortPk(connected)}</>}
           action={
             <GhostButton type="button" onClick={handleLinkWallet} disabled={busy === 'wallet'}>
@@ -515,7 +515,7 @@ export default function PayoutsSection({
       return (
         <ConnectedCard
           logo={SOLANA_LOGO}
-          title="Solana wallet ·ready to link"
+          title="Solana wallet · ready to link"
           meta={<><StatusDot kind="warn" />{shortPk(connected)} · save to receive USDC tips</>}
           action={
             <GhostButton type="button" onClick={handleLinkWallet} disabled={busy === 'wallet'}>
@@ -528,7 +528,7 @@ export default function PayoutsSection({
     return (
       <ConnectedCard
         logo={SOLANA_LOGO}
-        title="Solana wallet ·not linked"
+        title="Solana wallet · not linked"
         meta={<><StatusDot kind="off" />USDC tips + escrow refunds</>}
         action={
           <GhostButton type="button" onClick={handleLinkWallet}>
@@ -548,28 +548,14 @@ export default function PayoutsSection({
       <div
         className="mb-3.5 flex items-start gap-3"
         style={{
-          background: 'var(--ink-04)',
-          border: '1px solid var(--ink-22)',
-          borderRadius: 0,
-          padding: '12px 14px',
+          background: 'color-mix(in oklab, var(--ink) 6%, var(--paper))',
+          border: '1px solid color-mix(in oklab, var(--ink) 18%, var(--paper))',
+          borderRadius: 'var(--radius-row)',
+          padding: '14px 16px',
         }}
       >
-        <div
-          className="flex shrink-0 items-center justify-center font-mono font-semibold"
-          style={{
-            width: '22px',
-            height: '22px',
-            borderRadius: 0,
-            background: 'var(--ink-14)',
-            color: 'var(--ink, var(--casi-accent2))',
-            fontSize: '12px',
-            marginTop: '1px',
-          }}
-        >
-          ♦
-        </div>
-        <div style={{ fontFamily: 'var(--B), var(--font-casi-sans), sans-serif', fontSize: '12.5px', lineHeight: 1.5, color: 'var(--text-3, var(--casi-text-mid))' }}>
-          <strong style={{ color: 'var(--text, var(--casi-text))' }}>
+        <div style={{ fontFamily: 'var(--S)', fontSize: '15px', lineHeight: 1.5, color: 'var(--text-2)' }}>
+          <strong style={{ fontFamily: 'var(--B)', fontStyle: 'normal', fontWeight: 700, color: 'var(--text)' }}>
             Casi never holds your money.
           </strong>{' '}
           Card payments flow directly to your Stripe account. USDC sits in an on-chain escrow contract
@@ -584,8 +570,8 @@ export default function PayoutsSection({
 
       {walletErr && (
         <div
-          className="mt-2 font-mono"
-          style={{ fontSize: '10px', color: '#ef4444' }}
+          className="mt-2"
+          style={{ fontFamily: 'var(--M)', fontSize: '12px', color: '#ef4444' }}
         >
           ✕ {walletErr}
         </div>

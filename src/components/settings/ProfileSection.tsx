@@ -153,7 +153,7 @@ export default function ProfileSection({ supabase, profile }: Props) {
       desc={
         <>
           This is what viewers see. Your URL is{' '}
-          <code style={{ color: 'var(--casi-accent)' }}>
+          <code style={{ fontFamily: 'var(--M)', fontStyle: 'normal', color: 'var(--casi-accent)' }}>
             www.casi.gg/overlay?s={slug || '—'}
           </code>
           .
@@ -161,20 +161,30 @@ export default function ProfileSection({ supabase, profile }: Props) {
       }
       actions={<SaveIndicator state={saveState} error={errorMsg} />}
     >
-      <div className="mb-5 flex items-center gap-4">
+      {/* NOT built here: the design source's "six preset avatar marks
+          generated from the display name" picker. That needs a persisted
+          "which preset is selected" state distinct from avatar_url (which
+          today only ever means "uploaded photo" or "none, show initial") —
+          inventing a storage scheme for it is a product/data-model call
+          beyond a visual-only pass. Restyled the existing upload/remove
+          flow (real behaviour, unchanged) into the prototype's circular-
+          avatar look instead. See PR report for the flag. */}
+      <div className="mb-5 flex items-center gap-5" style={{ paddingBottom: '18px', marginBottom: '18px', borderBottom: '1px solid var(--chrome-line, var(--casi-border))' }}>
         <div
           className="flex shrink-0 items-center justify-center overflow-hidden"
           style={{
-            width: '72px',
-            height: '72px',
-            borderRadius: '16px',
+            width: '92px',
+            height: '92px',
+            borderRadius: '999px',
+            border: '2px solid var(--casi-border-2)',
             background: avatarUrl
-              ? '#000'
+              ? 'var(--casi-bg)'
               : 'linear-gradient(135deg, rgba(var(--casi-accent-rgb), 0.5), rgba(var(--casi-accent2-rgb), 0.4))',
-            fontFamily: 'var(--font-casi-sans)',
-            fontSize: '28px',
-            fontWeight: 800,
-            color: '#0a0a0a',
+            fontFamily: 'var(--H)',
+            fontSize: '34px',
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+            color: 'var(--casi-text)',
           }}
           aria-hidden
         >

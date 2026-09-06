@@ -40,22 +40,24 @@ export default function SignOutButton({ label = 'Sign out', variant = 'chip' }: 
   };
 
   if (variant === 'block') {
+    // Matches GhostButton's look (used for every other secondary action on
+    // this page — Replace/Remove/Connect/Manage) instead of an uppercase
+    // mono pill with a hardcoded 6px radius, which read as a leftover from
+    // the pre-redesign button language right next to fully-restyled ones.
     return (
       <button
         type="button"
         onClick={onClick}
         disabled={busy}
         style={{
-          padding: '12px 22px',
-          fontFamily: 'var(--M)',
-          fontSize: '12px',
+          padding: '10px 16px',
+          fontFamily: 'var(--B)',
+          fontSize: '14px',
           fontWeight: 600,
-          letterSpacing: '0.14em',
-          textTransform: 'uppercase',
           background: 'transparent',
           border: '1px solid var(--line-2)',
-          borderRadius: '6px',
-          color: 'var(--text-3)',
+          borderRadius: 'var(--radius-pill)',
+          color: 'var(--text-2)',
           cursor: busy ? 'wait' : 'pointer',
           opacity: busy ? 0.5 : 1,
           transition: 'border-color .14s, color .14s',

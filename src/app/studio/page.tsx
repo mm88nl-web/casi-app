@@ -15,7 +15,7 @@ import FlashesLog, { type FlashLogItem } from './_components/FlashesLog';
 import PreviewBookingModal, { type PreviewBooking } from './_components/PreviewBookingModal';
 import StudioWelcome from './_components/StudioWelcome';
 import StudioFrame from './_components/StudioFrame';
-import StreamerPublishCard from './_components/StreamerPublishCard';
+import StudioLiveEditor from './_components/StudioLiveEditor';
 import { fiatSymbol, formatFiat } from '@/lib/currency';
 
 // Explicit column lists. BOOKING_COLS adds the moderation-critical fields the
@@ -153,6 +153,13 @@ function bookingToQueueItem(
     kind: 'beam',
     name: `${who} · ${snippet}`,
     subtitle: `${timeAgo(b.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · ${durationLabel}${b.file_type === 'video' ? ' · video' : ''}${rate > 0 ? ` · ${rate}/${b.price_unit}` : ''}`,
+    // Split-out presentational fields for ApprovalQueue's card layout —
+    // pure re-derivations of the same data name/subtitle already encode,
+    // not new state.
+    who,
+    waitingLabel: `waiting ${timeAgo(b.created_at).replace(/ ago$/, '')}`,
+    requestText: snippet,
+    metaLine: [durationLabel, shape].filter(Boolean).join(' · '),
     rail: b.payment_method === 'free' ? null : (isUsdc ? 'usdc' : 'stripe'),
     priceLabel,
     readOnly: false,
@@ -176,6 +183,10 @@ function flashToQueueItem(f: FlashRow, currency: string | null = null): QueueIte
     kind: 'flash',
     name: `${who} · "${snippet}${overflow ? '…' : ''}"`,
     subtitle: `${logTime(f.created_at)} · ${isUsdc ? 'USDC' : 'paid'} · text`,
+    who,
+    waitingLabel: `waiting ${timeAgo(f.created_at).replace(/ ago$/, '')}`,
+    requestText: snippet ? `"${snippet}${overflow ? '…' : ''}"` : undefined,
+    metaLine: 'flash',
     rail: f.payment_method === 'free' ? null : (isUsdc ? 'usdc' : 'stripe'),
     priceLabel,
     paymentConfirmed: isFlashPaymentConfirmed(f),
@@ -1044,8 +1055,6 @@ function StudioPageInner() {
       isLive={profile.is_live}
       togglingLive={togglingLive}
       onToggleLive={toggleLive}
-      activeMode="dashboard"
-      pendingCount={queue.length}
       error={errorMsg}
       onDismissError={() => setErrorMsg(null)}
     >
@@ -1056,28 +1065,39 @@ function StudioPageInner() {
         pending={queue.length}
       />
 
-      {airing.length > 0 ? <AiringNow items={airing} /> : null}
-
-      <ApprovalQueue
-        items={queue}
-        onApprove={handleApprove}
-        onReject={handleReject}
-        onPreview={setPreviewId}
-        pendingIds={moderating}
-        emptyLabel="Nothing pending · share your viewer link above to get your first beam"
-      />
-
-      <StreamerPublishCard
-        elements={Object.entries(elementsById).map(([id, el]) => ({
-          id, shape: el.shape, is_background: el.is_background,
-        }))}
+      {/* Canvas + Waiting/Layers sidebar — the merged single-screen studio
+          (was split across /studio + /studio/live). StudioLiveEditor owns
+          the canvas + layers state; the queue/flashes (Waiting tab) and
+          below-canvas (On air) content are handed in as pre-rendered slots
+          since the real booking/flash data + moderation handlers live
+          here, not in the editor. Flashes sits under the approval queue in
+          the Waiting tab, not below the canvas, so both "things to react
+          to" live in one place. Publish-my-own-content also threads
+          through to whichever beam's properties panel is open — it's a
+          per-slot action now, not a standalone card with its own slot
+          picker. */}
+      <StudioLiveEditor
+        supabase={supabase}
+        profileId={profile.id}
+        username={profile.username}
+        stripeCurrency={stripeCurrency}
+        queueBadgeCount={queue.length}
         publishing={publishing}
         onPublish={handleStreamerPublish}
-      />
-
-      <FlashesLog
-        items={flashLog}
-        total={todayTotal}
+        queueSlot={
+          <>
+            <ApprovalQueue
+              items={queue}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              onPreview={setPreviewId}
+              pendingIds={moderating}
+              emptyLabel="Nothing pending · share your viewer link above to get your first beam"
+            />
+            <FlashesLog items={flashLog} total={todayTotal} />
+          </>
+        }
+        belowCanvasSlot={airing.length > 0 ? <AiringNow items={airing} /> : null}
       />
 
       <EndStreamDialog
@@ -1185,7 +1205,7 @@ function buildPreview(
 function StatusScreen({ children }: { children: React.ReactNode }) {
   return (
     <main
-      className="min-h-screen flex items-center justify-center"
+      className="casi-studio-chrome min-h-screen flex items-center justify-center"
       style={{ background: 'var(--casi-bg)', color: 'var(--casi-text-dim)' }}
     >
       <div className="font-mono uppercase" style={{ fontSize: '11px', letterSpacing: '0.2em' }}>

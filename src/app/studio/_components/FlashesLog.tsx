@@ -36,54 +36,46 @@ const CHIP_CLASS: Record<FlashLogItem['chip']['kind'], string> = {
  */
 export default function FlashesLog({ items, total }: Props) {
   return (
-    <section className="flex flex-col">
+    <section className="casi-card flex flex-col" style={{ padding: '16px 18px' }}>
       <style>{`
         .casi-fl-r {
           display: flex; align-items: center; gap: 10px;
-          padding: 10px 16px;
-          border-bottom: 1px solid var(--casi-border);
+          padding: 10px 0;
+          border-bottom: 1px solid var(--line);
           transition: background .12s;
         }
         .casi-fl-r:last-child { border-bottom: none; }
-        .casi-fl-r:hover { background: rgba(255,255,255,0.01); }
         .casi-fl-amt.u { color: var(--casi-accent); background: rgba(var(--casi-accent-rgb), 0.07); }
         .casi-fl-amt.e { color: var(--casi-accent); background: rgba(var(--casi-accent-rgb), 0.07); }
         .casi-fl-amt.f { color: var(--casi-text-dim); background: var(--casi-surface-2); }
       `}</style>
 
       <div
-        className="font-mono uppercase flex items-center"
-        style={{
-          gap: '8px',
-          fontSize: '11px',
-          fontWeight: 600,
-          color: 'var(--casi-text-mid)',
-          letterSpacing: '0.08em',
-          paddingBottom: '10px',
-        }}
+        className="flex items-baseline"
+        style={{ gap: '10px', paddingBottom: '13px' }}
       >
-        Flashes · today
+        <div style={{ fontFamily: 'var(--H)', fontWeight: 800, fontVariationSettings: '"opsz" 64', fontSize: '20px', letterSpacing: '-0.02em', color: 'var(--text)' }}>
+          Flashes
+        </div>
+        <div className="casi-meta-italic" style={{ fontSize: '13px', flex: 1 }}>
+          today
+        </div>
+        <div style={{ fontFamily: 'var(--M)', fontSize: '13px', color: 'var(--text-3)' }}>
+          {items.length}
+        </div>
       </div>
 
-      <div
-        style={{
-          border: '1px solid var(--line)',
-          borderRadius: 0,
-          background: 'var(--surf)',
-          overflow: 'hidden',
-        }}
-      >
+      <div>
         {items.length === 0 ? (
           <div
-            className="font-mono uppercase text-center"
             style={{
-              padding: '40px 16px',
-              fontSize: '10px',
-              letterSpacing: '0.15em',
-              color: 'var(--casi-text-faint)',
+              border: '1px dashed var(--line-2)',
+              borderRadius: 'var(--radius-card)',
+              padding: '20px',
+              textAlign: 'center',
             }}
           >
-            No flashes yet today
+            <span className="casi-meta-italic" style={{ fontSize: '15px' }}>No flashes yet today.</span>
           </div>
         ) : (
           items.map(flash => {
@@ -103,8 +95,9 @@ export default function FlashesLog({ items, total }: Props) {
                 </span>
                 <span
                   style={{
-                    fontSize: '13px',
-                    fontWeight: 600,
+                    fontFamily: 'var(--B)',
+                    fontSize: '15px',
+                    fontWeight: 700,
                     color: 'var(--casi-text)',
                     flexShrink: 0,
                     minWidth: '80px',
@@ -113,10 +106,9 @@ export default function FlashesLog({ items, total }: Props) {
                   {flash.who}
                 </span>
                 <span
-                  className="truncate"
+                  className="truncate casi-meta-italic"
                   style={{
-                    fontSize: '12.5px',
-                    color: 'var(--casi-text-mid)',
+                    fontSize: '14px',
                     flex: 1,
                     minWidth: 0,
                   }}
@@ -129,8 +121,8 @@ export default function FlashesLog({ items, total }: Props) {
                     fontFamily: 'var(--M), var(--font-casi-mono), monospace',
                     fontSize: '11.5px',
                     flexShrink: 0,
-                    padding: '2px 8px',
-                    borderRadius: 0,
+                    padding: '3px 9px',
+                    borderRadius: 'var(--radius-chip)',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 5,
@@ -149,17 +141,17 @@ export default function FlashesLog({ items, total }: Props) {
           })
         )}
         <div
+          className="casi-meta-italic"
           style={{
-            padding: '10px 16px',
-            borderTop: '1px solid var(--casi-border)',
-            fontSize: '12px',
-            color: 'var(--casi-text-mid)',
+            padding: '13px 0 0',
+            marginTop: '3px',
+            borderTop: '1px solid var(--line)',
+            fontSize: '14px',
             display: 'flex',
-            gap: '16px',
-            background: 'rgba(255,255,255,0.01)',
+            gap: '8px',
           }}
         >
-          Today: <strong style={{ color: 'var(--ink)', fontWeight: 500, marginLeft: '4px', fontFamily: 'var(--M), var(--font-casi-mono), monospace' }}>{total}</strong>
+          Today: <strong style={{ color: 'var(--ink)', fontStyle: 'normal', fontWeight: 700, fontFamily: 'var(--M)' }}>{total}</strong>
         </div>
       </div>
     </section>

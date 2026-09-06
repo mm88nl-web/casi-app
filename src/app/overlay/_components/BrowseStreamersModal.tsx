@@ -129,6 +129,8 @@ export default function BrowseStreamersModal({ open, onClose }: Props) {
           width: 100%; max-width: 560px; max-height: min(80vh, 640px);
           background: var(--surf, var(--casi-surface));
           border: 1px solid var(--line, var(--casi-border));
+          border-radius: var(--radius-panel, 20px);
+          overflow: hidden;
           display: flex; flex-direction: column;
           font-family: var(--B), inherit;
         }
@@ -145,6 +147,7 @@ export default function BrowseStreamersModal({ open, onClose }: Props) {
         .bsm-rule { display: block; width: 18px; height: 1px; background: var(--ink, var(--casi-accent)); }
         .bsm-tag {
           padding: 2px 8px; border: 1px solid var(--ink, var(--casi-accent));
+          border-radius: var(--radius-chip, 12px);
           color: var(--ink, var(--casi-accent)); font-size: 9.5px;
         }
         .bsm-close {
@@ -154,8 +157,9 @@ export default function BrowseStreamersModal({ open, onClose }: Props) {
         .bsm-close:hover { color: var(--text, var(--casi-text)); }
         .bsm-search {
           margin: 14px 20px 0;
-          padding: 10px 12px; background: var(--paper, var(--casi-bg));
+          padding: 10px 14px; background: var(--paper, var(--casi-bg));
           border: 1px solid var(--line, var(--casi-border));
+          border-radius: var(--radius-pill, 999px);
           color: var(--text, var(--casi-text));
           font-family: var(--M), monospace; font-size: 13px;
           outline: none;
@@ -178,6 +182,7 @@ export default function BrowseStreamersModal({ open, onClose }: Props) {
         .bsm-card:hover { background: var(--ink-04, rgba(255,255,255,0.04)); }
         .bsm-avatar {
           width: 44px; height: 44px; flex-shrink: 0;
+          border-radius: 50%;
           background: var(--ink, var(--casi-accent));
           color: var(--on-ink, #000);
           display: flex; align-items: center; justify-content: center;
@@ -197,7 +202,8 @@ export default function BrowseStreamersModal({ open, onClose }: Props) {
         }
         .bsm-live {
           display: inline-flex; align-items: center; gap: 6px;
-          padding: 3px 8px; background: var(--ink, var(--casi-accent));
+          padding: 3px 9px; background: var(--ink, var(--casi-accent));
+          border-radius: var(--radius-pill, 999px);
           color: var(--on-ink, #000);
           font-family: var(--M), monospace; font-size: 9px; font-weight: 700;
           letter-spacing: 0.18em; text-transform: uppercase; flex-shrink: 0;

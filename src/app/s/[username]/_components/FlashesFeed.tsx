@@ -39,7 +39,9 @@ export default function FlashesFeed({ flashes }: { flashes: Flash[] }) {
         }
         .casi-vf-item:last-child { border-bottom: none; }
         .casi-vf-who { font-size: 12.5px; font-weight: 600; min-width: 80px; flex-shrink: 0; color: var(--casi-text); }
-        .casi-vf-msg { font-size: 12.5px; color: var(--casi-text-mid); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* Signature redesign move: flash messages read in Newsreader, not
+           the body sans — matches the prototype's flash-feed row. */
+        .casi-vf-msg { font-family: var(--S); font-size: 14px; color: var(--casi-text-mid); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .casi-vf-amt { font-family: var(--font-casi-mono), monospace; font-size: 11px; padding: 2px 8px; border-radius: 4px; flex-shrink: 0; }
         .casi-vf-amt.u { color: var(--casi-accent); background: rgba(var(--casi-accent-rgb), 0.08); }
         .casi-vf-amt.e { color: var(--casi-accent); background: rgba(var(--casi-accent-rgb), 0.08); }

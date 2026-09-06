@@ -5,19 +5,27 @@ export type Skin = {
   accent: string;
   /** RGB channels of accent (no `rgb()` wrapper) — for rgba() usage */
   accentRgb: string;
-  /** Secondary action colour */
+  /** Secondary / state-only colour — live pips, flash ⚡, amount pills,
+   *  "Live" badge, the active/selected ring. Never body text or a primary
+   *  fill. A genuine third hue, not a shade of `ink`. */
   accent2: string;
   /** RGB channels of accent2 */
   accent2Rgb: string;
   /** Main page background (v7 alias: same value as `paper`) */
   bg: string;
-  /** Card / panel background */
+  /** Card / panel background (legacy v7 field — unused by the v9/redesign
+   *  ladder, which derives card fill from `paper` + `ink` via color-mix
+   *  instead. Kept only so the `Skin` type stays a superset for any code
+   *  still reading it.) */
   surface: string;
-  /** Divider / outline colour */
+  /** Hairline / card-edge colour. Curated per skin so it reads correctly
+   *  against that skin's exact paper — not a generic mix for presets.
+   *  Custom skins fall back to a generated mix(paper, ink, 18%) instead
+   *  (see globals.css `--border`). */
   border: string;
-  /** Primary text */
+  /** Primary text (legacy v7 field, equal to `ink`) */
   text: string;
-  /** Secondary / label text */
+  /** Secondary / label text (legacy v7 field, equal to `ink`) */
   textMuted: string;
   /** v9 root: brand/accent colour. Equal to `accent` — the providers wire this
    *  into `--ink`, and globals.css derives the rest of the ladder via color-mix. */
@@ -33,214 +41,71 @@ export type Skin = {
 
 export const DEFAULT_SKIN_ID = 'casi-light';
 
-export const SKINS: Skin[] = [
+/**
+ * Every skin is exactly three colours (`ink` / `paper` / `accent2`) plus one
+ * curated `border`. This is the full source of truth — see AGENTS.md → the
+ * redesign skin token contract. `accent2` must be a genuine third hue (not a
+ * darkened `ink`) or state changes (live pip, flash, amount pill) become
+ * invisible against the brand colour.
+ *
+ * `snow.accent2` was `#F97316` (2.61:1 against its `#F4F7FD` paper — under
+ * the 3:1 floor). Fixed to `#EA580C` (3.32:1), same warm-orange hue family,
+ * just darker/more saturated so it clears contrast.
+ */
+const SKIN_SOURCE: {
+  id: string;
+  name: string;
+  cat: 'light' | 'dark' | 'custom';
+  ink: string;
+  paper: string;
+  accent2: string;
+  border: string;
+}[] = [
   // ── Light ──────────────────────────────────────────────────────────────
-  {
-    id: 'casi-light',
-    name: 'Casi Light',
-    accent:     '#294b3c',
-    accentRgb:  '41, 75, 60',
-    accent2:    '#c04830',
-    accent2Rgb: '192, 72, 48',
-    bg:         '#f5e1d2',
-    surface:    '#ede0cf',
-    border:     '#d4c0aa',
-    text:       '#221a14',
-    textMuted:  '#6a574b',
-    ink:        '#294b3c',
-    paper:      '#f5e1d2',
-    isLight:    true,
-    category:   'light',
-  },
-  {
-    id: 'rose',
-    name: 'Rose',
-    accent:     '#BE185D',
-    accentRgb:  '190, 24, 93',
-    accent2:    '#9333EA',
-    accent2Rgb: '147, 51, 234',
-    bg:         '#FDF2F8',
-    surface:    '#FAE8F0',
-    border:     '#F5C8DC',
-    text:       '#4A0A24',
-    textMuted:  '#9D4C6A',
-    ink:        '#BE185D',
-    paper:      '#FDF2F8',
-    isLight:    true,
-    category:   'light',
-  },
-  {
-    id: 'snow',
-    name: 'Snow',
-    accent:     '#2563EB',
-    accentRgb:  '37, 99, 235',
-    accent2:    '#7C3AED',
-    accent2Rgb: '124, 58, 237',
-    bg:         '#F0F5FF',
-    surface:    '#E8EEFF',
-    border:     '#BFCDF9',
-    text:       '#0F172A',
-    textMuted:  '#475569',
-    ink:        '#2563EB',
-    paper:      '#F0F5FF',
-    isLight:    true,
-    category:   'light',
-  },
-  {
-    id: 'amber',
-    name: 'Amber',
-    accent:     '#B45309',
-    accentRgb:  '180, 83, 9',
-    accent2:    '#DC2626',
-    accent2Rgb: '220, 38, 38',
-    bg:         '#FFFBEB',
-    surface:    '#FEF3C7',
-    border:     '#FDE68A',
-    text:       '#1C1917',
-    textMuted:  '#78716C',
-    ink:        '#B45309',
-    paper:      '#FFFBEB',
-    isLight:    true,
-    category:   'light',
-  },
-  {
-    id: 'youtube',
-    name: 'YouTube',
-    accent:     '#FF0000',
-    accentRgb:  '255, 0, 0',
-    accent2:    '#CC0000',
-    accent2Rgb: '204, 0, 0',
-    bg:         '#FFF8F8',
-    surface:    '#F5EDED',
-    border:     '#E8D8D8',
-    text:       '#1A0A0A',
-    textMuted:  '#7A5050',
-    ink:        '#FF0000',
-    paper:      '#FFF8F8',
-    isLight:    true,
-    category:   'light',
-  },
+  { id: 'casi-light', name: 'Casi Light', cat: 'light', ink: '#294B3C', paper: '#F5E1D2', accent2: '#C04830', border: '#D4C0AA' },
+  { id: 'rose',        name: 'Rose',       cat: 'light', ink: '#9D174D', paper: '#FFF1F2', accent2: '#0F766E', border: '#F6CBD3' },
+  { id: 'snow',        name: 'Snow',       cat: 'light', ink: '#1D4ED8', paper: '#F4F7FD', accent2: '#EA580C', border: '#C7D6F5' },
+  { id: 'amber',       name: 'Amber',      cat: 'light', ink: '#92400E', paper: '#FFFAEC', accent2: '#15803D', border: '#F3DFAE' },
+  { id: 'youtube',     name: 'YouTube',    cat: 'light', ink: '#E32118', paper: '#FFFFFF', accent2: '#0F0F0F', border: '#E0E0E0' },
   // ── Dark ───────────────────────────────────────────────────────────────
-  {
-    id: 'casi-dark',
-    name: 'Casi Dark',
-    accent:     '#0DCFB0',
-    accentRgb:  '13, 207, 176',
-    accent2:    '#9945FF',
-    accent2Rgb: '153, 69, 255',
-    bg:         '#0C0D11',
-    surface:    '#13151C',
-    border:     '#1E2130',
-    text:       '#E8EAED',
-    textMuted:  '#5E6278',
-    ink:        '#0DCFB0',
-    paper:      '#0C0D11',
-    category:   'dark',
-  },
-  {
-    id: 'twitch',
-    name: 'Twitch',
-    accent:     '#9146FF',
-    accentRgb:  '145, 70, 255',
-    accent2:    '#772CE8',
-    accent2Rgb: '119, 44, 232',
-    bg:         '#0e0e1a',
-    surface:    '#18182a',
-    border:     '#2a2a3a',
-    text:       '#efeff1',
-    textMuted:  '#adadb8',
-    ink:        '#9146FF',
-    paper:      '#0e0e1a',
-    category:   'dark',
-  },
-  {
-    id: 'kick',
-    name: 'Kick',
-    accent:     '#53FC18',
-    accentRgb:  '83, 252, 24',
-    accent2:    '#00cc00',
-    accent2Rgb: '0, 204, 0',
-    bg:         '#0a1a0a',
-    surface:    '#102010',
-    border:     '#1d301d',
-    text:       '#e8eee8',
-    textMuted:  '#5a705a',
-    ink:        '#53FC18',
-    paper:      '#0a1a0a',
-    category:   'dark',
-  },
-  {
-    id: 'mono',
-    name: 'Mono',
-    accent:     '#E8E8E8',
-    accentRgb:  '232, 232, 232',
-    accent2:    '#888888',
-    accent2Rgb: '136, 136, 136',
-    bg:         '#0a0a0a',
-    surface:    '#141414',
-    border:     '#2a2a2a',
-    text:       '#f0f0f0',
-    textMuted:  '#888888',
-    ink:        '#E8E8E8',
-    paper:      '#0a0a0a',
-    category:   'dark',
-  },
-  {
-    id: 'apothecary',
-    name: 'Apothecary',
-    accent:     '#C8A45C',
-    accentRgb:  '200, 164, 92',
-    accent2:    '#7C5C2A',
-    accent2Rgb: '124, 92, 42',
-    bg:         '#0F0C07',
-    surface:    '#1A1508',
-    border:     '#2E2310',
-    text:       '#F5EDD8',
-    textMuted:  '#8A7A5A',
-    ink:        '#C8A45C',
-    paper:      '#0F0C07',
-    category:   'dark',
-  },
-  {
-    id: 'onlyfans',
-    name: 'OnlyFans',
-    accent:     '#00AFF0',
-    accentRgb:  '0, 175, 240',
-    accent2:    '#0088CC',
-    accent2Rgb: '0, 136, 204',
-    bg:         '#0A1420',
-    surface:    '#111D2C',
-    border:     '#1A3045',
-    text:       '#E0EEF8',
-    textMuted:  '#4A7090',
-    ink:        '#00AFF0',
-    paper:      '#0A1420',
-    category:   'dark',
-  },
+  { id: 'casi-dark',   name: 'Casi Dark',  cat: 'dark', ink: '#0DCFB0', paper: '#0C0D11', accent2: '#9945FF', border: '#1E2130' },
+  { id: 'twitch',      name: 'Twitch',     cat: 'dark', ink: '#A970FF', paper: '#0E0E10', accent2: '#00F5A0', border: '#2A2A32' },
+  { id: 'kick',        name: 'Kick',       cat: 'dark', ink: '#53FC18', paper: '#0B0F0A', accent2: '#FF3D71', border: '#1D2A18' },
+  { id: 'mono',        name: 'Mono',       cat: 'dark', ink: '#F2F2F2', paper: '#0A0A0A', accent2: '#FFB300', border: '#2A2A2A' },
+  { id: 'apothecary',  name: 'Apothecary', cat: 'dark', ink: '#D9B36A', paper: '#100C08', accent2: '#6E9E7C', border: '#2E2310' },
+  { id: 'onlyfans',    name: 'OnlyFans',   cat: 'dark', ink: '#00AFF0', paper: '#0A1420', accent2: '#FFC145', border: '#1A3045' },
   // ── Custom ────────────────────────────────────────────────────────────
-  // Sentinel skin: ink/paper here are seed defaults the picker uses on
-  // first selection. The actual visible ink/paper come from
-  // profiles.ink_color + profiles.paper_color overrides, which the
-  // Appearance section lets the streamer dial in freely. Selecting any
-  // other skin clears the implicit "this is custom" state — overrides can
-  // still be set on top of any preset.
-  {
-    id: 'custom',
-    name: 'Custom',
-    accent:     '#FFFFFF',
-    accentRgb:  '255, 255, 255',
-    accent2:    '#888888',
-    accent2Rgb: '136, 136, 136',
-    bg:         '#0A0A0A',
-    surface:    '#141414',
-    border:     '#2A2A2A',
-    text:       '#F0F0F0',
-    textMuted:  '#888888',
-    ink:        '#FFFFFF',
-    paper:      '#0A0A0A',
-    category:   'custom',
-  },
+  // Sentinel skin: ink/paper/accent2 here are seed defaults the picker uses
+  // on first selection. The actual visible values come from
+  // profiles.ink_color + profiles.paper_color + profiles.accent2_color
+  // overrides, which the Appearance section lets the streamer dial in
+  // freely from the curated swatches + free-text hex field. `border` for
+  // custom is never read from here — it's generated dynamically as
+  // mix(paper, ink, 18%) in globals.css so it tracks whatever ink/paper the
+  // streamer actually picks.
+  { id: 'custom', name: 'Custom', cat: 'custom', ink: '#FFFFFF', paper: '#0A0A0A', accent2: '#FFB300', border: '#2A2A2A' },
 ];
+
+export const SKINS: Skin[] = SKIN_SOURCE.map((s) => ({
+  id: s.id,
+  name: s.name,
+  accent: s.ink,
+  accentRgb: hexToRgbStr(s.ink) ?? '255, 255, 255',
+  accent2: s.accent2,
+  accent2Rgb: hexToRgbStr(s.accent2) ?? '255, 255, 255',
+  bg: s.paper,
+  // Legacy v7 fields — unused by the v9/redesign token ladder (nothing
+  // outside skins.ts reads them; see the Skin type doc comments above).
+  // Filled with sensible equivalents so the type stays a strict superset.
+  surface: s.paper,
+  text: s.ink,
+  textMuted: s.ink,
+  border: s.border,
+  ink: s.ink,
+  paper: s.paper,
+  isLight: s.cat === 'light',
+  category: s.cat,
+}));
 
 export function getSkinById(id: string | null | undefined): Skin {
   return SKINS.find(s => s.id === id) ?? SKINS.find(s => s.id === DEFAULT_SKIN_ID) ?? SKINS[0];
@@ -251,4 +116,29 @@ export function hexToRgbStr(hex: string): string | null {
   const m = /^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
   if (!m) return null;
   return `${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}`;
+}
+
+/**
+ * WCAG relative-luminance contrast ratio between two hex colours (1–21).
+ * Used by the custom-skin hex commit path to warn (never block/correct)
+ * when a streamer's pick falls under the floor: ink-on-paper 4.5:1,
+ * accent2-on-paper 3:1.
+ */
+export function contrastRatio(hexA: string, hexB: string): number | null {
+  const lum = (hex: string): number | null => {
+    const m = /^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
+    if (!m) return null;
+    const chan = (h: string) => {
+      const c = parseInt(h, 16) / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    const r = chan(m[1]), g = chan(m[2]), b = chan(m[3]);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const la = lum(hexA);
+  const lb = lum(hexB);
+  if (la === null || lb === null) return null;
+  const lighter = Math.max(la, lb);
+  const darker = Math.min(la, lb);
+  return (lighter + 0.05) / (darker + 0.05);
 }

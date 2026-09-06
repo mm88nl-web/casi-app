@@ -10,6 +10,12 @@ import {
 
 type Props = {
   shape: string | null | undefined;
+  /** SVG path data for a custom shape (shape === 'custom'). Without this,
+   *  the preview fell back to a plain circle regardless of the slot's real
+   *  shape (a star, heart, etc.) — so positioning media here didn't match
+   *  what actually appears on stream at all once the real shape wasn't a
+   *  circle. */
+  clipPathSvg?: string | null;
   /** The real slot's on-stream aspect ratio (width/height). Drives the
    *  preview box shape so drag/zoom operates on the actual crop region
    *  instead of a guessed 16:9 or 1:1 box. */
@@ -40,10 +46,19 @@ const SHAPE_CSS: Record<string, string> = {
   rect:    'none',
   rounded: 'inset(0 round 14px)',
   circle:  'circle(50%)',
-  // custom is handled via SVG clipPath on the actual canvas;
-  // the preview panel falls back to circle for simplicity.
-  custom:  'circle(50%)',
+  // 'custom' isn't in this table — it's resolved at render time from the
+  // slot's real clip_path_svg (see previewMaskCss below), same technique
+  // the actual canvas uses (an SVG <clipPath> referenced by url()).
 };
+
+// Fixed id is fine: only one CustomizePanel is ever mounted/open at a time
+// (the booking form for whichever slot the viewer currently has selected).
+const CUSTOM_CLIP_ID = 'casi-customize-preview-clip';
+
+// Target height for the position/zoom preview box — width is derived from
+// this + the slot's real aspect ratio (see the box's style below) so the
+// ratio itself is never independently clamped.
+const PREVIEW_MAX_HEIGHT = 200;
 
 const FONT_PRESETS = [
   { label: 'S', px: 18 },
@@ -59,7 +74,7 @@ const SPEED_PRESETS = [
 ] as const;
 
 export default function CustomizePanel({
-  shape, slotAspectRatio, open, onToggle,
+  shape, clipPathSvg, slotAspectRatio, open, onToggle,
   accentColor, accentColorRgb,
   message, bannerFontPx, onBannerFontPxChange, bannerSpeedSecs, onBannerSpeedSecsChange,
   mediaPreviewUrl, mediaPreviewFileType,
@@ -170,7 +185,15 @@ export default function CustomizePanel({
   const zoomDef   = MEDIA_ZOOM_RANGE.default;
   const resetBanner = () => { onBannerFontPxChange(fontDef); onBannerSpeedSecsChange(speedDef); };
 
-  const previewMaskCss = SHAPE_CSS[shape ?? 'rect'] ?? 'none';
+  // Custom shapes clip via the same SVG-clipPath url() technique the real
+  // canvas uses (see overlay/page.tsx's `beam-clip-${el.id}` defs) instead
+  // of the old hardcoded circle(50%) stand-in. Falls back to a circle only
+  // if a custom slot somehow has no clip_path_svg yet (shouldn't happen in
+  // practice — BeamCtrlPanel requires picking a preset to go Custom).
+  const previewMaskCss =
+    shape === 'custom'
+      ? (clipPathSvg ? `url(#${CUSTOM_CLIP_ID})` : 'circle(50%)')
+      : SHAPE_CSS[shape ?? 'rect'] ?? 'none';
 
   // Mirror the stream's objectFit logic: contain at zoom=1 (full image visible),
   // switch to cover once zoomed so transform-origin controls the visible region.
@@ -190,7 +213,7 @@ export default function CustomizePanel({
     borderRight: isLast ? `1px solid ${active ? accentColor : 'rgba(255,255,255,0.12)'}` : 'none',
     borderRadius: 0,
     background: active ? accentColor : 'transparent',
-    color: active ? 'var(--casi-bg)' : '#888',
+    color: active ? 'var(--casi-bg)' : 'var(--ink-70)',
     transition: 'background 0.12s, color 0.12s',
   });
 
@@ -207,7 +230,10 @@ export default function CustomizePanel({
         }}
       >
         <span>{open ? '▾' : '▸'} Customize</span>
-        <span style={{ color: '#444' }}>{isBanner ? 'size · speed' : 'drag · scroll to zoom'}</span>
+        {/* Signature redesign move: this is exactly the "5 min · square"
+            style metadata caption the handoff calls out — Newsreader
+            italic instead of inheriting the button's mono caps. */}
+        <span style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 12.5, textTransform: 'none', letterSpacing: 'normal', color: 'var(--ink-45)' }}>{isBanner ? 'size · speed' : 'drag · scroll to zoom'}</span>
       </button>
 
       {open && (
@@ -244,14 +270,14 @@ export default function CustomizePanel({
                     </button>
                   ))}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: '#444', marginTop: 3 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: 'var(--ink-45)', marginTop: 3 }}>
                   <span>Slow</span><span>Fast</span>
                 </div>
               </div>
 
               {/* Live banner preview */}
               <div style={{ borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,0.65)', border: '1px solid rgba(var(--casi-accent-rgb),0.25)' }}>
-                <div style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', color: '#555', padding: '6px 10px 0' }}>Preview</div>
+                <div style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ink-45)', padding: '6px 10px 0' }}>Preview</div>
                 <div className="beam-banner" style={{ height: Math.max(44, bannerFontPx + 16), borderTop: 'none', borderBottom: 'none' }}>
                   <span
                     className="beam-banner-track"
@@ -262,7 +288,7 @@ export default function CustomizePanel({
                 </div>
               </div>
 
-              <button onClick={resetBanner} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: '#555', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>
+              <button onClick={resetBanner} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: 'var(--ink-70)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1 }}>
                 ↺ Reset defaults
               </button>
             </>
@@ -270,6 +296,15 @@ export default function CustomizePanel({
 
           {!isBanner && isShapedMedia && (
             <>
+              {shape === 'custom' && clipPathSvg && (
+                <svg width={0} height={0} style={{ position: 'absolute' }} aria-hidden>
+                  <defs>
+                    <clipPath id={CUSTOM_CLIP_ID} clipPathUnits="objectBoundingBox">
+                      <path d={clipPathSvg} />
+                    </clipPath>
+                  </defs>
+                </svg>
+              )}
               <div>
                 <label className="bf-lbl" style={{ marginBottom: 6, display: 'block' }}>
                   Position {mediaPreviewUrl ? '· drag to pan · scroll to zoom' : ''}
@@ -281,10 +316,23 @@ export default function CustomizePanel({
                   onPointerUp={onPointerUp}
                   onPointerCancel={onPointerUp}
                   style={{
-                    width: '100%',
+                    // Was width:100% + aspectRatio + a separate maxHeight —
+                    // whenever the ratio-correct height exceeded 200px, the
+                    // browser clamped height but left width at 100%,
+                    // silently distorting the box into the WRONG aspect
+                    // ratio. That meant this preview was cropping a
+                    // different window into the image than the real canvas
+                    // slot, at any zoom/pan — the more you zoomed, the more
+                    // the two visibly diverged. Deriving width FROM the
+                    // height cap (instead of capping height independently)
+                    // means the aspect-ratio math is never overridden: this
+                    // box always shows exactly the same crop the canvas
+                    // does, just possibly narrower on screen for a tall/
+                    // portrait custom shape.
+                    width: `min(100%, ${PREVIEW_MAX_HEIGHT * slotAspectRatio}px)`,
                     aspectRatio: slotAspectRatio,
-                    maxHeight: 200,
-                    background: '#0d0d0d',
+                    margin: '0 auto',
+                    background: 'var(--paper-2)',
                     border: `1px solid rgba(${accentColorRgb},0.2)`,
                     borderRadius: 8,
                     position: 'relative',
@@ -311,7 +359,7 @@ export default function CustomizePanel({
                       )}
                     </div>
                   ) : (
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#444', fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, letterSpacing: 1 }}>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-45)', fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, letterSpacing: 1 }}>
                       Upload media to position it
                     </div>
                   )}
@@ -332,7 +380,7 @@ export default function CustomizePanel({
                       padding: '3px 8px',
                       fontFamily: 'var(--font-casi-mono),monospace',
                       fontSize: 10,
-                      color: mediaZoom > 1 ? accentColor : '#666',
+                      color: mediaZoom > 1 ? accentColor : 'var(--ink-45)',
                       cursor: 'pointer',
                       userSelect: 'none',
                       lineHeight: 1.4,
@@ -350,7 +398,7 @@ export default function CustomizePanel({
                         no pinch on desktop). A slider makes zoom control
                         directly visible and precise. */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                      <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 12, color: '#555', userSelect: 'none' }}>−</span>
+                      <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 12, color: 'var(--ink-45)', userSelect: 'none' }}>−</span>
                       <input
                         type="range"
                         min={MEDIA_ZOOM_RANGE.min}
@@ -361,12 +409,13 @@ export default function CustomizePanel({
                         aria-label="Zoom"
                         style={{ flex: 1, accentColor }}
                       />
-                      <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 12, color: '#555', userSelect: 'none' }}>+</span>
+                      <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 12, color: 'var(--ink-45)', userSelect: 'none' }}>+</span>
                     </div>
-                    <div style={{ marginTop: 5, fontFamily: 'var(--font-casi-mono),monospace', fontSize: 9, color: '#555', letterSpacing: 0.5 }}>
+                    <div style={{ marginTop: 5, fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 12.5, color: 'var(--ink-45)' }}>
                       Drag to pan · scroll, pinch, or the slider to zoom
                     </div>
                   </>
+
                 )}
               </div>
             </>

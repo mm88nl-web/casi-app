@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
@@ -13,20 +13,48 @@ import { useWalletBalances } from '@/lib/wallet-balances';
 import UsdcIcon from './icons/UsdcIcon';
 import SolanaIcon from './icons/SolanaIcon';
 
+// Shadows --ink/--paper to the fixed --chrome-* palette on whichever root
+// element carries it, so every var(--ink)/var(--paper) (and everything
+// derived from them — --surf, --line, --on-ink, --text*) inside this
+// component's CSS resolves to Casi's own chrome instead of the active
+// streamer skin mutating <html>. Always pair with data-paper="light" on
+// the same element — see the --chrome-* comment in globals.css.
+//
+// --ink-04/-08/-40 need their OWN explicit override here too, not just
+// --ink/--paper: those ladder tokens are declared once at :root as
+// color-mix(var(--ink), var(--paper)) formulas, and a custom property's
+// var()-substitution happens at the element that DECLARES it, not the one
+// that consumes it — so a descendant shadowing --ink/--paper alone doesn't
+// retroactively change what --ink-04 already resolved to at :root. Without
+// this, .wp-net / .wp-drop-head (both `background: var(--ink-04)`) rendered
+// as a dark teal-on-near-black tint from the streamer's real skin instead of
+// a green-on-cream chrome tint — same bug class .casi-studio-chrome exists
+// to fix for the studio surfaces.
+const CHROME_SCOPE: CSSProperties = {
+  ['--ink' as string]: 'var(--chrome-ink)',
+  ['--paper' as string]: 'var(--chrome-paper)',
+  ['--ink-04' as string]: 'color-mix(in oklab, var(--chrome-ink) 4%, var(--chrome-paper))',
+  ['--ink-08' as string]: 'color-mix(in oklab, var(--chrome-ink) 8%, var(--chrome-paper))',
+  ['--ink-40' as string]: 'color-mix(in oklab, var(--chrome-ink) 40%, var(--chrome-paper))',
+} as CSSProperties;
 
 const CSS = `
-  /* Disconnected CTA — v9 inverse-ink slab. Same palette as the v9
-     Connect-wallet pill in NavBar (.casi-v9-wlt-connect) but with the
-     Solana-purple accent kept on the icon for brand recognition. */
+  /* Disconnected CTA — terracotta fill, matching the design-source
+     prototype's "Connect wallet" pill exactly (background:#c04830 /
+     color:#f5e1d2 in Casi Live Preview.dc.html's shared nav template).
+     Uses --chrome-accent/-paper directly rather than the --ink shadow —
+     --ink here resolves to chrome-ink (dark green, the nav's own fill
+     color), which would make this button invisible against the nav. */
   .wp-connect {
     display: inline-flex; align-items: center; gap: 8px;
-    padding: 9px 14px;
+    padding: 9px 16px;
     font-family: var(--M);
     font-size: 11px; font-weight: 700;
     letter-spacing: 0.06em; text-transform: uppercase;
-    color: var(--on-ink);
-    background: var(--ink);
-    border: 1px solid var(--ink);
+    color: var(--chrome-paper);
+    background: var(--chrome-accent);
+    border: 1px solid var(--chrome-accent);
+    border-radius: var(--radius-pill);
     cursor: pointer;
     transition: filter .14s;
     white-space: nowrap;
@@ -34,13 +62,55 @@ const CSS = `
   .wp-connect:hover { filter: brightness(1.1); }
   .wp-connect:disabled { opacity: 0.6; cursor: not-allowed; }
 
+  /* Mobile deeplink picker — single .wp-connect button (below) reveals this
+     panel rather than showing every wallet's anchor inline in the nav.
+     Matches the prototype: one "Connect wallet" pill, tap opens a small
+     list of wallet rows. */
+  .wp-picker-wrap { position: relative; display: inline-block; }
+  .wp-picker-panel {
+    position: fixed; min-width: 220px;
+    background: var(--surf);
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-panel);
+    overflow: hidden;
+    z-index: 9999;
+    box-shadow: 0 20px 50px color-mix(in oklab, var(--paper) 60%, black);
+    animation: wp-drop-in .14s ease;
+  }
+  .wp-picker-head {
+    padding: 12px 16px 10px;
+    font-family: var(--M);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--text-4);
+    border-bottom: 1px solid var(--line);
+  }
+  .wp-picker-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 13px 16px;
+    font-family: var(--B);
+    font-size: 13.5px; font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+    border-bottom: 1px solid var(--line);
+    transition: background .12s;
+  }
+  .wp-picker-row:last-child { border-bottom: none; }
+  .wp-picker-row:hover { background: var(--ink-04); }
+
   /* Connected pill — three segments separated by --line dividers,
-     ink-04 wash on the network segment, sharp corners. Mirrors v9
-     .wlt-btn / .wlt-net / .wlt-balance / .wlt-identity. */
+     ink-04 wash on the network segment, rounded to a pill (was sharp
+     corners) to match the prototype's rounded wallet button. Mirrors v9
+     .wlt-btn / .wlt-net / .wlt-balance / .wlt-identity. overflow:hidden
+     clips the three segments' own square backgrounds to the pill shape —
+     safe with the dropdown below since that's position:fixed and escapes
+     ancestor overflow clipping. */
   .wp-row {
     display: inline-flex; align-items: stretch; gap: 0;
     background: var(--surf);
     border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
     font-family: var(--M);
     font-size: 11px;
     position: relative;
@@ -114,6 +184,7 @@ const CSS = `
     position: fixed; min-width: 260px;
     background: var(--surf);
     border: 1px solid var(--line-2);
+    border-radius: var(--radius-panel);
     overflow: hidden;
     z-index: 9999;
     box-shadow: 0 20px 50px color-mix(in oklab, var(--paper) 60%, black);
@@ -223,6 +294,32 @@ export default function WalletPill() {
   useEffect(() => { setUseDeeplink(needsMobileHandoff()); }, []);
   const rowRef = useRef<HTMLDivElement>(null);
 
+  // Disconnected + mobile-deeplink picker panel — single button (below)
+  // toggles this, rather than the old always-visible two-anchor row. Must
+  // be declared unconditionally alongside the other hooks above since the
+  // disconnected branch returns early.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerPos, setPickerPos] = useState<{ top: number; right: number }>({ top: 56, right: 12 });
+  const pickerWrapRef = useRef<HTMLDivElement>(null);
+
+  const openPicker = () => {
+    if (pickerWrapRef.current) {
+      const rect = pickerWrapRef.current.getBoundingClientRect();
+      setPickerPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    }
+    setPickerOpen(o => !o);
+  };
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (pickerWrapRef.current && !pickerWrapRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   // Wallet Standard auto-registers Phantom into `wallet` on page load. Only
   // call connect() in response to a user click — never silently.
   const userInitiatedConnect = useRef(false);
@@ -268,13 +365,29 @@ export default function WalletPill() {
 
   /* ── Disconnected ── */
   if (!isConnected || !effectivePublicKey) {
-    // See WalletNav for rationale. Mobile-not-in-wallet-browser users get a
-    // small picker of .wp-connect anchors, one per supported deeplink wallet.
+    // Mobile-not-in-wallet-browser users still get exactly ONE button here —
+    // matches the prototype, which never shows more than one "Connect
+    // wallet" pill in the nav regardless of platform. Tapping it reveals a
+    // small panel with the real per-wallet deeplink anchors (still genuine
+    // <a href> elements from MobileWalletPicker, so the Android
+    // user-gesture requirement for opening a wallet app via deeplink is
+    // preserved — only the reveal step changed, not the anchors themselves).
     if (useDeeplink && typeof window !== 'undefined') {
       return (
         <>
           <style>{CSS}</style>
-          <MobileWalletPicker anchorClassName="wp-connect" />
+          <div className="wp-picker-wrap" data-paper="light" style={CHROME_SCOPE} ref={pickerWrapRef}>
+            <button type="button" className="wp-connect" onClick={openPicker} aria-expanded={pickerOpen}>
+              <SolanaIcon size={12} />
+              Connect Wallet
+            </button>
+            {pickerOpen ? (
+              <div className="wp-picker-panel" style={{ top: pickerPos.top, right: pickerPos.right }}>
+                <div className="wp-picker-head">Connect a wallet</div>
+                <MobileWalletPicker anchorClassName="wp-picker-row" stacked />
+              </div>
+            ) : null}
+          </div>
         </>
       );
     }
@@ -282,7 +395,18 @@ export default function WalletPill() {
     return (
       <>
         <style>{CSS}</style>
-        <button className="wp-connect" onClick={openWalletModal} disabled={connecting}>
+        {/* data-paper="light" + the --ink/--paper shadow pin this to Casi's
+            fixed chrome palette — README calls the wallet/balance pill out
+            by name as chrome that never follows the active streamer skin,
+            wherever it's mounted (nav, /overlay, /studio/settings). See the
+            --chrome-* comment in globals.css for the mechanism. */}
+        <button
+          className="wp-connect"
+          data-paper="light"
+          style={CHROME_SCOPE}
+          onClick={openWalletModal}
+          disabled={connecting}
+        >
           <SolanaIcon size={12} />
           {connecting ? 'Connecting…' : 'Connect Wallet'}
         </button>
@@ -299,7 +423,18 @@ export default function WalletPill() {
   return (
     <>
       <style>{CSS}</style>
-      <div className={`wp-row${dropOpen ? ' open' : ''}`} ref={rowRef}>
+      {/* Chrome pin — see the comment on the disconnected .wp-connect button
+          above. The dropdown (.wp-drop) is `position: fixed` for viewport
+          placement but stays a JSX/DOM child of .wp-row below, so it
+          inherits this shadow + data-paper via normal CSS custom-property
+          inheritance — fixed positioning only affects layout, not the DOM
+          tree custom properties cascade through. */}
+      <div
+        className={`wp-row${dropOpen ? ' open' : ''}`}
+        data-paper="light"
+        style={CHROME_SCOPE}
+        ref={rowRef}
+      >
 
         <div className="wp-net">
           <span className="wp-net-dot" />

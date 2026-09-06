@@ -798,7 +798,7 @@ function OverlayContent() {
           });
         }, 60_000);
       }
-      if (old.status === 'pending' && booking.status === 'active')          showNotif('Your beam is live! 🎉', 'success');
+      if (old.status === 'pending' && booking.status === 'active')          showNotif('Your beam is live!', 'success');
       if (old.status === 'pending' && booking.status === 'approved_queued') showNotif("Approved — you're in the queue!", 'queue');
       // Admin kicked an active beam. Two possibilities for Solana:
       //   - settle_beam landed on-chain → the webhook clears escrow_pda, the
@@ -823,7 +823,7 @@ function OverlayContent() {
     const bookingId = params.get('booking_id');
 
     if (payment === 'success' && bookingId) {
-      showNotif('Payment successful — request sent! 🎉', 'success');
+      showNotif('Payment successful — request sent!', 'success');
       // Clean up the URL so the viewer doesn't see Stripe parameters
       const clean = `${window.location.pathname}?s=${profile.username}`;
       window.history.replaceState({}, '', clean);
@@ -1141,7 +1141,7 @@ function OverlayContent() {
   // requires), so don't delete it when reading this.
   const handleStripeCheckoutComplete = () => {
     setStripeCheckout(null);
-    showNotif('Payment successful — request sent! 🎉', 'success');
+    showNotif('Payment successful — request sent!', 'success');
   };
 
   // Viewer dismissed the modal without paying. Mirrors the old
@@ -2239,6 +2239,7 @@ function OverlayContent() {
         skin={profile?.skin}
         inkColor={profile?.skin === 'custom' ? (profile?.ink_color ?? profile?.theme_color) : null}
         paperColor={profile?.skin === 'custom' ? profile?.paper_color : null}
+        accent2Color={profile?.skin === 'custom' ? profile?.accent2_color : null}
       />
       <NameEntryScreen onConfirm={confirmName} tc={tc} />
     </>
@@ -2250,6 +2251,7 @@ function OverlayContent() {
         skin={profile?.skin}
         inkColor={profile?.skin === 'custom' ? (profile?.ink_color ?? profile?.theme_color) : null}
         paperColor={profile?.skin === 'custom' ? profile?.paper_color : null}
+        accent2Color={profile?.skin === 'custom' ? profile?.accent2_color : null}
       />
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2275,16 +2277,34 @@ function OverlayContent() {
         .beam-banner-track  { display:inline-block; padding-left:100%; color:var(--casi-accent); font-family:var(--font-casi-sans),sans-serif; font-weight:800; font-size:28px; letter-spacing:1px; animation: beamMarquee 20s linear infinite; }
         .ov { min-height:100vh; background:${isOBS?'transparent':'var(--casi-bg)'}; color:var(--casi-text); font-family:var(--font-casi-sans),sans-serif; }
 
-        .ov-nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; border-bottom:1px solid var(--casi-surface); background:color-mix(in srgb,var(--casi-bg) 94%,transparent); backdrop-filter:blur(20px); position:sticky; top:0; z-index:200; }
+        /* Nav follows this streamer's own skin (--ink/--paper, already
+           mutated by SkinProvider higher up the tree) — /overlay is a
+           viewer-facing per-streamer brand surface, not Casi's own chrome,
+           per explicit user confirmation. Background matches the page's
+           own paper (nav blends into the page) with a subtle ink-tinted
+           hairline so it's still legible as a distinct bar; logo/wordmark
+           render in the streamer's ink. .notif below already correctly
+           follows the mutable accent tokens (it's a moderation-state
+           toast, not chrome) — this just brings the rest of the nav in
+           line with that same rule instead of pinning it to Casi's fixed
+           --chrome-* palette. */
+        .ov-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; row-gap:8px; padding:10px 24px; min-height:56px; border-bottom:1px solid color-mix(in oklab, var(--ink) 12%, var(--paper)); background:var(--paper); position:sticky; top:0; z-index:200; }
         .ov-logo { display:flex; align-items:center; gap:8px; text-decoration:none; }
-        .ov-wm { font-size:18px; font-weight:800; color:var(--casi-accent); letter-spacing:-0.5px; }
-        .ov-nav-right { display:flex; align-items:center; gap:10px; }
+        .ov-wm { font-size:18px; font-weight:800; color:var(--ink); letter-spacing:-0.5px; }
+        /* flex-wrap here specifically -- on a narrow viewport the
+           MobileWalletPicker deeplink buttons (Phantom/Solflare, shown when
+           no wallet is connected) don't fit alongside the viewer-name chip
+           and any active notification toast. ov-nav's own min-height (was a
+           fixed height) lets this row actually grow instead of the
+           overflow spilling onto the content below it -- confirmed on a
+           real device screenshot, not a hypothetical. */
+        .ov-nav-right { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:8px 10px; }
         .notif { font-family:var(--font-casi-mono),monospace; font-size:10px; letter-spacing:1px; padding:5px 12px; border-radius:20px; animation:springPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
-        .viewer-chip { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.04); border:1px solid var(--casi-border); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
-        .viewer-chip:hover { border-color:#333; }
-        .vdot { width:6px; height:6px; border-radius:50%; background:var(--casi-accent); animation:blink 1.5s infinite; flex-shrink:0; }
-        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:#888; }
-        .name-edit-input { background:rgba(255,255,255,0.05); border:1px solid rgba(var(--casi-accent-rgb),0.31); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--casi-text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
+        .viewer-chip { display:flex; align-items:center; gap:6px; background:var(--ink-04); border:1px solid var(--ink-22); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .2s; }
+        .viewer-chip:hover { border-color:var(--ink-40); }
+        .vdot { width:6px; height:6px; border-radius:50%; background:var(--accent); animation:blink 1.5s infinite; flex-shrink:0; }
+        .vname { font-family:var(--font-casi-mono),monospace; font-size:10px; color:var(--text-3); }
+        .name-edit-input { background:var(--ink-04); border:1px solid var(--ink-40); border-radius:8px; padding:6px 12px; font-size:12px; color:var(--text); outline:none; font-family:var(--font-casi-mono),monospace; width:130px; }
 
         /* ov-layout: 2-col grid wrapper (desktop only). Separates canvas/feeds
            (left col, <main>) from slots/booking (right col, .ov-booking-col).
@@ -2302,7 +2322,20 @@ function OverlayContent() {
             padding:24px 48px 60px;
           }
           .ov-layout.ov-v9 > .ov-main { grid-column:1; padding:0; }
-          .ov-layout.ov-v9 > .ov-booking-col { grid-column:2; align-self:start; padding:0; }
+          /* Sticky + internally scrolling instead of just aligning to the
+             top: the booking form (many stacked cards — media, customize,
+             duration, payment) routinely runs taller than the canvas
+             column, which used to push the whole PAGE down well past
+             where the canvas ends. Capping it to the viewport and letting
+             IT scroll means the canvas / "My beams" / browse-streams
+             column stays in view the whole time you're filling the form
+             out, instead of scrolling out of reach. */
+          .ov-layout.ov-v9 > .ov-booking-col {
+            grid-column:2; padding:0;
+            position:sticky; top:80px;
+            max-height:calc(100vh - 100px);
+            overflow-y:auto;
+          }
         }
         .ov-browse-link {
           display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -2321,21 +2354,36 @@ function OverlayContent() {
           color: var(--text-3, rgba(255,255,255,0.45));
         }
 
-        .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:12px; padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
+        .my-beams { background:var(--casi-surface); border:1px solid var(--casi-border); border-radius:var(--radius-card, 16px); padding:14px 16px; margin-bottom:14px; animation:fadeIn .3s ease; }
         .my-beams-lbl { font-family:var(--font-casi-mono),monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--casi-text-muted); margin-bottom:10px; }
         .my-beams-list { display:flex; flex-wrap:wrap; gap:8px; }
-        .beam-chip { display:flex; align-items:center; gap:8px; border-radius:10px; padding:8px 12px; border:1px solid; font-size:12px; }
-        .cancel-btn { background:none; border:none; font-family:var(--font-casi-mono),monospace; font-size:9px; color:rgba(248,113,113,0.5); cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:color .2s; padding:0; margin-left:4px; }
+        .beam-chip { display:flex; align-items:center; gap:8px; border-radius:var(--radius-row, 14px); padding:8px 12px; border:1px solid; font-size:12px; }
+        /* Signature redesign move: the quiet "end early / cancel / recover"
+           action inside a beam chip reads as an italic Newsreader link
+           (matches the prototype's "end early"/"cancel" treatment) instead
+           of a mono uppercase caps label — this is what the prototype
+           calls the thing that makes secondary actions read warm rather
+           than technical. Colour is untouched (red/purple stay universal
+           status semantics, not brand — same precedent as the amber/purple
+           chip fills above). */
+        .cancel-btn { background:none; border:none; font-family:var(--S); font-style:italic; font-size:11.5px; color:rgba(248,113,113,0.6); cursor:pointer; text-decoration:underline; text-decoration-color:rgba(248,113,113,0.35); text-underline-offset:2px; transition:color .2s; padding:0; margin-left:4px; }
         .cancel-btn:hover { color:#f87171; }
 
-        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:#0a0a0a; position:relative; z-index:0; overflow:hidden; margin-bottom:10px; --line: rgba(255,255,255,0.06); }
+        .stream-canvas { width:100%; aspect-ratio:16/9; border-radius:12px; border:1px solid var(--casi-border); background:var(--paper-2); position:relative; z-index:0; overflow:hidden; margin-bottom:10px; --line: rgba(255,255,255,0.06); }
 
         /* ── Slot list — v9 ── sharp borders, ink accent on hover/select,
            48px square thumb that adopts the slot shape via .s-thumb-* helpers
            applied by SlotsList.tsx (none today, so it stays a square — fine
            visually, the type text already conveys shape). */
         .slots-sec { margin-top:0; }
-        @media (max-width:899px) { .slots-sec { margin-top:16px; } }
+        @media (max-width:899px) {
+          .slots-sec { margin-top:16px; }
+          /* Below the 2-col breakpoint, My Beams sits above the canvas +
+             booking form in one stacked column — showing it while a slot
+             is selected would push the form further down, the opposite
+             of the desktop fix below. See the render-site comment. */
+          .ov-mybeams-slotopen { display:none; }
+        }
         .slots-lbl {
           font-family:var(--M); font-size:11px; font-weight:600; color:var(--text-3);
           text-transform:uppercase; letter-spacing:0.16em; margin-bottom:14px;
@@ -2346,7 +2394,7 @@ function OverlayContent() {
         .slot-card {
           display:flex; align-items:center; gap:14px;
           padding:14px 16px; background:var(--surf);
-          border:1px solid var(--line); border-radius:10px;
+          border:1px solid var(--line); border-radius:14px;
           cursor:pointer; text-align:left; width:100%; font:inherit; color:inherit;
           transition:border-color .15s, background .15s;
         }
@@ -2373,51 +2421,80 @@ function OverlayContent() {
         .bf {
           position:static;
           width:100%;
-          overflow:hidden;
-          border-radius:14px;
-          border:1px solid var(--ink) !important;
-          background:var(--surf);
+          overflow:visible;
+          border-radius:0;
+          border:none;
+          background:transparent;
           padding:0;
+          display:flex;
+          flex-direction:column;
+          gap:14px;
           animation:slideInV9 .25s ease;
         }
         @keyframes slideInV9 { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
         @keyframes slotGlow { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
+        /* Header — tag pill + heading, on the page's own paper background,
+           matching the design-source prototype's slotTagUpper + slotHeading
+           pattern instead of a boxed ink-colored title strip. */
         .bf-hdr {
-          display:flex; align-items:center; justify-content:space-between;
-          padding:18px 22px; margin-bottom:0; border-bottom:none;
-          background:var(--ink); color:var(--on-ink);
-          border-radius:13px 13px 0 0;
+          display:flex; align-items:flex-start; justify-content:space-between;
+          gap:16px;
+          padding:0;
+          margin-bottom:0; border-bottom:none;
+          background:transparent; color:var(--text);
         }
         .bf-type {
-          font-family:var(--H); font-weight:700; font-size:15px; letter-spacing:-0.015em;
-          color:var(--on-ink) !important;  /* override per-component accent inline style */
+          display:inline-flex; align-items:center;
+          font-family:var(--B); font-weight:600; font-size:12px; letter-spacing:0.03em;
+          padding:6px 12px; border-radius:var(--radius-pill);
+          background:var(--ink); color:var(--on-ink) !important;
         }
         .bf-price {
-          font-family:var(--M); font-size:11px; font-weight:600;
-          letter-spacing:0.16em; text-transform:uppercase;
-          padding:5px 9px; background:rgba(0,0,0,0.18);
-          color:var(--on-ink) !important;
+          font-family:var(--H); font-weight:800; font-size:26px; letter-spacing:-0.02em;
+          margin-top:10px;
+          padding:0; background:none;
+          color:var(--ink) !important;
         }
+        /* Was a bare 14px glyph with no background — easy to miss as an
+           actual button rather than decorative text. Real circular chip
+           now, sized like a proper tap target. */
         .bf-x {
-          background:none; border:none; color:var(--on-ink); opacity:.7;
-          cursor:pointer; font-size:14px; padding:0 6px; transition:opacity .14s;
-          font-family:var(--M);
+          width:34px; height:34px; flex-shrink:0;
+          display:flex; align-items:center; justify-content:center;
+          background:var(--surf-2); border:1px solid var(--line-2);
+          border-radius:var(--radius-pill);
+          color:var(--text-2);
+          cursor:pointer; font-size:18px; line-height:1;
+          transition:background .14s, color .14s, border-color .14s;
         }
-        .bf-x:hover { opacity:1; color:var(--on-ink); }
+        .bf-x:hover { background:var(--surf); color:var(--text); border-color:var(--ink-40); }
         .bf-grid {
-          display:grid; grid-template-columns:1fr; gap:16px;
-          padding:20px 22px;
+          display:flex; flex-direction:column; gap:14px;
+          padding:0;
         }
+        /* Section card — each logical block (media, viewing-as, duration,
+           message) gets its own soft card, matching the prototype's
+           individually-carded sub-sections instead of one big bordered
+           form. */
+        .bf-section {
+          background:var(--surf);
+          border:1px solid var(--line);
+          border-radius:var(--radius-panel);
+          padding:16px 18px;
+        }
+        /* Matches .casi-v9-cp-lbl (BeamCtrlPanel's section headers, e.g.
+           "Slot type" / "Per-rail rates") -- .bf-lbl used to be small
+           uppercase mono with letter-spacing + a dash prefix, which reads
+           as dashboard-utility rather than the softer editorial voice the
+           rest of the redesign uses for section headers. */
         .bf-lbl {
-          font-family:var(--M); font-size:10px; font-weight:700; color:var(--text-3);
-          text-transform:uppercase; letter-spacing:0.2em;
-          display:flex; align-items:center; gap:8px;
+          font-family:var(--B); font-size:15px; font-weight:700; color:var(--text);
+          display:block;
           margin-bottom:12px;
         }
-        .bf-lbl::before { content:""; display:block; width:14px; height:1.5px; background:var(--ink); }
         .bf-inp {
           width:100%; background:var(--paper);
-          border:1px solid var(--line-2); border-radius:8px;
+          border:1px solid var(--line-2); border-radius:var(--radius-chip);
           padding:11px 14px; font-size:13.5px; color:var(--text); outline:none;
           font-family:var(--B); transition:border-color .14s;
         }
@@ -2428,44 +2505,133 @@ function OverlayContent() {
           letter-spacing:0.04em;
         }
 
-        /* Duration row — segmented presets, ink-active. Component renders six
-           buttons in a flex row; we promote them to v9's edge-to-edge segment. */
-        .dur-row {
-          display:flex; align-items:stretch; gap:0; flex-wrap:nowrap;
-          margin-top:8px;
+        /* Duration slider — matches the design-source prototype's "How
+           long" card exactly: label + big value on the left, big total
+           price on the right, then a track/fill/thumb slider with
+           min/mid/max tick labels underneath. Replaces the stepper +
+           preset-pill row, which never matched the prototype at all. */
+        .bf-dur-head {
+          display: flex; align-items: flex-end; justify-content: space-between;
+          margin-bottom: 14px;
         }
-        .dur-btn {
-          flex:1; padding:9px 4px;
-          font-family:var(--M); font-size:11px; font-weight:600; letter-spacing:0.06em;
-          background:transparent;
-          border:1px solid var(--line-2); border-right:none; border-radius:0;
-          color:var(--text-3); cursor:pointer; transition:all .12s;
+        .bf-dur-label {
+          font-family: var(--S); font-style: italic; font-size: 15px; color: var(--text-3);
         }
-        .dur-btn:last-child { border-right:1px solid var(--line-2); }
-        .dur-btn:hover { background:var(--ink-04); color:var(--ink); border-color:var(--ink-40); }
+        .bf-dur-value {
+          font-family: var(--H); font-weight: 700; font-size: 28px;
+          letter-spacing: -0.02em; color: var(--text); margin-top: 6px;
+          font-variant-numeric: tabular-nums;
+        }
+        .bf-dur-total {
+          font-family: var(--H); font-weight: 700; font-size: 28px;
+          letter-spacing: -0.02em; color: var(--text);
+          font-variant-numeric: tabular-nums;
+        }
+        .bf-dur-slider {
+          -webkit-appearance: none; appearance: none;
+          width: 100%; height: 8px; border-radius: var(--radius-pill);
+          background: var(--line-2);
+          outline: none; cursor: pointer; margin: 0; display: block;
+        }
+        .bf-dur-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 26px; height: 26px; border-radius: 50%;
+          background: var(--ink);
+          border: 3px solid var(--paper);
+          box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+          cursor: grab;
+        }
+        .bf-dur-slider::-webkit-slider-thumb:active { cursor: grabbing; }
+        .bf-dur-slider::-moz-range-track {
+          height: 8px; border-radius: var(--radius-pill); background: transparent;
+        }
+        .bf-dur-slider::-moz-range-progress {
+          height: 8px; border-radius: var(--radius-pill); background: var(--ink);
+        }
+        .bf-dur-slider::-moz-range-thumb {
+          width: 26px; height: 26px; border-radius: 50%;
+          background: var(--ink);
+          border: 3px solid var(--paper);
+          box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+          cursor: grab;
+        }
+        .bf-dur-ticks {
+          display: flex; justify-content: space-between; margin-top: 8px;
+          font-family: var(--M); font-size: 12px; color: var(--text-4);
+        }
 
-        /* Footer — receipt panel with the cost on the left, primary action on the right */
-        .bf-footer {
-          display:flex; align-items:center; justify-content:space-between;
-          padding:18px 22px;
-          border-top:1.5px solid var(--ink);
-          background:var(--paper);
-          gap:12px;
+        /* Rail picker — payment-method cards inside the payment .bf-section.
+           Replaces a fully inline-styled grid (hardcoded rgba borders,
+           10px radius, uppercase mono everywhere) with the same rounded
+           card language the rest of the form already uses. Per-rail accent
+           (railAccent) stays inline since it's genuinely data-driven —
+           same pattern as the duration preset's selected-state override. */
+        .bf-rail-row { display:grid; gap:8px; }
+        .bf-rail-card {
+          display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+          padding:12px 14px;
+          background:var(--surf-2);
+          border:1px solid var(--line-2);
+          border-radius:var(--radius-card);
+          text-align:left;
+          font-family:var(--B);
+          transition:border-color .14s, background .14s;
         }
-        @media (min-width:900px) { .bf-footer { border-radius:0 0 13px 13px; } }
-        .bf-cost-lbl {
-          font-family:var(--H); font-weight:800; font-size:13px;
-          text-transform:uppercase; letter-spacing:0.16em; color:var(--text);
+        .bf-rail-card:disabled { cursor:default; }
+        .bf-rail-dot {
+          width:14px; height:14px; border-radius:50%; flex-shrink:0;
+          border:1.5px solid var(--line-2);
+          background:transparent;
         }
-        .bf-cost-val {
-          font-family:var(--H); font-weight:800; font-variation-settings:"opsz" 96;
-          font-size:32px; letter-spacing:-0.035em; color:var(--ink) !important;
-          font-variant-numeric:tabular-nums; margin-top:2px;
+        .bf-rail-name {
+          display:inline-flex; align-items:center; gap:6px;
+          font-family:var(--M); font-size:11px; font-weight:700;
         }
+        .bf-rail-top { display:flex; align-items:center; gap:8px; width:100%; }
+        .bf-rail-cost {
+          font-family:var(--M); font-size:17px; font-weight:700;
+          color:var(--text); font-variant-numeric:tabular-nums;
+        }
+        .bf-rail-sub { font-family:var(--M); font-size:9.5px; color:var(--text-4); }
+        .bf-rail-meta {
+          display:flex; justify-content:space-between; margin-top:10px; padding:0 2px;
+          font-family:var(--S); font-style:italic; font-size:12.5px; color:var(--text-3);
+        }
+        .bf-rail-balance {
+          display:flex; justify-content:space-between; margin-top:8px; padding:0 2px;
+          font-family:var(--M); font-size:10px; color:var(--text-4);
+        }
+        .bf-rail-note {
+          font-size:10px; margin-top:5px; text-align:right; color:var(--text-4);
+        }
+
+        /* Queue-wait card — same .bf-section treatment as every other block. */
+        .bf-queue {
+          background:var(--surf); border:1px solid var(--line);
+          border-radius:var(--radius-panel); padding:14px 18px;
+        }
+        .bf-queue-lbl {
+          font-family:var(--B); font-size:13px; font-weight:600; color:var(--text-3);
+          margin-bottom:4px;
+        }
+        .bf-queue-val {
+          font-family:var(--H); font-size:16px; font-weight:800; color:var(--ink);
+        }
+        .bf-queue-sub {
+          font-family:var(--S); font-style:italic; font-size:12.5px; color:var(--text-3);
+          margin-top:2px;
+        }
+
+        /* Matches the design-source prototype's CTA exactly (same button
+           SolanaConfirmModal already uses) — a big 56px pill in Archivo
+           bold, not small uppercase mono in a 12px chip. Sitting right
+           below that modal's identical-purpose button, the old version
+           read as visibly weaker for no reason — same action, half the
+           visual weight. */
         .bf-sub {
-          font-family:var(--M); font-weight:700; font-size:12px;
-          letter-spacing:0.16em; text-transform:uppercase;
-          padding:15px 18px; border:1px solid var(--ink); border-radius:8px;
+          font-family:var(--B); font-weight:700; font-size:17px;
+          letter-spacing:-0.01em;
+          height:56px; padding:0 18px; border:1px solid var(--ink); border-radius:var(--radius-pill);
           background:var(--ink); color:var(--on-ink);
           cursor:pointer; transition:transform .14s, filter .14s;
           white-space:nowrap;
@@ -2475,6 +2641,10 @@ function OverlayContent() {
           border-color:var(--line) !important; cursor:not-allowed;
         }
         .bf-sub:hover:not(:disabled) { transform:translateY(-1px); filter:brightness(1.1); }
+        .bf-trust {
+          margin-top:10px; font-family:var(--M); font-size:9px; letter-spacing:0.1em;
+          text-transform:uppercase; color:var(--text-4); text-align:center;
+        }
 
         @media (max-width:640px) {
           .ov-nav { padding:0 16px; }
@@ -2503,7 +2673,7 @@ function OverlayContent() {
         }
       `}</style>
 
-      <div className="ov">
+      <div className="ov skin-root">
         {!isOBS && (
           <nav className="ov-nav">
             <a href="/" className="ov-logo">
@@ -2514,16 +2684,13 @@ function OverlayContent() {
               {/* Wallet pill — net dot, USDC + SOL balances, identity dropdown.
                   v7-styled twin of WalletNav; same useWalletBalances store. */}
               <WalletPill />
-              {notification && (
-                <div className="notif" style={
-                  notification.type==='success' ? { background:`rgba(${tcRgb},0.09)`, border:`1px solid rgba(${tcRgb},0.25)`, color:tc } :
-                  notification.type==='queue'   ? { background:`rgba(${tcRgb},0.08)`, border:`1px solid rgba(${tcRgb},0.21)`, color:tc } :
-                  notification.type==='denied'  ? { background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.25)', color:'#f87171' } :
-                  { background:'rgba(234,179,8,0.1)', border:'1px solid rgba(234,179,8,0.25)', color:'#facc15' }
-                }>{notification.text}</div>
-              )}
-              {selectedSlot && <button onClick={closeSlot} style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#555', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5 }}>Cancel</button>}
-              {savedViewerName && !selectedSlot && (
+              {/* Viewer identity chip — moved to sit directly beside the
+                  wallet pill and shown regardless of selectedSlot (it used
+                  to hide the moment a slot opened, forcing a second,
+                  bulkier "Viewing as" card inside the booking form itself —
+                  removed from BookingForm.tsx in favor of this one, always-
+                  visible copy). */}
+              {savedViewerName && (
                 showChangeName ? (
                   <input type="text" defaultValue={savedViewerName} autoFocus className="name-edit-input"
                     onKeyDown={(e) => { if(e.key==='Enter'){const v=(e.target as HTMLInputElement).value.trim(); if(v){confirmName(v);setShowChangeName(false);}} if(e.key==='Escape')setShowChangeName(false); }}
@@ -2535,6 +2702,15 @@ function OverlayContent() {
                   </div>
                 )
               )}
+              {notification && (
+                <div className="notif" style={
+                  notification.type==='success' ? { background:'var(--accent-soft)', border:'1px solid rgba(var(--casi-accent2-rgb),0.35)', color:'var(--accent)' } :
+                  notification.type==='queue'   ? { background:'rgba(var(--casi-accent2-rgb),0.08)', border:'1px solid rgba(var(--casi-accent2-rgb),0.28)', color:'var(--accent)' } :
+                  notification.type==='denied'  ? { background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.25)', color:'#f87171' } :
+                  { background:'rgba(234,179,8,0.1)', border:'1px solid rgba(234,179,8,0.25)', color:'#facc15' }
+                }>{notification.text}</div>
+              )}
+              {selectedSlot && <button onClick={closeSlot} style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'var(--ink-70)', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase', letterSpacing:1.5 }}>Cancel</button>}
             </div>
           </nav>
         )}
@@ -2580,9 +2756,16 @@ function OverlayContent() {
         <div className={isOBS ? '' : 'ov-layout ov-v9'}>
         <main className={isOBS ? '' : 'ov-main'}>
 
-          {/* MY BEAMS */}
-          {!isOBS && !selectedSlot && (
-            <div className="ov-full-row">
+          {/* MY BEAMS — was hidden entirely whenever a slot was selected,
+              so a viewer mid-booking lost all visibility into their own
+              active/queued beams ("history"). Kept hidden on mobile while
+              a slot is open (there it sits ABOVE the canvas+form in one
+              stacked column, so showing it would push the form even
+              further down the page — the opposite of what's wanted). On
+              desktop it's a separate column from the booking form
+              entirely, so there's no such tradeoff — always show it. */}
+          {!isOBS && (
+            <div className={`ov-full-row${selectedSlot ? ' ov-mybeams-slotopen' : ''}`}>
             <MyBeamsSection
               bookings={visibleMyBookings}
               activeBookings={activeBookings}
@@ -2594,8 +2777,6 @@ function OverlayContent() {
               viewerWallet={viewerWalletRef.current}
               cleanupBusy={cleanupBusy}
               onStaleCleanup={runStaleSolanaCleanup}
-              tc={tc}
-              tcRgb={tcRgb}
               cancelling={cancelling}
               ending={endingBeams}
               onEndEarly={async (booking, activeBooking) => {
@@ -2803,60 +2984,81 @@ function OverlayContent() {
                       </span>
                     </div>
                   ) : isOBS ? null : (
-                    <div
-                      className={shapeClass}
-                      style={{
-                        width:'100%', height:'100%', display:'flex', flexDirection:'column',
-                        alignItems:'center', justifyContent:'center',
-                        borderRadius: el.is_background ? 12 : 6,
-                        // Bumped alpha 0.25 → 0.85 and added an outer dark
-                        // stroke (box-shadow) so the dashed slot boundary
-                        // survives a bright backdrop image — without it,
-                        // slot edges vanish on beach/sky/snow canvases.
-                        border: `1.5px dashed ${isLocked
-                          ? 'rgba(248,113,113,0.85)'
-                          : isOccupied
-                            ? `rgba(${tcRgb},0.85)`
-                            : el.is_background
-                              ? 'rgba(168,85,247,0.85)'
-                              : `rgba(${tcRgb},0.85)`}`,
-                        background: isLocked
-                          ? 'rgba(248,113,113,0.03)'
-                          : isOccupied
-                            ? `rgba(${tcRgb},0.02)`
-                            : el.is_background
-                              ? 'rgba(168,85,247,0.03)'
-                              : `rgba(${tcRgb},0.02)`,
-                        boxShadow: '0 0 0 1px rgba(0,0,0,0.55)',
-                      }}
-                    >
-                      {/* Dark scrim chip behind the icon + countdown so they
-                          stay legible against any backdrop. Mirrors the
-                          studio/live editor treatment. */}
+                    // Was a single div carrying both the clip AND the
+                    // border/background/flex-centering styling — a
+                    // custom-shaped slot (star, heart, etc.) rendered as a
+                    // plain dashed rectangle until a viewer actually added
+                    // media, since only the displayImage branch above ever
+                    // applied the clip. Simply adding it here didn't fix
+                    // it either: a flex/bordered/static-position element
+                    // silently failed to resolve the objectBoundingBox
+                    // clip correctly. Restructured to match the exact
+                    // shape of the proven-working displayImage wrapper —
+                    // an outer position:relative div carrying ONLY the
+                    // clip, with all the visual styling moved to a nested
+                    // child — which clips correctly.
+                    <div style={{ position:'relative', width:'100%', height:'100%', ...customClip }}>
                       <div
+                        className={shapeClass}
                         style={{
-                          display:'inline-flex', flexDirection:'column', alignItems:'center',
-                          padding: el.is_background ? '8px 14px' : '5px 10px',
-                          borderRadius: 6,
-                          background: 'rgba(0,0,0,0.55)',
-                          backdropFilter: 'blur(4px)',
-                          WebkitBackdropFilter: 'blur(4px)',
-                          border: `1px solid ${isLocked
-                            ? 'rgba(248,113,113,0.4)'
-                            : el.is_background
-                              ? 'rgba(168,85,247,0.4)'
-                              : `rgba(${tcRgb},0.4)`}`,
-                          maxWidth: '90%',
+                          width:'100%', height:'100%', display:'flex', flexDirection:'column',
+                          alignItems:'center', justifyContent:'center',
+                          borderRadius: el.is_background ? 12 : 6,
+                          // Bumped alpha 0.25 → 0.85 and added an outer dark
+                          // stroke (box-shadow) so the dashed slot boundary
+                          // survives a bright backdrop image — without it,
+                          // slot edges vanish on beach/sky/snow canvases.
+                          border: `1.5px dashed ${isLocked
+                            ? 'rgba(248,113,113,0.85)'
+                            : isOccupied
+                              ? `rgba(${tcRgb},0.85)`
+                              : el.is_background
+                                ? 'rgba(168,85,247,0.85)'
+                                : `rgba(${tcRgb},0.85)`}`,
+                          // Fill alpha bumped 0.02-0.03 → 0.14 — the very
+                          // faint fill made empty slots read as "not really
+                          // there," almost fully see-through to whatever
+                          // backdrop sat behind them. Border stays at 0.85
+                          // (unchanged) since that was already clearly
+                          // visible; only the interior fill was the problem.
+                          background: isLocked
+                            ? 'rgba(248,113,113,0.14)'
+                            : isOccupied
+                              ? `rgba(${tcRgb},0.14)`
+                              : el.is_background
+                                ? 'rgba(168,85,247,0.14)'
+                                : `rgba(${tcRgb},0.14)`,
+                          boxShadow: '0 0 0 1px rgba(0,0,0,0.55)',
                         }}
                       >
-                        <span style={{ fontSize: el.is_background ? 18 : 14, marginBottom: isOccupied ? 3 : 0, color: 'rgba(255,255,255,0.9)' }}>
-                          {isLocked ? '🔒' : isOccupied ? (el.shape==='banner' ? '▰' : '') : el.is_background ? '🖼' : el.shape==='banner' ? '▰' : '✦'}
-                        </span>
-                        {isOccupied && (
-                          <span style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#fff', opacity: 0.85 }}>
-                            <Countdown booking={activeBooking} onExpire={() => clientExpireBooking(activeBooking)} />
+                        {/* Dark scrim chip behind the icon + countdown so they
+                            stay legible against any backdrop. Mirrors the
+                            studio/live editor treatment. */}
+                        <div
+                          style={{
+                            display:'inline-flex', flexDirection:'column', alignItems:'center',
+                            padding: el.is_background ? '8px 14px' : '5px 10px',
+                            borderRadius: 6,
+                            background: 'rgba(0,0,0,0.55)',
+                            backdropFilter: 'blur(4px)',
+                            WebkitBackdropFilter: 'blur(4px)',
+                            border: `1px solid ${isLocked
+                              ? 'rgba(248,113,113,0.4)'
+                              : el.is_background
+                                ? 'rgba(168,85,247,0.4)'
+                                : `rgba(${tcRgb},0.4)`}`,
+                            maxWidth: '90%',
+                          }}
+                        >
+                          <span style={{ fontSize: el.is_background ? 18 : 14, marginBottom: isOccupied ? 3 : 0, color: 'rgba(255,255,255,0.9)' }}>
+                            {isLocked ? '▨' : isOccupied ? (el.shape==='banner' ? '▰' : '') : el.is_background ? '▢' : el.shape==='banner' ? '▰' : '✦'}
                           </span>
-                        )}
+                          {isOccupied && (
+                            <span style={{ fontFamily:"var(--font-casi-mono),monospace", fontSize:10, color:'#fff', opacity: 0.85 }}>
+                              <Countdown booking={activeBooking} onExpire={() => clientExpireBooking(activeBooking)} />
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -2911,22 +3113,22 @@ function OverlayContent() {
                           : myIsExpiring
                             ? { color: '#facc15', borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.08)' }
                             : myBookingForSlot!.status === 'active'
-                              ? { color: tc, borderColor: `rgba(${tcRgb},0.3)`, background: `rgba(${tcRgb},0.08)` }
+                              ? { color: 'var(--accent)', borderColor: 'rgba(var(--casi-accent2-rgb),0.3)', background: 'rgba(var(--casi-accent2-rgb),0.08)' }
                               : myBookingForSlot!.status === 'approved_queued'
-                                ? { color: tc, borderColor: `rgba(${tcRgb},0.22)`, background: `rgba(${tcRgb},0.05)` }
+                                ? { color: 'var(--accent)', borderColor: 'rgba(var(--casi-accent2-rgb),0.22)', background: 'rgba(var(--casi-accent2-rgb),0.05)' }
                                 : { color: 'var(--casi-text-muted)', borderColor: 'var(--casi-border)', background: 'rgba(255,255,255,0.03)' }
                         ),
                       }}
                     >
                       {isLocked
-                        ? '🔒 Locked'
+                        ? 'Locked'
                         : myIsExpiring
                           ? '⚠ Expiring'
                           : myBookingForSlot!.status === 'active'
                             ? '● Your beam'
                             : myBookingForSlot!.status === 'approved_queued'
-                              ? '⏳ Queued'
-                              : '⌛ Pending'}
+                              ? '○ Queued'
+                              : '○ Pending'}
                     </div>
                   )}
 
@@ -3027,13 +3229,24 @@ function OverlayContent() {
             {selectedSlot && (
               <BookingForm
                 slot={selectedSlot}
+                slotLabel={
+                  selectedSlot.is_background
+                    ? 'Backdrop'
+                    // Same numbering scheme as Studio's Layers panel
+                    // (StudioLiveEditor's `layers` memo) — increments over
+                    // non-backdrop elements in their original fetch order,
+                    // computed independently here but landing on the same
+                    // number since both sides fetch with no explicit
+                    // .order() and don't resort before counting. Lets a
+                    // viewer say "the Beam 2 slot" and have the streamer
+                    // know exactly which one, instead of a generic label
+                    // neither side can point at.
+                    : `Beam ${elements.filter((el) => !el.is_background).findIndex((el) => el.id === selectedSlot.id) + 1}`
+                }
                 accentColor={accentColor}
                 accentColorRgb={accentColorRgb}
-                tcRgb={tcRgb}
                 isExtend={isExtend}
                 isQueue={isQueue}
-                savedViewerName={savedViewerName ?? ''}
-                onChangeNameClick={() => setShowChangeName(true)}
                 onClose={closeSlot}
                 uploadMode={uploadMode}
                 onUploadModeChange={setUploadMode}
@@ -3109,7 +3322,7 @@ function OverlayContent() {
             {/* Activity history — always last */}
             {!selectedSlot && username && (
               <div style={{ marginTop: 24 }}>
-                <MyTransactionsSection rows={myHistory} username={username} />
+                <MyTransactionsSection rows={myHistory} username={username} streamerCurrency={profile?.settlement_currency ?? null} />
               </div>
             )}
           </div>

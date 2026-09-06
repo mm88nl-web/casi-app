@@ -16,7 +16,7 @@ export default function StuckFlashesPanel({ flashes, reclaimingId, onReclaim }: 
   if (!flashes.length) return null;
 
   return (
-    <div style={{ marginTop: 24, background: 'rgba(192,132,252,0.05)', border: '1px solid rgba(192,132,252,0.2)', borderRadius: 12, padding: '14px 16px' }}>
+    <div style={{ marginTop: 24, background: 'rgba(192,132,252,0.05)', border: '1px solid rgba(192,132,252,0.2)', borderRadius: 'var(--radius-card, 16px)', padding: '14px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#c084fc' }}>
           ⚡ Your pending flashes

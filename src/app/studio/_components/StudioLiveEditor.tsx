@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { Rnd } from 'react-rnd';
 import SlotMedia from '@/components/SlotMedia';
@@ -72,9 +72,36 @@ type Props = {
    *  can render the button in its own layout. Optional — if not provided,
    *  an internal button renders above the canvas. */
   onAddHandler?: (handler: () => void) => void;
+  /** Pre-rendered approval-queue content (an <ApprovalQueue /> from the
+   *  parent, which owns the real booking/flash data + moderation
+   *  handlers) — rendered inside the sidebar's "Waiting" tab. StudioLiveEditor
+   *  doesn't know anything about booking/flash shapes; it just hosts this. */
+  queueSlot?: ReactNode;
+  /** Badge count on the "Waiting" tab — the parent's pending queue length. */
+  queueBadgeCount?: number;
+  /** Pre-rendered content (AiringNow + FlashesLog from the parent) shown
+   *  below the canvas, matching the design-source prototype's single-column
+   *  flow of status bar → canvas → On air → Flashes. */
+  belowCanvasSlot?: ReactNode;
+  /** Publish-my-own-content — passed straight through to whichever beam's
+   *  BeamCtrlPanel is selected (see StreamerPublishCard.tsx). The parent
+   *  owns the actual publish call + storage upload; StudioLiveEditor just
+   *  threads it to the selected slot's properties panel. */
+  publishing?: boolean;
+  onPublish?: (elementId: string, imageUrl: string, fileType: 'image' | 'video', storagePath: string | null) => void;
 };
 
-export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, onAddHandler }: Props) {
+export default function StudioLiveEditor({
+  supabase,
+  profileId,
+  stripeCurrency,
+  onAddHandler,
+  queueSlot,
+  queueBadgeCount = 0,
+  belowCanvasSlot,
+  publishing,
+  onPublish,
+}: Props) {
   const [elements, setElements] = useState<any[]>([]);
   // Map element_id → booking state: 'active' means a beam is currently
   // playing (glow + "Live" pill), 'queued' means approved and waiting.
@@ -85,6 +112,11 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [saveStatus, setSaveStatus] = useState<'Ready' | 'Saving…' | 'Saved'>('Ready');
   const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
+  // Sidebar tab — matches the design-source prototype's Waiting/Layers
+  // segmented switch (one shared column, not two separate always-visible
+  // panels). Defaults to Waiting since that's the more time-sensitive of
+  // the two and matches the prototype's initial screenshot state.
+  const [rightTab, setRightTab] = useState<'waiting' | 'layers'>('waiting');
 
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
   const isDragging = useRef(false);
@@ -237,24 +269,6 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
     await updateLayer(id, patch);
   }, [elements, updateLayer]);
 
-  const handleUpdateGlow = useCallback((id: string, glow: boolean) => {
-    updateLayer(id, { glow_on_start: glow });
-  }, [updateLayer]);
-
-  const toggleLock = useCallback(async (id: string, locked: boolean) => {
-    let prevEl: any = null;
-    setElements((prev) => prev.map((el) => {
-      if (el.id !== id) return el;
-      prevEl = el;
-      return { ...el, locked };
-    }));
-    const { error } = await supabase.from('overlay_elements').update({ locked }).eq('id', id);
-    if (error) {
-      if (prevEl) setElements((prev) => prev.map((el) => (el.id === id ? prevEl : el)));
-      showToast('Save failed — change was not saved', 'err');
-    }
-  }, [supabase]);
-
   const addBeam = useCallback(async () => {
     const freePos = findFreePosition(elements);
     const insertData = {
@@ -277,6 +291,36 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
       }
     }
   }, [supabase, profileId, elements]);
+
+  // Mirrors addBeam, but inserts full-canvas and background from the start —
+  // and demotes any existing backdrop first, same invariant handleUpdateShape
+  // enforces when converting a slot to 'backdrop' (at most one is_background
+  // row). Without the demotion a streamer clicking "+ Backdrop" twice would
+  // end up with two full-canvas background layers stacked on top of each
+  // other with no way to tell them apart on the canvas.
+  const addBackdrop = useCallback(async () => {
+    const prior = elements.find((e) => e.is_background);
+    if (prior) await updateLayer(prior.id, { is_background: false, shape: 'rect' });
+    const insertData = {
+      profile_id: profileId, image_url: '',
+      pos_x: 0, pos_y: 0, width: 100, height: 100,
+      is_background: true, shape: 'backdrop',
+      price_value: 0, price_unit: 'min', max_duration_minutes: null, locked: false,
+    };
+    const { data, error } = await supabase.from('overlay_elements').insert(insertData).select().single();
+    if (data) {
+      setElements((prev) => [...prev, data]);
+      setSelectedSlotId(data.id);
+    } else if (error) {
+      const bypassed = await tryDirectMutate(supabase, { action: 'insert', data: insertData });
+      if (bypassed?.data) {
+        setElements((prev) => [...prev, bypassed.data]);
+        setSelectedSlotId(bypassed.data.id);
+      } else {
+        showToast('Could not add backdrop — save failed', 'err');
+      }
+    }
+  }, [supabase, profileId, elements, updateLayer]);
 
   // Expose addBeam to the parent (for an external toolbar button). Re-ref on
   // every dependency change so the handler captures the latest elements array.
@@ -309,8 +353,17 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
   }, [supabase]);
 
   // Layers panel data — derived from elements + slotState.
+  //
+  // Labels are sequential ("Beam 1", "Beam 2", …) rather than shape-derived
+  // ("Rect", "Circle") — matches the design-source prototype and gives a
+  // streamer with multiple slots of the same shape a way to tell them apart
+  // at a glance. Purely a display label recomputed from z-order on every
+  // render — not persisted, so it's safe to shift when a slot is added,
+  // reordered, or deleted. The shape glyph in the row (LayerIcon) still
+  // reflects the real shape independently of this label.
   const layers: LayerItem[] = useMemo(() => {
-    return elements.map((el) => {
+    let beamNumber = 0;
+    const items = elements.map((el) => {
       const live = slotState[el.id] === 'active';
       const queued = slotState[el.id] === 'queued';
       const status = live ? 'LIVE' : queued ? 'queued' : 'idle';
@@ -319,20 +372,23 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
       // USDC-only and EUR-only slots as "$0/min" or hides them. The
       // helper falls back to price_value for slots predating the JSONB.
       const price = formatSlotPrice(el).label;
+      const label = el.is_background ? 'Backdrop' : `Beam ${++beamNumber}`;
       return {
         id: el.id,
         shape: (el.shape as LayerItem['shape']) ?? 'rect',
-        label: el.is_background
-          ? 'Backdrop'
-          : el.shape
-          ? el.shape.charAt(0).toUpperCase() + el.shape.slice(1)
-          : 'Beam',
+        label,
         meta: `${price} · ${status}`,
         isLive: live,
         isLocked: !!el.locked,
         isBackground: !!el.is_background,
       };
     });
+    // Backdrop always sorts to the bottom of the list — it sits conceptually
+    // "under" every beam, and there's at most one, so it shouldn't compete
+    // for top billing just because of when it happened to be created. Beam
+    // numbering above is computed BEFORE this sort so it still reflects
+    // creation order, not this display order.
+    return items.sort((a, b) => (a.isBackground === b.isBackground ? 0 : a.isBackground ? 1 : -1));
   }, [elements, slotState]);
 
   // Build the OBS source URL the streamer drops into OBS browser source.
@@ -375,29 +431,28 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
         }}>{toast.msg}</div>
       ) : null}
 
-      {/* v9 toolbar — status / +Beam. Edit/Preview toggle was removed —
+      {/* v9 toolbar — save status only. Edit/Preview toggle was removed —
           the editor is always in edit mode (grid + dashed outlines + delete
           handles). Streamers preview the live result via the OBS source URL
-          shown above, not via a fake in-app preview. */}
+          shown above, not via a fake in-app preview. Adding slots lives
+          entirely in the Layers panel's "+ Add" (Beam / Backdrop) menu below
+          — this toolbar used to duplicate that with its own +Beam button;
+          onAddHandler is never passed by the one real caller (studio/
+          page.tsx), so this row always renders alongside the Layers panel,
+          and two separate add affordances on screen was never intentional. */}
       {!onAddHandler ? (
         <div className="casi-v9-le-toolbar">
           <span className="casi-v9-le-save">{saveStatus} · auto-saved</span>
-          <button type="button" className="casi-v9-le-add" onClick={addBeam}>
-            + Beam
-          </button>
         </div>
       ) : null}
 
-      {/* v9 3-col layout — Layers · Canvas · Properties */}
-      <div className="casi-v9-le-grid3">
-
-      <StudioLayersPanel
-        layers={layers}
-        selectedId={selectedSlotId}
-        onSelect={(id) => setSelectedSlotId(id)}
-        onAdd={addBeam}
-        onToggleLock={setLayerLocked}
-      />
+      {/* v9 2-col layout — Canvas (+ On air/Flashes below) · Waiting/Layers
+          sidebar. Matches the design-source prototype's single-screen
+          studio: canvas and its status feed on the left, a tabbed
+          Waiting/Layers panel on the right (not three simultaneous
+          columns — Layers and Properties share one column, and the
+          approval queue lives in the same slot as an alternate tab). */}
+      <div className="casi-v9-le-grid2">
 
       <div>
       <div
@@ -574,10 +629,10 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
                             maxWidth: '90%',
                           }}>
                             {el.locked ? (
-                              <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, color: 'rgba(248,113,113,0.85)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>🔒 Locked</span>
+                              <span style={{ fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, color: 'rgba(248,113,113,0.85)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Locked</span>
                             ) : null}
                             <span style={{ fontSize: el.is_background ? 22 : 16, marginBottom: 2, opacity: 0.95 }}>
-                              {el.is_background ? '🖼️' : el.shape === 'banner' ? '▰' : '✦'}
+                              {el.is_background ? '▢' : el.shape === 'banner' ? '▰' : '✦'}
                             </span>
                             <span style={{
                               fontFamily: 'var(--font-casi-mono),monospace', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.5,
@@ -706,49 +761,93 @@ export default function StudioLiveEditor({ supabase, profileId, stripeCurrency, 
             : 'Tap a beam to select · drag to move'}
         </span>
       </div>
+
+      {belowCanvasSlot}
       </div>
 
-      {/* v9 Properties column — wraps the existing BeamCtrlPanel */}
-      <div className="casi-v9-cp-wrap">
-        {selectedEl ? (
-          <>
-            <div className="casi-v9-cp-head">
-              {selectedEl.is_background
-                ? 'Backdrop'
-                : `${(selectedEl.shape || 'beam').charAt(0).toUpperCase() + (selectedEl.shape || 'beam').slice(1)} slot`}
-            </div>
-            <BeamCtrlPanel
-              el={selectedEl}
-              activeBooking={null}
-              updateSlider={updateSlider}
-              updateLayer={updateLayer}
-              toggleLock={toggleLock}
-              deleteLayer={deleteLayer}
-              kickBeam={() => showToast('Use Dashboard to end a running beam', 'err')}
-              onDone={() => setSelectedSlotId(null)}
-              onUpdateShape={handleUpdateShape}
-              onUpdateGlow={handleUpdateGlow}
-              stripeCurrency={stripeCurrency}
-            />
-          </>
-        ) : (
-          <div
-            style={{
-              padding: '32px 12px',
-              textAlign: 'center',
-              fontFamily: 'var(--M)',
-              fontSize: 11,
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase',
-              color: 'var(--text-4)',
-            }}
+      {/* Sidebar — Waiting (approval queue) / Layers (list + inline
+          properties), one shared column matching the prototype. */}
+      <div className="casi-v9-le-side">
+        <div className="casi-v9-side-tabs">
+          <button
+            type="button"
+            onClick={() => setRightTab('waiting')}
+            className={`casi-v9-side-tab${rightTab === 'waiting' ? ' casi-v9-on' : ''}`}
           >
-            Select a slot
-          </div>
+            Waiting
+            {queueBadgeCount > 0 ? <span className="casi-v9-side-tab-badge">{queueBadgeCount}</span> : null}
+          </button>
+          <button
+            type="button"
+            onClick={() => setRightTab('layers')}
+            className={`casi-v9-side-tab${rightTab === 'layers' ? ' casi-v9-on' : ''}`}
+          >
+            Layers
+            <span className="casi-v9-side-tab-badge">{layers.length}</span>
+          </button>
+        </div>
+
+        {rightTab === 'waiting' ? (
+          queueSlot ?? null
+        ) : (
+          <>
+            <StudioLayersPanel
+              layers={layers}
+              selectedId={selectedSlotId}
+              onSelect={(id) => setSelectedSlotId(id)}
+              onAdd={addBeam}
+              onAddBackdrop={addBackdrop}
+              onToggleLock={setLayerLocked}
+            />
+
+            {/* Properties — wraps the existing BeamCtrlPanel, expanding
+                inline below the layers list (not a separate 3rd column)
+                when a slot is selected, matching the prototype exactly. */}
+            {selectedEl ? (
+              <div className="casi-v9-cp-wrap">
+                {/* Identity header — label matches the Layers list row
+                    exactly (see the `layers` memo above) so a streamer
+                    never loses track of which slot they clicked, plus an
+                    inline delete link matching the design-source
+                    prototype's header pattern (a single delete affordance
+                    instead of also repeating one at the bottom of the
+                    panel). */}
+                <div className="casi-v9-cp-head-row">
+                  <div>
+                    <div className="casi-v9-cp-head">
+                      {layers.find((l) => l.id === selectedEl.id)?.label ?? 'Beam'}
+                    </div>
+                    <div className="casi-v9-cp-head-sub">
+                      {selectedEl.is_background ? 'full-bleed backdrop' : `${selectedEl.shape || 'rect'} slot`}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="casi-v9-cp-head-del"
+                    onClick={() => deleteLayer(selectedEl.id)}
+                  >
+                    delete
+                  </button>
+                </div>
+                <BeamCtrlPanel
+                  el={selectedEl}
+                  activeBooking={null}
+                  updateSlider={updateSlider}
+                  updateLayer={updateLayer}
+                  kickBeam={() => showToast('Use Dashboard to end a running beam', 'err')}
+                  onDone={() => setSelectedSlotId(null)}
+                  onUpdateShape={handleUpdateShape}
+                  stripeCurrency={stripeCurrency}
+                  publishing={publishing}
+                  onPublish={onPublish}
+                />
+              </div>
+            ) : null}
+          </>
         )}
       </div>
 
-      </div>{/* /casi-v9-le-grid3 */}
+      </div>{/* /casi-v9-le-grid2 */}
     </>
   );
 }

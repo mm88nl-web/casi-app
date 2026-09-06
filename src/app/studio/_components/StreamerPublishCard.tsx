@@ -1,38 +1,50 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
-
-export type PublishableElement = {
-  id: string;
-  shape: string | null;
-  is_background: boolean | null;
-};
 
 // Hard bucket limit (see supabase/migrations/20260415360000_create_beams_bucket.sql) —
 // the bucket itself rejects anything over 5 MB regardless of type.
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
+// Same detection overlay/page.tsx uses for a pasted booking URL — lets a
+// pasted link auto-detect image vs video instead of asking the streamer to
+// pick from a dropdown that was disabled half the time anyway (upload mode
+// already knows the real type from the file's MIME type).
+function getUrlFileType(url: string): 'image' | 'video' {
+  const path = url.toLowerCase().split('?')[0];
+  return /\.(mp4|webm|mov|ogv)$/.test(path) ? 'video' : 'image';
+}
+
+/**
+ * Publish-my-own-content — lives inside a beam's own Properties panel now
+ * (one specific slot, already selected in the Layers tab) rather than as a
+ * standalone dashboard card with its own "choose a slot" dropdown. The
+ * slot is implicit: whichever beam this panel is currently showing.
+ */
 export default function StreamerPublishCard({
-  elements,
+  elementId,
   publishing,
   onPublish,
 }: {
-  elements: PublishableElement[];
+  elementId: string;
   publishing: boolean;
   onPublish: (elementId: string, imageUrl: string, fileType: 'image' | 'video', storagePath: string | null) => void;
 }) {
   const supabase = createClient();
-  const [elementId, setElementId] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<'link' | 'upload'>('link');
   const [imageUrl, setImageUrl] = useState('');
   const [uploadedUrl, setUploadedUrl] = useState('');
   const [uploadedPath, setUploadedPath] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
-  const [fileType, setFileType] = useState<'image' | 'video'>('image');
+  const [uploadedFileType, setUploadedFileType] = useState<'image' | 'video'>('image');
 
   const activeUrl = mode === 'upload' ? uploadedUrl : imageUrl.trim();
+  // Upload mode knows the real type from the file's MIME type; link mode
+  // detects it from the URL's extension — no manual picker needed either way.
+  const activeFileType = mode === 'upload' ? uploadedFileType : getUrlFileType(imageUrl);
   const canPublish = !!elementId && !!activeUrl && !publishing && !uploading;
 
   const handleFile = async (file: File) => {
@@ -54,34 +66,16 @@ export default function StreamerPublishCard({
     const { data: { publicUrl } } = supabase.storage.from('beams').getPublicUrl(path);
     setUploadedUrl(publicUrl);
     setUploadedPath(path);
-    setFileType(detectedType);
+    setUploadedFileType(detectedType);
     setUploading(false);
   };
 
   return (
-    <section className="flex flex-col gap-2 rounded-lg border p-4" style={{ borderColor: 'var(--line)' }}>
-      <h3 className="font-mono uppercase text-sm" style={{ color: 'var(--ink)' }}>
-        Publish my own content
-      </h3>
-      <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-        Puts an image/video straight on your overlay — no payment, no approval step, no
-        time limit. Stays up until you publish something else, or a viewer&apos;s approved
-        booking takes the slot back over.
+    <div className="flex flex-col gap-2">
+      <div className="casi-v9-cp-lbl">Publish my own content</div>
+      <p style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: '13px', color: 'var(--text-3)' }}>
+        Put something on this slot instantly — no payment, no approval, no timer.
       </p>
-
-      <select
-        className="rounded border px-2 py-1 text-sm bg-transparent"
-        style={{ borderColor: 'var(--line)' }}
-        value={elementId}
-        onChange={(e) => setElementId(e.target.value)}
-      >
-        <option value="">Choose a slot...</option>
-        {elements.map((el) => (
-          <option key={el.id} value={el.id}>
-            {el.is_background ? 'Backdrop' : (el.shape ?? 'slot')} ({el.id.slice(0, 8)})
-          </option>
-        ))}
-      </select>
 
       <div className="flex gap-3 text-xs" style={{ color: 'var(--text-3)' }}>
         <label className="flex items-center gap-1">
@@ -98,20 +92,43 @@ export default function StreamerPublishCard({
         <input
           type="text"
           placeholder="Image or video URL"
-          className="rounded border px-2 py-1 text-sm bg-transparent"
-          style={{ borderColor: 'var(--line)' }}
+          className="text-sm bg-transparent"
+          style={{ borderRadius: 'var(--radius-chip)', border: '1px solid var(--line)', padding: '8px 10px', fontFamily: 'var(--M)', color: 'var(--text)' }}
           value={imageUrl}
           onChange={(e) => setImageUrl(e.target.value)}
         />
       ) : (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1.5" style={{ alignItems: 'flex-start' }}>
           <input
+            ref={fileInputRef}
             type="file"
             accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime"
-            className="text-xs"
+            style={{ display: 'none' }}
             onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
           />
-          {uploading && <span className="text-xs" style={{ color: 'var(--text-3)' }}>Uploading...</span>}
+          {/* Was a bare native file input (browser-default "Choose File",
+              easy to miss) — now a real button, same weight as Publish
+              below it, since it's the button you actually need to click
+              first in upload mode. */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="disabled:opacity-40"
+            style={{
+              borderRadius: 'var(--radius-pill)',
+              border: '1px solid var(--ink)',
+              color: 'var(--ink)',
+              background: 'transparent',
+              padding: '9px 16px',
+              fontFamily: 'var(--B)',
+              fontWeight: 700,
+              fontSize: '13px',
+              cursor: uploading ? 'wait' : 'pointer',
+            }}
+          >
+            {uploading ? 'Uploading…' : uploadedUrl ? 'Replace file' : 'Choose file →'}
+          </button>
           {uploadError && <span className="text-xs" style={{ color: '#e88' }}>{uploadError}</span>}
           {uploadedUrl && !uploading && (
             <span className="text-xs" style={{ color: 'var(--ink)' }}>Uploaded ✓</span>
@@ -119,26 +136,15 @@ export default function StreamerPublishCard({
         </div>
       )}
 
-      <select
-        className="rounded border px-2 py-1 text-sm bg-transparent w-fit"
-        style={{ borderColor: 'var(--line)' }}
-        value={fileType}
-        onChange={(e) => setFileType(e.target.value as 'image' | 'video')}
-        disabled={mode === 'upload'}
-      >
-        <option value="image">Image</option>
-        <option value="video">Video</option>
-      </select>
-
       <button
         type="button"
         disabled={!canPublish}
-        onClick={() => onPublish(elementId, activeUrl, fileType, mode === 'upload' ? uploadedPath : null)}
-        className="rounded px-3 py-2 text-sm font-semibold disabled:opacity-40"
-        style={{ background: 'var(--ink)', color: 'var(--paper)' }}
+        onClick={() => onPublish(elementId, activeUrl, activeFileType, mode === 'upload' ? uploadedPath : null)}
+        className="casi-pill-solid disabled:opacity-40"
+        style={{ padding: '10px 18px', fontSize: '14px', alignSelf: 'flex-start' }}
       >
         {publishing ? 'Publishing...' : 'Publish now'}
       </button>
-    </section>
+    </div>
   );
 }

@@ -26,6 +26,10 @@ type Slot = {
   prices?: Record<string, number | string | null | undefined> | null;
   max_duration_minutes?: number | null;
   shape?: string | null;
+  /** SVG path data for a custom-shaped slot (shape === 'custom'). Lets the
+   *  Customize position/zoom preview clip to the real shape instead of a
+   *  circle stand-in — see CustomizePanel's clipPathSvg prop. */
+  clip_path_svg?: string | null;
   /** Percent of the 16:9 stream canvas — the slot's real on-stream
    *  footprint. Needed so the crop/zoom preview box can match the
    *  actual aspect ratio instead of guessing from `shape` alone. */
@@ -37,13 +41,14 @@ type Booking = { id: string | number; element_id?: string | null; duration_minut
 
 type Props = {
   slot: Slot;
+  /** "Beam 1" / "Backdrop" etc — same identifying label Studio's Layers
+   *  panel uses, so a viewer can reference the exact slot the streamer
+   *  sees. Replaces the old generic "Tip for slot" tag. */
+  slotLabel: string;
   accentColor: string;
   accentColorRgb: string;
-  tcRgb: string;
   isExtend: boolean;
   isQueue: boolean;
-  savedViewerName: string;
-  onChangeNameClick: () => void;
   onClose: () => void;
 
   // Media
@@ -108,8 +113,8 @@ type Props = {
 
 export default function BookingForm(props: Props) {
   const {
-    slot, accentColor, accentColorRgb, tcRgb,
-    isExtend, isQueue, savedViewerName, onChangeNameClick, onClose,
+    slot, slotLabel, accentColor, accentColorRgb,
+    isExtend, isQueue, onClose,
     uploadMode, onUploadModeChange,
     uploadedUrl, uploadedFileType, uploading, onFileSelect, onRemoveUpload,
     imageUrl, imageValid, onImageUrlChange, onImageValidChange, getUrlFileType,
@@ -222,14 +227,16 @@ export default function BookingForm(props: Props) {
   })();
 
   const maxSecs = slot.max_duration_minutes ? slot.max_duration_minutes * 60 : null;
-  const presets = [
-    { label: '30s', secs: 30 },
-    { label: '1m',  secs: 60 },
-    { label: '2m',  secs: 120 },
-    { label: '5m',  secs: 300 },
-    { label: '10m', secs: 600 },
-    { label: '30m', secs: 1800 },
-  ].filter(p => !maxSecs || p.secs <= maxSecs);
+
+  // Duration slider bounds. 30s floor matches the parent's own clamp
+  // (see overlay/page.tsx's setDurationSecsClamped); 30min ceiling for
+  // unbounded slots matches the old preset row's highest option.
+  const sliderMin = 30;
+  const sliderMax = maxSecs ?? 1800;
+  const sliderRange = Math.max(1, sliderMax - sliderMin);
+  const sliderMid = Math.round((sliderMin + sliderMax) / 2 / 5) * 5;
+  const sliderPct = Math.min(100, Math.max(0, ((durationSeconds - sliderMin) / sliderRange) * 100));
+  const tickLabel = (secs: number): string => (secs < 60 ? `${secs}s` : fmtMaxDur(Math.round(secs / 60)));
 
   const queueWait = (() => {
     if (!isQueue) return null;
@@ -245,13 +252,16 @@ export default function BookingForm(props: Props) {
   })();
 
   return (
-    <div className="bf" style={{ border: `1px solid rgba(${accentColorRgb},0.13)` }}>
+    <div className="bf">
       <div className="bf-hdr">
         <div>
-          <div className="bf-type" style={{ color: accentColor }}>
-            {isExtend ? '⏱ Extend slot' : isQueue ? '⏳ Join queue' : '🎯 Tip for slot'}
-          </div>
-          <div className="bf-price" style={{ color: isFreeSlot ? '#4ade80' : accentColor }}>
+          {/* Identifies the actual slot ("Beam 1", "Backdrop") instead of
+              a generic "Tip for slot" tag that told a viewer nothing they
+              could reference back to the streamer. Extend/queue context
+              still shows up in the pay button below ("Extend slot" /
+              "Join queue"), so it isn't lost — just not duplicated here. */}
+          <div className="bf-type">{slotLabel}</div>
+          <div className="bf-price" style={{ color: isFreeSlot ? '#4ade80' : undefined }}>
             {isFreeSlot ? '★ Free' : formatSlotPrice(slot).label}
           </div>
         </div>
@@ -259,8 +269,7 @@ export default function BookingForm(props: Props) {
       </div>
 
       <div className="bf-grid">
-        <div>
-          <div style={{ marginBottom: 14 }}>
+        <div className="bf-section">
             <label className="bf-lbl">Beam media</label>
             <div className="casi-v9-media-tabs">
               {(['upload', 'url'] as const).map(m => (
@@ -353,7 +362,7 @@ export default function BookingForm(props: Props) {
                 {imageUrl && getUrlFileType(imageUrl) === 'video' && (
                   <video src={imageUrl} style={{ display: 'none' }} muted onLoadedMetadata={() => onImageValidChange(true)} onError={() => onImageValidChange(false)} />
                 )}
-                <div className="bf-hint" style={{ color: !imageUrl ? '#444' : !imageUrl.startsWith('https://') ? '#f87171' : imageValid ? accentColor : '#f87171' }}>
+                <div className="bf-hint" style={{ color: !imageUrl ? 'var(--ink-45)' : !imageUrl.startsWith('https://') ? '#f87171' : imageValid ? accentColor : '#f87171' }}>
                   {!imageUrl
                     ? 'Paste a direct HTTPS image or GIF URL'
                     : !imageUrl.startsWith('https://')
@@ -372,6 +381,7 @@ export default function BookingForm(props: Props) {
           {slot.shape !== 'backdrop' && (
             <CustomizePanel
               shape={slot.shape}
+              clipPathSvg={slot.clip_path_svg ?? null}
               slotAspectRatio={slotAspectRatio}
               open={customizeOpen}
               onToggle={onCustomizeToggle}
@@ -392,79 +402,38 @@ export default function BookingForm(props: Props) {
             />
           )}
 
-          <div>
-            <label className="bf-lbl">Viewing as</label>
-            <div className="casi-v9-viewing-as">
-              <span className="casi-v9-va-avatar" aria-hidden />
-              <div className="casi-v9-va-info">
-                <span className="casi-v9-va-name">@{savedViewerName}</span>
-                <span className="casi-v9-va-tag">Local session</span>
+        <div className="bf-section">
+            {/* Slider, matching the design-source prototype's "How long"
+                card exactly (track + fill + thumb + min/mid/max ticks)
+                instead of a stepper + preset-pill row. The slider's own
+                min/max ticks communicate the range, so the old "— max Xm"
+                text callout is redundant here and was dropped. */}
+            <div className="bf-dur-head">
+              <div>
+                <div className="bf-dur-label">How long</div>
+                <div className="bf-dur-value">{formatTime(durationSeconds)}</div>
               </div>
-              <button
-                type="button"
-                onClick={onChangeNameClick}
-                className="casi-v9-va-change"
-              >
-                Change
-              </button>
+              <div className="bf-dur-total">{costLabel(paymentRail)}</div>
             </div>
-          </div>
+            <input
+              type="range"
+              className="bf-dur-slider"
+              min={sliderMin}
+              max={sliderMax}
+              step={5}
+              value={Math.min(sliderMax, Math.max(sliderMin, durationSeconds))}
+              onChange={(e) => onDurationChange(Number(e.target.value))}
+              style={{ background: `linear-gradient(to right, ${accentColor} ${sliderPct}%, var(--line-2) ${sliderPct}%)` }}
+              aria-label="Duration"
+            />
+            <div className="bf-dur-ticks">
+              <span>{tickLabel(sliderMin)}</span>
+              <span>{tickLabel(sliderMid)}</span>
+              <span>{tickLabel(sliderMax)}</span>
+            </div>
         </div>
 
-        <div>
-          <div style={{ marginBottom: 14 }}>
-            <label className="bf-lbl">Duration{maxSecs && slot.max_duration_minutes ? ` — max ${fmtMaxDur(slot.max_duration_minutes)}` : ''}</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <button
-                onClick={() => onDurationChange(durationSeconds - 5)}
-                style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'var(--casi-text)', fontSize: 15, cursor: 'pointer', flexShrink: 0 }}
-              >−</button>
-              <div style={{ flex: 1, textAlign: 'center', fontFamily: "var(--font-casi-mono),monospace", fontSize: 20, fontWeight: 700, color: 'var(--casi-text)', letterSpacing: 1 }}>
-                {formatTime(durationSeconds)}
-              </div>
-              <button
-                onClick={() => onDurationChange(durationSeconds + 5)}
-                style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'var(--casi-text)', fontSize: 15, cursor: 'pointer', flexShrink: 0 }}
-              >+</button>
-            </div>
-            <div className="dur-row">
-              {presets.map(p => (
-                <button
-                  key={p.secs}
-                  className="dur-btn"
-                  style={durationSeconds === p.secs ? { background: accentColor, borderColor: accentColor, color: 'var(--casi-bg)', fontWeight: 700 } : {}}
-                  onClick={() => onDurationChange(p.secs)}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-              <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, letterSpacing: 1, color: '#555', textTransform: 'uppercase' }}>Custom</span>
-              <input
-                type="number"
-                min="0.5"
-                step="0.5"
-                placeholder="minutes"
-                style={{ width: 80, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, padding: '5px 8px', fontSize: 12, color: 'var(--casi-text)', fontFamily: "var(--font-casi-mono),monospace", outline: 'none', textAlign: 'center', MozAppearance: 'textfield' } as React.CSSProperties}
-                onFocus={(e) => (e.target.style.borderColor = 'rgba(var(--casi-accent-rgb),0.38)')}
-                onBlur={(e) => {
-                  e.target.style.borderColor = 'rgba(255,255,255,0.08)';
-                  const mins = parseFloat(e.target.value);
-                  if (!isNaN(mins) && mins > 0) { onDurationChange(Math.round(mins * 60)); e.target.value = ''; }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const mins = parseFloat((e.target as HTMLInputElement).value);
-                    if (!isNaN(mins) && mins > 0) { onDurationChange(Math.round(mins * 60)); (e.target as HTMLInputElement).value = ''; }
-                  }
-                }}
-              />
-              <span style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: '#555' }}>min</span>
-            </div>
-          </div>
-
-          <div>
+        <div className="bf-section">
             {/* Banner slots render the viewer's message as a scrolling marquee on
                 the overlay, so text becomes load-bearing content (not optional).
                 Server-side validation at /api/bookings/create-* also requires
@@ -481,13 +450,13 @@ export default function BookingForm(props: Props) {
                   className="bf-inp"
                   style={{ resize: 'none' }}
                 />
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: message.length > BANNER_MAX_MESSAGE * 0.85 ? '#facc15' : '#555' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontFamily: "var(--font-casi-mono),monospace", fontSize: 9, color: message.length > BANNER_MAX_MESSAGE * 0.85 ? '#facc15' : 'var(--ink-45)' }}>
                   <span>Shows as a live scroll on stream</span>
                   <span>{message.length}/{BANNER_MAX_MESSAGE}</span>
                 </div>
                 {message.trim().length > 0 && (
                   <div style={{ marginTop: 10, padding: 0, borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,0.65)', border: '1px solid rgba(var(--casi-accent-rgb),0.25)' }}>
-                    <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', color: '#555', padding: '6px 10px 0' }}>Preview</div>
+                    <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ink-45)', padding: '6px 10px 0' }}>Preview</div>
                     <div className="beam-banner" style={{ height: 44, borderTop: 'none', borderBottom: 'none' }}>
                       <span className="beam-banner-track" style={{ fontSize: 20 }}>{message}</span>
                     </div>
@@ -507,7 +476,6 @@ export default function BookingForm(props: Props) {
                 />
               </>
             )}
-          </div>
         </div>
       </div>
 
@@ -539,65 +507,49 @@ export default function BookingForm(props: Props) {
           );
 
         return (
-          <div className="bf-rail" style={{ margin: '14px 0 12px' }}>
-            <div className="bf-rail-row" style={{ display: 'grid', gridTemplateColumns: `repeat(${rails.length}, minmax(0, 1fr))`, gap: 8 }}>
+          <div className="bf-section">
+            <label className="bf-lbl">Payment</label>
+            <div className="bf-rail-row" style={{ gridTemplateColumns: `repeat(${rails.length}, minmax(0, 1fr))` }}>
               {rails.map((r) => {
                 const selected = paymentRail === r;
-                const railAccent = r === 'free' ? '#4ade80' : r === 'usdc' ? '#9945FF' : accentColor;
+                const railAccent = r === 'free' ? '#4ade80' : r === 'usdc' ? 'var(--accent)' : accentColor;
                 const disabled = isFreeSlot ? false : rails.length === 1; // sole rail isn't really a picker
                 return (
                   <button
                     key={r}
                     type="button"
+                    className="bf-rail-card"
                     onClick={() => !disabled && setPaymentRail(r)}
                     disabled={disabled}
                     style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      gap: 6,
-                      padding: '12px 14px',
-                      background: selected ? `color-mix(in oklab, ${railAccent} 12%, transparent)` : 'rgba(255,255,255,0.03)',
-                      border: `1px solid ${selected ? railAccent : 'rgba(255,255,255,0.08)'}`,
-                      borderRadius: 10,
+                      background: selected ? `color-mix(in oklab, ${railAccent} 12%, var(--surf-2))` : undefined,
+                      borderColor: selected ? railAccent : undefined,
                       cursor: disabled ? 'default' : 'pointer',
-                      color: 'var(--casi-text)',
-                      textAlign: 'left',
-                      fontFamily: "var(--B), var(--font-casi-sans), sans-serif",
-                      transition: 'border-color 0.14s, background 0.14s',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                    <div className="bf-rail-top">
                       <span
                         aria-hidden
-                        style={{
-                          width: 14, height: 14, borderRadius: '50%',
-                          border: `1.5px solid ${selected ? railAccent : 'rgba(255,255,255,0.25)'}`,
-                          background: selected ? railAccent : 'transparent',
-                          flexShrink: 0,
-                          display: 'inline-block',
-                          boxShadow: selected ? `inset 0 0 0 2px var(--casi-bg, #0c0d11)` : 'none',
-                        }}
+                        className="bf-rail-dot"
+                        style={selected ? { borderColor: railAccent, background: railAccent } : undefined}
                       />
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: railAccent, fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700 }}>
+                      <span className="bf-rail-name" style={{ color: railAccent }}>
                         {railIcon(r)}
                         {railName(r)}
                       </span>
                     </div>
-                    <div style={{ fontFamily: "var(--font-casi-mono),monospace", fontSize: 18, fontWeight: 700, color: selected ? railAccent : 'var(--casi-text)', letterSpacing: 0.5, marginTop: 2 }}>
+                    <div className="bf-rail-cost" style={selected ? { color: railAccent } : undefined}>
                       {costLabel(r)}
                     </div>
-                    <div style={{ fontFamily: "var(--M), var(--font-casi-mono),monospace", fontSize: 9, color: '#666', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-                      {railSub(r)}
-                    </div>
+                    <div className="bf-rail-sub">{railSub(r)}</div>
                   </button>
                 );
               })}
             </div>
 
-            {/* Sub-detail line — duration + rate breakdown, neutralized
-                visually so it doesn't compete with the rail cards above. */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, padding: '0 4px', fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, color: '#666', letterSpacing: 0.5 }}>
+            {/* Sub-detail line — duration + rate breakdown, in the same
+                Newsreader-italic voice as the queue-wait aside below. */}
+            <div className="bf-rail-meta">
               <span>{formatTime(durationSeconds)} · {slot.price_unit === 'hr' ? 'hourly rate' : 'per-minute rate'}</span>
               <span>{paymentRail === 'free' ? 'no charge' : paymentRail === 'stripe' ? `${fiatSymbol(streamerCurrency)}${fiatRate}/${slot.price_unit}` : `${usdcRate} USDC/${slot.price_unit}`}</span>
             </div>
@@ -606,8 +558,8 @@ export default function BookingForm(props: Props) {
                 rail is the active one. No more showing USDC balance to
                 a card-paying viewer. */}
             {paymentRail === 'usdc' && walletConnected && usdcBalance !== null ? (
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, padding: '0 4px', fontFamily: "var(--font-casi-mono),monospace", fontSize: 10, letterSpacing: 0.5 }}>
-                <span style={{ color: '#666' }}>Your balance</span>
+              <div className="bf-rail-balance">
+                <span>Your balance</span>
                 <span style={{ color: usdcBalance < usdcCost ? '#f87171' : '#6ee7b7', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <UsdcIcon size={10} />
                   {usdcBalance.toFixed(2)} USDC
@@ -615,96 +567,88 @@ export default function BookingForm(props: Props) {
               </div>
             ) : null}
             {paymentRail === 'usdc' && walletConnected && usdcBalance !== null && usdcBalance < usdcCost ? (
-              <div style={{ color: '#f87171', fontSize: 10, marginTop: 5, textAlign: 'right' }}>⚠ Insufficient balance</div>
+              <div className="bf-rail-note" style={{ color: '#f87171' }}>⚠ Insufficient balance</div>
             ) : null}
             {paymentRail === 'usdc' && walletConnected && usdcBalance === null ? (
-              <div style={{ color: '#555', fontSize: 10, marginTop: 6, textAlign: 'right' }}>Fetching balance…</div>
+              <div className="bf-rail-note">Fetching balance…</div>
             ) : null}
             {paymentRail === 'usdc' && !walletConnected ? (
-              <div style={{ color: '#555', fontSize: 10, marginTop: 6, textAlign: 'right' }}>Connect wallet to pay with USDC on-chain</div>
+              <div className="bf-rail-note">Connect wallet to pay with USDC on-chain</div>
             ) : null}
+
+            {/* Queue wait estimate */}
+            {queueWait && (
+              <div className="bf-queue" style={{ marginTop: 14 }}>
+                <div className="bf-queue-lbl">Estimated wait</div>
+                <div className="bf-queue-val">
+                  {queueWait.wait === null ? 'Unknown — waiting on streamer' : `~${queueWait.wait} min`}
+                </div>
+                <div className="bf-queue-sub">
+                  {queueWait.ahead} booking{queueWait.ahead !== 1 ? 's' : ''} ahead of you
+                </div>
+              </div>
+            )}
+
+            {/* Free-slot Turnstile (paid slots skip it) */}
+            {isFreeSlot && (
+              <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
+                <TurnstileWidget onVerify={onTurnstileVerify} onExpire={onTurnstileExpire} theme="dark" compact />
+              </div>
+            )}
+
+            {/* Single pay button — the rail picker above already named the
+                chosen rail + its cost, so the button is just the commit
+                action. Color matches the selected rail so the visual link
+                between picker and CTA is obvious. */}
+            <div style={{ marginTop: 14 }}>
+              {(() => {
+                const railAccent =
+                  paymentRail === 'free' ? '#4ade80'
+                  : paymentRail === 'usdc' ? 'var(--accent)'
+                  : accentColor;
+                // For USDC rail with unconnected wallet, fall to ghost style so
+                // the action reads as 'connect first' rather than 'commit now'.
+                const ghost = paymentRail === 'usdc' && !walletConnected;
+                return (
+                  <button
+                    onClick={payButtonProps.onClick}
+                    disabled={payButtonProps.disabled}
+                    className="bf-sub"
+                    style={{
+                      width: '100%',
+                      background: ghost ? 'transparent' : railAccent,
+                      color: ghost ? railAccent : 'var(--casi-bg)',
+                      border: ghost ? `1px solid ${railAccent}` : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      opacity: payButtonProps.disabled ? 0.5 : 1,
+                    }}
+                  >
+                    {payButtonProps.icon === 'stripe' ? <StripeIcon size={12} mono="currentColor" />
+                      : payButtonProps.icon === 'usdc' ? <UsdcIcon size={14} mono={ghost ? railAccent : 'var(--casi-bg)'} />
+                      : <span style={{ fontSize: 14, lineHeight: 1 }}>★</span>}
+                    <span>{isExtend ? 'Extend slot' : payButtonProps.label}</span>
+                  </button>
+                );
+              })()}
+
+              {/* Trust copy — small footnote below the button so first-time
+                  viewers know what 'pay' commits them to. The streamer's
+                  approval gate is the strongest reassurance and worth
+                  surfacing. */}
+              <div className="bf-trust">
+                {paymentRail === 'free'
+                  ? 'Free flashes are rate-limited · streamer can deny'
+                  : paymentRail === 'usdc'
+                    ? 'USDC held in escrow until streamer approves · 100% refund on deny'
+                    : 'Authorized until streamer approves · 100% refund on deny · CASI 0%'}
+              </div>
+            </div>
           </div>
         );
       })()}
-
-      {/* Queue wait estimate */}
-      {queueWait && (
-        <div style={{ background: `rgba(${tcRgb},0.06)`, border: `1px solid rgba(${tcRgb},0.15)`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
-          <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--casi-text-muted)', marginBottom: 4 }}>Estimated wait</div>
-          <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 15, fontWeight: 700, color: 'var(--casi-accent)' }}>
-            {queueWait.wait === null ? 'Unknown — waiting on streamer' : `~${queueWait.wait} min`}
-          </div>
-          <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, color: '#555', marginTop: 2 }}>
-            {queueWait.ahead} booking{queueWait.ahead !== 1 ? 's' : ''} ahead of you
-          </div>
-        </div>
-      )}
-
-      {/* Free-slot Turnstile (paid slots skip it) */}
-      {isFreeSlot && (
-        <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'flex-end' }}>
-          <TurnstileWidget onVerify={onTurnstileVerify} onExpire={onTurnstileExpire} theme="dark" compact />
-        </div>
-      )}
-
-      {/* Single pay button — the rail picker above already named the
-          chosen rail + its cost, so the button is just the commit
-          action. Color matches the selected rail so the visual link
-          between picker and CTA is obvious. */}
-      <div style={{ marginTop: 4 }}>
-        {(() => {
-          const railAccent =
-            paymentRail === 'free' ? '#4ade80'
-            : paymentRail === 'usdc' ? '#9945FF'
-            : accentColor;
-          // For USDC rail with unconnected wallet, fall to ghost style so
-          // the action reads as 'connect first' rather than 'commit now'.
-          const ghost = paymentRail === 'usdc' && !walletConnected;
-          return (
-            <button
-              onClick={payButtonProps.onClick}
-              disabled={payButtonProps.disabled}
-              className="bf-sub"
-              style={{
-                width: '100%',
-                background: ghost ? 'transparent' : railAccent,
-                color: ghost ? railAccent : (paymentRail === 'usdc' ? '#fff' : 'var(--casi-bg)'),
-                border: ghost ? `1px solid ${railAccent}` : 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                padding: '14px 18px',
-                fontFamily: "var(--font-casi-sans), sans-serif",
-                fontWeight: 800,
-                fontSize: 14,
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em',
-                opacity: payButtonProps.disabled ? 0.5 : 1,
-                cursor: payButtonProps.disabled ? 'not-allowed' : 'pointer',
-                transition: 'opacity 0.16s',
-              }}
-            >
-              {payButtonProps.icon === 'stripe' ? <StripeIcon size={12} mono="currentColor" />
-                : payButtonProps.icon === 'usdc' ? <UsdcIcon size={14} mono={ghost ? railAccent : '#fff'} />
-                : <span style={{ fontSize: 14, lineHeight: 1 }}>★</span>}
-              <span>{isExtend ? 'Extend slot' : payButtonProps.label}</span>
-            </button>
-          );
-        })()}
-
-        {/* Trust copy — small footnote below the button so first-time
-            viewers know what 'pay' commits them to. The streamer's
-            approval gate is the strongest reassurance and worth
-            surfacing. */}
-        <div style={{ marginTop: 10, fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#555', textAlign: 'center' }}>
-          {paymentRail === 'free'
-            ? 'Free flashes are rate-limited · streamer can deny'
-            : paymentRail === 'usdc'
-              ? 'USDC held in escrow until streamer approves · 100% refund on deny'
-              : 'Authorized until streamer approves · 100% refund on deny · CASI 0%'}
-        </div>
-      </div>
     </div>
   );
 }

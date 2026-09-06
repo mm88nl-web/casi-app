@@ -99,7 +99,7 @@ function ephemeral(content: string) {
 function studioLink() {
   return [{
     type: 1,
-    components: [{ type: 2, style: 5, label: '→ Open Studio', url: `${APP_URL}/studio/live` }],
+    components: [{ type: 2, style: 5, label: '→ Open Studio', url: `${APP_URL}/studio` }],
   }];
 }
 

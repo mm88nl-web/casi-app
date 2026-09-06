@@ -34,9 +34,31 @@ function connectUrlFor(wallet: DeeplinkWallet): string {
  * connecting) hands off to the same wallet; the connect itself is fully
  * determined by the href + `casi_wallet` marker regardless.
  */
-export default function MobileWalletPicker({ anchorClassName }: { anchorClassName: string }) {
+export default function MobileWalletPicker({
+  anchorClassName,
+  stacked = false,
+}: {
+  anchorClassName: string;
+  /** Lay wallets out as full-width stacked rows (for a dropdown/modal
+   *  panel) instead of the default inline-wrapped pill row. */
+  stacked?: boolean;
+}) {
   return (
-    <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+    // data-paper="light" + the --ink/--paper shadow pin this to Casi's
+    // fixed chrome palette — the wallet/balance pill is chrome everywhere
+    // it's mounted (nav, /overlay, /studio/settings), never the active
+    // streamer skin. Mirrors WalletPill.tsx's own connected/disconnected
+    // states; see the --chrome-* comment in globals.css for the mechanism.
+    <span
+      data-paper="light"
+      style={{
+        display: stacked ? 'flex' : 'inline-flex',
+        flexDirection: stacked ? 'column' : 'row',
+        gap: stacked ? 0 : 6,
+        flexWrap: stacked ? 'nowrap' : 'wrap',
+        ['--ink' as string]: 'var(--chrome-ink)',
+        ['--paper' as string]: 'var(--chrome-paper)',
+      }}>
       {DEEPLINK_WALLETS.map(({ wallet, label }) => (
         <a
           key={wallet}

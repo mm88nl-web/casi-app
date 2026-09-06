@@ -58,7 +58,7 @@ export default function SlotsList({
           const myBookingForSlot = getMyBookingForSlot(el.id);
           const isLocked         = !!el.locked;
           const isFree           = Number(el.price_value) === 0;
-          const priceColor       = isLocked ? '#555' : myBookingForSlot ? '#555' : isFree ? '#4ade80' : tc;
+          const priceColor       = isLocked ? 'var(--ink-45)' : myBookingForSlot ? 'var(--ink-45)' : isFree ? '#4ade80' : tc;
 
           return (
             <button
@@ -71,14 +71,14 @@ export default function SlotsList({
               onClick={() => !myBookingForSlot && !isLocked && onOpenSlot(el, isOccupied)}
             >
               {isFree && !isLocked && (
-                <span style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(74,222,128,0.14)', border: '1px solid rgba(74,222,128,0.4)', color: '#4ade80', fontFamily: "var(--font-casi-mono), monospace", fontSize: 8, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 4, pointerEvents: 'none' }}>
+                <span style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(74,222,128,0.14)', border: '1px solid rgba(74,222,128,0.4)', color: '#4ade80', fontFamily: "var(--font-casi-mono), monospace", fontSize: 8, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 999, pointerEvents: 'none' }}>
                   ★ Free
                 </span>
               )}
               <div className="s-thumb" style={{ borderColor: isFree ? 'rgba(74,222,128,0.25)' : isOccupied ? `rgba(${tcRgb},0.21)` : `rgba(${tcRgb},0.14)` }}>
                 {el.image_url
                   ? <SlotMedia src={el.image_url} fileType={null} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                  : <span>{isLocked ? '🔒' : el.is_background ? '🖼' : '✦'}</span>}
+                  : <span>{isLocked ? '▨' : el.is_background ? '▢' : '✦'}</span>}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="s-type">

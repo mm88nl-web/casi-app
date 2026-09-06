@@ -54,12 +54,19 @@ export default function EarningsBar({ viewerLink, todayLines, pending }: Earning
   return (
     <div className="casi-v9-earn-line">
       <style>{`
+        /* Cream card, matching every other dashboard tile — the dark-green
+           treatment is reserved for the one live-status strip in
+           StudioFrame.tsx (Live / this stream / Go-live·End-stream), per
+           the design_handoff prototype which only ever shows a single dark
+           bar per screen. */
         .casi-v9-earn-line {
           display: grid;
           grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
           gap: 0;
           background: var(--surf);
           border: 1px solid var(--line);
+          border-radius: var(--radius-panel);
+          overflow: hidden;
         }
         @media (max-width: 760px) {
           .casi-v9-earn-line { grid-template-columns: 1fr; }
@@ -68,7 +75,7 @@ export default function EarningsBar({ viewerLink, todayLines, pending }: Earning
           display: flex;
           flex-direction: column;
           justify-content: center;
-          padding: 18px 22px;
+          padding: 16px 20px;
           border-right: 1px solid var(--line);
           min-width: 0;
         }
@@ -86,20 +93,19 @@ export default function EarningsBar({ viewerLink, todayLines, pending }: Earning
           gap: 14px;
         }
         .casi-v9-earn-line .earn-seg-lbl {
-          font-family: var(--M);
-          font-size: 10px;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-          color: var(--text-4);
+          font-family: var(--S);
+          font-style: italic;
+          font-size: 13px;
+          color: var(--text-2);
           margin-bottom: 6px;
-          font-weight: 500;
+          font-weight: 400;
         }
         .casi-v9-earn-line .earn-seg-val {
           font-family: var(--H);
           font-weight: 800;
           font-variation-settings: 'opsz' 48;
-          font-size: 32px;
-          letter-spacing: -0.035em;
+          font-size: 30px;
+          letter-spacing: -0.03em;
           line-height: 1;
           color: var(--text);
           font-variant-numeric: tabular-nums;
@@ -108,7 +114,7 @@ export default function EarningsBar({ viewerLink, todayLines, pending }: Earning
         .casi-v9-earn-line .earn-url {
           font-family: var(--M);
           font-size: 13px;
-          color: var(--text-3);
+          color: var(--text-2);
           flex: 1;
           min-width: 0;
           overflow: hidden;
@@ -122,20 +128,19 @@ export default function EarningsBar({ viewerLink, todayLines, pending }: Earning
           font-weight: 600;
         }
         .casi-v9-earn-line .earn-copy-btn {
-          padding: 9px 14px;
+          padding: 10px 16px;
           background: var(--ink);
           color: var(--on-ink);
           border: none;
-          font-family: var(--M);
-          font-size: 11px;
+          border-radius: var(--radius-pill);
+          font-family: var(--B);
+          font-size: 13px;
           font-weight: 700;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
           flex-shrink: 0;
           cursor: pointer;
           transition: filter 0.14s;
         }
-        .casi-v9-earn-line .earn-copy-btn:hover { filter: brightness(1.1); }
+        .casi-v9-earn-line .earn-copy-btn:hover { filter: brightness(1.06); }
       `}</style>
 
       <div className="earn-seg link">

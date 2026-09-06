@@ -2,7 +2,9 @@ import Link from 'next/link';
 
 export function Footer() {
   return (
-    <footer className="casi-v9-foot">
+    // data-paper="light" — see the comment in NavBar.tsx; the footer is
+    // Casi's own chrome and must stay pinned to the light chrome palette.
+    <footer className="casi-v9-foot" data-paper="light">
       <div>© {new Date().getFullYear()} · operated by Terminal Data Solutions · KvK 80519687</div>
       <div className="casi-v9-foot-links">
         <Link href="/legal/terms">Terms</Link>

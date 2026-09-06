@@ -74,9 +74,9 @@ export default function PreviewBookingModal({ booking, onClose, onApprove, onDen
         style={{
           width: '100%',
           maxWidth: '540px',
-          background: 'var(--casi-surface)',
-          border: '1px solid var(--casi-border-2)',
-          borderRadius: '14px',
+          background: 'var(--casi-bg)',
+          border: '1px solid var(--casi-border)',
+          borderRadius: 'var(--radius-panel)',
           padding: '22px',
           color: 'var(--casi-text)',
         }}
@@ -86,10 +86,11 @@ export default function PreviewBookingModal({ booking, onClose, onApprove, onDen
             <h2
               id="preview-modal-title"
               style={{
-                fontFamily: 'var(--font-casi-display), var(--font-casi-sans), sans-serif',
+                fontFamily: 'var(--H)',
                 fontWeight: 800,
-                fontSize: '18px',
-                letterSpacing: '0.2px',
+                fontVariationSettings: '"opsz" 64',
+                fontSize: '22px',
+                letterSpacing: '-0.02em',
                 color: 'var(--casi-text)',
               }}
             >
@@ -132,9 +133,9 @@ export default function PreviewBookingModal({ booking, onClose, onApprove, onDen
         <div
           style={{
             aspectRatio: '16 / 9',
-            background: 'var(--casi-bg)',
+            background: 'var(--casi-surface-2)',
             border: '1px solid var(--casi-border)',
-            borderRadius: '10px',
+            borderRadius: 'var(--radius-card)',
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
@@ -175,18 +176,18 @@ export default function PreviewBookingModal({ booking, onClose, onApprove, onDen
         {booking.message ? (
           <div
             style={{
-              background: 'rgba(255, 255, 255, 0.02)',
+              background: 'var(--casi-surface-2)',
               border: '1px solid var(--casi-border)',
-              borderRadius: '8px',
-              padding: '12px 14px',
+              borderRadius: 'var(--radius-card)',
+              padding: '13px 15px',
               marginBottom: '16px',
             }}
           >
             <div
               className="font-mono uppercase"
               style={{
-                fontSize: '9.5px',
-                letterSpacing: '0.16em',
+                fontSize: '10px',
+                letterSpacing: '0.12em',
                 color: 'var(--casi-text-faint)',
                 marginBottom: '6px',
               }}
@@ -195,7 +196,8 @@ export default function PreviewBookingModal({ booking, onClose, onApprove, onDen
             </div>
             <div
               style={{
-                fontSize: '13px',
+                fontFamily: 'var(--S)',
+                fontSize: '15px',
                 color: 'var(--casi-text-mid)',
                 fontStyle: 'italic',
                 lineHeight: 1.5,
@@ -210,39 +212,23 @@ export default function PreviewBookingModal({ booking, onClose, onApprove, onDen
           <button
             type="button"
             onClick={() => { onDeny(booking.id); onClose(); }}
-            style={{
-              flex: 1,
-              padding: '11px',
-              borderRadius: '9px',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              background: 'rgba(239, 68, 68, 0.08)',
-              color: '#f87171',
-              fontFamily: 'var(--font-casi-sans), sans-serif',
-              fontSize: '12px',
-              fontWeight: 700,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-            }}
+            className="casi-pill-ghost"
+            style={{ flex: 1, height: '44px', fontSize: '15px' }}
           >
+            {/* Kept as "Deny" (not the prototype's "Decline") — matches the
+                app's own established terminology (denyBooking(), onDeny
+                prop, EndStreamDialog copy). Look changed, copy didn't. */}
             Deny
           </button>
           <button
             type="button"
             onClick={() => { onApprove(booking.id); onClose(); }}
             disabled={!booking.paymentConfirmed}
+            className="casi-pill-solid"
             style={{
-              flex: 1,
-              padding: '11px',
-              borderRadius: '9px',
-              border: 'none',
-              background: booking.paymentConfirmed ? 'var(--casi-accent)' : 'var(--casi-border)',
-              color: booking.paymentConfirmed ? 'var(--casi-bg)' : 'var(--casi-text-faint)',
-              fontFamily: 'var(--font-casi-sans), sans-serif',
-              fontSize: '12px',
-              fontWeight: 800,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
+              flex: 2,
+              height: '44px',
+              fontSize: '15px',
               cursor: booking.paymentConfirmed ? 'pointer' : 'not-allowed',
             }}
           >
