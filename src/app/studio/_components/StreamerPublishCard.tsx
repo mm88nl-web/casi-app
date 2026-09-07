@@ -7,6 +7,18 @@ import { createClient } from '@/utils/supabase/client';
 // the bucket itself rejects anything over 5 MB regardless of type.
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
+// Same shape → clip-path mapping CustomizePanel.tsx uses for the viewer's
+// booking preview — kept in sync there rather than shared, since the two
+// components' clip needs (a full drag/zoom rig vs a static look-ahead) are
+// different enough that a shared helper would need its own prop surface.
+const SHAPE_CSS: Record<string, string> = {
+  rect:    'none',
+  rounded: 'inset(0 round 14px)',
+  circle:  'circle(50%)',
+};
+const PUBLISH_PREVIEW_CLIP_ID = 'casi-publish-preview-clip';
+const PREVIEW_MAX_HEIGHT = 160;
+
 // Same detection overlay/page.tsx uses for a pasted booking URL — lets a
 // pasted link auto-detect image vs video instead of asking the streamer to
 // pick from a dropdown that was disabled half the time anyway (upload mode
@@ -26,10 +38,23 @@ export default function StreamerPublishCard({
   elementId,
   publishing,
   onPublish,
+  shape,
+  clipPathSvg,
+  cornerRadius,
+  slotAspectRatio,
 }: {
   elementId: string;
   publishing: boolean;
   onPublish: (elementId: string, imageUrl: string, fileType: 'image' | 'video', storagePath: string | null) => void;
+  /** Slot's real shape (rect/circle/custom/…) — drives the preview's clip,
+   *  same technique CustomizePanel uses for the viewer-facing booking form.
+   *  Publish-my-own skips the drag/zoom rig entirely (no offset/zoom is
+   *  ever sent to onPublish), so the preview always renders at the
+   *  default center/zoom=1 crop — exactly what actually gets published. */
+  shape?: string | null;
+  clipPathSvg?: string | null;
+  cornerRadius?: number | null;
+  slotAspectRatio: number;
 }) {
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -46,6 +71,21 @@ export default function StreamerPublishCard({
   // detects it from the URL's extension — no manual picker needed either way.
   const activeFileType = mode === 'upload' ? uploadedFileType : getUrlFileType(imageUrl);
   const canPublish = !!elementId && !!activeUrl && !publishing && !uploading;
+
+  // Same clip technique CustomizePanel uses for the viewer's booking form —
+  // 'custom' resolves to the slot's real clip_path_svg via an SVG <clipPath>
+  // url(), everything else is a plain CSS clip-path (or none, for rect,
+  // which uses cornerRadius via border-radius instead).
+  const previewMaskCss =
+    shape === 'custom'
+      ? (clipPathSvg ? `url(#${PUBLISH_PREVIEW_CLIP_ID})` : 'circle(50%)')
+      : SHAPE_CSS[shape ?? 'rect'] ?? 'none';
+  // No offset/zoom controls here — publish-my-own always ships at the
+  // default center crop, so 'cover' for circle/custom (they can't sensibly
+  // letterbox) and 'contain' for rect/rounded (shows the whole image,
+  // matching what a fresh unzoomed booking would look like) is the same
+  // rule CustomizePanel applies at its own zoom===default state.
+  const previewObjectFit: 'cover' | 'contain' = shape === 'circle' || shape === 'custom' ? 'cover' : 'contain';
 
   const handleFile = async (file: File) => {
     setUploadError('');
@@ -135,6 +175,61 @@ export default function StreamerPublishCard({
           )}
         </div>
       )}
+
+      {/* Preview — this publishes instantly with no approval step, so
+          there's no second chance to catch a wrong crop or a broken link
+          before it's live on stream. Clips to the slot's real shape/aspect
+          ratio the same way the viewer-facing booking preview does. */}
+      {shape === 'custom' && clipPathSvg && (
+        <svg width={0} height={0} style={{ position: 'absolute' }} aria-hidden>
+          <defs>
+            <clipPath id={PUBLISH_PREVIEW_CLIP_ID} clipPathUnits="objectBoundingBox">
+              <path d={clipPathSvg} />
+            </clipPath>
+          </defs>
+        </svg>
+      )}
+      <div>
+        <div className="casi-v9-cp-lbl" style={{ marginBottom: 6 }}>Preview</div>
+        <div
+          style={{
+            // Same width-derived-from-height-cap approach CustomizePanel
+            // uses — deriving width from the height cap (instead of
+            // capping height independently alongside a separate aspectRatio)
+            // keeps the ratio itself from ever being silently overridden.
+            width: `min(100%, ${PREVIEW_MAX_HEIGHT * slotAspectRatio}px)`,
+            aspectRatio: slotAspectRatio,
+            background: 'var(--paper-2)',
+            border: '1px solid var(--line)',
+            borderRadius: shape === 'rect' || !shape ? (cornerRadius ?? 0) : 8,
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          {activeUrl ? (
+            <div style={{ position: 'absolute', inset: 0, clipPath: previewMaskCss === 'none' ? undefined : previewMaskCss }}>
+              {activeFileType === 'video' ? (
+                <video
+                  src={activeUrl}
+                  autoPlay muted loop playsInline
+                  style={{ width: '100%', height: '100%', objectFit: previewObjectFit }}
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={activeUrl}
+                  alt=""
+                  style={{ width: '100%', height: '100%', objectFit: previewObjectFit }}
+                />
+              )}
+            </div>
+          ) : (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', fontFamily: 'var(--M)', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}>
+              Paste a link or upload a file
+            </div>
+          )}
+        </div>
+      </div>
 
       <button
         type="button"
