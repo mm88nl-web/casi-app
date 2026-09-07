@@ -279,28 +279,12 @@ function OBSContent() {
           );
         })}
 
-        {/* Product-led growth: a subtle attribution tag that shows on the beams
-            layer whenever a beam is live — every paid beam becomes a discovery
-            moment for the viewers watching. pointer-events:none so it never
-            blocks. Future Pro tier ("custom branding") can hide this via a
-            profile flag; free tier keeps it. */}
-        {layer !== 'backdrop' && activeBookings.length > 0 && (
-          <div
-            style={{
-              position: 'absolute', left: 14, bottom: 12, zIndex: 60,
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '4px 9px', borderRadius: 8,
-              background: 'rgba(0,0,0,0.42)', backdropFilter: 'blur(4px)',
-              color: 'rgba(255,255,255,0.82)',
-              fontFamily: 'var(--font-casi-mono),ui-monospace,monospace',
-              fontSize: 12, fontWeight: 600, letterSpacing: '0.04em',
-              pointerEvents: 'none',
-            }}
-          >
-            <span style={{ color: 'var(--ink)', fontWeight: 800 }}>▸</span>
-            get on stream · casi.gg
-          </div>
-        )}
+        {/* The "get on stream · casi.gg" growth tag that used to render here
+            was removed — casi-obs's own Standby-scene overlay (a separate
+            server-side HTML page, not part of this app) already draws a
+            permanent glowing "casi.gg" mark in the same bottom-left corner,
+            and the two were overlapping/colliding on stream. Keeping one
+            brand mark instead of two competing for the same corner. */}
       </div>
     </div>
   );
