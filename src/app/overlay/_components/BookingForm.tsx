@@ -228,11 +228,17 @@ export default function BookingForm(props: Props) {
 
   const maxSecs = slot.max_duration_minutes ? slot.max_duration_minutes * 60 : null;
 
-  // Duration slider bounds. 30s floor matches the parent's own clamp
-  // (see overlay/page.tsx's setDurationSecsClamped); 30min ceiling for
-  // unbounded slots matches the old preset row's highest option.
+  // Duration slider bounds. 30s floor matches the parent's own clamp (see
+  // overlay/page.tsx's setDurationSecsClamped, which itself only floors at
+  // 30s and otherwise has no ceiling when the slot has no configured max —
+  // create-stripe/create-free/create-solana no longer reject an unbounded
+  // slot either, so an unconfigured max genuinely means no cap). A slider
+  // still needs *some* finite drag range to be usable though; 24h matches
+  // the streamer's own highest selectable preset in BeamCtrlPanel, so an
+  // unconfigured slot behaves like the most generous real config instead of
+  // an arbitrary small one.
   const sliderMin = 30;
-  const sliderMax = maxSecs ?? 1800;
+  const sliderMax = maxSecs ?? 86400;
   const sliderRange = Math.max(1, sliderMax - sliderMin);
   const sliderMid = Math.round((sliderMin + sliderMax) / 2 / 5) * 5;
   const sliderPct = Math.min(100, Math.max(0, ((durationSeconds - sliderMin) / sliderRange) * 100));
