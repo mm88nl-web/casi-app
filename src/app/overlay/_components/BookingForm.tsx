@@ -664,7 +664,13 @@ export default function BookingForm(props: Props) {
                 {paymentRail === 'free'
                   ? 'Free flashes are rate-limited · streamer can deny'
                   : paymentRail === 'usdc'
-                    ? 'USDC held in escrow until streamer approves · 100% refund on deny'
+                    // Covers both refund paths so a viewer sees the full
+                    // picture before paying, not just the pre-approval one:
+                    // 100% back on deny (cancel_escrow), and the unvested
+                    // remainder back automatically if the beam ends early
+                    // once active (settle_beam prorates — see
+                    // SolanaConfirmModal's fuller explanation post-submit).
+                    ? 'USDC held in escrow · 100% refund if denied · unused portion returns if ended early'
                     : 'Authorized until streamer approves · 100% refund on deny · CASI 0%'}
               </div>
             </div>
