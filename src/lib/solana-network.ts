@@ -51,3 +51,16 @@ export const WALLET_ADAPTER_CLUSTER: 'devnet' | 'mainnet-beta' =
 export const EXPLORER_CLUSTER_QUERY: string = IS_MAINNET ? '' : '?cluster=devnet';
 
 export const NETWORK_LABEL: string = IS_MAINNET ? 'Mainnet' : 'Devnet';
+
+// The deployed casi-escrow program's on-chain GlobalConfig.min_escrow_amount
+// floor, mirrored here for client-side pre-flight checks. This is NOT a
+// program constant — it's admin-settable via update_config — but the live
+// deployment sets it to exactly 1 USDC (see
+// src/app/api/admin/init-escrow-config/route.ts and
+// docs/fable-security-review-2026-08-10.md Finding 6: it exists specifically
+// to make ATA-rent griefing uneconomical). Booking below this floor isn't
+// rejected until the wallet tries to simulate the transaction, surfacing as
+// an opaque "custom program error: 0x1783" — confirmed live 2026-09-07 on a
+// 0.50 USDC test booking. Keep this in sync if `update_config` ever changes
+// the live value.
+export const MIN_ESCROW_USDC = 1;
