@@ -190,7 +190,17 @@
   justify-content: space-between;
   flex-wrap: wrap;
   row-gap: 8px;
-  padding: 10px var(--pad);
+  /* Was `10px var(--pad)` — --pad is a shared token fixed at 32px (64px
+     total) with no responsive scaling anywhere it's defined, so this nav
+     (used by /studio's dashboard, via NavBar.tsx) carried the exact same
+     "fixed padding regardless of viewport" bug already found and fixed on
+     Nav.tsx's own inline styles (used by /studio/settings, /search, etc —
+     a DIFFERENT component, hence needing its own fix). clamp() here keeps
+     desktop byte-for-byte identical (var(--pad) is still the ceiling) while
+     scaling down on narrow phones. Deliberately scoped to this one rule
+     rather than changing --pad itself, which Solitaire and /builders also
+     read and weren't part of this bug report. */
+  padding: 10px clamp(14px, 4vw, var(--pad));
   min-height: 60px;
   border-bottom: none;
   background: var(--paper);
