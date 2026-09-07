@@ -98,19 +98,42 @@ function OBSContent() {
 
     loadAll();
 
-    // Tracks the last time we know the realtime pipe was alive (an actual
-    // change event, or the channel reaching SUBSCRIBED). The watchdog below
-    // only refetches once this goes stale — a healthy connection never
-    // triggers the backstop at all.
-    let lastEventAt = Date.now();
-    const bump = () => { lastEventAt = Date.now(); };
+    // CORRECTED 2026-09-07: the previous version of this watchdog tracked
+    // only a "last event" timestamp and refetched whenever >15s had passed
+    // since the last bump — but a genuinely healthy realtime connection
+    // goes quiet for long stretches whenever nothing in bookings/
+    // overlay_elements actually changes (the common case for most of a
+    // 24/7 stream's runtime), and that quiet was indistinguishable from a
+    // dead connection. Verified live via Supabase's edge logs: this OBS
+    // window was steadily making ~6 requests/minute around the clock —
+    // the "backstop" had become the PRIMARY polling mechanism, not a rare
+    // fallback, quietly eating into the free-tier egress quota 24/7 (see
+    // the exceed_egress_quota errors logged by the solana-reconciler cron
+    // in this same window).
+    //
+    // Fixed by reacting to the channel's own reported status instead of
+    // guessing from a quiet timer: SUBSCRIBED means healthy (no refetch
+    // needed beyond the one-time catch-up), CLOSED/CHANNEL_ERROR/TIMED_OUT
+    // means the socket actually dropped (Supabase's client auto-retries
+    // the underlying reconnect; this just makes sure we catch up on
+    // whatever changed while it was down). SAFETY_NET_MS is a much longer,
+    // pure last-resort in case a status callback is ever missed entirely —
+    // not the everyday path.
+    let elHealthy = false, bkHealthy = false;
+    let lastRefetchAt = Date.now();
+    const refetchOnce = () => { lastRefetchAt = Date.now(); loadAll(); };
 
     const elCh = supabase.channel(`obs_els_${layer}_${profileId}`)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'overlay_elements',
         filter: `profile_id=eq.${profileId}`,
-      }, () => { bump(); loadAll(); })
-      .subscribe((status) => { if (status === 'SUBSCRIBED') bump(); });
+      }, refetchOnce)
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') { elHealthy = true; refetchOnce(); }
+        else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          elHealthy = false; refetchOnce();
+        }
+      });
 
     // Banner content lives on bookings (message field), so the OBS render
     // needs to hear about booking transitions too — not just element
@@ -120,25 +143,25 @@ function OBSContent() {
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'bookings',
         filter: `profile_id=eq.${profileId}`,
-      }, () => { bump(); loadAll(); })
-      .subscribe((status) => { if (status === 'SUBSCRIBED') bump(); });
+      }, refetchOnce)
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') { bkHealthy = true; refetchOnce(); }
+        else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          bkHealthy = false; refetchOnce();
+        }
+      });
 
-    // Safety-refresh backstop. OBS browser sources run in CEF, which can
-    // throttle background JS — so a Supabase realtime push (e.g. a beam the
-    // streamer just approved) can land seconds late, sometimes ~30s. Rather
-    // than polling unconditionally (which was ~43k requests/day per open
-    // OBS window and blew through the Supabase free-tier egress quota), this
-    // checks every 5s whether a realtime event has landed in the last 15s;
-    // only a genuinely stalled connection triggers a refetch. The render
-    // keys (`el.id` / `${el.id}-${active?.id}`) are stable, so an unchanged
-    // refresh causes no remount, flicker, or glow-animation replay.
-    const STALE_MS = 15_000;
+    // Last-resort safety net only — fires solely when BOTH channels have
+    // never reported a healthy status at all (e.g. a status callback got
+    // dropped somewhere) AND it's been a genuinely long time. A connection
+    // that's ever reached SUBSCRIBED relies on its own CLOSED/ERROR
+    // callback above, not this timer, to catch future drops.
+    const SAFETY_NET_MS = 90_000;
     const watchdog = setInterval(() => {
-      if (Date.now() - lastEventAt > STALE_MS) {
-        bump(); // avoid re-firing every tick while the outage continues
-        loadAll();
+      if (!elHealthy && !bkHealthy && Date.now() - lastRefetchAt > SAFETY_NET_MS) {
+        refetchOnce();
       }
-    }, 5_000);
+    }, 10_000);
 
     return () => {
       supabase.removeChannel(elCh);
