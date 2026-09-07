@@ -31,13 +31,19 @@ export type PreviewBooking = {
   /** Slot label like "circle · top-left" so the streamer knows where it
    *  lands. Hidden for flashes (no slot). */
   slotLabel?: string | null;
+  /** False for a booking that's already airing or already queued — nothing
+   *  to Approve/Deny there (those actions live on the row itself as End
+   *  early / Play now). The modal falls back to a plain "Close" footer
+   *  instead of hiding entirely, since it's still useful as a full-size
+   *  look at what's live/up next. */
+  actionable: boolean;
 };
 
 type Props = {
   booking: PreviewBooking | null;
   onClose: () => void;
-  onApprove: (id: string) => void;
-  onDeny: (id: string) => void;
+  onApprove?: (id: string) => void;
+  onDeny?: (id: string) => void;
 };
 
 /**
@@ -113,7 +119,12 @@ export default function PreviewBookingModal({ booking, onClose, onApprove, onDen
                 color: 'var(--casi-text)',
               }}
             >
-              Review request
+              {/* "Review request" only fits a pending item — this same
+                  modal is also opened from the already-live row and its
+                  queue, where there's nothing left to decide. */}
+              {booking.id.startsWith('active-') ? 'Now airing'
+                : booking.id.startsWith('queued-') ? 'Up next'
+                : 'Review request'}
             </h2>
             <div
               className="font-mono uppercase"
@@ -240,33 +251,49 @@ export default function PreviewBookingModal({ booking, onClose, onApprove, onDen
           </div>
         ) : null}
 
-        <div style={{ display: 'flex', gap: '8px' }}>
+        {booking.actionable && onApprove && onDeny ? (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => { onDeny(booking.id); onClose(); }}
+              className="casi-pill-ghost"
+              style={{ flex: 1, height: '44px', fontSize: '15px' }}
+            >
+              {/* Kept as "Deny" (not the prototype's "Decline") — matches the
+                  app's own established terminology (denyBooking(), onDeny
+                  prop, EndStreamDialog copy). Look changed, copy didn't. */}
+              Deny
+            </button>
+            <button
+              type="button"
+              onClick={() => { onApprove(booking.id); onClose(); }}
+              disabled={!booking.paymentConfirmed}
+              className="casi-pill-solid"
+              style={{
+                flex: 2,
+                height: '44px',
+                fontSize: '15px',
+                cursor: booking.paymentConfirmed ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {booking.paymentConfirmed ? 'Approve' : 'Awaiting payment'}
+            </button>
+          </div>
+        ) : (
+          // Already airing / already queued — nothing to Approve/Deny here
+          // (End early / Play now live on the row itself). Still worth
+          // surfacing this modal as a read-only "get the full picture"
+          // view rather than hiding it, since that's the actual ask this
+          // was added for.
           <button
             type="button"
-            onClick={() => { onDeny(booking.id); onClose(); }}
+            onClick={onClose}
             className="casi-pill-ghost"
-            style={{ flex: 1, height: '44px', fontSize: '15px' }}
+            style={{ width: '100%', height: '44px', fontSize: '15px' }}
           >
-            {/* Kept as "Deny" (not the prototype's "Decline") — matches the
-                app's own established terminology (denyBooking(), onDeny
-                prop, EndStreamDialog copy). Look changed, copy didn't. */}
-            Deny
+            Close
           </button>
-          <button
-            type="button"
-            onClick={() => { onApprove(booking.id); onClose(); }}
-            disabled={!booking.paymentConfirmed}
-            className="casi-pill-solid"
-            style={{
-              flex: 2,
-              height: '44px',
-              fontSize: '15px',
-              cursor: booking.paymentConfirmed ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {booking.paymentConfirmed ? 'Approve' : 'Awaiting payment'}
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );
