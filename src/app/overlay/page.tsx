@@ -473,6 +473,15 @@ function OverlayContent() {
             || (b.payment_method === 'stripe'
                 && Date.now() - new Date(b.created_at).getTime() < STRIPE_DENIED_WINDOW_MS);
         }
+        // `cancelled` is a legacy status — nothing in the live app writes it
+        // anymore (viewer self-cancel now sets 'denied', which the branch
+        // above already handles), but old rows from before that
+        // consolidation never had a hiding rule at all and fell through to
+        // "always show". A cancelled booking has nothing actionable left
+        // (no funds pending, no refund to track), same as a free 'denied'
+        // row — hide unconditionally instead of letting it accumulate
+        // forever with no way for the viewer to dismiss it.
+        if (b.status === 'cancelled') return false;
         return true;
       });
       setMyBookings(relevant);
@@ -2229,6 +2238,10 @@ function OverlayContent() {
       }
       return false;
     }
+    // Legacy status — see the matching comment on the fetch-layer filter
+    // above (`relevant`). Nothing actionable left on a cancelled booking;
+    // hide it rather than let it accumulate with no way to dismiss it.
+    if (b.status === 'cancelled') return false;
     return true;
   });
 
