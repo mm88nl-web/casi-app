@@ -339,7 +339,7 @@ function StudioPageInner() {
   const [pendingFlashes, setPendingFlashes] = useState<FlashRow[]>([]);
   const [activeBookings, setActiveBookings] = useState<BookingRow[]>([]);
   const [queuedBookings, setQueuedBookings] = useState<BookingRow[]>([]);
-  const [elementsById, setElementsById] = useState<Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }>>({});
+  const [elementsById, setElementsById] = useState<Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; clip_path_svg: string | null; width: number | null; height: number | null; }>>({});
   const [flashLogRaw, setFlashLogRaw] = useState<FlashRow[]>([]);
   const [moderating, setModerating] = useState<Set<string>>(new Set());
   const [endingEarly, setEndingEarly] = useState<Set<string>>(new Set());
@@ -389,7 +389,7 @@ function StudioPageInner() {
           .eq('profile_id', profileId).eq('status', 'approved_queued')
           .order('approved_at', { ascending: true }).limit(50),
         supabase.from('overlay_elements')
-          .select('id, shape, pos_x, pos_y, is_background')
+          .select('id, shape, pos_x, pos_y, is_background, clip_path_svg, width, height')
           .eq('profile_id', profileId),
         supabase.from('flashes').select(FLASH_COLS)
           .eq('profile_id', profileId)
@@ -411,9 +411,9 @@ function StudioPageInner() {
     setQueuedBookings((queuedBookingsRes.data ?? []) as BookingRow[]);
     setTodayBookings((todayBookingsRes.data ?? []) as BookingRow[]);
 
-    const elementsMap: Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }> = {};
-    for (const el of (elementsRes.data ?? []) as Array<{ id: string; shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; }>) {
-      elementsMap[el.id] = { shape: el.shape, pos_x: el.pos_x, pos_y: el.pos_y, is_background: el.is_background };
+    const elementsMap: Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; clip_path_svg: string | null; width: number | null; height: number | null; }> = {};
+    for (const el of (elementsRes.data ?? []) as Array<{ id: string; shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; clip_path_svg: string | null; width: number | null; height: number | null; }>) {
+      elementsMap[el.id] = { shape: el.shape, pos_x: el.pos_x, pos_y: el.pos_y, is_background: el.is_background, clip_path_svg: el.clip_path_svg, width: el.width, height: el.height };
     }
     setElementsById(elementsMap);
 
@@ -1134,7 +1134,7 @@ function buildPreview(
   id: string | null,
   pendingBookings: BookingRow[],
   pendingFlashes: FlashRow[],
-  elementsById: Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null }>,
+  elementsById: Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; clip_path_svg: string | null; width: number | null; height: number | null }>,
 ): PreviewBooking | null {
   if (!id) return null;
   if (id.startsWith('booking-')) {
@@ -1155,6 +1155,12 @@ function buildPreview(
         ? `${Math.floor(duration / 60)}h${duration % 60 ? ` ${duration % 60}m` : ''}`
         : `${duration}m`;
     const element = b.element_id ? elementsById[b.element_id] : undefined;
+    // Same width%/height% → on-stream aspect ratio formula used everywhere
+    // else this shows up (BookingForm, CustomizePanel, StreamerPublishCard) —
+    // el.width/height are percent-of-canvas on a 16:9 stream canvas, not a
+    // fixed ratio guessed from shape alone.
+    const ew = Number(element?.width), eh = Number(element?.height);
+    const rawRatio = ew > 0 && eh > 0 ? (ew * 16) / (eh * 9) : 16 / 9;
     return {
       id,
       kind: 'beam',
@@ -1163,6 +1169,8 @@ function buildPreview(
       imageUrl: b.image_url,
       fileType: b.file_type,
       shape: element?.shape ?? null,
+      clipPathSvg: element?.clip_path_svg ?? null,
+      slotAspectRatio: Math.min(6, Math.max(1 / 6, rawRatio)),
       rateLabel,
       totalLabel,
       durationLabel,
@@ -1190,6 +1198,8 @@ function buildPreview(
       imageUrl: null,
       fileType: null,
       shape: null,
+      clipPathSvg: null,
+      slotAspectRatio: 16 / 9,
       rateLabel: '',
       totalLabel,
       durationLabel: '',

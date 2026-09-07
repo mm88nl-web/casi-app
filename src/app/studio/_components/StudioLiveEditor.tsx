@@ -557,6 +557,27 @@ export default function StudioLiveEditor({
                 style={{ position: 'relative', width: '100%', height: '100%' }}
                 onClick={el.is_background ? (e) => { e.stopPropagation(); setSelectedSlotId(el.id); } : undefined}
               >
+                {/* Bare clip wrapper carrying ONLY clip-path — border/
+                    borderRadius/overflow/boxShadow all live on the nested
+                    child below instead. A custom (concave) heart/star path
+                    combined with those other box-model properties on the
+                    SAME element rendered with the top portion truncated to
+                    a plain rectangle (bottom point + sides came out
+                    correctly heart-shaped, but the top lobes were cut off
+                    flat) — this exact "clip-path plus other styling on one
+                    element" combination was already root-caused as
+                    unreliable once before, in the viewer-facing overlay's
+                    empty-slot placeholder (see overlay/page.tsx). Same fix
+                    here: match the structural shape that's proven to work. */}
+                <div
+                  style={{
+                    position: 'relative', width: '100%', height: '100%',
+                    clipPath:
+                      el.shape === 'circle' ? 'circle(50%)'
+                      : el.shape === 'custom' && el.clip_path_svg ? `url(#studio-clip-${el.id})`
+                      : undefined,
+                  }}
+                >
                 <div
                   style={{
                     position: 'relative', width: '100%', height: '100%',
@@ -576,10 +597,6 @@ export default function StudioLiveEditor({
                     // holds steady while the beam is live.
                     boxShadow: isActive
                       ? '0 0 0 3px rgba(var(--casi-accent2-rgb), 0.2), 0 0 24px rgba(var(--casi-accent2-rgb), 0.35)'
-                      : undefined,
-                    clipPath:
-                      el.shape === 'circle' ? 'circle(50%)'
-                      : el.shape === 'custom' && el.clip_path_svg ? `url(#studio-clip-${el.id})`
                       : undefined,
                   }}
                 >
@@ -668,6 +685,7 @@ export default function StudioLiveEditor({
                       }}
                     />
                   )}
+                </div>
                 </div>
                 {isSelected && !el.is_background ? (
                   <div style={{
