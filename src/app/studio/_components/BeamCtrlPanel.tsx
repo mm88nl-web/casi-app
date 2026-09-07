@@ -569,31 +569,6 @@ export default function BeamCtrlPanel({
             </div>
           </div>
 
-          {/* "No limit" is really "not set yet" for the max bound — every
-              paid rail's create route (create-stripe/create-free/create-
-              solana) hard-rejects a booking with "Slot has no duration
-              limit configured" when max_duration_minutes is null/0, since
-              the escrow vesting math needs a finite duration to prorate
-              against. That rejection only ever surfaced to a VIEWER
-              mid-booking, as a cryptic error with no indication the fix is
-              on the streamer's side — confirmed live during escrow
-              testing 2026-09-07 (the test slot had no max set, first
-              real-money booking attempt bounced off this with no context).
-              Surfacing it here instead, right next to the control that
-              fixes it in one click. */}
-          {maxMin === '' && (
-            <div
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                fontSize: 11, color: '#eab308',
-                padding: '2px 4px 0',
-                fontFamily: 'var(--B), var(--font-casi-sans), sans-serif',
-              }}
-            >
-              ⚠ No max duration set — viewers can&apos;t book this slot yet. Pick one above.
-            </div>
-          )}
-
           {/* Quiet inline hint when the per-minute rate falls below Stripe's
               currency floor — in that range, viewers ending a beam early
               get a full refund (the cancel path in /api/stripe/end-early)
