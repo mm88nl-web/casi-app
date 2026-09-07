@@ -90,7 +90,21 @@ export default function SettingsLayout({ rail, children }: Props) {
     >
       <style>{`
         @media (max-width: 760px) {
-          .casi-st-layout { grid-template-columns: 1fr !important; padding: 20px 16px 60px !important; }
+          /* Was a bare 1fr — a grid track sized as plain 1fr (unlike
+             the desktop rule's minmax(0, 1fr) two lines up) carries an
+             IMPLICIT automatic minimum equal to its content's min-content
+             size, not 0. Any wide child forced the whole track — and with
+             it the whole page — wider than the viewport instead of
+             shrinking to fit, which is exactly why this page kept needing
+             horizontal scroll through several rounds of unrelated padding
+             fixes: this was the actual structural cause the whole time.
+             Confirmed live: the Skin picker's swatch grid
+             (repeat(auto-fill, minmax(150px, 1fr))) was the specific
+             child wide enough to trigger it, cutting its third column off
+             past the screen edge. minmax(0, 1fr) matches the desktop
+             rule's own safety property, just at 100% width instead of
+             the second of two columns. */
+          .casi-st-layout { grid-template-columns: minmax(0, 1fr) !important; padding: 20px 16px 60px !important; }
           .casi-st-rail { display: none !important; }
         }
       `}</style>

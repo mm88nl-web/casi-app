@@ -883,7 +883,21 @@
   align-items: start;
 }
 @media (max-width: 900px) {
-  .casi-v9-le-grid2 { grid-template-columns: 1fr; }
+  /* Was a bare `1fr` — unlike the desktop rule two lines up (which
+     correctly wraps its first column in minmax(0, 1fr)), a plain `1fr`
+     track carries an IMPLICIT automatic minimum equal to its content's
+     min-content size, not 0. This grid's first column holds the canvas
+     (.canvas-wrap) plus the On-air/Waiting panels below it — any of that
+     content wide enough to want more room than the viewport forces this
+     whole track, and the canvas along with it, wider than the screen
+     instead of shrinking to fit. Confirmed live: the canvas measured with
+     a symmetric-looking left margin but its true right edge sitting off-
+     screen (page needed a horizontal scroll to reach it), which is what
+     actually produced the "canvas squished / needs more room on the
+     right" look — a previous fix to .canvas-wrap's own overflow was a
+     reasonable change to keep but didn't touch this, the actual cause.
+     minmax(0, 1fr) matches the desktop rule's own safety property. */
+  .casi-v9-le-grid2 { grid-template-columns: minmax(0, 1fr); }
 }
 
 .casi-v9-le-side {

@@ -69,7 +69,15 @@ export default function EarningsBar({ viewerLink, todayLines, pending }: Earning
           overflow: hidden;
         }
         @media (max-width: 760px) {
-          .casi-v9-earn-line { grid-template-columns: 1fr; }
+          /* minmax(0, 1fr), not bare 1fr — matches the desktop rule above.
+             A plain 1fr track's implicit automatic minimum is its
+             content's min-content size, not 0; this is the same "grid
+             collapses to one column but drops its minmax(0,...) safety
+             net" pattern found (and fixed) in .casi-st-layout and
+             .casi-v9-le-grid2 on this same /studio page. Preemptive here —
+             no confirmed overflow report on this specific bar, but it
+             shares the identical shape, on the identical page. */
+          .casi-v9-earn-line { grid-template-columns: minmax(0, 1fr); }
         }
         .casi-v9-earn-line > .earn-seg {
           display: flex;
