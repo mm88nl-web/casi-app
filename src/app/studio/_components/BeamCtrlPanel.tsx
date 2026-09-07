@@ -438,6 +438,18 @@ export default function BeamCtrlPanel({
                 elementId={el.id}
                 publishing={!!publishing}
                 onPublish={onPublish}
+                shape={el.shape}
+                clipPathSvg={el.clip_path_svg ?? null}
+                cornerRadius={el.corner_radius ?? 0}
+                slotAspectRatio={(() => {
+                  // Same width%/height% → on-stream aspect ratio formula
+                  // BookingForm.tsx uses for the viewer's own preview — el.
+                  // width/height are percent-of-canvas on a 16:9 stream
+                  // canvas, not a fixed 1:1/16:9 guessed from shape alone.
+                  const w = Number(el.width), h = Number(el.height);
+                  const raw = w > 0 && h > 0 ? (w * 16) / (h * 9) : 16 / 9;
+                  return Math.min(6, Math.max(1 / 6, raw));
+                })()}
               />
             </div>
           )}
