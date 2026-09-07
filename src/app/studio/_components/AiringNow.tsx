@@ -64,6 +64,10 @@ export type AiringItem = {
 
 type Props = {
   items: AiringItem[];
+  /** Click the active row's thumb/name, or a queued row, to open the same
+   *  full preview modal the Waiting queue uses. Receives 'active-<id>' for
+   *  the airing row itself, 'queued-<id>' for a row in its expanded queue. */
+  onPreview?: (id: string) => void;
 };
 
 /**
@@ -72,7 +76,7 @@ type Props = {
  * exposes a "Queue · N" toggle that expands an inline strip with the
  * waiting bookings + Play Now per item.
  */
-export default function AiringNow({ items }: Props) {
+export default function AiringNow({ items, onPreview }: Props) {
   // Only one row's queue is open at a time; clicking another collapses
   // the previous. State lives here (not on AiringItem) so the parent
   // doesn't need to round-trip through React props for a pure UI toggle.
@@ -89,6 +93,8 @@ export default function AiringNow({ items }: Props) {
         .casi-air-q-pill { padding: 4px 9px; border-radius: var(--radius-chip); font-size: 10.5px; font-family: var(--font-casi-mono), monospace; letter-spacing: 0.04em; cursor: pointer; transition: border-color .12s, background .12s; }
         .casi-air-q-pill:hover { background: rgba(var(--casi-accent-rgb), 0.06); }
         .casi-air-play:hover { border-color: rgba(var(--casi-accent-rgb), 0.4) !important; color: var(--casi-accent) !important; background: rgba(var(--casi-accent-rgb), 0.08) !important; }
+        .casi-air-preview-btn { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; padding: 0; border: none; background: transparent; color: inherit; text-align: left; cursor: zoom-in; }
+        .casi-air-q-preview-btn { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 0; border: none; background: transparent; color: inherit; text-align: left; cursor: zoom-in; }
       `}</style>
 
       <div style={{ fontFamily: 'var(--B)', fontWeight: 700, fontSize: '14px', color: 'var(--text)' }}>
@@ -103,29 +109,38 @@ export default function AiringNow({ items }: Props) {
           return (
             <div key={item.id} className="casi-card casi-air-row-wrap">
               <div className="casi-air-r">
-                <AiringThumb
-                  mediaUrl={item.mediaUrl}
-                  fileType={item.fileType}
-                  shape={item.shape}
-                  icon={item.icon}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    className="truncate"
-                    style={{ fontFamily: 'var(--B)', fontWeight: 700, fontSize: '17px', letterSpacing: '-0.01em', color: 'var(--casi-text)' }}
-                  >
-                    {item.name}
+                <button
+                  type="button"
+                  className="casi-air-preview-btn"
+                  onClick={onPreview ? () => onPreview('active-' + item.id) : undefined}
+                  disabled={!onPreview}
+                  style={{ cursor: onPreview ? 'zoom-in' : 'default' }}
+                  title={onPreview ? 'Preview' : undefined}
+                >
+                  <AiringThumb
+                    mediaUrl={item.mediaUrl}
+                    fileType={item.fileType}
+                    shape={item.shape}
+                    icon={item.icon}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      className="truncate"
+                      style={{ fontFamily: 'var(--B)', fontWeight: 700, fontSize: '17px', letterSpacing: '-0.01em', color: 'var(--casi-text)' }}
+                    >
+                      {item.name}
+                    </div>
+                    <div
+                      className="truncate casi-meta-italic"
+                      style={{
+                        fontSize: '14px',
+                        marginTop: '3px',
+                      }}
+                    >
+                      {item.subtitle}
+                    </div>
                   </div>
-                  <div
-                    className="truncate casi-meta-italic"
-                    style={{
-                      fontSize: '14px',
-                      marginTop: '3px',
-                    }}
-                  >
-                    {item.subtitle}
-                  </div>
-                </div>
+                </button>
                 {queueCount > 0 ? (
                   <button
                     type="button"
@@ -237,6 +252,14 @@ export default function AiringNow({ items }: Props) {
                         >
                           #{idx + 1}
                         </span>
+                        <button
+                          type="button"
+                          className="casi-air-q-preview-btn"
+                          onClick={onPreview ? () => onPreview('queued-' + q.id) : undefined}
+                          disabled={!onPreview}
+                          style={{ cursor: onPreview ? 'zoom-in' : 'default' }}
+                          title={onPreview ? 'Preview' : undefined}
+                        >
                         <QueueThumb
                           mediaUrl={q.mediaUrl}
                           fileType={q.fileType}
@@ -258,6 +281,7 @@ export default function AiringNow({ items }: Props) {
                             {q.durationMin}m
                           </div>
                         </div>
+                        </button>
                         <span
                           style={{
                             fontFamily: 'var(--M), var(--font-casi-mono), monospace',

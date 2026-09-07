@@ -1097,7 +1097,7 @@ function StudioPageInner() {
             <FlashesLog items={flashLog} total={todayTotal} />
           </>
         }
-        belowCanvasSlot={airing.length > 0 ? <AiringNow items={airing} /> : null}
+        belowCanvasSlot={airing.length > 0 ? <AiringNow items={airing} onPreview={setPreviewId} /> : null}
       />
 
       <EndStreamDialog
@@ -1115,7 +1115,7 @@ function StudioPageInner() {
       />
 
       <PreviewBookingModal
-        booking={buildPreview(previewId, pendingBookings, pendingFlashes, elementsById)}
+        booking={buildPreview(previewId, pendingBookings, activeBookings, queuedBookings, pendingFlashes, elementsById)}
         onClose={() => setPreviewId(null)}
         onApprove={handleApprove}
         onDeny={handleReject}
@@ -1124,59 +1124,86 @@ function StudioPageInner() {
   );
 }
 
+type ElementInfo = { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; clip_path_svg: string | null; width: number | null; height: number | null };
+
 /**
- * Resolve a preview-modal id ("booking-123" or "flash-uuid") back to the
- * raw row plus formatted display strings. Returns null when the id isn't
- * set or its row dropped out of the pending lists (approved / denied
- * elsewhere) — modal closes itself on null.
+ * Shared by every beam-shaped preview-modal id (pending / active / queued) —
+ * only `actionable` and the id prefix differ between them. Extracted so the
+ * rate/duration/clip/aspect-ratio computation lives in exactly one place.
+ */
+function buildBeamPreview(id: string, b: BookingRow, elementsById: Record<string, ElementInfo>, actionable: boolean): PreviewBooking {
+  const duration = Number(b.duration_minutes) || 0;
+  const rate = Number(b.price_value) || 0;
+  const unitMinutes = b.price_unit === 'hr' ? 60 : 1;
+  const total = rate * (duration / unitMinutes);
+  const isUsdc = b.payment_method === 'usdc' || b.payment_method === 'solana';
+  const fmt = (n: number) => n.toFixed(n % 1 === 0 ? 0 : 2);
+  const totalLabel = isUsdc ? `${fmt(total)} USDC` : `€${fmt(total)}`;
+  const rateLabel = isUsdc ? `${fmt(rate)} USDC/${b.price_unit}` : `€${fmt(rate)}/${b.price_unit}`;
+  const durationLabel = b.duration_minutes == null
+    ? '∞'
+    : duration >= 60
+      ? `${Math.floor(duration / 60)}h${duration % 60 ? ` ${duration % 60}m` : ''}`
+      : `${duration}m`;
+  const element = b.element_id ? elementsById[b.element_id] : undefined;
+  // Same width%/height% → on-stream aspect ratio formula used everywhere
+  // else this shows up (BookingForm, CustomizePanel, StreamerPublishCard) —
+  // el.width/height are percent-of-canvas on a 16:9 stream canvas, not a
+  // fixed ratio guessed from shape alone.
+  const ew = Number(element?.width), eh = Number(element?.height);
+  const rawRatio = ew > 0 && eh > 0 ? (ew * 16) / (eh * 9) : 16 / 9;
+  return {
+    id,
+    kind: 'beam',
+    viewerName: b.viewer_name || 'anon',
+    message: b.message,
+    imageUrl: b.image_url,
+    fileType: b.file_type,
+    shape: element?.shape ?? null,
+    clipPathSvg: element?.clip_path_svg ?? null,
+    slotAspectRatio: Math.min(6, Math.max(1 / 6, rawRatio)),
+    rateLabel,
+    totalLabel,
+    durationLabel,
+    // Active/queued bookings are definitionally already paid (Approve is
+    // payment-gated) — force true rather than re-deriving, so a stale/
+    // missing payment field on an already-live row can't show "awaiting
+    // payment" on something that's already airing.
+    paymentConfirmed: actionable ? isPaymentConfirmed(b) : true,
+    slotLabel: slotLabel(element),
+    actionable,
+  };
+}
+
+/**
+ * Resolve a preview-modal id ("booking-123" / "active-123" / "queued-123" /
+ * "flash-uuid") back to the raw row plus formatted display strings. Returns
+ * null when the id isn't set or its row dropped out of the relevant list
+ * (approved / denied / ended elsewhere) — modal closes itself on null.
  */
 function buildPreview(
   id: string | null,
   pendingBookings: BookingRow[],
+  activeBookings: BookingRow[],
+  queuedBookings: BookingRow[],
   pendingFlashes: FlashRow[],
-  elementsById: Record<string, { shape: string | null; pos_x: number | null; pos_y: number | null; is_background: boolean | null; clip_path_svg: string | null; width: number | null; height: number | null }>,
+  elementsById: Record<string, ElementInfo>,
 ): PreviewBooking | null {
   if (!id) return null;
   if (id.startsWith('booking-')) {
     const raw = id.slice('booking-'.length);
     const b = pendingBookings.find((x) => String(x.id) === raw);
-    if (!b) return null;
-    const duration = Number(b.duration_minutes) || 0;
-    const rate = Number(b.price_value) || 0;
-    const unitMinutes = b.price_unit === 'hr' ? 60 : 1;
-    const total = rate * (duration / unitMinutes);
-    const isUsdc = b.payment_method === 'usdc' || b.payment_method === 'solana';
-    const fmt = (n: number) => n.toFixed(n % 1 === 0 ? 0 : 2);
-    const totalLabel = isUsdc ? `${fmt(total)} USDC` : `€${fmt(total)}`;
-    const rateLabel = isUsdc ? `${fmt(rate)} USDC/${b.price_unit}` : `€${fmt(rate)}/${b.price_unit}`;
-    const durationLabel = b.duration_minutes == null
-      ? '∞'
-      : duration >= 60
-        ? `${Math.floor(duration / 60)}h${duration % 60 ? ` ${duration % 60}m` : ''}`
-        : `${duration}m`;
-    const element = b.element_id ? elementsById[b.element_id] : undefined;
-    // Same width%/height% → on-stream aspect ratio formula used everywhere
-    // else this shows up (BookingForm, CustomizePanel, StreamerPublishCard) —
-    // el.width/height are percent-of-canvas on a 16:9 stream canvas, not a
-    // fixed ratio guessed from shape alone.
-    const ew = Number(element?.width), eh = Number(element?.height);
-    const rawRatio = ew > 0 && eh > 0 ? (ew * 16) / (eh * 9) : 16 / 9;
-    return {
-      id,
-      kind: 'beam',
-      viewerName: b.viewer_name || 'anon',
-      message: b.message,
-      imageUrl: b.image_url,
-      fileType: b.file_type,
-      shape: element?.shape ?? null,
-      clipPathSvg: element?.clip_path_svg ?? null,
-      slotAspectRatio: Math.min(6, Math.max(1 / 6, rawRatio)),
-      rateLabel,
-      totalLabel,
-      durationLabel,
-      paymentConfirmed: isPaymentConfirmed(b),
-      slotLabel: slotLabel(element),
-    };
+    return b ? buildBeamPreview(id, b, elementsById, true) : null;
+  }
+  if (id.startsWith('active-')) {
+    const raw = id.slice('active-'.length);
+    const b = activeBookings.find((x) => String(x.id) === raw);
+    return b ? buildBeamPreview(id, b, elementsById, false) : null;
+  }
+  if (id.startsWith('queued-')) {
+    const raw = id.slice('queued-'.length);
+    const b = queuedBookings.find((x) => String(x.id) === raw);
+    return b ? buildBeamPreview(id, b, elementsById, false) : null;
   }
   if (id.startsWith('flash-')) {
     const raw = id.slice('flash-'.length);
@@ -1207,6 +1234,7 @@ function buildPreview(
       // tx_signature fields on the FlashRow projection used here. Treat
       // visible-in-pending as "paid enough to surface the modal".
       paymentConfirmed: true,
+      actionable: true,
     };
   }
   return null;
