@@ -1595,7 +1595,21 @@ body {
   border-radius: 12px;
   border: 1px solid var(--casi-border);
   background: #080808;
-  overflow: visible;
+  /* Was overflow:visible. Slots are positioned/sized in JS as percentages
+     of the canvas's own measured pixel size (dimensions.width/height in
+     StudioLiveEditor.tsx) — a slot dragged flush to an edge (a "top-right"
+     custom shape, confirmed live) can end up a few px past 100% from
+     rounding, and with overflow:visible that bleed isn't just cropped
+     locally, it makes the canvas the widest thing in the page and drags
+     the WHOLE mobile layout wider with it — confirmed via pixel-measuring
+     a live screenshot: ~39px left margin, ~0px right margin, canvas
+     touching the literal screen edge. Clipping here matches reality
+     anyway — the real OBS canvas is also hard-clipped to the 16:9 frame,
+     so a slot bleeding past it here was never an accurate preview. Only
+     cost: a selected slot's 2px outline ring (StudioLiveEditor.tsx) gets
+     clipped on whichever side sits flush against the canvas edge, instead
+     of bleeding 2px past it — a fine trade for not breaking page layout. */
+  overflow: hidden;
   /* Slot chips always render on #080808 regardless of the active skin.
      Force a bright teal so slot borders/labels stay visible even when the
      streamer has chosen a dark-ink skin like Homepage (#294b3c). */
