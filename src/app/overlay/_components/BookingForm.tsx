@@ -14,6 +14,7 @@ import UsdcIcon from '@/components/icons/UsdcIcon';
 import StripeIcon from '@/components/icons/StripeIcon';
 import { formatSlotPrice } from '@/lib/slot-pricing';
 import { fiatSymbol } from '@/lib/currency';
+import { MIN_ESCROW_USDC } from '@/lib/solana-network';
 import CustomizePanel from './CustomizePanel';
 import { formatTime, getSecondsRemaining } from './time';
 
@@ -171,6 +172,14 @@ export default function BookingForm(props: Props) {
   const secsPerUnit = slot.price_unit === 'hr' ? 3600 : 60;
   const stripeCost = stripeAvailable ? (fiatRate * durationSeconds) / secsPerUnit : 0;
   const usdcCost = usdcAvailable ? (usdcRate * durationSeconds) / secsPerUnit : 0;
+  // The on-chain program's GlobalConfig.min_escrow_amount floor (currently 1
+  // USDC, set deliberately to make ATA-rent griefing uneconomical — see
+  // MIN_ESCROW_USDC's doc comment). Below this, initialize_escrow reverts
+  // with AmountBelowMin, which previously only surfaced as an opaque wallet
+  // "Simulation failed / custom program error: 0x1783" after the viewer had
+  // already filled out the whole form and hit Pay. Confirmed live 2026-09-07
+  // on a 0.50 USDC / 30min test booking.
+  const belowMinUsdc = usdcAvailable && usdcCost > 0 && usdcCost < MIN_ESCROW_USDC;
 
   // Default rail: free slots = free; paid slots prefer stripe when both
   // rails are priced (matches viewer expectation that "card" is the
@@ -213,15 +222,17 @@ export default function BookingForm(props: Props) {
       };
     }
     return {
-      label: connecting
-        ? 'Connecting…'
-        : !walletConnected
-          ? `Connect wallet · ${costLabel('usdc')}`
-          : submitting
-            ? 'Sending…'
-            : `Pay ${costLabel('usdc')}`,
+      label: belowMinUsdc
+        ? `Below ${MIN_ESCROW_USDC} USDC minimum`
+        : connecting
+          ? 'Connecting…'
+          : !walletConnected
+            ? `Connect wallet · ${costLabel('usdc')}`
+            : submitting
+              ? 'Sending…'
+              : `Pay ${costLabel('usdc')}`,
       onClick: onSolanaPay,
-      disabled: connecting || submitting || (walletConnected && !canSubmit),
+      disabled: belowMinUsdc || connecting || submitting || (walletConnected && !canSubmit),
       icon: 'usdc' as const,
     };
   })();
@@ -580,6 +591,11 @@ export default function BookingForm(props: Props) {
             ) : null}
             {paymentRail === 'usdc' && !walletConnected ? (
               <div className="bf-rail-note">Connect wallet to pay with USDC on-chain</div>
+            ) : null}
+            {paymentRail === 'usdc' && belowMinUsdc ? (
+              <div className="bf-rail-note" style={{ color: '#f87171' }}>
+                ⚠ On-chain escrow requires at least {MIN_ESCROW_USDC} USDC — pick a longer duration.
+              </div>
             ) : null}
 
             {/* Queue wait estimate */}
