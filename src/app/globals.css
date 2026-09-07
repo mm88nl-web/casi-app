@@ -1449,26 +1449,27 @@
    paint the root cream so mobile dark-mode doesn't flash a dark canvas. */
 html {
   background: var(--paper);
-  /* Site-wide safety net — no page should ever be horizontally swipeable/
-     pannable; that's always a layout bug somewhere, not a feature. Found
-     live on /studio/settings: fixed-width nav padding + a wallet address
-     that didn't collapse on some phone widths together pushed the page
-     wide enough to swipe left/right. Fixed both of those root causes
-     separately (Nav.tsx, WalletPill.tsx), but this belongs here too as a
-     backstop — an element this doesn't excuse from being fixed properly,
-     it just stops a stray one from making the whole page pannable while
-     it's found. Any component that genuinely needs its own horizontal
-     scroll (a wide table, a code block) uses its own explicit
-     overflow-x:auto container — unaffected by this. */
-  overflow-x: hidden;
 }
 
 body {
   background: var(--casi-bg);
   color: var(--casi-text);
   font-family: var(--font-casi-sans), ui-sans-serif, system-ui, sans-serif;
-  overflow-x: hidden;
 }
+
+/* REVERTED 2026-09-07: briefly had overflow-x:hidden on html+body here as a
+   site-wide backstop against horizontal overflow. Pulled it after a live
+   report of the page getting "stuck" on mobile right after it shipped —
+   explicit overflow on the root elements is a known minefield for mobile
+   scroll: some mobile browsers get ambiguous about which element (html vs
+   body) owns page scrolling once both have an explicit overflow value,
+   which can freeze/glitch scrolling entirely. A frozen page is a worse bug
+   than the swipeable-but-functional one this was guarding against. The two
+   actual root causes (Nav.tsx's fixed padding, WalletPill.tsx's mobile
+   breakpoint) were already fixed directly and don't depend on this — this
+   was always meant as defense-in-depth on top of those, not required. If
+   horizontal overflow shows up again on a specific page, fix that page's
+   actual wide element rather than re-adding a global rule here. */
 
 /* ── Casi responsive grids ── one place, so the redesign surfaces stack
    to one column on narrow viewports instead of overflowing sideways.
