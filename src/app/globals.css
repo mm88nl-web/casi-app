@@ -1449,12 +1449,25 @@
    paint the root cream so mobile dark-mode doesn't flash a dark canvas. */
 html {
   background: var(--paper);
+  /* Site-wide safety net — no page should ever be horizontally swipeable/
+     pannable; that's always a layout bug somewhere, not a feature. Found
+     live on /studio/settings: fixed-width nav padding + a wallet address
+     that didn't collapse on some phone widths together pushed the page
+     wide enough to swipe left/right. Fixed both of those root causes
+     separately (Nav.tsx, WalletPill.tsx), but this belongs here too as a
+     backstop — an element this doesn't excuse from being fixed properly,
+     it just stops a stray one from making the whole page pannable while
+     it's found. Any component that genuinely needs its own horizontal
+     scroll (a wide table, a code block) uses its own explicit
+     overflow-x:auto container — unaffected by this. */
+  overflow-x: hidden;
 }
 
 body {
   background: var(--casi-bg);
   color: var(--casi-text);
   font-family: var(--font-casi-sans), ui-sans-serif, system-ui, sans-serif;
+  overflow-x: hidden;
 }
 
 /* ── Casi responsive grids ── one place, so the redesign surfaces stack
