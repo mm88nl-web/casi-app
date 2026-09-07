@@ -76,7 +76,17 @@ export default function Nav({ brandHref = '/', left, right, followSkin = false }
         display: 'flex',
         flexWrap: 'wrap',
         rowGap: '8px',
-        padding: '10px 36px',
+        // Was a fixed 36px each side (72px total) regardless of viewport —
+        // this component has no <style> tag of its own (everything is
+        // inline styles), so a media query isn't an option without adding
+        // one; clamp() gets the same effect with pure CSS. On a narrow
+        // phone (~390px) this comes out to ~16px/side instead of 36px,
+        // reclaiming ~40px of content width — real width on a screen that
+        // tight, and a contributor to genuine horizontal page overflow
+        // (confirmed live: a viewer could swipe the whole /studio/settings
+        // page left/right, not just see clipped/zoomed text). Unchanged on
+        // desktop (clamps back up to the original 36px past ~900px).
+        padding: '10px clamp(14px, 4vw, 36px)',
         minHeight: '54px',
         position: centered ? 'relative' : undefined,
       } as CSSProperties}
