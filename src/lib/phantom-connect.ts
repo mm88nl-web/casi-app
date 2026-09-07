@@ -1,5 +1,5 @@
 /**
- * Wallet deeplink helpers (Phantom + Solflare).
+ * Wallet deeplink helpers (Phantom + Solflare + Backpack).
  *
  * Why this file exists: on a mobile browser that is NOT inside a wallet's
  * in-app browser, the two in-process routes both fail for us (see history of
@@ -13,20 +13,31 @@
  * URL. No WebView bridge involved; the only IPC is through the OS's URL-scheme
  * handler. As reliable as opening any other deeplink.
  *
- * Phantom and Solflare implement the SAME protocol (same request params, same
- * NaCl-box encryption, base58 encoding). They differ only in (a) the deeplink
- * base URL and (b) the name of the response param carrying the wallet's
- * ephemeral encryption public key. Those two differences are captured in
- * `WALLETS` below; everything else is shared. Refs:
+ * Phantom, Solflare, and (per its published docs) Backpack implement the SAME
+ * protocol (same request params, same NaCl-box-style encryption, base58
+ * encoding). They differ only in (a) the deeplink base URL and (b) the name
+ * of the response param carrying the wallet's ephemeral encryption public
+ * key. Those differences are captured in `WALLETS` below; everything else is
+ * shared. Refs:
  *   https://docs.phantom.app/phantom-deeplinks/encryption
  *   https://docs.solflare.com/solflare/technical/deeplinks
+ *   https://docs.backpack.app/deeplinks/provider-methods/connect
+ *   https://docs.backpack.app/deeplinks/encryption
+ *
+ * Backpack support is unverified against a real device — Phantom's and
+ * Solflare's entries were both confirmed live before shipping; Backpack's
+ * was added from docs alone (see the `backpack:` comment on `WALLETS`
+ * below). Test on a real device before treating it as equally trustworthy.
  *
  * Tradeoff: the booking UX is no longer in-page. The user gets bounced
  * Chrome → wallet app → Chrome with the booking complete. We persist the
  * pending booking_id + cancel_token in localStorage so we can reconcile
  * when they come back.
  *
- * Encryption scheme is NaCl box (XSalsa20-Poly1305 + X25519 ECDH).
+ * Encryption scheme is NaCl box (XSalsa20-Poly1305 + X25519 ECDH) for
+ * Phantom/Solflare; Backpack's docs confirm the X25519 exchange but don't
+ * spell out the symmetric AEAD, so this is a best-effort match, not a
+ * confirmed one.
  */
 
 import nacl from 'tweetnacl';
@@ -35,7 +46,7 @@ import bs58 from 'bs58';
 // ── Wallet registry ────────────────────────────────────────────────────────
 
 /** The wallets we can hand off to via the encrypted deeplink protocol. */
-export type DeeplinkWallet = 'phantom' | 'solflare';
+export type DeeplinkWallet = 'phantom' | 'solflare' | 'backpack';
 
 type WalletConfig = {
   /** Universal-link base, e.g. `https://phantom.app/ul/v1`. */
@@ -46,9 +57,20 @@ type WalletConfig = {
   label: string;
 };
 
+// Backpack added 2026-09-07: its published deeplink docs describe the same
+// protocol shape as Phantom/Solflare — https://backpack.app/ul/v1/<method>,
+// an X25519 Diffie-Hellman handshake, and the identical wallet-agnostic
+// data/nonce/public_key/session field names every function below already
+// reads generically off `WALLETS[wallet]`. Only encKeyParam differs
+// (wallet_encryption_public_key, per docs.backpack.app/deeplinks/encryption).
+// Not yet confirmed against a real device round-trip — the docs don't spell
+// out the exact symmetric cipher (XSalsa20-Poly1305 vs some other AEAD over
+// the same X25519 exchange), so if a real Backpack connect fails to decrypt,
+// that mismatch is the first thing to check.
 const WALLETS: Record<DeeplinkWallet, WalletConfig> = {
   phantom:  { ul: 'https://phantom.app/ul/v1',  encKeyParam: 'phantom_encryption_public_key',  label: 'Phantom'  },
   solflare: { ul: 'https://solflare.com/ul/v1', encKeyParam: 'solflare_encryption_public_key', label: 'Solflare' },
+  backpack: { ul: 'https://backpack.app/ul/v1', encKeyParam: 'wallet_encryption_public_key',   label: 'Backpack' },
 };
 
 export const DEEPLINK_WALLETS: { wallet: DeeplinkWallet; label: string }[] =
@@ -56,7 +78,7 @@ export const DEEPLINK_WALLETS: { wallet: DeeplinkWallet; label: string }[] =
 
 /** Coerce an arbitrary string to a known wallet, defaulting to phantom. */
 function normalizeWallet(w: string | null | undefined): DeeplinkWallet {
-  return w === 'solflare' ? 'solflare' : 'phantom';
+  return w === 'solflare' ? 'solflare' : w === 'backpack' ? 'backpack' : 'phantom';
 }
 
 // ── Types ────────────────────────────────────────────────────────────────
