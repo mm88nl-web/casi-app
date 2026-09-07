@@ -13,6 +13,12 @@ export type PreviewBooking = {
   imageUrl: string | null;
   fileType: string | null;
   shape: string | null;
+  /** SVG path data for a custom shape (shape === 'custom'). Lets the media
+   *  box clip to the real on-stream shape instead of a plain rectangle. */
+  clipPathSvg: string | null;
+  /** The real slot's on-stream aspect ratio (width%/height% on the 16:9
+   *  canvas), so the media box matches instead of a guessed 16:9. */
+  slotAspectRatio: number;
   /** Pre-formatted "$X/min" or "$X/hr" — same string the row shows. */
   rateLabel: string;
   /** Pre-formatted total ("€10" or "8 USDC") — what actually gets paid. */
@@ -51,6 +57,19 @@ export default function PreviewBookingModal({ booking, onClose, onApprove, onDen
 
   if (!booking) return null;
   const isBeam = booking.kind === 'beam';
+
+  // Same shape → clip-path mapping used throughout the app (overlay's
+  // CustomizePanel, the studio canvas, StreamerPublishCard's preview) —
+  // shows what will actually land on stream instead of a plain rectangle,
+  // which matters most here since this is the last look before Approve.
+  const previewMaskCss =
+    booking.shape === 'custom'
+      ? (booking.clipPathSvg ? `url(#preview-modal-clip-${booking.id})` : 'circle(50%)')
+      : booking.shape === 'circle' ? 'circle(50%)'
+      : booking.shape === 'rounded' ? 'inset(0 round 14px)'
+      : 'none';
+  const previewObjectFit: 'cover' | 'contain' =
+    booking.shape === 'circle' || booking.shape === 'custom' ? 'cover' : 'contain';
 
   return (
     <div
@@ -130,25 +149,38 @@ export default function PreviewBookingModal({ booking, onClose, onApprove, onDen
           </button>
         </div>
 
+        {booking.shape === 'custom' && booking.clipPathSvg && (
+          <svg width={0} height={0} style={{ position: 'absolute' }} aria-hidden>
+            <defs>
+              <clipPath id={`preview-modal-clip-${booking.id}`} clipPathUnits="objectBoundingBox">
+                <path d={booking.clipPathSvg} />
+              </clipPath>
+            </defs>
+          </svg>
+        )}
         <div
           style={{
-            aspectRatio: '16 / 9',
+            width: `min(100%, ${280 * booking.slotAspectRatio}px)`,
+            aspectRatio: booking.slotAspectRatio,
+            margin: '0 auto 16px',
             background: 'var(--casi-surface-2)',
             border: '1px solid var(--casi-border)',
-            borderRadius: 'var(--radius-card)',
+            borderRadius: previewMaskCss === 'none' ? 'var(--radius-card)' : 0,
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: '16px',
+            position: 'relative',
           }}
         >
           {booking.imageUrl ? (
-            <SlotMedia
-              src={booking.imageUrl}
-              fileType={booking.fileType}
-              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-            />
+            <div style={{ position: 'absolute', inset: 0, clipPath: previewMaskCss === 'none' ? undefined : previewMaskCss }}>
+              <SlotMedia
+                src={booking.imageUrl}
+                fileType={booking.fileType}
+                style={{ width: '100%', height: '100%', objectFit: previewObjectFit }}
+              />
+            </div>
           ) : (
             <span
               className="font-mono uppercase"

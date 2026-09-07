@@ -128,6 +128,13 @@ export default function ApprovalQueue({
 
             return (
               <div key={item.id} className="casi-card" style={{ padding: '16px' }}>
+                {/* Clickable area now covers the whole card body (identity
+                    row + thumbnail/details row), not just the top identity
+                    row — clicking the thumbnail (the most natural "preview
+                    this" target) previously did nothing, since only the
+                    name/avatar row above it opened the modal. Deny/Approve
+                    stay outside this button as separate siblings so they
+                    keep acting directly. */}
                 <button
                   type="button"
                   onClick={previewable ? () => onPreview!(item.id) : undefined}
@@ -135,8 +142,7 @@ export default function ApprovalQueue({
                   title={previewable ? 'Preview' : undefined}
                   style={{
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
+                    flexDirection: 'column',
                     width: '100%',
                     padding: 0,
                     border: 'none',
@@ -146,80 +152,82 @@ export default function ApprovalQueue({
                     cursor: previewable ? 'zoom-in' : 'default',
                   }}
                 >
-                  <span
-                    aria-hidden
-                    style={{
-                      width: '30px',
-                      height: '30px',
-                      borderRadius: '999px',
-                      background: 'var(--ink)',
-                      color: 'var(--on-ink)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontFamily: 'var(--M)',
-                      fontWeight: 600,
-                      fontSize: '12px',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {initial}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      className="truncate"
-                      style={{ fontFamily: 'var(--B)', fontWeight: 700, fontSize: '17px', letterSpacing: '-0.01em', color: 'var(--text)' }}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span
+                      aria-hidden
+                      style={{
+                        width: '30px',
+                        height: '30px',
+                        borderRadius: '999px',
+                        background: 'var(--ink)',
+                        color: 'var(--on-ink)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontFamily: 'var(--M)',
+                        fontWeight: 600,
+                        fontSize: '12px',
+                        flexShrink: 0,
+                      }}
                     >
-                      {who}
+                      {initial}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        className="truncate"
+                        style={{ fontFamily: 'var(--B)', fontWeight: 700, fontSize: '17px', letterSpacing: '-0.01em', color: 'var(--text)' }}
+                      >
+                        {who}
+                      </div>
+                      <div className="truncate casi-meta-italic" style={{ fontSize: '14px', marginTop: '3px' }}>
+                        {waitingLabel}
+                        {!paid ? (
+                          <>
+                            <span style={{ opacity: 0.5, margin: '0 6px' }}>·</span>
+                            <span style={{ color: '#c08a12', fontStyle: 'normal' }}>awaiting payment</span>
+                          </>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="truncate casi-meta-italic" style={{ fontSize: '14px', marginTop: '3px' }}>
-                      {waitingLabel}
-                      {!paid ? (
-                        <>
-                          <span style={{ opacity: 0.5, margin: '0 6px' }}>·</span>
-                          <span style={{ color: '#c08a12', fontStyle: 'normal' }}>awaiting payment</span>
-                        </>
+                    <div
+                      style={{
+                        fontFamily: 'var(--M)',
+                        fontWeight: 600,
+                        fontSize: '15px',
+                        color: 'var(--text-2)',
+                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {item.rail ? <RailIcon method={item.rail} size={12} /> : null}
+                      {item.priceLabel}
+                    </div>
+                  </div>
+
+                  <div className="flex" style={{ gap: '12px', marginTop: '13px' }}>
+                    <QueueThumb
+                      mediaUrl={item.mediaUrl}
+                      fileType={item.fileType}
+                      shape={item.shape}
+                      kind={item.kind}
+                    />
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '6px' }}>
+                      {requestText ? (
+                        <div className="truncate" style={{ fontFamily: 'var(--S)', fontSize: '15px', color: 'var(--text)' }}>
+                          {requestText}
+                        </div>
+                      ) : null}
+                      {item.metaLine ? (
+                        <div className="casi-meta-italic truncate" style={{ fontSize: '13px' }}>
+                          {item.metaLine}
+                        </div>
                       ) : null}
                     </div>
                   </div>
-                  <div
-                    style={{
-                      fontFamily: 'var(--M)',
-                      fontWeight: 600,
-                      fontSize: '15px',
-                      color: 'var(--text-2)',
-                      whiteSpace: 'nowrap',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {item.rail ? <RailIcon method={item.rail} size={12} /> : null}
-                    {item.priceLabel}
-                  </div>
                 </button>
-
-                <div className="flex" style={{ gap: '12px', marginTop: '13px' }}>
-                  <QueueThumb
-                    mediaUrl={item.mediaUrl}
-                    fileType={item.fileType}
-                    shape={item.shape}
-                    kind={item.kind}
-                  />
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '6px' }}>
-                    {requestText ? (
-                      <div className="truncate" style={{ fontFamily: 'var(--S)', fontSize: '15px', color: 'var(--text)' }}>
-                        {requestText}
-                      </div>
-                    ) : null}
-                    {item.metaLine ? (
-                      <div className="casi-meta-italic truncate" style={{ fontSize: '13px' }}>
-                        {item.metaLine}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
 
                 {ro ? null : (
                   <div className="flex" style={{ gap: '8px', marginTop: '14px' }}>
