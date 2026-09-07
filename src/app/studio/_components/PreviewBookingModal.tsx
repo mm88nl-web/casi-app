@@ -303,8 +303,19 @@ function Fact({ label, value, accent = false }: { label: string; value: string; 
   return (
     <div
       style={{
-        background: 'rgba(255, 255, 255, 0.02)',
-        border: '1px solid var(--casi-border)',
+        // Was rgba(255,255,255,0.02) — a near-invisible white tint clearly
+        // written for a dark background; on Studio's cream chrome it did
+        // nothing, leaving every fact card flat against the modal with no
+        // real card definition (a hairline border was all that was left
+        // holding the grid together). var(--casi-surface-2) is the same
+        // inset-fill token the media preview box and message box below
+        // already use, so this now actually reads as a card. The
+        // highlighted "Total" fact gets its own accent-tinted treatment
+        // instead, same technique already used elsewhere in Studio
+        // (StudioLiveEditor's price pills, StreamerPublishCard) to make
+        // the one number that matters visually stand out from the rest.
+        background: accent ? 'rgba(var(--casi-accent-rgb), 0.08)' : 'var(--casi-surface-2)',
+        border: `1px solid ${accent ? 'rgba(var(--casi-accent-rgb), 0.25)' : 'var(--casi-border)'}`,
         borderRadius: '8px',
         padding: '10px 12px',
       }}
