@@ -25,7 +25,7 @@ import { fiatSymbol, formatFiat } from '@/lib/currency';
 const BOOKING_COLS =
   'id, created_at, profile_id, element_id, viewer_name, status, file_type, message, image_url, storage_path, duration_minutes, price_value, price_unit, payment_method, payment_intent_id, tx_signature, started_at, ended_at, escrow_pda, escrow_seed, viewer_wallet, is_queued';
 const FLASH_COLS =
-  'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, escrow_pda, viewer_wallet';
+  'id, created_at, profile_id, viewer_name, status, message, amount_cents, payment_method, payment_intent_id, escrow_pda, viewer_wallet';
 const PROFILE_COLS = 'id, username, solana_wallet, is_live';
 
 function formatUsdc(amount: number): string {
@@ -107,13 +107,23 @@ function isPaymentConfirmed(b: BookingRow): boolean {
 // escrow_pda + viewer_wallet are stamped (otherwise moderateFlash trips the
 // "Flash hasn't been paid yet" guard server-side and the streamer sees a
 // useless red banner). Free flashes and zero-amount flashes are always
-// confirmed; non-Solana rails defer to the server gate.
+// confirmed.
+//
+// Corrected 2026-09-07: the Stripe branch used to just `return true`
+// unconditionally, on the assumption the server gate covered it — it
+// didn't (see /api/flashes/moderate/route.ts's matching fix). A viewer who
+// abandons Stripe checkout before it completes leaves a pending flash row
+// with no payment_intent_id at all (only the checkout.session.completed
+// webhook attaches one), and this function said "confirmed" anyway,
+// showing an always-enabled Approve button for a flash that was never
+// paid for — confirmed live. Now requires the same payment_intent_id
+// presence bookings' isPaymentConfirmed already requires.
 function isFlashPaymentConfirmed(f: FlashRow): boolean {
   if (f.payment_method === 'free') return true;
   if ((f.amount_cents ?? 0) === 0) return true;
   const isUsdc = f.payment_method === 'usdc' || f.payment_method === 'solana';
   if (isUsdc) return !!(f.viewer_wallet && f.escrow_pda);
-  return true;
+  return !!f.payment_intent_id;
 }
 
 type FlashRow = {
@@ -124,6 +134,7 @@ type FlashRow = {
   message: string | null;
   amount_cents: number | null;
   payment_method: string | null;
+  payment_intent_id: string | null;
   escrow_pda: string | null;
   viewer_wallet: string | null;
 };
@@ -1230,10 +1241,7 @@ function buildPreview(
       rateLabel: '',
       totalLabel,
       durationLabel: '',
-      // Flashes get gated server-side already; no payment_intent_id /
-      // tx_signature fields on the FlashRow projection used here. Treat
-      // visible-in-pending as "paid enough to surface the modal".
-      paymentConfirmed: true,
+      paymentConfirmed: isFlashPaymentConfirmed(f),
       actionable: true,
     };
   }

@@ -307,12 +307,33 @@ export async function POST(req: Request) {
   const stripeAccount = stripeProfile?.stripe_account_id;
 
   if (action === 'approve') {
-    if (flash.payment_method === 'stripe' && flash.payment_intent_id && stripeAccount) {
+    // Real gap found live 2026-09-07: a viewer who abandons Stripe checkout
+    // before it completes leaves a `pending` flash row with NO
+    // payment_intent_id (that's only attached by the checkout.session.
+    // completed webhook — see stripe/webhook/route.ts). The old condition
+    // below (`&& flash.payment_intent_id`) meant that exact case SKIPPED
+    // the capture block entirely and fell straight through to marking the
+    // flash approved — no payment check at all. Mirrors the same class of
+    // bug isPaymentConfirmed exists to prevent on the bookings side (see
+    // AGENTS.md "Approve must be payment-gated"), just missing here.
+    // free-method flashes are legitimately unpaid by design and skip this.
+    if (flash.payment_method === 'stripe') {
+      if (!flash.payment_intent_id || !stripeAccount) {
+        return NextResponse.json(
+          { error: 'This flash was never paid for — nothing to approve' },
+          { status: 409 },
+        );
+      }
       try {
         const opts = { stripeAccount };
         const pi = await stripe.paymentIntents.retrieve(flash.payment_intent_id, undefined, opts);
         if (pi.status === 'requires_capture') {
           await stripe.paymentIntents.capture(flash.payment_intent_id, undefined, opts);
+        } else if (pi.status !== 'succeeded') {
+          return NextResponse.json(
+            { error: `Payment was never completed (status: ${pi.status})` },
+            { status: 409 },
+          );
         }
       } catch (err: any) {
         console.error('[flashes/moderate] Stripe capture failed:', err.message);
