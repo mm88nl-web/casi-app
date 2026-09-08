@@ -365,7 +365,54 @@ function OverlayContent() {
         const bs58Local = bs58Mod.default;
         const conn = new Connection(SOLANA_RPC, 'confirmed');
         const rawTx = bs58Local.decode(signedTransactionB58);
-        const signature = await conn.sendRawTransaction(rawTx, { skipPreflight: false });
+        // Dispatch on the stash's `kind` early — needed below, before the
+        // send, to recognize a settle/cancel-specific benign race.
+        const kind = pending.kind ?? 'book';
+        let signature: string;
+        try {
+          signature = await conn.sendRawTransaction(rawTx, { skipPreflight: false });
+        } catch (sendErr) {
+          // Desktop's settleSolanaBeam/reclaimSolanaEscrow/reclaimFlashEscrow
+          // already recognize this: settle_beam or cancel_escrow can lose a
+          // race against something else closing the SAME escrow between the
+          // viewer's last on-chain check and this submission (the streamer
+          // ending the beam, the permissionless post-duration settle, an
+          // earlier attempt of this exact retry landing) — skipPreflight:
+          // false means simulation catches it right here as
+          // AccountNotInitialized (escrow_state already closed) or
+          // AlreadySettled, and conn.sendRawTransaction throws before ever
+          // queuing anything. The mobile round-trip through this same
+          // return handler never had that recognition — it just showed the
+          // raw simulation error. Found live 2026-09-08 on a real "end
+          // early" attempt. Only handled for settle/cancel: 'book'/'flash'/
+          // 'swap' failing this way is a genuine failure, not a race.
+          const { isAlreadyProcessed } = await import('@/lib/casi-errors');
+          const sendMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+          const isBenignRace = isAlreadyProcessed(sendErr) || /AlreadySettled|AccountNotInitialized/i.test(sendMsg);
+          if (isBenignRace && (kind === 'settle' || kind === 'cancel') && pending.escrow_pda) {
+            const pdaKey = new PublicKey(pending.escrow_pda);
+            let closed = false;
+            for (let i = 0; i < 6; i++) {
+              const info = await conn.getAccountInfo(pdaKey).catch(() => null);
+              if (!info) { closed = true; break; }
+              await new Promise((r) => setTimeout(r, 1000));
+            }
+            if (closed) {
+              pc.clearPendingBooking();
+              refreshWalletNav();
+              showNotif(
+                kind === 'settle'
+                  ? '◎ Beam ended — refund returned to your wallet'
+                  : '◎ USDC returned to your wallet',
+                'warning',
+              );
+              cleanUrl();
+              if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+              return;
+            }
+          }
+          throw sendErr;
+        }
 
         // sendRawTransaction only confirms the network ACCEPTED the tx into
         // its send queue — not that it actually landed. Found live
@@ -383,9 +430,10 @@ function OverlayContent() {
         // "on-chain state is authoritative" pattern the wallet-adapter
         // path's PDA-poll race already uses — before ever claiming success.
         //
-        // Dispatch on the stash's `kind`. Default 'book' for stashes from
-        // older code paths that didn't set it explicitly.
-        const kind = pending.kind ?? 'book';
+        // `kind` (dispatch on the stash's kind, default 'book' for older
+        // stashes that didn't set it explicitly) was already computed above,
+        // before the send, so the benign-race recovery around
+        // sendRawTransaction could use it too.
 
         // 'swap' has no escrow_pda at all (it's not a booking) — confirm by
         // signature status instead of polling for an account that will
