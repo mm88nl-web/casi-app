@@ -32,7 +32,7 @@ import {
   rememberFlashToken,
 } from './_components/viewerStorage';
 import NameEntryScreen from './_components/NameEntryScreen';
-import SolanaConfirmModal, { type TxStatus } from './_components/SolanaConfirmModal';
+import SolanaConfirmModal, { type TxStatus, type SwapQuoteState } from './_components/SolanaConfirmModal';
 import FlashFeed from './_components/FlashFeed';
 import MyBeamsSection from './_components/MyBeamsSection';
 import MyTransactionsSection, { type TxRow } from './_components/MyTransactionsSection';
@@ -54,6 +54,24 @@ const BOOKING_PAGE_LIMIT = 200;
 // `denied_at` column — see comments at the use sites. 10 minutes covers
 // realistic streamer moderation latency without trailing stale history.
 const STRIPE_DENIED_WINDOW_MS = 10 * 60 * 1000;
+
+// SOL a viewer's wallet needs on hand for a Solana booking tx itself — rent
+// for the fresh escrow state account + vault ATA that initialize_escrow
+// creates on EVERY booking (not a one-time cost, a new escrow PDA is created
+// per booking) plus network fees. Verified against a real mainnet tx
+// 2026-09-08: escrow-state rent 1,899,900 + vault-ATA rent 1,855,569 +
+// program's own SOL transfer 4,078,560 + network fee ~80,000 lamports ≈
+// 0.0078 SOL — 0.015 leaves comfortable headroom. Shared so the pay-with-SOL
+// swap step's own pre-flight (below) can reserve it on top of the swap
+// amount: that step used to only check SOL for the swap itself, letting a
+// viewer near the margin swap successfully and then get stuck unable to
+// afford the booking tx right after — a real "fees look unpredictable" trap.
+const MIN_SOL_FOR_BOOKING_LAMPORTS = 0.015 * 1e9;
+
+// Network-fee margin for the pay-with-SOL swap tx itself — shared between
+// the live quote display and submitSolanaBooking's actual pre-flight check
+// so the two never silently disagree about what "enough SOL" means.
+const SWAP_TX_FEE_MARGIN_LAMPORTS = 0.005 * 1e9;
 
 function OverlayContent() {
   const searchParams = useSearchParams();
@@ -106,11 +124,23 @@ function OverlayContent() {
   // Pulled from the shared wallet-balance store (same source the top-right
   // WalletNav reads from, so the booking-form "Your balance" line and the
   // nav are guaranteed in lockstep). One WS sub + 10s poll for the whole app.
-  const { usdc: usdcBalance } = useWalletBalances();
+  const { usdc: usdcBalance, sol: solBalance } = useWalletBalances();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [txStatus, setTxStatus]         = useState<TxStatus>('idle');
   const [txError, setTxError]           = useState<string|null>(null);
   const [confirmedTxId, setConfirmedTxId] = useState<string|null>(null);
+  // "Pay with SOL" — viewer opts in when USDC alone doesn't cover the
+  // booking. See jupiter-swap.ts + submitSolanaBooking's pre-flight branch.
+  const [paySol, setPaySol] = useState(false);
+  const [swapQuote, setSwapQuote] = useState<SwapQuoteState | null>(null);
+  // True right after the swap step lands and paySol flips back to false so
+  // the modal's SECOND confirm reuses the plain USDC flow — without this,
+  // that second confirm looks identical to an ordinary single-step USDC
+  // payment, with nothing telling the viewer they're on step 2 of a flow
+  // they already approved once. Reset wherever paySol/swapQuote reset
+  // (fresh Pay tap, modal cancel) so it can't leak into an unrelated later
+  // booking.
+  const [justSwapped, setJustSwapped] = useState(false);
   // Stripe Embedded Checkout — replaces the old redirect-to-checkout_url
   // flow. null = modal hidden. bookingId is kept alongside the secret so
   // onComplete/onClose know which booking they're reacting to without
@@ -179,6 +209,21 @@ function OverlayContent() {
   // the loadData callback on every wallet change.
   const viewerWalletRef = useRef<string | null>(null);
   const lastRealtimeEventAt = useRef(Date.now());
+  // Guards the phantom-connect-return effect below against processing the
+  // same one-time wallet-response URL twice. That effect depends on
+  // [profile?.id], which flips from undefined to a real value shortly after
+  // mount — a genuine double-fire, not a hypothetical one. cleanUrl() only
+  // strips the response params partway through the async handler (after
+  // several awaited steps), so a second overlapping run can still see them
+  // and re-submit the SAME already-signed transaction a second time. Found
+  // live 2026-09-08: a mobile pay-with-SOL swap got "Transaction simulation
+  // failed: This transaction has already been processed" — which only
+  // happens when an identical signature already landed once, meaning the
+  // swap itself had already succeeded and this was a redundant resubmission
+  // being reported to the viewer as a hard failure. Set synchronously,
+  // before any await, the moment a run commits to processing a given
+  // phantom_action value.
+  const phantomReturnHandledFor = useRef<string | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const bookingColRef = useRef<HTMLDivElement | null>(null);
 
@@ -225,16 +270,40 @@ function OverlayContent() {
   // string, which would mangle a URL that already has a hash.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
+    // Solflare (confirmed live 2026-09-08 via a real DeeplinkErrorCode.
+    // payloadDecryptionFailed response) appends its response params with a
+    // bare `?` instead of `&` when redirect_link already has a query string
+    // — which ours always does (`...&phantom_action=sign-resume`). That
+    // produces `...phantom_action=sign-resume?errorCode=...`, where the
+    // second `?` isn't a real delimiter — URLSearchParams then reads the
+    // ENTIRE tail as the value of `phantom_action`
+    // (`"sign-resume?errorCode=..."`), which fails the exact-match check
+    // below and makes the whole handler silently no-op: no toast, no
+    // reportClientError, nothing. This masks both genuine wallet errors and
+    // (same code path, untested until this is fixed) genuine successes.
+    // Normalize any non-leading `?` in the query string to `&` before
+    // parsing so this can't happen regardless of which wallet does it.
+    const normalizeSearch = (search: string): string =>
+      search.length > 0 ? '?' + search.slice(1).split('?').join('&') : search;
+    const params = new URLSearchParams(normalizeSearch(window.location.search));
     const action = params.get('phantom_action');
     if (action !== 'connect-resume' && action !== 'sign-resume') return;
+
+    // Bail if this exact response URL was already claimed by an earlier run
+    // of this same effect — see phantomReturnHandledFor's doc comment.
+    // Checked and set synchronously, before any await, so two overlapping
+    // firings (e.g. this effect's own [profile?.id] dependency flipping
+    // shortly after mount) can't both commit to processing the same
+    // one-time wallet response.
+    if (phantomReturnHandledFor.current === window.location.search) return;
+    phantomReturnHandledFor.current = window.location.search;
 
     // Strip ONLY the phantom-* params from the URL — leave everything else
     // (especially `s=<streamer>`) intact. Otherwise the page-level guard
     // `if (!isOBS && !username) → /search` fires on the next render and
     // the user lands on the search page right after a successful connect.
     const cleanUrl = (): void => {
-      const next = new URLSearchParams(window.location.search);
+      const next = new URLSearchParams(normalizeSearch(window.location.search));
       next.delete('phantom_action');
       next.delete('casi_wallet');
       next.delete('phantom_encryption_public_key');
@@ -313,6 +382,82 @@ function OverlayContent() {
         // existed on-chain. Poll for the PDA actually existing — same
         // "on-chain state is authoritative" pattern the wallet-adapter
         // path's PDA-poll race already uses — before ever claiming success.
+        //
+        // Dispatch on the stash's `kind`. Default 'book' for stashes from
+        // older code paths that didn't set it explicitly.
+        const kind = pending.kind ?? 'book';
+
+        // 'swap' has no escrow_pda at all (it's not a booking) — confirm by
+        // signature status instead of polling for an account that will
+        // never exist. See PendingBooking['kind']'s doc comment for why
+        // this is its own standalone step rather than spliced into the
+        // booking tx.
+        if (kind === 'swap') {
+          let swapLanded = false;
+          for (let i = 0; i < 15; i++) {
+            const st = await conn.getSignatureStatus(signature).catch(() => null);
+            const confirmationStatus = st?.value?.confirmationStatus;
+            if (confirmationStatus === 'confirmed' || confirmationStatus === 'finalized') {
+              swapLanded = !st?.value?.err;
+              break;
+            }
+            await new Promise((r) => setTimeout(r, 2000));
+          }
+          pc.clearPendingBooking();
+          refreshWalletNav();
+          if (swapLanded) {
+            // Restore the booking form and reopen the confirm modal —
+            // otherwise the viewer lands back on a bare overlay page (this
+            // was a full navigation away and back, every piece of React
+            // state is gone) with nothing to tap and has to redo the whole
+            // form from scratch. See PendingBooking['swap_ctx']'s doc
+            // comment. One more explicit tap is still required (not fully
+            // automatic) — Android won't open a wallet deeplink from a
+            // JS-driven navigation that isn't a direct result of a user
+            // gesture, so auto-firing the booking's own sign step here
+            // would likely just silently fail.
+            let restored = false;
+            if (pending.swap_ctx) {
+              try {
+                const ctx = JSON.parse(pending.swap_ctx);
+                setSelectedSlot(ctx.selectedSlot ?? null);
+                setDurationSeconds(ctx.durationSeconds ?? 60);
+                setMessage(ctx.message ?? '');
+                setIsExtend(!!ctx.isExtend);
+                setIsQueue(!!ctx.isQueue);
+                setUploadMode(ctx.uploadMode === 'upload' ? 'upload' : 'url');
+                setUploadedUrl(ctx.uploadedUrl ?? null);
+                setUploadedPath(ctx.uploadedPath ?? null);
+                setUploadedFileType(ctx.uploadedFileType ?? null);
+                setImageUrl(ctx.imageUrl ?? '');
+                setBannerFontPx(typeof ctx.bannerFontPx === 'number' ? ctx.bannerFontPx : 28);
+                setBannerSpeedSecs(typeof ctx.bannerSpeedSecs === 'number' ? ctx.bannerSpeedSecs : 20);
+                setMediaOffsetX(typeof ctx.mediaOffsetX === 'number' ? ctx.mediaOffsetX : 50);
+                setMediaOffsetY(typeof ctx.mediaOffsetY === 'number' ? ctx.mediaOffsetY : 50);
+                setMediaZoom(typeof ctx.mediaZoom === 'number' ? ctx.mediaZoom : 1);
+                setPaySol(false);
+                setJustSwapped(true);
+                setShowConfirmModal(true);
+                restored = true;
+              } catch (ctxErr) {
+                const { reportClientError: rceCtx } = await import('@/lib/report-client-error');
+                rceCtx('overlay/pay-with-sol/swap-ctx-restore-failed', ctxErr, {});
+              }
+            }
+            showNotif(
+              restored
+                ? '◎ Swap complete — confirm your booking below to finish'
+                : '◎ Swap complete — tap Pay again to finish your booking with USDC',
+              'success',
+            );
+          } else {
+            const { reportClientError } = await import('@/lib/report-client-error');
+            reportClientError('overlay/pay-with-sol/swap-not-confirmed', `swap sig ${signature} never confirmed after 30s poll`, { signature });
+            showNotif('Swap sent but never confirmed on-chain — it likely expired in transit. Check your wallet balance before retrying.', 'error');
+          }
+          return;
+        }
+
         let landed = false;
         if (pending.escrow_pda) {
           const pdaKey = new PublicKey(pending.escrow_pda);
@@ -323,9 +468,6 @@ function OverlayContent() {
           }
         }
 
-        // Dispatch on the stash's `kind`. Default 'book' for stashes from
-        // older code paths that didn't set it explicitly.
-        const kind = pending.kind ?? 'book';
         if (kind === 'book') {
           const res = await fetch('/api/bookings/attach-solana-tx', {
             method: 'POST',
@@ -401,7 +543,21 @@ function OverlayContent() {
       } catch (err) {
         const { reportClientError } = await import('@/lib/report-client-error');
         reportClientError('overlay/phantom-connect-return', err, { action });
-        showNotif(err instanceof Error ? err.message : 'Wallet return failed — please try again', 'denied');
+        // payloadDecryptionFailed means the wallet's cached shared secret no
+        // longer matches ours — happens if our dapp encryption keypair
+        // (localStorage, separate from the session record) was regenerated
+        // since the session was established, e.g. by a storage clear. The
+        // stored session is now permanently unusable; every retry would hit
+        // the exact same error forever. Clear it so the next attempt goes
+        // through a fresh connect handshake instead of dead-ending again.
+        const msg = err instanceof Error ? err.message : '';
+        if (msg.includes('payloadDecryptionFailed')) {
+          pc.clearSession();
+          pc.clearPendingBooking();
+          showNotif('Wallet connection was out of sync — reconnected state cleared, please tap Pay again', 'denied');
+        } else {
+          showNotif(msg || 'Wallet return failed — please try again', 'denied');
+        }
         cleanUrl();
       }
     })();
@@ -1238,6 +1394,136 @@ function OverlayContent() {
       showNotif('This streamer has not linked a Solana wallet yet', 'denied');
       return;
     }
+
+    // Pay-with-SOL: a completely standalone step, not spliced into the
+    // booking's deposit transaction. Found live 2026-09-08 that even the
+    // simplest possible swap route combined with the real escrow deposit
+    // instruction doesn't reliably fit Solana's 1232-byte legacy
+    // transaction limit — measured the best case at 1240 bytes, 8 over.
+    // No booking gets created here at all; this only swaps SOL for USDC,
+    // and on success flips paySol back off so the viewer's next tap of
+    // Pay runs the completely unmodified, already-proven direct-USDC
+    // flow below with a now-sufficient balance. See PendingBooking['kind']
+    // in phantom-connect.ts for the mobile-deeplink half of this.
+    if (paySol) {
+      setSubmitting(true);
+      setTxStatus('booking');
+      setTxError(null);
+      try {
+        const { Connection, PublicKey: PK, Transaction: Tx } = await import('@solana/web3.js');
+        const connection = new Connection(SOLANA_RPC);
+        const solLamports = await connection.getBalance(effectivePublicKey);
+        const { value: existingUsdcAtas } = await connection.getParsedTokenAccountsByOwner(
+          effectivePublicKey, { mint: new PK(USDC_MINT) },
+        );
+        const durationMinutesSwap = durationSeconds / 60;
+        const totalUsdcSwap = selectedSlot.price_unit === 'min'
+          ? selectedSlot.price_value * durationMinutesSwap
+          : selectedSlot.price_value * (durationMinutesSwap / 60);
+        const usdcMicroTarget = Math.round(totalUsdcSwap * 10 ** 6);
+        const { getSolToUsdcQuote, getSwapInstructions, ATA_RENT_LAMPORTS } = await import('@/lib/jupiter-swap');
+        const ataRentLamports = existingUsdcAtas.length === 0 ? ATA_RENT_LAMPORTS : 0;
+        const { quote, lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
+        // Reserve MIN_SOL_FOR_BOOKING_LAMPORTS on top of the swap's own cost —
+        // that's what the SECOND tx (the actual booking, run on the viewer's
+        // next tap) needs for its own escrow-account rent + fees, a real SOL
+        // debit this swap step never touches. Without this reserve, a viewer
+        // near the margin could swap successfully and then fail the normal
+        // booking pre-flight's MIN_SOL check moments later, stuck holding
+        // freshly-converted USDC but not enough SOL to actually spend it.
+        const totalLamportsNeeded = SWAP_TX_FEE_MARGIN_LAMPORTS + lamportsRequired + ataRentLamports + MIN_SOL_FOR_BOOKING_LAMPORTS;
+        if (solLamports < totalLamportsNeeded) {
+          showNotif(
+            `Need ~${(totalLamportsNeeded / 1e9).toFixed(4)} SOL total (swap + fees${ataRentLamports ? ' + one-time USDC wallet setup' : ''} + booking tx). You have ${(solLamports / 1e9).toFixed(4)} SOL.`,
+            'denied',
+          );
+          setSubmitting(false);
+          return;
+        }
+        const swapInstructions = await getSwapInstructions({ quote, userPublicKey: effectivePublicKey });
+        const swapTx = new Tx();
+        swapTx.add(...swapInstructions);
+        swapTx.feePayer = effectivePublicKey;
+        const { blockhash } = await connection.getLatestBlockhash();
+        swapTx.recentBlockhash = blockhash;
+
+        const { needsMobileHandoff, isInWalletBrowser } = await import('@/lib/mobile-wallet');
+        if (needsMobileHandoff() && !isInWalletBrowser()) {
+          const pc = await import('@/lib/phantom-connect');
+          const bs58Mod = await import('bs58');
+          const bs58 = bs58Mod.default;
+          const txB58 = bs58.encode(swapTx.serialize({ requireAllSignatures: false, verifySignatures: false }));
+          const session = pc.getStoredSession();
+          const baseHere = window.location.origin + window.location.pathname + window.location.search;
+          const sep = window.location.search ? '&' : '?';
+          // Snapshot the whole booking form so the return handler can
+          // restore it and reopen the confirm modal after the swap round-
+          // trips through the wallet app — see PendingBooking['swap_ctx']'s
+          // doc comment. Every value here is already a serializable
+          // primitive or an already-uploaded storage reference.
+          const swapCtx = JSON.stringify({
+            selectedSlot, durationSeconds, message, isExtend, isQueue,
+            uploadMode, uploadedUrl, uploadedPath, uploadedFileType, imageUrl,
+            bannerFontPx, bannerSpeedSecs, mediaOffsetX, mediaOffsetY, mediaZoom,
+          });
+          if (!session) {
+            const walletName = pc.getPreferredDeeplinkWallet();
+            pc.stashPendingBooking({
+              kind: 'swap',
+              booking_id: '', cancel_token: '', escrow_pda: '',
+              viewer_wallet: effectivePublicKey.toBase58(),
+              pending_tx: txB58,
+              swap_ctx: swapCtx,
+            });
+            // Force a fresh dapp keypair for this connect (see
+            // regenerateDappKeypair's doc comment) — must happen before
+            // buildConnectUrl so the connect handshake and the resulting
+            // session are both anchored to the same, definitely-current key.
+            pc.regenerateDappKeypair();
+            window.location.href = pc.buildConnectUrl({
+              wallet: walletName,
+              cluster: WALLET_ADAPTER_CLUSTER,
+              redirectTo: `${baseHere}${sep}phantom_action=connect-resume&casi_wallet=${walletName}`,
+            });
+            return;
+          }
+          pc.stashPendingBooking({
+            kind: 'swap',
+            booking_id: '', cancel_token: '', escrow_pda: '',
+            viewer_wallet: effectivePublicKey.toBase58(),
+            swap_ctx: swapCtx,
+          });
+          window.location.href = pc.buildSignTransactionUrl({
+            session,
+            transactionB58: txB58,
+            redirectTo: `${baseHere}${sep}phantom_action=sign-resume`,
+          });
+          return;
+        }
+
+        // Desktop / wallet-adapter path — no page navigation, just await it
+        // directly. A hanging wallet promise was a MOBILE in-app-browser
+        // bug (see the PDA-poll race comment below); not replicating that
+        // workaround here since desktop wallet-adapter doesn't exhibit it.
+        if (!sendTransaction) throw new Error('Wallet does not support sending transactions');
+        const sig = await sendTransaction(swapTx, connection);
+        await connection.confirmTransaction(sig, 'confirmed');
+        refreshWalletNav();
+        setPaySol(false);
+        setJustSwapped(true);
+        showNotif('◎ Swap complete — tap Pay again to finish your booking with USDC', 'success');
+        setSubmitting(false);
+        return;
+      } catch (err) {
+        console.error('[solana][pay-with-sol] swap step failed', err);
+        const { reportClientError } = await import('@/lib/report-client-error');
+        reportClientError('overlay/pay-with-sol/swap-step', err, {});
+        showNotif(err instanceof Error ? err.message : 'Could not complete the SOL swap — try again', 'denied');
+        setSubmitting(false);
+        return;
+      }
+    }
+
     setSubmitting(true);
     setTxStatus('booking');
     setTxError(null);
@@ -1340,7 +1626,8 @@ function OverlayContent() {
         ? selectedSlot.price_value * durationMinutes
         : selectedSlot.price_value * (durationMinutes / 60);
 
-      // ── Pre-flight: verify viewer has SOL + a USDC ATA with enough balance ──
+      // ── Pre-flight: verify viewer has SOL + a USDC ATA with enough balance
+      // (or, on the pay-with-SOL path, enough SOL to cover a swap) ──
       const connection = new Connection(SOLANA_RPC);
 
       // SOL: initialize_escrow creates the EscrowState PDA (~0.00209 SOL
@@ -1354,46 +1641,53 @@ function OverlayContent() {
       // slack against the actual Beam requirement, thinner than intended.
       const solLamports = await connection.getBalance(effectivePublicKey);
       const MIN_SOL     = 0.015 * 1e9;
-      if (solLamports < MIN_SOL) {
-        showNotif(
-          IS_MAINNET
-            ? `Need SOL for rent + fees. You have ${(solLamports / 1e9).toFixed(4)} SOL — top up your wallet and try again.`
-            : `Need devnet SOL for rent + fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.quicknode.com/solana/devnet`,
-          'denied',
-        );
-        await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
-        setSubmitting(false);
-        return;
-      }
 
-      // USDC ATA balance check.
-      const { value: tokenAccounts } = await connection.getParsedTokenAccountsByOwner(
-        effectivePublicKey,
-        { mint: new PublicKey(USDC_MINT) },
-      );
-      if (tokenAccounts.length === 0) {
-        showNotif(
-          IS_MAINNET
-            ? 'No USDC found in your wallet. Buy or bridge USDC and try again.'
-            : 'No devnet USDC found (mint 4zMMC9…DU). Switch your wallet to Devnet then mint at spl-token-faucet.vercel.app',
-          'denied',
+      // Pay-with-SOL is handled as its own standalone earlier step (see
+      // above, right after the solana_wallet guard) — by the time
+      // execution reaches here paySol is always false, so this is just
+      // the plain direct-USDC pre-flight, unmodified.
+      {
+        if (solLamports < MIN_SOL) {
+          showNotif(
+            IS_MAINNET
+              ? `Need SOL for rent + fees. You have ${(solLamports / 1e9).toFixed(4)} SOL — top up your wallet and try again.`
+              : `Need devnet SOL for rent + fees. You have ${(solLamports / 1e9).toFixed(4)} SOL. Airdrop at faucet.quicknode.com/solana/devnet`,
+            'denied',
+          );
+          await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
+          setSubmitting(false);
+          return;
+        }
+
+        // USDC ATA balance check.
+        const { value: tokenAccounts } = await connection.getParsedTokenAccountsByOwner(
+          effectivePublicKey,
+          { mint: new PublicKey(USDC_MINT) },
         );
-        await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
-        setSubmitting(false);
-        return;
+        if (tokenAccounts.length === 0) {
+          showNotif(
+            IS_MAINNET
+              ? 'No USDC found in your wallet. Buy or bridge USDC and try again.'
+              : 'No devnet USDC found (mint 4zMMC9…DU). Switch your wallet to Devnet then mint at spl-token-faucet.vercel.app',
+            'denied',
+          );
+          await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
+          setSubmitting(false);
+          return;
+        }
+        const usdcBalance: number =
+          tokenAccounts[0].account.data.parsed.info.tokenAmount.uiAmount ?? 0;
+        if (usdcBalance < totalUsdc) {
+          showNotif(
+            `Insufficient USDC: you have ${usdcBalance.toFixed(2)}, need ${totalUsdc.toFixed(2)}`,
+            'denied',
+          );
+          await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
+          setSubmitting(false);
+          return;
+        }
+        console.log('[solana] pre-flight passed — SOL:', (solLamports / 1e9).toFixed(4), 'USDC:', usdcBalance);
       }
-      const usdcBalance: number =
-        tokenAccounts[0].account.data.parsed.info.tokenAmount.uiAmount ?? 0;
-      if (usdcBalance < totalUsdc) {
-        showNotif(
-          `Insufficient USDC: you have ${usdcBalance.toFixed(2)}, need ${totalUsdc.toFixed(2)}`,
-          'denied',
-        );
-        await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
-        setSubmitting(false);
-        return;
-      }
-      console.log('[solana] pre-flight passed — SOL:', (solLamports / 1e9).toFixed(4), 'USDC:', usdcBalance);
       // ──────────────────────────────────────────────────────────────────────
 
       // Lock full amount in the CASI escrow PDA. Settlement pays the
@@ -1475,6 +1769,10 @@ function OverlayContent() {
         durationSecs: durationSecsInt,
       });
       const escrowPda = escrowPdaPubkey.toBase58();
+      // Pay-with-SOL used to splice a Jupiter swap onto this same tx — see
+      // the standalone swap step earlier in this function for why that
+      // was replaced. tx here is always a plain deposit-only transaction
+      // now, identical to the direct-USDC path.
 
       // ── Mobile (non-in-app) Phantom Connect deeplink path ──────────────
       // Mobile Chrome's Phantom-deeplink-via-wallet-adapter returns txs with
@@ -1514,6 +1812,9 @@ function OverlayContent() {
             viewer_wallet: effectivePublicKey.toBase58(),
             pending_tx:    txB58,
           });
+          // Force a fresh dapp keypair for this connect — see
+          // regenerateDappKeypair's doc comment in phantom-connect.ts.
+          pc.regenerateDappKeypair();
           window.location.href = pc.buildConnectUrl({
             wallet,
             cluster: WALLET_ADAPTER_CLUSTER,
@@ -1651,6 +1952,15 @@ function OverlayContent() {
       showNotif('◎ Payment locked — awaiting streamer approval!', 'success');
       setShowConfirmModal(false);
       closeSlot();
+      // Report successes too, not just failures — reportClientError is just
+      // a thin /api/log POST, doesn't care whether "err" is a real error.
+      // While this feature is still under live testing (single tester,
+      // every attempt is a real data point), visibility into what actually
+      // landed on-chain matters as much as what failed.
+      {
+        const { reportClientError } = await import('@/lib/report-client-error');
+        reportClientError('overlay/pay-with-sol/success', `booking ${newBooking.id} confirmed, tx ${sig}`, { paySol, bookingId: newBooking.id, tx: sig, escrowPda });
+      }
       if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
     } catch (err: unknown) {
       const { formatEscrowError, isUserRejection, isWalletSignatureMissing } = await import('@/lib/casi-errors');
@@ -2243,6 +2553,66 @@ function OverlayContent() {
       ? (selectedSlot.price_value * (durationSeconds / 60)).toFixed(2)
       : (selectedSlot.price_value * (durationSeconds / 3600)).toFixed(2)
     : '0';
+
+  // Display-only quote for the "pay with SOL" toggle. submitSolanaBooking
+  // fetches its own fresh quote (and its own ATA check) at actual submit
+  // time rather than trusting this one — Jupiter quotes go stale within
+  // seconds, this is purely so the modal can show the real total upfront
+  // and gate the Confirm button.
+  //
+  // Includes the one-time USDC-wallet-creation cost (ATA_RENT_LAMPORTS)
+  // when the viewer doesn't have a USDC ATA yet, same as
+  // submitSolanaBooking's pre-flight check — otherwise the number shown
+  // here understates what actually gets debited, which is exactly the
+  // wrong direction to be wrong in for a payment confirmation screen.
+  useEffect(() => {
+    if (!paySol || !showConfirmModal) return;
+    let cancelled = false;
+    setSwapQuote({ loading: true, solRequired: null, swapOnlySol: null, needsSetup: false, error: null });
+    const usdcMicroTarget = Math.round(parseFloat(estimatedCost) * 1e6);
+    const fetchQuote = async () => {
+      try {
+        const { Connection, PublicKey } = await import('@solana/web3.js');
+        const { getSolToUsdcQuote, ATA_RENT_LAMPORTS } = await import('@/lib/jupiter-swap');
+        let effectiveKey = publicKey;
+        if (!effectiveKey) {
+          const pcSession = await import('@/lib/phantom-connect').then(m => m.getStoredSession());
+          effectiveKey = pcSession ? new PublicKey(pcSession.walletPublicKey) : null;
+        }
+        let needsSetup = false;
+        if (effectiveKey) {
+          const connection = new Connection(SOLANA_RPC);
+          const { value: existingUsdcAtas } = await connection.getParsedTokenAccountsByOwner(
+            effectiveKey, { mint: new PublicKey(USDC_MINT) },
+          );
+          needsSetup = existingUsdcAtas.length === 0;
+        }
+        const { lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
+        // swapOnlySol is what the swap tx itself actually converts — the
+        // honest answer to "how much SOL am I trading away." solRequired is
+        // bigger: it's the full balance the wallet needs to have on hand,
+        // matching submitSolanaBooking's real pre-flight check exactly (swap
+        // amount + swap tx's own network-fee margin + one-time USDC-ATA rent
+        // if needed + the reserve for the SEPARATE booking tx that follows —
+        // that last piece isn't spent by this swap at all, just has to be
+        // present, and used to be missing here entirely, understating the
+        // real requirement).
+        const swapOnlyLamports = lamportsRequired + (needsSetup ? ATA_RENT_LAMPORTS : 0);
+        const totalLamports = swapOnlyLamports + SWAP_TX_FEE_MARGIN_LAMPORTS + MIN_SOL_FOR_BOOKING_LAMPORTS;
+        if (!cancelled) setSwapQuote({ loading: false, solRequired: totalLamports / 1e9, swapOnlySol: swapOnlyLamports / 1e9, needsSetup, error: null });
+      } catch (err) {
+        if (!cancelled) {
+          setSwapQuote({ loading: false, solRequired: null, swapOnlySol: null, needsSetup: false, error: err instanceof Error ? err.message : 'Quote failed' });
+        }
+      }
+    };
+    fetchQuote();
+    // Refresh periodically while the toggle is on and the modal is open, so
+    // a viewer who sits on the confirm screen doesn't submit against a
+    // long-stale quote.
+    const interval = setInterval(() => { if (!cancelled) fetchQuote(); }, 20_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [paySol, showConfirmModal, estimatedCost, publicKey]);
 
   // True when the viewer has the content needed to submit a booking.
   // Banner slots use the scrolling message as their content (media is
@@ -3347,6 +3717,7 @@ function OverlayContent() {
                     openWalletModal();
                   } else {
                     setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
+                    setPaySol(false); setSwapQuote(null); setJustSwapped(false);
                   }
                 }}
               />
@@ -3405,12 +3776,17 @@ function OverlayContent() {
           username={username}
           recipientWallet={profile?.solana_wallet ?? null}
           usdcBalance={usdcBalance}
+          solBalance={solBalance}
+          paySol={paySol}
+          onTogglePaySol={setPaySol}
+          swapQuote={swapQuote}
+          justSwapped={justSwapped}
           txStatus={txStatus}
           txError={txError}
           txId={confirmedTxId}
           submitting={submitting}
           onConfirm={submitSolanaBooking}
-          onCancel={() => { if (!submitting) { setShowConfirmModal(false); setTxStatus('idle'); setTxError(null); setConfirmedTxId(null); } }}
+          onCancel={() => { if (!submitting) { setShowConfirmModal(false); setTxStatus('idle'); setTxError(null); setConfirmedTxId(null); setPaySol(false); setSwapQuote(null); setJustSwapped(false); } }}
         />
       )}
     </>

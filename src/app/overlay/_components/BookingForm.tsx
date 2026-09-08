@@ -250,9 +250,37 @@ export default function BookingForm(props: Props) {
   // an arbitrary small one.
   const sliderMin = 30;
   const sliderMax = maxSecs ?? 86400;
-  const sliderRange = Math.max(1, sliderMax - sliderMin);
-  const sliderMid = Math.round((sliderMin + sliderMax) / 2 / 5) * 5;
-  const sliderPct = Math.min(100, Math.max(0, ((durationSeconds - sliderMin) / sliderRange) * 100));
+  // A LINEAR slider across this range (30s to as much as 24h when a slot has
+  // no configured cap) is unusable — every 1% of drag length moves the value
+  // by minutes, so landing on something like "2 hours" precisely is nearly
+  // impossible. Found live 2026-09-08 after shipping pay-with-SOL: the first
+  // real end-to-end booking landed at "30:00" from what was meant to be a
+  // much longer duration, just from the thumb's default rest position.
+  //
+  // Standard fix (same idea as a volume/zoom/ISO slider): make the SLIDER'S
+  // POSITION geometric/log-scaled against duration, not linear. Moving the
+  // thumb a constant PERCENTAGE multiplies the duration by a constant
+  // FACTOR, so the low end (where almost every real booking lives) gets most
+  // of the drag length's resolution, while the tail still reaches the full
+  // configured max for the rare long booking. This degrades gracefully for
+  // any sliderMax (a 30-min-capped slot, this 24h-uncapped one, anything in
+  // between) — deliberately not hardcoding a fixed "2 hour" breakpoint,
+  // which would only look right for slots whose range happens to match it.
+  const SLIDER_STEPS = 1000;
+  const logMin = Math.log(sliderMin);
+  const logMax = Math.log(Math.max(sliderMin + 1, sliderMax));
+  const logSpan = logMax - logMin || 1;
+  const posToSeconds = (pos: number): number => {
+    const t = pos / SLIDER_STEPS;
+    return Math.exp(logMin + t * logSpan);
+  };
+  const secondsToPos = (secs: number): number => {
+    const clamped = Math.min(sliderMax, Math.max(sliderMin, secs));
+    return Math.round(((Math.log(clamped) - logMin) / logSpan) * SLIDER_STEPS);
+  };
+  const sliderPos = secondsToPos(durationSeconds);
+  const sliderMid = Math.round(Math.exp((logMin + logMax) / 2) / 5) * 5;
+  const sliderPct = Math.min(100, Math.max(0, (sliderPos / SLIDER_STEPS) * 100));
   const tickLabel = (secs: number): string => (secs < 60 ? `${secs}s` : fmtMaxDur(Math.round(secs / 60)));
 
   const queueWait = (() => {
@@ -435,11 +463,14 @@ export default function BookingForm(props: Props) {
             <input
               type="range"
               className="bf-dur-slider"
-              min={sliderMin}
-              max={sliderMax}
-              step={5}
-              value={Math.min(sliderMax, Math.max(sliderMin, durationSeconds))}
-              onChange={(e) => onDurationChange(Number(e.target.value))}
+              min={0}
+              max={SLIDER_STEPS}
+              step={1}
+              value={sliderPos}
+              onChange={(e) => {
+                const secs = posToSeconds(Number(e.target.value));
+                onDurationChange(Math.min(sliderMax, Math.max(sliderMin, Math.round(secs / 5) * 5)));
+              }}
               style={{ background: `linear-gradient(to right, ${accentColor} ${sliderPct}%, var(--line-2) ${sliderPct}%)` }}
               aria-label="Duration"
             />
@@ -583,8 +614,13 @@ export default function BookingForm(props: Props) {
                 </span>
               </div>
             ) : null}
+            {/* Predates pay-with-SOL: used to read as a hard stop ("⚠
+                Insufficient balance") with no mention that a SOL-holding
+                viewer can still book — the confirm modal one tap later
+                already offers exactly that (SolanaConfirmModal's "Pay with
+                SOL instead" toggle), this just stopped saying so. */}
             {paymentRail === 'usdc' && walletConnected && usdcBalance !== null && usdcBalance < usdcCost ? (
-              <div className="bf-rail-note" style={{ color: '#f87171' }}>⚠ Insufficient balance</div>
+              <div className="bf-rail-note" style={{ color: '#f87171' }}>⚠ Not enough USDC — you can pay with SOL instead on the next screen</div>
             ) : null}
             {paymentRail === 'usdc' && walletConnected && usdcBalance === null ? (
               <div className="bf-rail-note">Fetching balance…</div>

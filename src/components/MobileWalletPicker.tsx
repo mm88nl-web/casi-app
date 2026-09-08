@@ -1,7 +1,9 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   buildConnectUrl,
+  regenerateDappKeypair,
   setPreferredDeeplinkWallet,
   DEEPLINK_WALLETS,
   type DeeplinkWallet,
@@ -43,6 +45,16 @@ export default function MobileWalletPicker({
    *  panel) instead of the default inline-wrapped pill row. */
   stacked?: boolean;
 }) {
+  // This panel mounts fresh each time the "Connect Wallet" dropdown opens
+  // (see WalletPill/WalletNav: rendered conditionally on pickerOpen, not
+  // kept mounted) — so a regenerate here happens exactly once per real
+  // connect attempt. useMemo (not a plain call in the body) keeps it from
+  // re-firing on incidental re-renders while the panel stays open, which
+  // would otherwise silently invalidate a keypair a still-visible button's
+  // href already embeds. Solflare's own docs recommend a new dapp keypair
+  // per connect session; this codebase used to reuse one forever. See
+  // regenerateDappKeypair's doc comment in phantom-connect.ts.
+  useMemo(() => { regenerateDappKeypair(); }, []);
   return (
     // data-paper="light" + the --ink/--paper shadow pin this to Casi's
     // fixed chrome palette — the wallet/balance pill is chrome everywhere

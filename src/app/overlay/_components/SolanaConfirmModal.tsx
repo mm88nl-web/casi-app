@@ -7,6 +7,24 @@ import { formatTime } from './time';
 
 export type TxStatus = 'idle' | 'booking' | 'streaming' | 'waiting' | 'error';
 
+/** Live SOL→USDC quote state for the "pay with SOL" toggle — see
+ *  src/lib/jupiter-swap.ts. Both amounts are UI SOL (not lamports).
+ *  `swapOnlySol` is what the swap transaction actually converts (plus the
+ *  one-time USDC-wallet-creation cost when `needsSetup`). `solRequired` is
+ *  bigger and is the real "balance the wallet needs on hand" figure used
+ *  for the insufficient-funds check — swapOnlySol, plus the swap tx's own
+ *  network-fee margin, plus a reserve for the SEPARATE booking transaction
+ *  that follows this swap (not spent by the swap at all, but the whole
+ *  two-step flow fails partway through without it — see the matching
+ *  comment on MIN_SOL_FOR_BOOKING_LAMPORTS in overlay/page.tsx). */
+export type SwapQuoteState = {
+  loading: boolean;
+  solRequired: number | null;
+  swapOnlySol: number | null;
+  needsSetup: boolean;
+  error: string | null;
+};
+
 type Props = {
   slot: {
     price_value: number | string;
@@ -18,6 +36,23 @@ type Props = {
   username: string;
   recipientWallet: string | null;
   usdcBalance: number | null;
+  /** Viewer's SOL balance — drives both the pay-with-SOL toggle's
+   *  availability (implicitly, via the parent knowing whether to bother)
+   *  and the "insufficient" check once that path is selected. */
+  solBalance: number | null;
+  /** True once the viewer has opted into paying with SOL instead of USDC
+   *  (only offered when USDC alone doesn't cover the booking). */
+  paySol: boolean;
+  onTogglePaySol: (v: boolean) => void;
+  /** Live quote for the SOL amount the swap would need — null until the
+   *  parent starts fetching one (i.e. before paySol is ever toggled on). */
+  swapQuote: SwapQuoteState | null;
+  /** True right after the swap step has landed and the viewer is back here
+   *  for the second, plain-USDC confirm. Without this, that second confirm
+   *  is visually identical to an ordinary single-step USDC payment — two
+   *  "one step" screens back to back instead of one visibly two-step flow.
+   *  Drives the "Step 1 of 2" / "Step 2 of 2" badge below. */
+  justSwapped: boolean;
   txStatus: TxStatus;
   txError: string | null;
   txId: string | null;
@@ -34,12 +69,23 @@ type Props = {
  * data as before — this is a re-skin, not a behavior change.
  */
 export default function SolanaConfirmModal({
-  slot, duration, estimatedCost, username, recipientWallet, usdcBalance,
+  slot, duration, estimatedCost, username, recipientWallet, usdcBalance, solBalance,
+  paySol, onTogglePaySol, swapQuote, justSwapped,
   txStatus, txError, txId, submitting, onConfirm, onCancel,
 }: Props) {
-  const hasInsufficient = usdcBalance !== null
-    && usdcBalance < parseFloat(estimatedCost)
-    && (txStatus === 'idle' || txStatus === 'error');
+  const usdcShort = usdcBalance !== null && usdcBalance < parseFloat(estimatedCost);
+  // Offered any time nothing's in flight — not just when USDC is short.
+  // Originally gated on usdcShort only, but that hid the option entirely
+  // for a viewer who wants to pay with SOL by choice even with enough USDC
+  // on hand, and (worse) could hide it outright during the brief window
+  // right after connecting a fresh wallet where usdcBalance is still null
+  // rather than a real 0. Flipping payment method under an in-progress
+  // submit would still race submitSolanaBooking's pre-flight, hence the
+  // txStatus guard.
+  const canOfferSwap = txStatus === 'idle' || txStatus === 'error';
+  const hasInsufficient = paySol
+    ? !swapQuote?.solRequired || (solBalance !== null && solBalance < swapQuote.solRequired)
+    : usdcShort && (txStatus === 'idle' || txStatus === 'error');
   const inProgress = submitting && txStatus !== 'idle' && txStatus !== 'error';
   const stepIcon = (active: boolean, done: boolean) => (done ? '✓' : active ? '⟳' : '○');
   const shortWallet = recipientWallet
@@ -49,7 +95,16 @@ export default function SolanaConfirmModal({
     ? `https://solscan.io/tx/${txId}${EXPLORER_CLUSTER_QUERY}`
     : null;
   const rateLabel = formatSlotPrice(slot, { prefer: 'usdc' }).label;
-  const ctaLabel = inProgress ? 'Signing…' : hasInsufficient ? 'Not enough to cover it' : txStatus === 'error' ? 'Retry →' : 'Confirm & sign →';
+  const ctaLabel = inProgress
+    ? 'Signing…'
+    : hasInsufficient
+      ? 'Not enough to cover it'
+      : txStatus === 'error'
+        ? 'Retry →'
+        // Step 1's tap only signs the swap, not the booking — say so,
+        // rather than reusing "Confirm & sign" for a button that doesn't
+        // actually confirm the booking yet.
+        : paySol ? 'Swap & continue →' : 'Confirm & sign →';
 
   return (
     <div
@@ -78,6 +133,21 @@ export default function SolanaConfirmModal({
               ×
             </button>
           </div>
+          {/* Paying with SOL is two separate signatures (swap, then the
+              actual escrow deposit) — this badge is the only thing telling
+              the viewer they're on a multi-step flow instead of looking at
+              two back-to-back, visually-identical single-step screens. */}
+          {(paySol || justSwapped) && (
+            <div
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10,
+                padding: '4px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.16)',
+                fontFamily: 'var(--B)', fontWeight: 600, fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase',
+              }}
+            >
+              {justSwapped ? '✓ Step 1 done · Step 2 of 2 — fund escrow' : 'Step 1 of 2 · Swap SOL → USDC'}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 16 }}>
             <span style={{ fontFamily: 'var(--H)', fontWeight: 700, fontSize: 48, lineHeight: 0.9, letterSpacing: '-0.03em' }}>
               {estimatedCost}
@@ -97,13 +167,77 @@ export default function SolanaConfirmModal({
             </span>
           </div>
           <div style={{ height: 1, background: 'var(--line)' }} />
-          {usdcBalance !== null && (
+          {usdcBalance !== null && !paySol && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0' }}>
               <span style={{ fontFamily: 'var(--S)', fontSize: 15, color: 'var(--text-3)' }}>Your balance</span>
               <span style={{ fontFamily: 'var(--M)', fontSize: 14, fontVariantNumeric: 'tabular-nums', color: hasInsufficient ? '#f87171' : 'var(--text)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                 <UsdcIcon size={11} />
                 {usdcBalance.toFixed(2)}{hasInsufficient ? ' — insufficient' : ''}
               </span>
+            </div>
+          )}
+
+          {/* Offer swapping SOL for USDC — available whether or not USDC is
+              actually short, since a viewer might simply prefer to pay in
+              SOL. Reads as reassurance, not a fee disclosure: the added cost
+              is a trivial network fee, most of which comes back as unused
+              USDC anyway (any real one-time wallet-setup cost is broken out
+              separately below, once known). Two signatures, not one — a
+              combined swap+deposit transaction doesn't fit Solana's legacy
+              size limit even in the best case (measured live, see the
+              design brief) — the "Step 1 of 2" badge above communicates
+              that once checked; this label sets the expectation up front.
+              See docs/pay-with-sol-design-brief.md. */}
+          {canOfferSwap && (
+            <label
+              style={{
+                display: 'flex', alignItems: 'center', gap: 9, padding: '9px 0',
+                fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 14, color: 'var(--text-3)',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={paySol}
+                onChange={(e) => onTogglePaySol(e.target.checked)}
+                style={{ width: 15, height: 15, accentColor: 'var(--ink)', flexShrink: 0 }}
+              />
+              {usdcShort ? 'Not enough USDC — pay with SOL instead' : 'Pay with SOL instead'} (auto-swapped via Jupiter, two quick signatures)
+            </label>
+          )}
+
+          {paySol && (
+            <div style={{ padding: '9px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontFamily: 'var(--S)', fontSize: 15, color: 'var(--text-3)' }}>Paying with</span>
+                <span style={{ fontFamily: 'var(--M)', fontSize: 14, fontVariantNumeric: 'tabular-nums', color: hasInsufficient ? '#f87171' : 'var(--text)' }}>
+                  {swapQuote?.loading
+                    ? 'getting quote…'
+                    : swapQuote?.error
+                      ? swapQuote.error
+                      : swapQuote?.swapOnlySol
+                        ? `≈ ${swapQuote.swapOnlySol.toFixed(4)} SOL`
+                        : '—'}
+                </span>
+              </div>
+              {/* This is the number that actually gets converted — kept
+                  separate from the wallet's TOTAL balance requirement
+                  (solRequired, used for the insufficient-funds check below
+                  and shown in the breakdown here) because that total also
+                  includes SOL the swap never touches: its own network-fee
+                  margin, a one-time USDC-wallet-creation cost on a first
+                  swap, and a reserve for the separate booking transaction
+                  that follows right after. Folding all of that into one
+                  "Paying with" figure would overstate what's actually being
+                  traded away — but hiding it entirely is exactly the kind
+                  of surprise-fee outcome this line is here to prevent. */}
+              {!swapQuote?.loading && !swapQuote?.error && swapQuote?.solRequired != null && (
+                <div style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 12, color: 'var(--text-4)', marginTop: 4, lineHeight: 1.5 }}>
+                  Your wallet needs ≈ {swapQuote.solRequired.toFixed(4)} SOL on hand in total
+                  {solBalance !== null && solBalance < swapQuote.solRequired ? <span style={{ color: '#f87171' }}> — insufficient</span> : null}
+                  : the swap above, a small network-fee margin{swapQuote.needsSetup ? ', a one-time ~0.002 SOL cost to open your USDC wallet' : ''}, and ~0.015 SOL reserved for the booking step right after (not spent by this swap, just has to be present).
+                </div>
+              )}
             </div>
           )}
 

@@ -155,6 +155,35 @@ export function getOrCreateDappKeypair(): DappKeypair {
   return kp;
 }
 
+/** Forces a brand-new x25519 dapp keypair, discarding whatever was
+ *  persisted before. Call this immediately before starting a FRESH connect
+ *  handshake (buildConnectUrl) — never before a sign call, which must keep
+ *  using the same keypair the corresponding connect used, or its shared
+ *  secret with the wallet won't match.
+ *
+ *  Solflare's own deeplink docs (docs.solflare.com/solflare/technical/
+ *  deeplinks/encryption, checked 2026-09-08) recommend generating a new
+ *  keypair per connect session — this codebase previously reused one
+ *  keypair forever via getOrCreateDappKeypair's persistence, which is a
+ *  real deviation from that guidance. Investigating a live, reproducible
+ *  DeeplinkErrorCode.payloadDecryptionFailed on Solflare's mobile sign
+ *  step (two connect+sign round trips in the same test session both
+ *  failed identically) that a stale/reused keypair is the leading
+ *  candidate for, even without being able to pin the exact mechanism from
+ *  outside Solflare's own app. This closes the gap regardless of the
+ *  precise cause. */
+export function regenerateDappKeypair(): DappKeypair {
+  if (typeof window === 'undefined') {
+    throw new Error('phantom-connect: SSR call');
+  }
+  const kp = nacl.box.keyPair();
+  window.localStorage.setItem(KEY_DAPP_KEYPAIR, JSON.stringify({
+    pk: bs58.encode(kp.publicKey),
+    sk: bs58.encode(kp.secretKey),
+  }));
+  return kp;
+}
+
 // ── Session persistence ──────────────────────────────────────────────────
 
 /** Storage event we dispatch ourselves when saveSession/clearSession runs.
@@ -221,8 +250,17 @@ export type PendingBooking = {
    *  - 'flash'  → POST /api/flashes/attach-escrow
    *  - 'settle' → tx already submitted on-chain by us; refresh data
    *  - 'cancel' → tx already submitted on-chain by us; refresh data
+   *  - 'swap'   → pay-with-SOL's standalone Jupiter swap, no booking
+   *    attached yet. Kept deliberately separate from 'book' rather than
+   *    combined into one transaction — see docs/pay-with-sol-design-brief.md
+   *    and the 2026-09-08 finding that a spliced swap+deposit legacy tx
+   *    doesn't reliably fit Solana's 1232-byte limit even in the best
+   *    case. On return, just confirms the swap landed and tells the
+   *    viewer to hit Confirm again — the second click runs the completely
+   *    unmodified, already-proven 'book' flow with a now-sufficient USDC
+   *    balance.
    *  Default 'book' for backwards-compatibility with older stashes. */
-  kind?:         'book' | 'flash' | 'settle' | 'cancel';
+  kind?:         'book' | 'flash' | 'settle' | 'cancel' | 'swap';
   booking_id:    string;
   cancel_token:  string;
   escrow_pda:    string;
@@ -231,6 +269,19 @@ export type PendingBooking = {
    *  before signing — on connect-return we re-fire the sign deeplink with
    *  this tx without rebuilding it. */
   pending_tx?:   string;
+  /** kind:'swap' only — the booking-form state to restore after the swap
+   *  round-trips through the wallet app. A mobile deeplink is a full page
+   *  navigation away and back, so every piece of React state (selected
+   *  slot, uploaded image reference, duration, message, customize params)
+   *  is gone by the time the return handler runs. Without this, a viewer
+   *  who swapped SOL→USDC on mobile landed back on a bare overlay page
+   *  with nothing to tap and had to redo the whole booking form from
+   *  scratch — found live 2026-09-08. Opaque JSON (not individual typed
+   *  fields) so this type doesn't have to track every field the booking
+   *  form happens to have; the overlay page owns both writing and parsing
+   *  it. All values are already-serializable primitives / already-uploaded
+   *  storage references — nothing here requires re-uploading a file. */
+  swap_ctx?: string;
   /** ms since epoch — older than ~10 min and we treat the stash as stale. */
   ts: number;
 };
