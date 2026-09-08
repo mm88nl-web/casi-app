@@ -201,6 +201,21 @@ function OverlayContent() {
   // the loadData callback on every wallet change.
   const viewerWalletRef = useRef<string | null>(null);
   const lastRealtimeEventAt = useRef(Date.now());
+  // Guards the phantom-connect-return effect below against processing the
+  // same one-time wallet-response URL twice. That effect depends on
+  // [profile?.id], which flips from undefined to a real value shortly after
+  // mount — a genuine double-fire, not a hypothetical one. cleanUrl() only
+  // strips the response params partway through the async handler (after
+  // several awaited steps), so a second overlapping run can still see them
+  // and re-submit the SAME already-signed transaction a second time. Found
+  // live 2026-09-08: a mobile pay-with-SOL swap got "Transaction simulation
+  // failed: This transaction has already been processed" — which only
+  // happens when an identical signature already landed once, meaning the
+  // swap itself had already succeeded and this was a redundant resubmission
+  // being reported to the viewer as a hard failure. Set synchronously,
+  // before any await, the moment a run commits to processing a given
+  // phantom_action value.
+  const phantomReturnHandledFor = useRef<string | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const bookingColRef = useRef<HTMLDivElement | null>(null);
 
@@ -265,6 +280,15 @@ function OverlayContent() {
     const params = new URLSearchParams(normalizeSearch(window.location.search));
     const action = params.get('phantom_action');
     if (action !== 'connect-resume' && action !== 'sign-resume') return;
+
+    // Bail if this exact response URL was already claimed by an earlier run
+    // of this same effect — see phantomReturnHandledFor's doc comment.
+    // Checked and set synchronously, before any await, so two overlapping
+    // firings (e.g. this effect's own [profile?.id] dependency flipping
+    // shortly after mount) can't both commit to processing the same
+    // one-time wallet response.
+    if (phantomReturnHandledFor.current === window.location.search) return;
+    phantomReturnHandledFor.current = window.location.search;
 
     // Strip ONLY the phantom-* params from the URL — leave everything else
     // (especially `s=<streamer>`) intact. Otherwise the page-level guard
