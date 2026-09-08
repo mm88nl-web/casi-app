@@ -1366,18 +1366,31 @@ function OverlayContent() {
       let swapInstructions: import('@solana/web3.js').TransactionInstruction[] | null = null;
 
       if (paySol) {
-        // Skip the USDC ATA/balance checks entirely — the viewer may not
-        // even have a USDC ATA yet, the swap creates one. Fetch a FRESH
-        // quote here rather than trust the modal's display quote, which can
-        // be up to 20s stale (see the display-quote effect near
+        // Don't skip the USDC ATA check — we still need to know whether one
+        // already exists, since Jupiter's swap has to CREATE it (real,
+        // separate ~0.002 SOL rent cost, see ATA_RENT_LAMPORTS in
+        // jupiter-swap.ts) if the viewer has never held USDC before. That
+        // cost doesn't show up in a swap quote's inAmount at all — found
+        // live 2026-09-07 reviewing this before its first real test, the
+        // original version of this check would have silently under-budgeted
+        // by this exact amount for exactly the viewers most likely to hit
+        // it (a SOL-only holder has probably never held USDC). Fetch a
+        // FRESH quote here rather than trust the modal's display quote,
+        // which can be up to 20s stale (see the display-quote effect near
         // estimatedCost).
+        const { value: existingUsdcAtas } = await connection.getParsedTokenAccountsByOwner(
+          effectivePublicKey,
+          { mint: new PublicKey(USDC_MINT) },
+        );
         const usdcMicroTarget = Math.round(totalUsdc * 10 ** usdcDecimals);
         try {
-          const { getSolToUsdcQuote, getSwapInstructions } = await import('@/lib/jupiter-swap');
+          const { getSolToUsdcQuote, getSwapInstructions, ATA_RENT_LAMPORTS } = await import('@/lib/jupiter-swap');
+          const ataRentLamports = existingUsdcAtas.length === 0 ? ATA_RENT_LAMPORTS : 0;
           const { quote, lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
-          if (solLamports < MIN_SOL + lamportsRequired) {
+          const totalLamportsNeeded = MIN_SOL + lamportsRequired + ataRentLamports;
+          if (solLamports < totalLamportsNeeded) {
             showNotif(
-              `Need ~${((MIN_SOL + lamportsRequired) / 1e9).toFixed(4)} SOL (swap + rent/fees). You have ${(solLamports / 1e9).toFixed(4)} SOL.`,
+              `Need ~${(totalLamportsNeeded / 1e9).toFixed(4)} SOL (swap + rent/fees${ataRentLamports ? ' + one-time USDC wallet setup' : ''}). You have ${(solLamports / 1e9).toFixed(4)} SOL.`,
               'denied',
             );
             await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
@@ -2298,22 +2311,44 @@ function OverlayContent() {
     : '0';
 
   // Display-only quote for the "pay with SOL" toggle. submitSolanaBooking
-  // fetches its own fresh quote at actual submit time rather than trusting
-  // this one — Jupiter quotes go stale within seconds, this is purely so
-  // the modal can show "≈ X SOL" and gate the Confirm button.
+  // fetches its own fresh quote (and its own ATA check) at actual submit
+  // time rather than trusting this one — Jupiter quotes go stale within
+  // seconds, this is purely so the modal can show the real total upfront
+  // and gate the Confirm button.
+  //
+  // Includes the one-time USDC-wallet-creation cost (ATA_RENT_LAMPORTS)
+  // when the viewer doesn't have a USDC ATA yet, same as
+  // submitSolanaBooking's pre-flight check — otherwise the number shown
+  // here understates what actually gets debited, which is exactly the
+  // wrong direction to be wrong in for a payment confirmation screen.
   useEffect(() => {
     if (!paySol || !showConfirmModal) return;
     let cancelled = false;
-    setSwapQuote({ loading: true, solRequired: null, error: null });
+    setSwapQuote({ loading: true, solRequired: null, needsSetup: false, error: null });
     const usdcMicroTarget = Math.round(parseFloat(estimatedCost) * 1e6);
     const fetchQuote = async () => {
       try {
-        const { getSolToUsdcQuote } = await import('@/lib/jupiter-swap');
+        const { Connection, PublicKey } = await import('@solana/web3.js');
+        const { getSolToUsdcQuote, ATA_RENT_LAMPORTS } = await import('@/lib/jupiter-swap');
+        let effectiveKey = publicKey;
+        if (!effectiveKey) {
+          const pcSession = await import('@/lib/phantom-connect').then(m => m.getStoredSession());
+          effectiveKey = pcSession ? new PublicKey(pcSession.walletPublicKey) : null;
+        }
+        let needsSetup = false;
+        if (effectiveKey) {
+          const connection = new Connection(SOLANA_RPC);
+          const { value: existingUsdcAtas } = await connection.getParsedTokenAccountsByOwner(
+            effectiveKey, { mint: new PublicKey(USDC_MINT) },
+          );
+          needsSetup = existingUsdcAtas.length === 0;
+        }
         const { lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
-        if (!cancelled) setSwapQuote({ loading: false, solRequired: lamportsRequired / 1e9, error: null });
+        const totalLamports = lamportsRequired + (needsSetup ? ATA_RENT_LAMPORTS : 0);
+        if (!cancelled) setSwapQuote({ loading: false, solRequired: totalLamports / 1e9, needsSetup, error: null });
       } catch (err) {
         if (!cancelled) {
-          setSwapQuote({ loading: false, solRequired: null, error: err instanceof Error ? err.message : 'Quote failed' });
+          setSwapQuote({ loading: false, solRequired: null, needsSetup: false, error: err instanceof Error ? err.message : 'Quote failed' });
         }
       }
     };
@@ -2323,7 +2358,7 @@ function OverlayContent() {
     // long-stale quote.
     const interval = setInterval(() => { if (!cancelled) fetchQuote(); }, 20_000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [paySol, showConfirmModal, estimatedCost]);
+  }, [paySol, showConfirmModal, estimatedCost, publicKey]);
 
   // True when the viewer has the content needed to submit a booking.
   // Banner slots use the scrolling message as their content (media is

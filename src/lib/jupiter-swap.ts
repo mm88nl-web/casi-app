@@ -30,6 +30,20 @@ const JUPITER_BASE = process.env.NEXT_PUBLIC_JUPITER_API_BASE || 'https://lite-a
 
 export const WSOL_MINT = 'So11111111111111111111111111111111111111112';
 
+// Rent-exempt minimum for a new SPL token account — mirrors
+// ATA_RENT_LAMPORTS in programs/casi-escrow/src/lib.rs (kept as a literal
+// here since Rust constants aren't importable client-side; this is a
+// protocol-level constant, not something that drifts). If the viewer has
+// never held USDC before, Jupiter's swap has to CREATE their USDC ATA as
+// part of swap-instructions' setupInstructions — that's a real, separate
+// SOL cost on top of the amount actually being swapped, and it's easy to
+// undercount: it doesn't show up in a quote's inAmount/outAmount at all.
+// Found live 2026-09-07 reviewing this feature before its first real test —
+// the original pre-flight check only budgeted MIN_SOL + the swap amount,
+// which would silently under-budget by this exact amount for any first-
+// time-USDC viewer, the majority case for a SOL-only holder.
+export const ATA_RENT_LAMPORTS = 2_039_280;
+
 // Reference probe amount used only to learn the current SOL/USDC rate —
 // arbitrary, doesn't need to be close to the real swap size.
 const PROBE_LAMPORTS = 10_000_000; // 0.01 SOL

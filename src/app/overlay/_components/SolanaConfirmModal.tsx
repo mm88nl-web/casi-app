@@ -8,10 +8,14 @@ import { formatTime } from './time';
 export type TxStatus = 'idle' | 'booking' | 'streaming' | 'waiting' | 'error';
 
 /** Live SOL→USDC quote state for the "pay with SOL" toggle — see
- *  src/lib/jupiter-swap.ts. solRequired is UI SOL (not lamports). */
+ *  src/lib/jupiter-swap.ts. solRequired is UI SOL (not lamports), and
+ *  already includes the one-time USDC-wallet-creation cost (needsSetup)
+ *  when applicable — it's the real total that gets debited, not just the
+ *  swapped amount. */
 export type SwapQuoteState = {
   loading: boolean;
   solRequired: number | null;
+  needsSetup: boolean;
   error: string | null;
 };
 
@@ -155,17 +159,31 @@ export default function SolanaConfirmModal({
           )}
 
           {paySol && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0' }}>
-              <span style={{ fontFamily: 'var(--S)', fontSize: 15, color: 'var(--text-3)' }}>Paying with</span>
-              <span style={{ fontFamily: 'var(--M)', fontSize: 14, fontVariantNumeric: 'tabular-nums', color: hasInsufficient ? '#f87171' : 'var(--text)' }}>
-                {swapQuote?.loading
-                  ? 'getting quote…'
-                  : swapQuote?.error
-                    ? swapQuote.error
-                    : swapQuote?.solRequired
-                      ? `≈ ${swapQuote.solRequired.toFixed(4)} SOL${solBalance !== null && solBalance < swapQuote.solRequired ? ' — insufficient' : ''}`
-                      : '—'}
-              </span>
+            <div style={{ padding: '9px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontFamily: 'var(--S)', fontSize: 15, color: 'var(--text-3)' }}>Paying with</span>
+                <span style={{ fontFamily: 'var(--M)', fontSize: 14, fontVariantNumeric: 'tabular-nums', color: hasInsufficient ? '#f87171' : 'var(--text)' }}>
+                  {swapQuote?.loading
+                    ? 'getting quote…'
+                    : swapQuote?.error
+                      ? swapQuote.error
+                      : swapQuote?.solRequired
+                        ? `≈ ${swapQuote.solRequired.toFixed(4)} SOL${solBalance !== null && solBalance < swapQuote.solRequired ? ' — insufficient' : ''}`
+                        : '—'}
+                </span>
+              </div>
+              {/* This total already has the one-time wallet-setup cost
+                  folded in when it applies — surfaced explicitly rather
+                  than left as an unexplained gap between this number and a
+                  naive price/rate conversion, which is disproportionately
+                  the case for a $ smaller booking on a first-ever SOL→USDC
+                  swap (a flat ~0.002 SOL setup cost is a small fraction of
+                  a $50 booking but a large one of a $1 flash). */}
+              {!swapQuote?.loading && !swapQuote?.error && swapQuote?.needsSetup && (
+                <div style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 12, color: 'var(--text-4)', marginTop: 4 }}>
+                  Includes a one-time ~0.002 SOL cost to open your USDC wallet — first USDC swap only.
+                </div>
+              )}
             </div>
           )}
 
