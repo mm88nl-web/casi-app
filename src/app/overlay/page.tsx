@@ -1378,17 +1378,22 @@ function OverlayContent() {
         // FRESH quote here rather than trust the modal's display quote,
         // which can be up to 20s stale (see the display-quote effect near
         // estimatedCost).
+        console.log('[solana][pay-with-sol] pre-flight start — checking for existing USDC ATA…');
         const { value: existingUsdcAtas } = await connection.getParsedTokenAccountsByOwner(
           effectivePublicKey,
           { mint: new PublicKey(USDC_MINT) },
         );
+        console.log('[solana][pay-with-sol] ATA check done', { hasExistingAta: existingUsdcAtas.length > 0 });
         const usdcMicroTarget = Math.round(totalUsdc * 10 ** usdcDecimals);
         try {
           const { getSolToUsdcQuote, getSwapInstructions, ATA_RENT_LAMPORTS } = await import('@/lib/jupiter-swap');
           const ataRentLamports = existingUsdcAtas.length === 0 ? ATA_RENT_LAMPORTS : 0;
+          console.log('[solana][pay-with-sol] fetching quote…', { usdcMicroTarget });
           const { quote, lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
+          console.log('[solana][pay-with-sol] quote resolved', { lamportsRequired, ataRentLamports });
           const totalLamportsNeeded = MIN_SOL + lamportsRequired + ataRentLamports;
           if (solLamports < totalLamportsNeeded) {
+            console.warn('[solana][pay-with-sol] insufficient SOL', { solLamports, totalLamportsNeeded });
             showNotif(
               `Need ~${(totalLamportsNeeded / 1e9).toFixed(4)} SOL (swap + rent/fees${ataRentLamports ? ' + one-time USDC wallet setup' : ''}). You have ${(solLamports / 1e9).toFixed(4)} SOL.`,
               'denied',
@@ -1397,8 +1402,11 @@ function OverlayContent() {
             setSubmitting(false);
             return;
           }
+          console.log('[solana][pay-with-sol] fetching swap instructions…');
           swapInstructions = await getSwapInstructions({ quote, userPublicKey: effectivePublicKey });
+          console.log('[solana][pay-with-sol] swap instructions ready', { count: swapInstructions.length });
         } catch (err) {
+          console.error('[solana][pay-with-sol] pre-flight failed', err);
           showNotif(err instanceof Error ? err.message : 'Could not prepare SOL swap — try again', 'denied');
           await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
           setSubmitting(false);
@@ -1539,6 +1547,7 @@ function OverlayContent() {
       // is untouched — it just signs/submits a tx with a few extra
       // instructions at the front.
       if (swapInstructions?.length) {
+        console.log('[solana][pay-with-sol] splicing swap instructions onto deposit tx, requesting signature…', { swapIxCount: swapInstructions.length, totalIxCount: tx.instructions.length + swapInstructions.length });
         tx.instructions.unshift(...swapInstructions);
       }
 

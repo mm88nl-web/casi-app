@@ -52,6 +52,32 @@ const MAX_QUOTE_ATTEMPTS = 3;
 const INITIAL_BUFFER = 1.015; // +1.5%
 const BUFFER_STEP = 0.01; // +1% per retry
 
+// Browser fetch() has NO default timeout — a stalled or silently-rate-
+// -limited response (the free lite-api tier is 1 req/s) hangs forever with
+// no error ever surfacing. Confirmed live 2026-09-07: the first real test
+// of this feature got stuck indefinitely on "Funding CASI escrow…" with no
+// error shown — this is why. Every Jupiter call now aborts and throws a
+// clear, catchable error after FETCH_TIMEOUT_MS instead of hanging the
+// whole booking flow.
+const FETCH_TIMEOUT_MS = 12_000;
+
+const LOG = '[jupiter-swap]';
+
+async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`Jupiter request timed out after ${FETCH_TIMEOUT_MS / 1000}s — try again`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 type JupiterIx = {
   programId: string;
   accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[];
@@ -103,11 +129,15 @@ async function fetchQuote(params: {
     asLegacyTransaction: 'true',
     restrictIntermediateTokens: 'true',
   });
-  const res = await fetch(`${JUPITER_BASE}/quote?${qs.toString()}`);
+  console.log(LOG, 'quote request', { amount: params.amount, slippageBps: params.slippageBps });
+  const t0 = Date.now();
+  const res = await fetchWithTimeout(`${JUPITER_BASE}/quote?${qs.toString()}`);
   const body = await res.json().catch(() => null);
   if (!res.ok || !body || body.error) {
+    console.warn(LOG, 'quote failed', { status: res.status, error: body?.error, ms: Date.now() - t0 });
     throw new Error(body?.error || `Jupiter quote failed (${res.status})`);
   }
+  console.log(LOG, 'quote ok', { inAmount: body.inAmount, outAmount: body.outAmount, ms: Date.now() - t0 });
   return body as JupiterQuote;
 }
 
@@ -124,6 +154,7 @@ export async function getSolToUsdcQuote(params: {
 }): Promise<{ quote: JupiterQuote; lamportsRequired: number }> {
   const { usdcMint, usdcMicroTarget } = params;
   const slippageBps = params.slippageBps ?? 50;
+  console.log(LOG, 'getSolToUsdcQuote start', { usdcMicroTarget, slippageBps });
 
   const probe = await fetchQuote({
     inputMint: WSOL_MINT,
@@ -133,11 +164,13 @@ export async function getSolToUsdcQuote(params: {
   });
   const rate = Number(probe.outAmount) / PROBE_LAMPORTS; // USDC micro per lamport
   if (!(rate > 0)) throw new Error('Could not price SOL → USDC — try again shortly');
+  console.log(LOG, 'probe rate', { rate });
 
   let buffer = INITIAL_BUFFER;
   let lastQuote: JupiterQuote | null = null;
   for (let attempt = 0; attempt < MAX_QUOTE_ATTEMPTS; attempt++) {
     const lamports = Math.ceil((usdcMicroTarget / rate) * buffer);
+    console.log(LOG, 'buffered attempt', { attempt, buffer, lamports });
     const quote = await fetchQuote({
       inputMint: WSOL_MINT,
       outputMint: usdcMint,
@@ -146,10 +179,12 @@ export async function getSolToUsdcQuote(params: {
     });
     lastQuote = quote;
     if (Number(quote.outAmount) >= usdcMicroTarget) {
+      console.log(LOG, 'getSolToUsdcQuote resolved', { attempt, lamportsRequired: quote.inAmount });
       return { quote, lamportsRequired: Number(quote.inAmount) };
     }
     buffer += BUFFER_STEP;
   }
+  console.warn(LOG, 'getSolToUsdcQuote exhausted retries', { lastOutAmount: lastQuote?.outAmount, usdcMicroTarget });
   throw new Error(
     `SOL price moved during quoting — got ${lastQuote?.outAmount ?? '?'} of ${usdcMicroTarget} USDC needed. Try again.`,
   );
@@ -171,7 +206,9 @@ export async function getSwapInstructions(params: {
   quote: JupiterQuote;
   userPublicKey: PublicKey;
 }): Promise<TransactionInstruction[]> {
-  const res = await fetch(`${JUPITER_BASE}/swap-instructions`, {
+  console.log(LOG, 'swap-instructions request', { userPublicKey: params.userPublicKey.toBase58() });
+  const t0 = Date.now();
+  const res = await fetchWithTimeout(`${JUPITER_BASE}/swap-instructions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -182,6 +219,7 @@ export async function getSwapInstructions(params: {
   });
   const body = (await res.json().catch(() => null)) as SwapInstructionsResponse | null;
   if (!res.ok || !body || body.error) {
+    console.warn(LOG, 'swap-instructions failed', { status: res.status, error: body?.error, ms: Date.now() - t0 });
     throw new Error(body?.error || `Jupiter swap-instructions failed (${res.status})`);
   }
   if (body.addressLookupTableAddresses?.length) {
@@ -190,10 +228,12 @@ export async function getSwapInstructions(params: {
   const swapIx = body.swapInstruction ?? body.swapInstructionPayload;
   if (!swapIx) throw new Error('Jupiter response missing swap instruction');
 
-  return [
+  const ixs = [
     ...(body.computeBudgetInstructions ?? []).map(deserializeInstruction),
     ...(body.setupInstructions ?? []).map(deserializeInstruction),
     deserializeInstruction(swapIx),
     ...(body.cleanupInstruction ? [deserializeInstruction(body.cleanupInstruction)] : []),
   ];
+  console.log(LOG, 'swap-instructions ok', { count: ixs.length, hasSetup: !!body.setupInstructions?.length, ms: Date.now() - t0 });
+  return ixs;
 }

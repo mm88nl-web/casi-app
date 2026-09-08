@@ -62,10 +62,15 @@ export default function SolanaConfirmModal({
   txStatus, txError, txId, submitting, onConfirm, onCancel,
 }: Props) {
   const usdcShort = usdcBalance !== null && usdcBalance < parseFloat(estimatedCost);
-  // Only offer the SOL-swap path while nothing's in flight — flipping
-  // payment method under an in-progress submit would race the pre-flight
-  // logic in submitSolanaBooking.
-  const canOfferSwap = usdcShort && (txStatus === 'idle' || txStatus === 'error');
+  // Offered any time nothing's in flight — not just when USDC is short.
+  // Originally gated on usdcShort only, but that hid the option entirely
+  // for a viewer who wants to pay with SOL by choice even with enough USDC
+  // on hand, and (worse) could hide it outright during the brief window
+  // right after connecting a fresh wallet where usdcBalance is still null
+  // rather than a real 0. Flipping payment method under an in-progress
+  // submit would still race submitSolanaBooking's pre-flight, hence the
+  // txStatus guard.
+  const canOfferSwap = txStatus === 'idle' || txStatus === 'error';
   const hasInsufficient = paySol
     ? !swapQuote?.solRequired || (solBalance !== null && solBalance < swapQuote.solRequired)
     : usdcShort && (txStatus === 'idle' || txStatus === 'error');
@@ -136,10 +141,13 @@ export default function SolanaConfirmModal({
             </div>
           )}
 
-          {/* Not enough USDC — offer swapping SOL for it in the same
-              signature. Reads as reassurance, not a fee disclosure: the
-              added cost is a trivial network fee, most of which comes back
-              as unused USDC anyway. See docs/pay-with-sol-design-brief.md. */}
+          {/* Offer swapping SOL for USDC in the same signature — available
+              whether or not USDC is actually short, since a viewer might
+              simply prefer to pay in SOL. Reads as reassurance, not a fee
+              disclosure: the added cost is a trivial network fee, most of
+              which comes back as unused USDC anyway (any real one-time
+              wallet-setup cost is broken out separately below, once
+              known). See docs/pay-with-sol-design-brief.md. */}
           {canOfferSwap && (
             <label
               style={{
@@ -154,7 +162,7 @@ export default function SolanaConfirmModal({
                 onChange={(e) => onTogglePaySol(e.target.checked)}
                 style={{ width: 15, height: 15, accentColor: 'var(--ink)', flexShrink: 0 }}
               />
-              Not enough USDC — pay with SOL instead (swapped automatically, one signature)
+              {usdcShort ? 'Not enough USDC — pay with SOL instead' : 'Pay with SOL instead'} (swapped automatically, one signature)
             </label>
           )}
 
