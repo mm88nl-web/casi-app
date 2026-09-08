@@ -1557,6 +1557,29 @@ function OverlayContent() {
       if (swapInstructions?.length) {
         console.log('[solana][pay-with-sol] splicing swap instructions onto deposit tx, requesting signature…', { swapIxCount: swapInstructions.length, totalIxCount: tx.instructions.length + swapInstructions.length });
         tx.instructions.unshift(...swapInstructions);
+
+        // The real constraint check — jupiter-swap.ts no longer hard-fails
+        // on the presence of addressLookupTableAddresses in the API
+        // response (verified live: that field shows up on nearly every
+        // route right now, including ones that fit legacy tx limits fine —
+        // it doesn't mean the raw instructions actually need it). This is
+        // the ACTUAL question: does the fully-composed transaction
+        // (swap + escrow deposit, everything together) fit under Solana's
+        // 1232-byte legacy transaction limit. tx already has feePayer +
+        // recentBlockhash set by buildInitializeBeamTx, so this reflects
+        // reality rather than a Jupiter-response-shape heuristic.
+        try {
+          tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+          console.log('[solana][pay-with-sol] composed tx fits within legacy size limit');
+        } catch (sizeErr) {
+          console.error('[solana][pay-with-sol] composed tx too large for legacy transaction', sizeErr);
+          const { reportClientError } = await import('@/lib/report-client-error');
+          reportClientError('overlay/pay-with-sol/tx-too-large', sizeErr, { swapIxCount: swapInstructions.length, totalIxCount: tx.instructions.length });
+          showNotif('This swap route is too complex to combine with the booking in one transaction — try again for a different route, or pay with USDC directly.', 'denied');
+          await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
+          setSubmitting(false);
+          return;
+        }
       }
 
       // ── Mobile (non-in-app) Phantom Connect deeplink path ──────────────

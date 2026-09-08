@@ -128,6 +128,16 @@ async function fetchQuote(params: {
     swapMode: 'ExactIn',
     asLegacyTransaction: 'true',
     restrictIntermediateTokens: 'true',
+    // Single-hop only. Not required for correctness (the real fit check is
+    // the composed-tx serialize() in overlay/page.tsx), but keeps account
+    // counts low as a matter of course — verified live 2026-09-08 that
+    // account counts for this pair range from ~18 (direct) to ~39
+    // (2-hop) depending on which route currently wins on price. At the
+    // swap sizes this feature deals with (single-digit-dollar bookings),
+    // the price difference between direct and multi-hop is negligible;
+    // margin against the 1232-byte legacy limit once the escrow deposit
+    // instruction is added on top is not.
+    onlyDirectRoutes: 'true',
   });
   console.log(LOG, 'quote request', { amount: params.amount, slippageBps: params.slippageBps });
   const t0 = Date.now();
@@ -231,8 +241,21 @@ export async function getSwapInstructions(params: {
     console.warn(LOG, 'swap-instructions failed', { status: res.status, error: body?.error, ms: Date.now() - t0 });
     throw new Error(body?.error || `Jupiter swap-instructions failed (${res.status})`);
   }
+  // Was a hard-fail here. Verified live against the real API 2026-09-08:
+  // lite-api currently returns a non-empty addressLookupTableAddresses on
+  // essentially every route right now — including a plain 18-account
+  // Raydium (non-CLMM) swap, the simplest case there is — so its presence
+  // alone doesn't mean the raw instructions actually NEED it to fit in a
+  // legacy transaction. That array only matters if you build a
+  // VersionedTransaction referencing it; a legacy Transaction built from
+  // these same instructions and never mentioning the ALT works fine as
+  // long as it's under Solana's 1232-byte legacy tx size limit. Rejecting
+  // on this field alone was rejecting nearly every real quote. The real
+  // constraint (actual serialized size) is checked by the caller once
+  // these instructions are spliced onto the full booking transaction —
+  // see overlay/page.tsx's submitSolanaBooking, right after the splice.
   if (body.addressLookupTableAddresses?.length) {
-    throw new Error('Swap route needs address lookup tables — unsupported on this booking path');
+    console.warn(LOG, 'route reports ALT addresses (informational only, not necessarily required)', { count: body.addressLookupTableAddresses.length });
   }
   const swapIx = body.swapInstruction ?? body.swapInstructionPayload;
   if (!swapIx) throw new Error('Jupiter response missing swap instruction');
