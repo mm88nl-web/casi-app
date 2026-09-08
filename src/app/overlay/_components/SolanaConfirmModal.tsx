@@ -8,13 +8,19 @@ import { formatTime } from './time';
 export type TxStatus = 'idle' | 'booking' | 'streaming' | 'waiting' | 'error';
 
 /** Live SOL→USDC quote state for the "pay with SOL" toggle — see
- *  src/lib/jupiter-swap.ts. solRequired is UI SOL (not lamports), and
- *  already includes the one-time USDC-wallet-creation cost (needsSetup)
- *  when applicable — it's the real total that gets debited, not just the
- *  swapped amount. */
+ *  src/lib/jupiter-swap.ts. Both amounts are UI SOL (not lamports).
+ *  `swapOnlySol` is what the swap transaction actually converts (plus the
+ *  one-time USDC-wallet-creation cost when `needsSetup`). `solRequired` is
+ *  bigger and is the real "balance the wallet needs on hand" figure used
+ *  for the insufficient-funds check — swapOnlySol, plus the swap tx's own
+ *  network-fee margin, plus a reserve for the SEPARATE booking transaction
+ *  that follows this swap (not spent by the swap at all, but the whole
+ *  two-step flow fails partway through without it — see the matching
+ *  comment on MIN_SOL_FOR_BOOKING_LAMPORTS in overlay/page.tsx). */
 export type SwapQuoteState = {
   loading: boolean;
   solRequired: number | null;
+  swapOnlySol: number | null;
   needsSetup: boolean;
   error: string | null;
 };
@@ -175,21 +181,27 @@ export default function SolanaConfirmModal({
                     ? 'getting quote…'
                     : swapQuote?.error
                       ? swapQuote.error
-                      : swapQuote?.solRequired
-                        ? `≈ ${swapQuote.solRequired.toFixed(4)} SOL${solBalance !== null && solBalance < swapQuote.solRequired ? ' — insufficient' : ''}`
+                      : swapQuote?.swapOnlySol
+                        ? `≈ ${swapQuote.swapOnlySol.toFixed(4)} SOL`
                         : '—'}
                 </span>
               </div>
-              {/* This total already has the one-time wallet-setup cost
-                  folded in when it applies — surfaced explicitly rather
-                  than left as an unexplained gap between this number and a
-                  naive price/rate conversion, which is disproportionately
-                  the case for a $ smaller booking on a first-ever SOL→USDC
-                  swap (a flat ~0.002 SOL setup cost is a small fraction of
-                  a $50 booking but a large one of a $1 flash). */}
-              {!swapQuote?.loading && !swapQuote?.error && swapQuote?.needsSetup && (
-                <div style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 12, color: 'var(--text-4)', marginTop: 4 }}>
-                  Includes a one-time ~0.002 SOL cost to open your USDC wallet — first USDC swap only.
+              {/* This is the number that actually gets converted — kept
+                  separate from the wallet's TOTAL balance requirement
+                  (solRequired, used for the insufficient-funds check below
+                  and shown in the breakdown here) because that total also
+                  includes SOL the swap never touches: its own network-fee
+                  margin, a one-time USDC-wallet-creation cost on a first
+                  swap, and a reserve for the separate booking transaction
+                  that follows right after. Folding all of that into one
+                  "Paying with" figure would overstate what's actually being
+                  traded away — but hiding it entirely is exactly the kind
+                  of surprise-fee outcome this line is here to prevent. */}
+              {!swapQuote?.loading && !swapQuote?.error && swapQuote?.solRequired != null && (
+                <div style={{ fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 12, color: 'var(--text-4)', marginTop: 4, lineHeight: 1.5 }}>
+                  Your wallet needs ≈ {swapQuote.solRequired.toFixed(4)} SOL on hand in total
+                  {solBalance !== null && solBalance < swapQuote.solRequired ? <span style={{ color: '#f87171' }}> — insufficient</span> : null}
+                  : the swap above, a small network-fee margin{swapQuote.needsSetup ? ', a one-time ~0.002 SOL cost to open your USDC wallet' : ''}, and ~0.015 SOL reserved for the booking step right after (not spent by this swap, just has to be present).
                 </div>
               )}
             </div>

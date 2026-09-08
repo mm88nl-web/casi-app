@@ -55,6 +55,24 @@ const BOOKING_PAGE_LIMIT = 200;
 // realistic streamer moderation latency without trailing stale history.
 const STRIPE_DENIED_WINDOW_MS = 10 * 60 * 1000;
 
+// SOL a viewer's wallet needs on hand for a Solana booking tx itself — rent
+// for the fresh escrow state account + vault ATA that initialize_escrow
+// creates on EVERY booking (not a one-time cost, a new escrow PDA is created
+// per booking) plus network fees. Verified against a real mainnet tx
+// 2026-09-08: escrow-state rent 1,899,900 + vault-ATA rent 1,855,569 +
+// program's own SOL transfer 4,078,560 + network fee ~80,000 lamports ≈
+// 0.0078 SOL — 0.015 leaves comfortable headroom. Shared so the pay-with-SOL
+// swap step's own pre-flight (below) can reserve it on top of the swap
+// amount: that step used to only check SOL for the swap itself, letting a
+// viewer near the margin swap successfully and then get stuck unable to
+// afford the booking tx right after — a real "fees look unpredictable" trap.
+const MIN_SOL_FOR_BOOKING_LAMPORTS = 0.015 * 1e9;
+
+// Network-fee margin for the pay-with-SOL swap tx itself — shared between
+// the live quote display and submitSolanaBooking's actual pre-flight check
+// so the two never silently disagree about what "enough SOL" means.
+const SWAP_TX_FEE_MARGIN_LAMPORTS = 0.005 * 1e9;
+
 function OverlayContent() {
   const searchParams = useSearchParams();
   const username = searchParams.get('s') || '';
@@ -1346,12 +1364,18 @@ function OverlayContent() {
         const usdcMicroTarget = Math.round(totalUsdcSwap * 10 ** 6);
         const { getSolToUsdcQuote, getSwapInstructions, ATA_RENT_LAMPORTS } = await import('@/lib/jupiter-swap');
         const ataRentLamports = existingUsdcAtas.length === 0 ? ATA_RENT_LAMPORTS : 0;
-        const MIN_SOL_SWAP = 0.005 * 1e9; // just tx fees now — no escrow rent in THIS tx
         const { quote, lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
-        const totalLamportsNeeded = MIN_SOL_SWAP + lamportsRequired + ataRentLamports;
+        // Reserve MIN_SOL_FOR_BOOKING_LAMPORTS on top of the swap's own cost —
+        // that's what the SECOND tx (the actual booking, run on the viewer's
+        // next tap) needs for its own escrow-account rent + fees, a real SOL
+        // debit this swap step never touches. Without this reserve, a viewer
+        // near the margin could swap successfully and then fail the normal
+        // booking pre-flight's MIN_SOL check moments later, stuck holding
+        // freshly-converted USDC but not enough SOL to actually spend it.
+        const totalLamportsNeeded = SWAP_TX_FEE_MARGIN_LAMPORTS + lamportsRequired + ataRentLamports + MIN_SOL_FOR_BOOKING_LAMPORTS;
         if (solLamports < totalLamportsNeeded) {
           showNotif(
-            `Need ~${(totalLamportsNeeded / 1e9).toFixed(4)} SOL (swap + fees${ataRentLamports ? ' + one-time USDC wallet setup' : ''}). You have ${(solLamports / 1e9).toFixed(4)} SOL.`,
+            `Need ~${(totalLamportsNeeded / 1e9).toFixed(4)} SOL total (swap + fees${ataRentLamports ? ' + one-time USDC wallet setup' : ''} + booking tx). You have ${(solLamports / 1e9).toFixed(4)} SOL.`,
             'denied',
           );
           setSubmitting(false);
@@ -2488,7 +2512,7 @@ function OverlayContent() {
   useEffect(() => {
     if (!paySol || !showConfirmModal) return;
     let cancelled = false;
-    setSwapQuote({ loading: true, solRequired: null, needsSetup: false, error: null });
+    setSwapQuote({ loading: true, solRequired: null, swapOnlySol: null, needsSetup: false, error: null });
     const usdcMicroTarget = Math.round(parseFloat(estimatedCost) * 1e6);
     const fetchQuote = async () => {
       try {
@@ -2508,11 +2532,21 @@ function OverlayContent() {
           needsSetup = existingUsdcAtas.length === 0;
         }
         const { lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
-        const totalLamports = lamportsRequired + (needsSetup ? ATA_RENT_LAMPORTS : 0);
-        if (!cancelled) setSwapQuote({ loading: false, solRequired: totalLamports / 1e9, needsSetup, error: null });
+        // swapOnlySol is what the swap tx itself actually converts — the
+        // honest answer to "how much SOL am I trading away." solRequired is
+        // bigger: it's the full balance the wallet needs to have on hand,
+        // matching submitSolanaBooking's real pre-flight check exactly (swap
+        // amount + swap tx's own network-fee margin + one-time USDC-ATA rent
+        // if needed + the reserve for the SEPARATE booking tx that follows —
+        // that last piece isn't spent by this swap at all, just has to be
+        // present, and used to be missing here entirely, understating the
+        // real requirement).
+        const swapOnlyLamports = lamportsRequired + (needsSetup ? ATA_RENT_LAMPORTS : 0);
+        const totalLamports = swapOnlyLamports + SWAP_TX_FEE_MARGIN_LAMPORTS + MIN_SOL_FOR_BOOKING_LAMPORTS;
+        if (!cancelled) setSwapQuote({ loading: false, solRequired: totalLamports / 1e9, swapOnlySol: swapOnlyLamports / 1e9, needsSetup, error: null });
       } catch (err) {
         if (!cancelled) {
-          setSwapQuote({ loading: false, solRequired: null, needsSetup: false, error: err instanceof Error ? err.message : 'Quote failed' });
+          setSwapQuote({ loading: false, solRequired: null, swapOnlySol: null, needsSetup: false, error: err instanceof Error ? err.message : 'Quote failed' });
         }
       }
     };
