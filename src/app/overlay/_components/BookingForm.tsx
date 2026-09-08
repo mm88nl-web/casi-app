@@ -614,8 +614,13 @@ export default function BookingForm(props: Props) {
                 </span>
               </div>
             ) : null}
+            {/* Predates pay-with-SOL: used to read as a hard stop ("⚠
+                Insufficient balance") with no mention that a SOL-holding
+                viewer can still book — the confirm modal one tap later
+                already offers exactly that (SolanaConfirmModal's "Pay with
+                SOL instead" toggle), this just stopped saying so. */}
             {paymentRail === 'usdc' && walletConnected && usdcBalance !== null && usdcBalance < usdcCost ? (
-              <div className="bf-rail-note" style={{ color: '#f87171' }}>⚠ Insufficient balance</div>
+              <div className="bf-rail-note" style={{ color: '#f87171' }}>⚠ Not enough USDC — you can pay with SOL instead on the next screen</div>
             ) : null}
             {paymentRail === 'usdc' && walletConnected && usdcBalance === null ? (
               <div className="bf-rail-note">Fetching balance…</div>
