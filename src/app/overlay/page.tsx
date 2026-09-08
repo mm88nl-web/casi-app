@@ -414,7 +414,49 @@ function OverlayContent() {
           pc.clearPendingBooking();
           refreshWalletNav();
           if (swapLanded) {
-            showNotif('◎ Swap complete — tap Pay again to finish your booking with USDC', 'success');
+            // Restore the booking form and reopen the confirm modal —
+            // otherwise the viewer lands back on a bare overlay page (this
+            // was a full navigation away and back, every piece of React
+            // state is gone) with nothing to tap and has to redo the whole
+            // form from scratch. See PendingBooking['swap_ctx']'s doc
+            // comment. One more explicit tap is still required (not fully
+            // automatic) — Android won't open a wallet deeplink from a
+            // JS-driven navigation that isn't a direct result of a user
+            // gesture, so auto-firing the booking's own sign step here
+            // would likely just silently fail.
+            let restored = false;
+            if (pending.swap_ctx) {
+              try {
+                const ctx = JSON.parse(pending.swap_ctx);
+                setSelectedSlot(ctx.selectedSlot ?? null);
+                setDurationSeconds(ctx.durationSeconds ?? 60);
+                setMessage(ctx.message ?? '');
+                setIsExtend(!!ctx.isExtend);
+                setIsQueue(!!ctx.isQueue);
+                setUploadMode(ctx.uploadMode === 'upload' ? 'upload' : 'url');
+                setUploadedUrl(ctx.uploadedUrl ?? null);
+                setUploadedPath(ctx.uploadedPath ?? null);
+                setUploadedFileType(ctx.uploadedFileType ?? null);
+                setImageUrl(ctx.imageUrl ?? '');
+                setBannerFontPx(typeof ctx.bannerFontPx === 'number' ? ctx.bannerFontPx : 28);
+                setBannerSpeedSecs(typeof ctx.bannerSpeedSecs === 'number' ? ctx.bannerSpeedSecs : 20);
+                setMediaOffsetX(typeof ctx.mediaOffsetX === 'number' ? ctx.mediaOffsetX : 50);
+                setMediaOffsetY(typeof ctx.mediaOffsetY === 'number' ? ctx.mediaOffsetY : 50);
+                setMediaZoom(typeof ctx.mediaZoom === 'number' ? ctx.mediaZoom : 1);
+                setPaySol(false);
+                setShowConfirmModal(true);
+                restored = true;
+              } catch (ctxErr) {
+                const { reportClientError: rceCtx } = await import('@/lib/report-client-error');
+                rceCtx('overlay/pay-with-sol/swap-ctx-restore-failed', ctxErr, {});
+              }
+            }
+            showNotif(
+              restored
+                ? '◎ Swap complete — confirm your booking below to finish'
+                : '◎ Swap complete — tap Pay again to finish your booking with USDC',
+              'success',
+            );
           } else {
             const { reportClientError } = await import('@/lib/report-client-error');
             reportClientError('overlay/pay-with-sol/swap-not-confirmed', `swap sig ${signature} never confirmed after 30s poll`, { signature });
@@ -1421,6 +1463,16 @@ function OverlayContent() {
           const session = pc.getStoredSession();
           const baseHere = window.location.origin + window.location.pathname + window.location.search;
           const sep = window.location.search ? '&' : '?';
+          // Snapshot the whole booking form so the return handler can
+          // restore it and reopen the confirm modal after the swap round-
+          // trips through the wallet app — see PendingBooking['swap_ctx']'s
+          // doc comment. Every value here is already a serializable
+          // primitive or an already-uploaded storage reference.
+          const swapCtx = JSON.stringify({
+            selectedSlot, durationSeconds, message, isExtend, isQueue,
+            uploadMode, uploadedUrl, uploadedPath, uploadedFileType, imageUrl,
+            bannerFontPx, bannerSpeedSecs, mediaOffsetX, mediaOffsetY, mediaZoom,
+          });
           if (!session) {
             const walletName = pc.getPreferredDeeplinkWallet();
             pc.stashPendingBooking({
@@ -1428,6 +1480,7 @@ function OverlayContent() {
               booking_id: '', cancel_token: '', escrow_pda: '',
               viewer_wallet: effectivePublicKey.toBase58(),
               pending_tx: txB58,
+              swap_ctx: swapCtx,
             });
             // Force a fresh dapp keypair for this connect (see
             // regenerateDappKeypair's doc comment) — must happen before
@@ -1454,6 +1507,7 @@ function OverlayContent() {
             kind: 'swap',
             booking_id: '', cancel_token: '', escrow_pda: '',
             viewer_wallet: effectivePublicKey.toBase58(),
+            swap_ctx: swapCtx,
           });
           // DEBUG (2026-09-08, pending payloadDecryptionFailed investigation):
           // this is the branch that runs when getStoredSession() ALREADY

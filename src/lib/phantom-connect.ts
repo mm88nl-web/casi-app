@@ -269,6 +269,19 @@ export type PendingBooking = {
    *  before signing — on connect-return we re-fire the sign deeplink with
    *  this tx without rebuilding it. */
   pending_tx?:   string;
+  /** kind:'swap' only — the booking-form state to restore after the swap
+   *  round-trips through the wallet app. A mobile deeplink is a full page
+   *  navigation away and back, so every piece of React state (selected
+   *  slot, uploaded image reference, duration, message, customize params)
+   *  is gone by the time the return handler runs. Without this, a viewer
+   *  who swapped SOL→USDC on mobile landed back on a bare overlay page
+   *  with nothing to tap and had to redo the whole booking form from
+   *  scratch — found live 2026-09-08. Opaque JSON (not individual typed
+   *  fields) so this type doesn't have to track every field the booking
+   *  form happens to have; the overlay page owns both writing and parsing
+   *  it. All values are already-serializable primitives / already-uploaded
+   *  storage references — nothing here requires re-uploading a file. */
+  swap_ctx?: string;
   /** ms since epoch — older than ~10 min and we treat the stash as stale. */
   ts: number;
 };
