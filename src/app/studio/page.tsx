@@ -373,7 +373,23 @@ function StudioPageInner() {
   const { publicKey, signTransaction, signAllTransactions } = useWallet();
   const { connection } = useConnection();
 
+  // Out-of-order response guard. reload() is called constantly (realtime
+  // events + the 5-10s watchdog poll below), and nothing serialized the
+  // 7-query Promise.all + its setState calls — two overlapping reload()
+  // calls could resolve in either order, and whichever one's setState runs
+  // LAST wins regardless of which one actually started more recently. A
+  // slower-but-earlier call finishing after a faster-but-later one would
+  // silently overwrite fresh state with stale data. Confirmed live
+  // 2026-09-07: a Studio tab that was actively open and polling every
+  // 5-10s (verified via Supabase edge logs — a poll landed 0.5s after a
+  // new flash's created_at) still didn't show that flash without a manual
+  // refresh, which this race explains and a dead subscription/watchdog
+  // doesn't. Each reload() call now claims a generation number and bails
+  // before any setState if a newer call has since started.
+  const reloadGenRef = useRef(0);
+
   const reload = useCallback(async (profileId: string) => {
+    const myGen = ++reloadGenRef.current;
     const startOfDayIso = new Date();
     startOfDayIso.setHours(0, 0, 0, 0);
 
@@ -415,6 +431,10 @@ function StudioPageInner() {
           .gte('started_at', startOfDayIso.toISOString())
           .order('started_at', { ascending: false }).limit(LOG_LIMIT),
       ]);
+
+    // A newer reload() has started since this one began — its result will
+    // land and this one is now stale. Drop it instead of racing setState.
+    if (myGen !== reloadGenRef.current) return;
 
     setPendingBookings((pendingBookingsRes.data ?? []) as BookingRow[]);
     setPendingFlashes((pendingFlashesRes.data ?? []) as FlashRow[]);
