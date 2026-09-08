@@ -1394,6 +1394,8 @@ function OverlayContent() {
           const totalLamportsNeeded = MIN_SOL + lamportsRequired + ataRentLamports;
           if (solLamports < totalLamportsNeeded) {
             console.warn('[solana][pay-with-sol] insufficient SOL', { solLamports, totalLamportsNeeded });
+            const { reportClientError } = await import('@/lib/report-client-error');
+            reportClientError('overlay/pay-with-sol/insufficient-sol', `Need ${totalLamportsNeeded} lamports, have ${solLamports}`, { totalLamportsNeeded, solLamports, ataRentLamports });
             showNotif(
               `Need ~${(totalLamportsNeeded / 1e9).toFixed(4)} SOL (swap + rent/fees${ataRentLamports ? ' + one-time USDC wallet setup' : ''}). You have ${(solLamports / 1e9).toFixed(4)} SOL.`,
               'denied',
@@ -1407,6 +1409,12 @@ function OverlayContent() {
           console.log('[solana][pay-with-sol] swap instructions ready', { count: swapInstructions.length });
         } catch (err) {
           console.error('[solana][pay-with-sol] pre-flight failed', err);
+          // Explicitly caught here, so ClientErrorReporter's global
+          // window.onerror/unhandledrejection listeners never see it —
+          // confirmed live 2026-09-08: two real failed attempts produced
+          // zero Discord reports because of exactly this. Opt in directly.
+          const { reportClientError } = await import('@/lib/report-client-error');
+          reportClientError('overlay/pay-with-sol/preflight', err, { usdcMicroTarget });
           showNotif(err instanceof Error ? err.message : 'Could not prepare SOL swap — try again', 'denied');
           await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
           setSubmitting(false);
@@ -1726,6 +1734,15 @@ function OverlayContent() {
       showNotif('◎ Payment locked — awaiting streamer approval!', 'success');
       setShowConfirmModal(false);
       closeSlot();
+      // Report successes too, not just failures — reportClientError is just
+      // a thin /api/log POST, doesn't care whether "err" is a real error.
+      // While this feature is still under live testing (single tester,
+      // every attempt is a real data point), visibility into what actually
+      // landed on-chain matters as much as what failed.
+      {
+        const { reportClientError } = await import('@/lib/report-client-error');
+        reportClientError('overlay/pay-with-sol/success', `booking ${newBooking.id} confirmed, tx ${sig}`, { paySol, bookingId: newBooking.id, tx: sig, escrowPda });
+      }
       if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
     } catch (err: unknown) {
       const { formatEscrowError, isUserRejection, isWalletSignatureMissing } = await import('@/lib/casi-errors');
