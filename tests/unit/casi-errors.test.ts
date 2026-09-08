@@ -4,6 +4,7 @@ import {
   isUserRejection,
   isTransientRpcError,
   isAlreadyProcessed,
+  isBenignEscrowRace,
   formatEscrowError,
   CASI_ERROR_NAMES,
   CASI_ERROR_CODE_BASE,
@@ -95,6 +96,73 @@ describe('isAlreadyProcessed', () => {
   it('returns false for unrelated errors', () => {
     expect(isAlreadyProcessed(new Error('Blockhash not found'))).to.equal(false);
     expect(isAlreadyProcessed(new Error('User rejected the request'))).to.equal(false);
+  });
+});
+
+describe('isBenignEscrowRace', () => {
+  it('detects "already processed" (isAlreadyProcessed passthrough)', () => {
+    expect(isBenignEscrowRace(new Error('already processed'))).to.equal(true);
+  });
+
+  it('detects a real AnchorError shape via .error.errorCode.number', () => {
+    // Mirrors what @coral-xyz/anchor's translateError() produces when it
+    // successfully matches a "Program log: AnchorError..." line.
+    const err = {
+      message: 'AnchorError caused by account: escrow_state. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.',
+      error: { errorCode: { code: 'AccountNotInitialized', number: 3012 } },
+    };
+    expect(isBenignEscrowRace(err)).to.equal(true);
+  });
+
+  it('detects AlreadySettled by AnchorError error number (6005)', () => {
+    const err = { message: 'AnchorError ... AlreadySettled ...', error: { errorCode: { code: 'AlreadySettled', number: 6005 } } };
+    expect(isBenignEscrowRace(err)).to.equal(true);
+  });
+
+  it('detects a bare ProgramError shape via .code, even though .message is empty', () => {
+    // @coral-xyz/anchor's ProgramError calls super() with NO argument, so
+    // .message is ALWAYS '' — this is the case that broke plain
+    // message-regex matching and is the whole reason this helper exists.
+    class FakeProgramError extends Error {
+      code: number;
+      constructor(code: number) {
+        super();
+        this.code = code;
+      }
+    }
+    const err = new FakeProgramError(3012);
+    expect(err.message).to.equal('');
+    expect(isBenignEscrowRace(err)).to.equal(true);
+  });
+
+  it('detects the untranslated raw SendTransactionError text by name', () => {
+    const err = new Error('Simulation failed. \nMessage: Transaction simulation failed: Error processing Instruction 0: custom program error: AccountNotInitialized');
+    expect(isBenignEscrowRace(err)).to.equal(true);
+  });
+
+  it('detects the untranslated raw SendTransactionError text by hex code alone', () => {
+    // 0xbc4 = 3012 = AccountNotInitialized, with no readable name anywhere
+    // in the message — the exact shape a bare conn.sendRawTransaction()
+    // throws when the RPC never echoed a matching Anchor log line.
+    const err = new Error('Simulation failed. \nMessage: Transaction simulation failed: Error processing Instruction 0: custom program error: 0xbc4');
+    expect(isBenignEscrowRace(err)).to.equal(true);
+  });
+
+  it('detects CasiError::AlreadySettled by hex code alone (0x1775 = 6005)', () => {
+    const err = new Error('custom program error: 0x1775');
+    expect(isBenignEscrowRace(err)).to.equal(true);
+  });
+
+  it('does not false-positive on an unrelated hex code', () => {
+    // 0x1771 = 6001 = InvalidDuration — a real error, not a benign race.
+    const err = new Error('custom program error: 0x1771');
+    expect(isBenignEscrowRace(err)).to.equal(false);
+  });
+
+  it('returns false for a genuine, unrelated failure', () => {
+    expect(isBenignEscrowRace(new Error('User rejected the request'))).to.equal(false);
+    expect(isBenignEscrowRace(new Error('Blockhash not found'))).to.equal(false);
+    expect(isBenignEscrowRace(null)).to.equal(false);
   });
 });
 

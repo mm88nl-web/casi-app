@@ -386,9 +386,14 @@ function OverlayContent() {
           // raw simulation error. Found live 2026-09-08 on a real "end
           // early" attempt. Only handled for settle/cancel: 'book'/'flash'/
           // 'swap' failing this way is a genuine failure, not a race.
-          const { isAlreadyProcessed } = await import('@/lib/casi-errors');
-          const sendMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);
-          const isBenignRace = isAlreadyProcessed(sendErr) || /AlreadySettled|AccountNotInitialized/i.test(sendMsg);
+          // isBenignEscrowRace (not a plain message regex) — a bare
+          // sendRawTransaction() call like this one never runs through
+          // Anchor's translateError(), so the thrown SendTransactionError's
+          // .message is whatever raw text the RPC returned; see the
+          // helper's doc comment in casi-errors.ts for the three different
+          // shapes this same underlying error can take.
+          const { isBenignEscrowRace } = await import('@/lib/casi-errors');
+          const isBenignRace = isBenignEscrowRace(sendErr);
           if (isBenignRace && (kind === 'settle' || kind === 'cancel') && pending.escrow_pda) {
             const pdaKey = new PublicKey(pending.escrow_pda);
             let closed = false;
@@ -2204,9 +2209,19 @@ function OverlayContent() {
    * Settle a live Solana beam via `settle_beam`. On-chain integer proration
    * pays the streamer the vested portion and refunds the viewer the rest.
    * Called when the viewer clicks "end early" on an active beam.
+   *
+   * Returns true only when the on-chain state is actually confirmed
+   * terminal — a clean settle, or a recognized benign race where something
+   * else (the streamer's kick, a delegate settle, the expire crank) already
+   * closed the same escrow. Returns false for a real failure AND for the
+   * mobile-redirect branch, where the outcome isn't known yet (the page is
+   * navigating away; the phantom-connect-return handler owns the DB flip
+   * once IT confirms). The caller uses this to decide whether it's safe to
+   * flip the booking's DB status to expired — see the onEndEarly comment at
+   * the call site for the bug this replaced.
    */
-  const settleSolanaBeam = async (booking: any) => {
-    if (!booking.escrow_pda || !booking.viewer_wallet || !profile?.solana_wallet) return;
+  const settleSolanaBeam = async (booking: any): Promise<boolean> => {
+    if (!booking.escrow_pda || !booking.viewer_wallet || !profile?.solana_wallet) return false;
     try {
       const client = await buildViewerCasiClient();
       if (!client) throw new Error('Wallet not ready to sign');
@@ -2221,7 +2236,7 @@ function OverlayContent() {
           streamer: new PK(profile.solana_wallet),
         });
         await phantomConnectSignAndSubmit(tx, 'settle', booking);
-        return;
+        return false;
       }
       await client.settleBeam({
         escrowId: booking.escrow_seed ?? booking.id,
@@ -2229,19 +2244,23 @@ function OverlayContent() {
         streamer: new PK(profile.solana_wallet),
       });
     } catch (err) {
-      // "Transaction has already been processed" = Anchor's .rpc() resubmitted
-      // the signed tx after the first submission already landed. The refund
-      // went through; treat as success and fall through to the happy path.
-      const { formatEscrowError, isAlreadyProcessed } = await import('@/lib/casi-errors');
-      if (!isAlreadyProcessed(err)) {
+      // isBenignEscrowRace covers "Transaction has already been processed"
+      // (Anchor's .rpc() resubmitted after the first submission already
+      // landed) AND AccountNotInitialized/AlreadySettled (something else
+      // closed this same escrow first) — both mean the refund already
+      // happened, just not via this call. See its doc comment in
+      // casi-errors.ts for why this needs more than a message-regex check.
+      const { formatEscrowError, isBenignEscrowRace } = await import('@/lib/casi-errors');
+      if (!isBenignEscrowRace(err)) {
         console.error('[beam] settleBeam failed:', err);
         showNotif(formatEscrowError(err), 'denied');
-        return;
+        return false;
       }
     }
     refreshWalletNav();
     showNotif('◎ Beam ended — refund returned to your wallet', 'warning');
     if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+    return true;
   };
 
   /**
@@ -2367,12 +2386,11 @@ function OverlayContent() {
           streamer: new PK(profile.solana_wallet),
         });
       } catch (err) {
-        const { formatEscrowError, isAlreadyProcessed } = await import('@/lib/casi-errors');
-        const msg = err instanceof Error ? err.message : String(err);
+        const { formatEscrowError, isBenignEscrowRace } = await import('@/lib/casi-errors');
         // AlreadySettled / AccountNotInitialized = the escrow closed between
         // our probe and our tx (streamer retried, cranker caught up). Verify
         // on-chain and treat as success if so.
-        if (isAlreadyProcessed(err) || /AlreadySettled|AccountNotInitialized/i.test(msg)) {
+        if (isBenignEscrowRace(err)) {
           if (await isPdaClosed()) {
             const ok = await clearPdaInDb();
             refreshWalletNav();
@@ -2409,7 +2427,7 @@ function OverlayContent() {
       await client.cancelEscrow({ escrowId: booking.escrow_seed ?? booking.id });
     } catch (err) {
       cancelThrew = true;
-      const { formatEscrowError } = await import('@/lib/casi-errors');
+      const { formatEscrowError, isBenignEscrowRace } = await import('@/lib/casi-errors');
       console.error('[beam] cancelEscrow failed:', err);
       // AlreadySettled = escrow moved out of Pending between our probe and the
       // cancel (approved / settled / cancelled elsewhere). already-processed =
@@ -2417,8 +2435,7 @@ function OverlayContent() {
       // cancel likely succeeded. AccountNotInitialized = Anchor couldn't find
       // a valid EscrowState (closed). In all three cases the tx may have
       // actually closed the PDA — poll-probe before concluding otherwise.
-      const msg = err instanceof Error ? err.message : String(err);
-      if (/AlreadySettled|already.*processed|AccountNotInitialized/i.test(msg)) {
+      if (isBenignEscrowRace(err)) {
         if (await isPdaClosed()) {
           const ok = await clearPdaInDb();
           refreshWalletNav();
@@ -2521,9 +2538,8 @@ function OverlayContent() {
         }
         await client.cancelEscrow({ escrowId: flash.id });
       } catch (err) {
-        const { isAlreadyProcessed, formatEscrowError } = await import('@/lib/casi-errors');
-        const msg = err instanceof Error ? err.message : String(err);
-        if (isAlreadyProcessed(err) || /AlreadySettled|AccountNotInitialized/i.test(msg)) {
+        const { isBenignEscrowRace, formatEscrowError } = await import('@/lib/casi-errors');
+        if (isBenignEscrowRace(err)) {
           // Race: PDA closed between our probe and our tx. Reconcile.
           await reflectClosed(
             '◎ Already settled — DB synced',
@@ -3262,11 +3278,22 @@ function OverlayContent() {
                 try {
                   if (booking.payment_method === 'solana') {
                     // settle_beam pays streamer the vested portion on-chain and
-                    // refunds the viewer the rest in a single tx. DB is updated
-                    // after to advance the queue; settleSolanaBeam surfaces its
-                    // own toast on error.
-                    await settleSolanaBeam(booking);
-                    if (activeBooking) await clientExpireBooking(activeBooking);
+                    // refunds the viewer the rest in a single tx. Only flip the
+                    // DB to expired when settleSolanaBeam actually confirms the
+                    // on-chain state is terminal — settleSolanaBeam surfaces its
+                    // own toast on error either way.
+                    //
+                    // Found live 2026-09-08: this used to call
+                    // clientExpireBooking unconditionally, so a settle that
+                    // threw (wallet rejected, RPC hiccup, an unrecognized
+                    // "Simulation failed") still flipped the booking to expired
+                    // while the escrow stayed genuinely Active on-chain — the
+                    // beam vanished from the canvas as "aired" but the funds
+                    // never actually moved, and the viewer was left staring at
+                    // a stuck "Ended early — USDC recoverable" chip for a beam
+                    // that, on-chain, was never touched.
+                    const settled = await settleSolanaBeam(booking);
+                    if (settled && activeBooking) await clientExpireBooking(activeBooking);
                   } else {
                     // Stripe rail. Wait for the server to confirm before
                     // celebrating — previously this fired the success toast
