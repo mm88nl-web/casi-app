@@ -215,6 +215,15 @@ export async function getSwapInstructions(params: {
       quoteResponse: params.quote,
       userPublicKey: params.userPublicKey.toBase58(),
       wrapAndUnwrapSol: true,
+      // The /quote call already passes asLegacyTransaction — found live
+      // 2026-09-08 that this does NOT carry over to /swap-instructions on
+      // its own; they're independent requests and each determines its own
+      // transaction-format compatibility. Without this here, Jupiter can
+      // still hand back an ALT-requiring instruction set even for a quote
+      // that was itself legacy-compatible, which the addressLookupTable
+      // check below then (correctly) rejects — but needlessly, since this
+      // flag avoids it in the first place.
+      asLegacyTransaction: true,
     }),
   });
   const body = (await res.json().catch(() => null)) as SwapInstructionsResponse | null;
