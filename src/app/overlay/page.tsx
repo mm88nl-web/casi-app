@@ -290,13 +290,38 @@ function OverlayContent() {
           showNotif('Your booking session timed out — please start the booking again', 'denied');
           return;
         }
-        const { Connection } = await import('@solana/web3.js');
+        const { Connection, PublicKey } = await import('@solana/web3.js');
         const { SOLANA_RPC } = await import('@/lib/solana-network');
         const bs58Mod = await import('bs58');
         const bs58Local = bs58Mod.default;
         const conn = new Connection(SOLANA_RPC, 'confirmed');
         const rawTx = bs58Local.decode(signedTransactionB58);
         const signature = await conn.sendRawTransaction(rawTx, { skipPreflight: false });
+
+        // sendRawTransaction only confirms the network ACCEPTED the tx into
+        // its send queue — not that it actually landed. Found live
+        // 2026-09-08: a mobile deeplink round-trip (redirect out to the
+        // wallet app, viewer reviews, redirect back) can easily outlast the
+        // tx's blockhash validity window and silently expire it. The wallet
+        // app itself reports success (it did send), but the network never
+        // confirms it — and this code used to call attach-solana-tx and
+        // show "Payment locked!" immediately after sendRawTransaction, with
+        // no confirmation wait at all. Produced exactly that: a DB row with
+        // a real (deterministically-derived) escrow_pda and no tx_signature
+        // (attach-solana-tx's own verifyTxReferencesEscrow correctly
+        // dropped the unconfirmable signature), while the PDA itself never
+        // existed on-chain. Poll for the PDA actually existing — same
+        // "on-chain state is authoritative" pattern the wallet-adapter
+        // path's PDA-poll race already uses — before ever claiming success.
+        let landed = false;
+        if (pending.escrow_pda) {
+          const pdaKey = new PublicKey(pending.escrow_pda);
+          for (let i = 0; i < 15; i++) {
+            const info = await conn.getAccountInfo(pdaKey).catch(() => null);
+            if (info) { landed = true; break; }
+            await new Promise((r) => setTimeout(r, 2000));
+          }
+        }
 
         // Dispatch on the stash's `kind`. Default 'book' for stashes from
         // older code paths that didn't set it explicitly.
@@ -313,8 +338,14 @@ function OverlayContent() {
               viewer_wallet: pending.viewer_wallet,
             }),
           });
-          if (res.ok) {
+          if (res.ok && landed) {
             showNotif('◎ Payment locked — awaiting streamer approval!', 'success');
+            pc.clearPendingBooking();
+            if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+          } else if (res.ok && !landed) {
+            const { reportClientError } = await import('@/lib/report-client-error');
+            reportClientError('overlay/phantom-connect-return/not-confirmed', `sig ${signature} sent but PDA never appeared after 30s poll`, { bookingId: pending.booking_id, escrowPda: pending.escrow_pda, signature });
+            showNotif('Transaction sent but never confirmed on-chain — it likely expired in transit. Check your wallet balance before retrying; nothing was charged if it expired.', 'error');
             pc.clearPendingBooking();
             if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
           } else {
@@ -336,9 +367,16 @@ function OverlayContent() {
               viewer_wallet: pending.viewer_wallet,
             }),
           });
-          if (res.ok) {
+          if (res.ok && landed) {
             if (pending.cancel_token) rememberFlashToken(pending.booking_id, pending.cancel_token);
             showNotif('⚡ Flash locked — awaiting streamer approval!', 'success');
+            pc.clearPendingBooking();
+            refreshWalletNav();
+            if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
+          } else if (res.ok && !landed) {
+            const { reportClientError } = await import('@/lib/report-client-error');
+            reportClientError('overlay/phantom-connect-return/not-confirmed', `sig ${signature} sent but PDA never appeared after 30s poll`, { flashId: pending.booking_id, escrowPda: pending.escrow_pda, signature });
+            showNotif('Transaction sent but never confirmed on-chain — it likely expired in transit. Check your wallet balance before retrying; nothing was charged if it expired.', 'error');
             pc.clearPendingBooking();
             refreshWalletNav();
             if (profile?.id) await loadData(profile.id, savedViewerName ?? undefined);
