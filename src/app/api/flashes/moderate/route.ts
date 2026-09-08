@@ -17,6 +17,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { createHash } from 'node:crypto';
 import { stripe } from '@/lib/stripe';
+import { SOLANA_RPC as DEFAULT_SOLANA_RPC } from '@/lib/solana-network';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,10 +26,16 @@ const supabase = createClient(
 
 const TX_SIG_RE = /^[1-9A-HJ-NP-Za-km-z]{64,88}$/;
 
+// Was falling back to a hardcoded devnet URL if HELIUS_RPC_URL was ever
+// unset — silently wrong on live mainnet. DEFAULT_SOLANA_RPC (from
+// solana-network.ts) is the correct network-aware fallback the rest of the
+// app already uses; this also means setting NEXT_PUBLIC_SOLANA_RPC (the
+// client-facing var, see that file's "HOW TO FLIP TO MAINNET" comment)
+// benefits this route automatically even without HELIUS_RPC_URL set.
 const SOLANA_RPC =
   process.env.HELIUS_RPC_URL ||
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
-  'https://api.devnet.solana.com';
+  DEFAULT_SOLANA_RPC;
 
 const ESCROW_SEED = Buffer.from('casi-escrow');
 
