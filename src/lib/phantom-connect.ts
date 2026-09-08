@@ -221,8 +221,17 @@ export type PendingBooking = {
    *  - 'flash'  → POST /api/flashes/attach-escrow
    *  - 'settle' → tx already submitted on-chain by us; refresh data
    *  - 'cancel' → tx already submitted on-chain by us; refresh data
+   *  - 'swap'   → pay-with-SOL's standalone Jupiter swap, no booking
+   *    attached yet. Kept deliberately separate from 'book' rather than
+   *    combined into one transaction — see docs/pay-with-sol-design-brief.md
+   *    and the 2026-09-08 finding that a spliced swap+deposit legacy tx
+   *    doesn't reliably fit Solana's 1232-byte limit even in the best
+   *    case. On return, just confirms the swap landed and tells the
+   *    viewer to hit Confirm again — the second click runs the completely
+   *    unmodified, already-proven 'book' flow with a now-sufficient USDC
+   *    balance.
    *  Default 'book' for backwards-compatibility with older stashes. */
-  kind?:         'book' | 'flash' | 'settle' | 'cancel';
+  kind?:         'book' | 'flash' | 'settle' | 'cancel' | 'swap';
   booking_id:    string;
   cancel_token:  string;
   escrow_pda:    string;

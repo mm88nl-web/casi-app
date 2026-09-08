@@ -317,6 +317,39 @@ function OverlayContent() {
         // existed on-chain. Poll for the PDA actually existing — same
         // "on-chain state is authoritative" pattern the wallet-adapter
         // path's PDA-poll race already uses — before ever claiming success.
+        //
+        // Dispatch on the stash's `kind`. Default 'book' for stashes from
+        // older code paths that didn't set it explicitly.
+        const kind = pending.kind ?? 'book';
+
+        // 'swap' has no escrow_pda at all (it's not a booking) — confirm by
+        // signature status instead of polling for an account that will
+        // never exist. See PendingBooking['kind']'s doc comment for why
+        // this is its own standalone step rather than spliced into the
+        // booking tx.
+        if (kind === 'swap') {
+          let swapLanded = false;
+          for (let i = 0; i < 15; i++) {
+            const st = await conn.getSignatureStatus(signature).catch(() => null);
+            const confirmationStatus = st?.value?.confirmationStatus;
+            if (confirmationStatus === 'confirmed' || confirmationStatus === 'finalized') {
+              swapLanded = !st?.value?.err;
+              break;
+            }
+            await new Promise((r) => setTimeout(r, 2000));
+          }
+          pc.clearPendingBooking();
+          refreshWalletNav();
+          if (swapLanded) {
+            showNotif('◎ Swap complete — tap Pay again to finish your booking with USDC', 'success');
+          } else {
+            const { reportClientError } = await import('@/lib/report-client-error');
+            reportClientError('overlay/pay-with-sol/swap-not-confirmed', `swap sig ${signature} never confirmed after 30s poll`, { signature });
+            showNotif('Swap sent but never confirmed on-chain — it likely expired in transit. Check your wallet balance before retrying.', 'error');
+          }
+          return;
+        }
+
         let landed = false;
         if (pending.escrow_pda) {
           const pdaKey = new PublicKey(pending.escrow_pda);
@@ -327,9 +360,6 @@ function OverlayContent() {
           }
         }
 
-        // Dispatch on the stash's `kind`. Default 'book' for stashes from
-        // older code paths that didn't set it explicitly.
-        const kind = pending.kind ?? 'book';
         if (kind === 'book') {
           const res = await fetch('/api/bookings/attach-solana-tx', {
             method: 'POST',
@@ -1242,6 +1272,112 @@ function OverlayContent() {
       showNotif('This streamer has not linked a Solana wallet yet', 'denied');
       return;
     }
+
+    // Pay-with-SOL: a completely standalone step, not spliced into the
+    // booking's deposit transaction. Found live 2026-09-08 that even the
+    // simplest possible swap route combined with the real escrow deposit
+    // instruction doesn't reliably fit Solana's 1232-byte legacy
+    // transaction limit — measured the best case at 1240 bytes, 8 over.
+    // No booking gets created here at all; this only swaps SOL for USDC,
+    // and on success flips paySol back off so the viewer's next tap of
+    // Pay runs the completely unmodified, already-proven direct-USDC
+    // flow below with a now-sufficient balance. See PendingBooking['kind']
+    // in phantom-connect.ts for the mobile-deeplink half of this.
+    if (paySol) {
+      setSubmitting(true);
+      setTxStatus('booking');
+      setTxError(null);
+      try {
+        const { Connection, PublicKey: PK, Transaction: Tx } = await import('@solana/web3.js');
+        const connection = new Connection(SOLANA_RPC);
+        const solLamports = await connection.getBalance(effectivePublicKey);
+        const { value: existingUsdcAtas } = await connection.getParsedTokenAccountsByOwner(
+          effectivePublicKey, { mint: new PK(USDC_MINT) },
+        );
+        const durationMinutesSwap = durationSeconds / 60;
+        const totalUsdcSwap = selectedSlot.price_unit === 'min'
+          ? selectedSlot.price_value * durationMinutesSwap
+          : selectedSlot.price_value * (durationMinutesSwap / 60);
+        const usdcMicroTarget = Math.round(totalUsdcSwap * 10 ** 6);
+        const { getSolToUsdcQuote, getSwapInstructions, ATA_RENT_LAMPORTS } = await import('@/lib/jupiter-swap');
+        const ataRentLamports = existingUsdcAtas.length === 0 ? ATA_RENT_LAMPORTS : 0;
+        const MIN_SOL_SWAP = 0.005 * 1e9; // just tx fees now — no escrow rent in THIS tx
+        const { quote, lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
+        const totalLamportsNeeded = MIN_SOL_SWAP + lamportsRequired + ataRentLamports;
+        if (solLamports < totalLamportsNeeded) {
+          showNotif(
+            `Need ~${(totalLamportsNeeded / 1e9).toFixed(4)} SOL (swap + fees${ataRentLamports ? ' + one-time USDC wallet setup' : ''}). You have ${(solLamports / 1e9).toFixed(4)} SOL.`,
+            'denied',
+          );
+          setSubmitting(false);
+          return;
+        }
+        const swapInstructions = await getSwapInstructions({ quote, userPublicKey: effectivePublicKey });
+        const swapTx = new Tx();
+        swapTx.add(...swapInstructions);
+        swapTx.feePayer = effectivePublicKey;
+        const { blockhash } = await connection.getLatestBlockhash();
+        swapTx.recentBlockhash = blockhash;
+
+        const { needsMobileHandoff, isInWalletBrowser } = await import('@/lib/mobile-wallet');
+        if (needsMobileHandoff() && !isInWalletBrowser()) {
+          const pc = await import('@/lib/phantom-connect');
+          const bs58Mod = await import('bs58');
+          const bs58 = bs58Mod.default;
+          const txB58 = bs58.encode(swapTx.serialize({ requireAllSignatures: false, verifySignatures: false }));
+          const session = pc.getStoredSession();
+          const baseHere = window.location.origin + window.location.pathname + window.location.search;
+          const sep = window.location.search ? '&' : '?';
+          if (!session) {
+            const walletName = pc.getPreferredDeeplinkWallet();
+            pc.stashPendingBooking({
+              kind: 'swap',
+              booking_id: '', cancel_token: '', escrow_pda: '',
+              viewer_wallet: effectivePublicKey.toBase58(),
+              pending_tx: txB58,
+            });
+            window.location.href = pc.buildConnectUrl({
+              wallet: walletName,
+              cluster: WALLET_ADAPTER_CLUSTER,
+              redirectTo: `${baseHere}${sep}phantom_action=connect-resume&casi_wallet=${walletName}`,
+            });
+            return;
+          }
+          pc.stashPendingBooking({
+            kind: 'swap',
+            booking_id: '', cancel_token: '', escrow_pda: '',
+            viewer_wallet: effectivePublicKey.toBase58(),
+          });
+          window.location.href = pc.buildSignTransactionUrl({
+            session,
+            transactionB58: txB58,
+            redirectTo: `${baseHere}${sep}phantom_action=sign-resume`,
+          });
+          return;
+        }
+
+        // Desktop / wallet-adapter path — no page navigation, just await it
+        // directly. A hanging wallet promise was a MOBILE in-app-browser
+        // bug (see the PDA-poll race comment below); not replicating that
+        // workaround here since desktop wallet-adapter doesn't exhibit it.
+        if (!sendTransaction) throw new Error('Wallet does not support sending transactions');
+        const sig = await sendTransaction(swapTx, connection);
+        await connection.confirmTransaction(sig, 'confirmed');
+        refreshWalletNav();
+        setPaySol(false);
+        showNotif('◎ Swap complete — tap Pay again to finish your booking with USDC', 'success');
+        setSubmitting(false);
+        return;
+      } catch (err) {
+        console.error('[solana][pay-with-sol] swap step failed', err);
+        const { reportClientError } = await import('@/lib/report-client-error');
+        reportClientError('overlay/pay-with-sol/swap-step', err, {});
+        showNotif(err instanceof Error ? err.message : 'Could not complete the SOL swap — try again', 'denied');
+        setSubmitting(false);
+        return;
+      }
+    }
+
     setSubmitting(true);
     setTxStatus('booking');
     setTxError(null);
@@ -1360,68 +1496,11 @@ function OverlayContent() {
       const solLamports = await connection.getBalance(effectivePublicKey);
       const MIN_SOL     = 0.015 * 1e9;
 
-      // Populated on the pay-with-SOL path; prepended to the deposit tx
-      // below. null on the default direct-USDC path — zero behavior change
-      // there.
-      let swapInstructions: import('@solana/web3.js').TransactionInstruction[] | null = null;
-
-      if (paySol) {
-        // Don't skip the USDC ATA check — we still need to know whether one
-        // already exists, since Jupiter's swap has to CREATE it (real,
-        // separate ~0.002 SOL rent cost, see ATA_RENT_LAMPORTS in
-        // jupiter-swap.ts) if the viewer has never held USDC before. That
-        // cost doesn't show up in a swap quote's inAmount at all — found
-        // live 2026-09-07 reviewing this before its first real test, the
-        // original version of this check would have silently under-budgeted
-        // by this exact amount for exactly the viewers most likely to hit
-        // it (a SOL-only holder has probably never held USDC). Fetch a
-        // FRESH quote here rather than trust the modal's display quote,
-        // which can be up to 20s stale (see the display-quote effect near
-        // estimatedCost).
-        console.log('[solana][pay-with-sol] pre-flight start — checking for existing USDC ATA…');
-        const { value: existingUsdcAtas } = await connection.getParsedTokenAccountsByOwner(
-          effectivePublicKey,
-          { mint: new PublicKey(USDC_MINT) },
-        );
-        console.log('[solana][pay-with-sol] ATA check done', { hasExistingAta: existingUsdcAtas.length > 0 });
-        const usdcMicroTarget = Math.round(totalUsdc * 10 ** usdcDecimals);
-        try {
-          const { getSolToUsdcQuote, getSwapInstructions, ATA_RENT_LAMPORTS } = await import('@/lib/jupiter-swap');
-          const ataRentLamports = existingUsdcAtas.length === 0 ? ATA_RENT_LAMPORTS : 0;
-          console.log('[solana][pay-with-sol] fetching quote…', { usdcMicroTarget });
-          const { quote, lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
-          console.log('[solana][pay-with-sol] quote resolved', { lamportsRequired, ataRentLamports });
-          const totalLamportsNeeded = MIN_SOL + lamportsRequired + ataRentLamports;
-          if (solLamports < totalLamportsNeeded) {
-            console.warn('[solana][pay-with-sol] insufficient SOL', { solLamports, totalLamportsNeeded });
-            const { reportClientError } = await import('@/lib/report-client-error');
-            reportClientError('overlay/pay-with-sol/insufficient-sol', `Need ${totalLamportsNeeded} lamports, have ${solLamports}`, { totalLamportsNeeded, solLamports, ataRentLamports });
-            showNotif(
-              `Need ~${(totalLamportsNeeded / 1e9).toFixed(4)} SOL (swap + rent/fees${ataRentLamports ? ' + one-time USDC wallet setup' : ''}). You have ${(solLamports / 1e9).toFixed(4)} SOL.`,
-              'denied',
-            );
-            await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
-            setSubmitting(false);
-            return;
-          }
-          console.log('[solana][pay-with-sol] fetching swap instructions…');
-          swapInstructions = await getSwapInstructions({ quote, userPublicKey: effectivePublicKey });
-          console.log('[solana][pay-with-sol] swap instructions ready', { count: swapInstructions.length });
-        } catch (err) {
-          console.error('[solana][pay-with-sol] pre-flight failed', err);
-          // Explicitly caught here, so ClientErrorReporter's global
-          // window.onerror/unhandledrejection listeners never see it —
-          // confirmed live 2026-09-08: two real failed attempts produced
-          // zero Discord reports because of exactly this. Opt in directly.
-          const { reportClientError } = await import('@/lib/report-client-error');
-          reportClientError('overlay/pay-with-sol/preflight', err, { usdcMicroTarget });
-          showNotif(err instanceof Error ? err.message : 'Could not prepare SOL swap — try again', 'denied');
-          await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
-          setSubmitting(false);
-          return;
-        }
-        console.log('[solana] pre-flight passed (pay-with-SOL) — SOL:', (solLamports / 1e9).toFixed(4));
-      } else {
+      // Pay-with-SOL is handled as its own standalone earlier step (see
+      // above, right after the solana_wallet guard) — by the time
+      // execution reaches here paySol is always false, so this is just
+      // the plain direct-USDC pre-flight, unmodified.
+      {
         if (solLamports < MIN_SOL) {
           showNotif(
             IS_MAINNET
@@ -1544,43 +1623,10 @@ function OverlayContent() {
         durationSecs: durationSecsInt,
       });
       const escrowPda = escrowPdaPubkey.toBase58();
-
-      // Pay-with-SOL: splice the swap onto the FRONT of the deposit tx, one
-      // signature covers both. Solana transactions are all-or-nothing, so
-      // if the swap under-delivers, the deposit instruction (which pulls a
-      // fixed amount, unaffected by any of this) fails and the whole
-      // transaction reverts — the viewer keeps their SOL, nothing partial
-      // ever lands. Everything downstream (Phantom Connect deeplink signing,
-      // wallet-adapter signing, the mobile PDA-poll race, attach-solana-tx)
-      // is untouched — it just signs/submits a tx with a few extra
-      // instructions at the front.
-      if (swapInstructions?.length) {
-        console.log('[solana][pay-with-sol] splicing swap instructions onto deposit tx, requesting signature…', { swapIxCount: swapInstructions.length, totalIxCount: tx.instructions.length + swapInstructions.length });
-        tx.instructions.unshift(...swapInstructions);
-
-        // The real constraint check — jupiter-swap.ts no longer hard-fails
-        // on the presence of addressLookupTableAddresses in the API
-        // response (verified live: that field shows up on nearly every
-        // route right now, including ones that fit legacy tx limits fine —
-        // it doesn't mean the raw instructions actually need it). This is
-        // the ACTUAL question: does the fully-composed transaction
-        // (swap + escrow deposit, everything together) fit under Solana's
-        // 1232-byte legacy transaction limit. tx already has feePayer +
-        // recentBlockhash set by buildInitializeBeamTx, so this reflects
-        // reality rather than a Jupiter-response-shape heuristic.
-        try {
-          tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-          console.log('[solana][pay-with-sol] composed tx fits within legacy size limit');
-        } catch (sizeErr) {
-          console.error('[solana][pay-with-sol] composed tx too large for legacy transaction', sizeErr);
-          const { reportClientError } = await import('@/lib/report-client-error');
-          reportClientError('overlay/pay-with-sol/tx-too-large', sizeErr, { swapIxCount: swapInstructions.length, totalIxCount: tx.instructions.length });
-          showNotif('This swap route is too complex to combine with the booking in one transaction — try again for a different route, or pay with USDC directly.', 'denied');
-          await fetch('/api/bookings/viewer-deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: newBooking.id, cancel_token: readBookingTokens()[newBooking.id] }) });
-          setSubmitting(false);
-          return;
-        }
-      }
+      // Pay-with-SOL used to splice a Jupiter swap onto this same tx — see
+      // the standalone swap step earlier in this function for why that
+      // was replaced. tx here is always a plain deposit-only transaction
+      // now, identical to the direct-USDC path.
 
       // ── Mobile (non-in-app) Phantom Connect deeplink path ──────────────
       // Mobile Chrome's Phantom-deeplink-via-wallet-adapter returns txs with
