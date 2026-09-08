@@ -153,6 +153,53 @@ export function isAlreadyProcessed(err: unknown): boolean {
 }
 
 /**
+ * True if a settle/cancel attempt failed because the escrow was already
+ * closed by something else (a race with the streamer's own kick, a
+ * delegate-signed settle, the permissionless expire crank, or the viewer's
+ * own prior attempt landing on retry) — not a real failure. Callers should
+ * treat this as success: the funds already moved, just not via this call.
+ *
+ * This needs THREE independent checks because the same underlying
+ * AccountNotInitialized (3012 / 0xbc4) or CasiError::AlreadySettled (6005 /
+ * 0x1775) condition surfaces in three different shapes depending on how far
+ * Anchor's `translateError()` got:
+ *   1. A real `AnchorError` (translateError matched a "Program log:
+ *      AnchorError..." line) — `.error.errorCode.number` holds the code.
+ *   2. A `ProgramError` (translateError found `err.logs` but no matching
+ *      Anchor log line, so it fell back to parsing "custom program error:
+ *      0xN" out of the raw message) — `.code` holds the code. Its `.message`
+ *      is ALWAYS the empty string (the class's constructor calls `super()`
+ *      with no argument), so string/regex matching on errorMessage() finds
+ *      nothing here — this is why `.code` must be checked directly instead.
+ *   3. The raw, untranslated `SendTransactionError` (translateError had no
+ *      `err.logs` at all to work with — e.g. a bare
+ *      `conn.sendRawTransaction()` call that never goes through Anchor's
+ *      `.rpc()`, or an RPC provider that omits `data.logs` on the error
+ *      response) — only `.message` text survives, either the named variant
+ *      ("AccountNotInitialized") if the RPC echoed program logs inline, or
+ *      just the raw hex code otherwise.
+ */
+const BENIGN_RACE_CODES = new Set([
+  3012,  // Anchor framework: AccountNotInitialized (0xbc4) — escrow_state already closed
+  6005,  // CasiError::AlreadySettled (0x1775) — escrow still open but already terminal
+]);
+
+export function isBenignEscrowRace(err: unknown): boolean {
+  if (isAlreadyProcessed(err)) return true;
+  if (err && typeof err === 'object') {
+    const anchorNumber = (err as { error?: { errorCode?: { number?: unknown } } }).error?.errorCode?.number;
+    if (typeof anchorNumber === 'number' && BENIGN_RACE_CODES.has(anchorNumber)) return true;
+    const programCode = (err as { code?: unknown }).code;
+    if (typeof programCode === 'number' && BENIGN_RACE_CODES.has(programCode)) return true;
+  }
+  const msg = errorMessage(err) || String(err ?? '');
+  if (/AlreadySettled|AccountNotInitialized/i.test(msg)) return true;
+  const hexMatch = msg.match(/custom program error:\s*0x([0-9a-fA-F]+)/i);
+  if (hexMatch && BENIGN_RACE_CODES.has(parseInt(hexMatch[1], 16))) return true;
+  return false;
+}
+
+/**
  * True if the wallet returned a transaction without the viewer's signature
  * attached — the cluster rejects with "Signature verification failed" /
  * "Missing signature for public key …". This happens with mobile deeplink
