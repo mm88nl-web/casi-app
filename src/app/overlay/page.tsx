@@ -55,23 +55,10 @@ const BOOKING_PAGE_LIMIT = 200;
 // realistic streamer moderation latency without trailing stale history.
 const STRIPE_DENIED_WINDOW_MS = 10 * 60 * 1000;
 
-// SOL a viewer's wallet needs on hand for a Solana booking tx itself — rent
-// for the fresh escrow state account + vault ATA that initialize_escrow
-// creates on EVERY booking (not a one-time cost, a new escrow PDA is created
-// per booking) plus network fees. Verified against a real mainnet tx
-// 2026-09-08: escrow-state rent 1,899,900 + vault-ATA rent 1,855,569 +
-// program's own SOL transfer 4,078,560 + network fee ~80,000 lamports ≈
-// 0.0078 SOL — 0.015 leaves comfortable headroom. Shared so the pay-with-SOL
-// swap step's own pre-flight (below) can reserve it on top of the swap
-// amount: that step used to only check SOL for the swap itself, letting a
-// viewer near the margin swap successfully and then get stuck unable to
-// afford the booking tx right after — a real "fees look unpredictable" trap.
-const MIN_SOL_FOR_BOOKING_LAMPORTS = 0.015 * 1e9;
-
-// Network-fee margin for the pay-with-SOL swap tx itself — shared between
-// the live quote display and submitSolanaBooking's actual pre-flight check
-// so the two never silently disagree about what "enough SOL" means.
-const SWAP_TX_FEE_MARGIN_LAMPORTS = 0.005 * 1e9;
+// MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS / SWAP_TX_FEE_MARGIN_LAMPORTS: see
+// jupiter-swap.ts, imported below — hoisted there so the flash composer
+// (SendFlashSection.tsx) can share the exact same reserve math instead of
+// duplicating (and risking drifting from) it.
 
 function OverlayContent() {
   const searchParams = useSearchParams();
@@ -459,18 +446,42 @@ function OverlayContent() {
           pc.clearPendingBooking();
           refreshWalletNav();
           if (swapLanded) {
-            // Restore the booking form and reopen the confirm modal —
-            // otherwise the viewer lands back on a bare overlay page (this
-            // was a full navigation away and back, every piece of React
-            // state is gone) with nothing to tap and has to redo the whole
-            // form from scratch. See PendingBooking['swap_ctx']'s doc
-            // comment. One more explicit tap is still required (not fully
-            // automatic) — Android won't open a wallet deeplink from a
-            // JS-driven navigation that isn't a direct result of a user
-            // gesture, so auto-firing the booking's own sign step here
-            // would likely just silently fail.
+            // Restore the right form and reopen it — otherwise the viewer
+            // lands back on a bare overlay page (this was a full navigation
+            // away and back, every piece of React state is gone) with
+            // nothing to tap and has to redo the whole form from scratch.
+            // One more explicit tap is still required (not fully automatic)
+            // — Android won't open a wallet deeplink from a JS-driven
+            // navigation that isn't a direct result of a user gesture, so
+            // auto-firing the next sign step here would likely just fail
+            // silently.
+            //
+            // Two completely different restore targets share this one
+            // 'swap' kind — swap_target says which. Flash's restore can't
+            // happen here directly: SendFlashSection.tsx isn't part of this
+            // component's state at all, so it goes through a localStorage
+            // signal that component reads on its own mount instead. See
+            // PendingBooking['swap_ctx'] and stashFlashSwapRestore's doc
+            // comments.
             let restored = false;
-            if (pending.swap_ctx) {
+            if (pending.swap_target === 'flash') {
+              if (pending.swap_ctx) {
+                try {
+                  const ctx = JSON.parse(pending.swap_ctx);
+                  pc.stashFlashSwapRestore({ message: ctx.message ?? '', amount: ctx.amount ?? '5' });
+                  restored = true;
+                } catch (ctxErr) {
+                  const { reportClientError: rceCtx } = await import('@/lib/report-client-error');
+                  rceCtx('overlay/pay-with-sol/flash-swap-ctx-restore-failed', ctxErr, {});
+                }
+              }
+              showNotif(
+                restored
+                  ? '◎ Swap complete — reopen Send a Flash to finish'
+                  : '◎ Swap complete — tap Send again to finish your flash with USDC',
+                'success',
+              );
+            } else if (pending.swap_ctx) {
               try {
                 const ctx = JSON.parse(pending.swap_ctx);
                 setSelectedSlot(ctx.selectedSlot ?? null);
@@ -492,17 +503,15 @@ function OverlayContent() {
                 setJustSwapped(true);
                 setShowConfirmModal(true);
                 restored = true;
+                showNotif('◎ Swap complete — confirm your booking below to finish', 'success');
               } catch (ctxErr) {
                 const { reportClientError: rceCtx } = await import('@/lib/report-client-error');
                 rceCtx('overlay/pay-with-sol/swap-ctx-restore-failed', ctxErr, {});
+                showNotif('◎ Swap complete — tap Pay again to finish your booking with USDC', 'success');
               }
+            } else {
+              showNotif('◎ Swap complete — tap Pay again to finish your booking with USDC', 'success');
             }
-            showNotif(
-              restored
-                ? '◎ Swap complete — confirm your booking below to finish'
-                : '◎ Swap complete — tap Pay again to finish your booking with USDC',
-              'success',
-            );
           } else {
             const { reportClientError } = await import('@/lib/report-client-error');
             reportClientError('overlay/pay-with-sol/swap-not-confirmed', `swap sig ${signature} never confirmed after 30s poll`, { signature });
@@ -1474,17 +1483,18 @@ function OverlayContent() {
           ? selectedSlot.price_value * durationMinutesSwap
           : selectedSlot.price_value * (durationMinutesSwap / 60);
         const usdcMicroTarget = Math.round(totalUsdcSwap * 10 ** 6);
-        const { getSolToUsdcQuote, getSwapInstructions, ATA_RENT_LAMPORTS } = await import('@/lib/jupiter-swap');
+        const { getSolToUsdcQuote, getSwapInstructions, ATA_RENT_LAMPORTS, MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS, SWAP_TX_FEE_MARGIN_LAMPORTS } = await import('@/lib/jupiter-swap');
         const ataRentLamports = existingUsdcAtas.length === 0 ? ATA_RENT_LAMPORTS : 0;
         const { quote, lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget });
-        // Reserve MIN_SOL_FOR_BOOKING_LAMPORTS on top of the swap's own cost —
-        // that's what the SECOND tx (the actual booking, run on the viewer's
-        // next tap) needs for its own escrow-account rent + fees, a real SOL
-        // debit this swap step never touches. Without this reserve, a viewer
-        // near the margin could swap successfully and then fail the normal
-        // booking pre-flight's MIN_SOL check moments later, stuck holding
-        // freshly-converted USDC but not enough SOL to actually spend it.
-        const totalLamportsNeeded = SWAP_TX_FEE_MARGIN_LAMPORTS + lamportsRequired + ataRentLamports + MIN_SOL_FOR_BOOKING_LAMPORTS;
+        // Reserve MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS on top of the swap's own
+        // cost — that's what the SECOND tx (the actual booking, run on the
+        // viewer's next tap) needs for its own escrow-account rent + fees, a
+        // real SOL debit this swap step never touches. Without this
+        // reserve, a viewer near the margin could swap successfully and
+        // then fail the normal booking pre-flight's MIN_SOL check moments
+        // later, stuck holding freshly-converted USDC but not enough SOL to
+        // actually spend it.
+        const totalLamportsNeeded = SWAP_TX_FEE_MARGIN_LAMPORTS + lamportsRequired + ataRentLamports + MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS;
         if (solLamports < totalLamportsNeeded) {
           showNotif(
             `Need ~${(totalLamportsNeeded / 1e9).toFixed(4)} SOL total (swap + fees${ataRentLamports ? ' + one-time USDC wallet setup' : ''} + booking tx). You have ${(solLamports / 1e9).toFixed(4)} SOL.`,
@@ -2637,7 +2647,7 @@ function OverlayContent() {
     const fetchQuote = async () => {
       try {
         const { Connection, PublicKey } = await import('@solana/web3.js');
-        const { getSolToUsdcQuote, ATA_RENT_LAMPORTS } = await import('@/lib/jupiter-swap');
+        const { getSolToUsdcQuote, ATA_RENT_LAMPORTS, MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS, SWAP_TX_FEE_MARGIN_LAMPORTS } = await import('@/lib/jupiter-swap');
         let effectiveKey = publicKey;
         if (!effectiveKey) {
           const pcSession = await import('@/lib/phantom-connect').then(m => m.getStoredSession());
@@ -2662,7 +2672,7 @@ function OverlayContent() {
         // present, and used to be missing here entirely, understating the
         // real requirement).
         const swapOnlyLamports = lamportsRequired + (needsSetup ? ATA_RENT_LAMPORTS : 0);
-        const totalLamports = swapOnlyLamports + SWAP_TX_FEE_MARGIN_LAMPORTS + MIN_SOL_FOR_BOOKING_LAMPORTS;
+        const totalLamports = swapOnlyLamports + SWAP_TX_FEE_MARGIN_LAMPORTS + MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS;
         if (!cancelled) setSwapQuote({ loading: false, solRequired: totalLamports / 1e9, swapOnlySol: swapOnlyLamports / 1e9, needsSetup, error: null });
       } catch (err) {
         if (!cancelled) {

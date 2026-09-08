@@ -282,6 +282,18 @@ export type PendingBooking = {
    *  it. All values are already-serializable primitives / already-uploaded
    *  storage references — nothing here requires re-uploading a file. */
   swap_ctx?: string;
+  /** kind:'swap' only — which UI swap_ctx's JSON is shaped for and where the
+   *  return handler should restore it. Pay-with-SOL shipped for beam/
+   *  backdrop bookings first (overlay/page.tsx's submitSolanaBooking); the
+   *  flash composer (SendFlashSection.tsx) got its own standalone swap step
+   *  later, with a completely different form shape (message/amount, no
+   *  slot/duration/customize) restored into a different component entirely
+   *  — SendFlashSection isn't even part of the same render tree as the
+   *  return handler, so its restore goes through a separate localStorage
+   *  signal (KEY_FLASH_SWAP_RESTORE) rather than direct React state
+   *  updates. Default 'booking' for back-compat with stashes written before
+   *  this field existed. */
+  swap_target?: 'booking' | 'flash';
   /** ms since epoch — older than ~10 min and we treat the stash as stale. */
   ts: number;
 };
@@ -310,6 +322,46 @@ export function readPendingBooking(): PendingBooking | null {
 export function clearPendingBooking(): void {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(KEY_PENDING_BOOKING);
+}
+
+// ── Flash swap restore signal ───────────────────────────────────────────
+
+const KEY_FLASH_SWAP_RESTORE = 'casi-flash-swap-restore-v1';
+
+/** What SendFlashSection.tsx needs to restore itself after a mobile
+ *  pay-with-SOL swap round-trip. Same serializable-primitives-only shape
+ *  as PendingBooking['swap_ctx'], just flash-specific fields. */
+export type FlashSwapRestore = {
+  message: string;
+  amount: string;
+  ts: number;
+};
+
+/** Written by the phantom-connect-return handler (overlay/page.tsx) right
+ *  when a kind:'swap', swap_target:'flash' swap confirms. SendFlashSection
+ *  isn't mounted at that moment in any way the return handler can reach
+ *  directly — this is a deliberately loose, localStorage-mediated handoff
+ *  between two components that don't otherwise share state, read back by
+ *  SendFlashSection's own mount effect. */
+export function stashFlashSwapRestore(r: Omit<FlashSwapRestore, 'ts'>): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(KEY_FLASH_SWAP_RESTORE, JSON.stringify({ ...r, ts: Date.now() }));
+}
+
+/** Reads and immediately clears the stash — one-shot, so a later unrelated
+ *  mount of SendFlashSection (e.g. the viewer navigates away and back)
+ *  doesn't replay a stale restore. Same 10-minute staleness window as
+ *  PendingBooking. */
+export function consumeFlashSwapRestore(): FlashSwapRestore | null {
+  if (typeof window === 'undefined') return null;
+  const raw = window.localStorage.getItem(KEY_FLASH_SWAP_RESTORE);
+  if (!raw) return null;
+  window.localStorage.removeItem(KEY_FLASH_SWAP_RESTORE);
+  try {
+    const r = JSON.parse(raw) as FlashSwapRestore;
+    if (Date.now() - r.ts > 10 * 60_000) return null;
+    return r;
+  } catch { return null; }
 }
 
 // ── Encryption helpers ───────────────────────────────────────────────────
