@@ -229,7 +229,22 @@ function OverlayContent() {
   // string, which would mangle a URL that already has a hash.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
+    // Solflare (confirmed live 2026-09-08 via a real DeeplinkErrorCode.
+    // payloadDecryptionFailed response) appends its response params with a
+    // bare `?` instead of `&` when redirect_link already has a query string
+    // — which ours always does (`...&phantom_action=sign-resume`). That
+    // produces `...phantom_action=sign-resume?errorCode=...`, where the
+    // second `?` isn't a real delimiter — URLSearchParams then reads the
+    // ENTIRE tail as the value of `phantom_action`
+    // (`"sign-resume?errorCode=..."`), which fails the exact-match check
+    // below and makes the whole handler silently no-op: no toast, no
+    // reportClientError, nothing. This masks both genuine wallet errors and
+    // (same code path, untested until this is fixed) genuine successes.
+    // Normalize any non-leading `?` in the query string to `&` before
+    // parsing so this can't happen regardless of which wallet does it.
+    const normalizeSearch = (search: string): string =>
+      search.length > 0 ? '?' + search.slice(1).split('?').join('&') : search;
+    const params = new URLSearchParams(normalizeSearch(window.location.search));
     const action = params.get('phantom_action');
     if (action !== 'connect-resume' && action !== 'sign-resume') return;
 
@@ -238,7 +253,7 @@ function OverlayContent() {
     // `if (!isOBS && !username) → /search` fires on the next render and
     // the user lands on the search page right after a successful connect.
     const cleanUrl = (): void => {
-      const next = new URLSearchParams(window.location.search);
+      const next = new URLSearchParams(normalizeSearch(window.location.search));
       next.delete('phantom_action');
       next.delete('casi_wallet');
       next.delete('phantom_encryption_public_key');
@@ -435,7 +450,21 @@ function OverlayContent() {
       } catch (err) {
         const { reportClientError } = await import('@/lib/report-client-error');
         reportClientError('overlay/phantom-connect-return', err, { action });
-        showNotif(err instanceof Error ? err.message : 'Wallet return failed — please try again', 'denied');
+        // payloadDecryptionFailed means the wallet's cached shared secret no
+        // longer matches ours — happens if our dapp encryption keypair
+        // (localStorage, separate from the session record) was regenerated
+        // since the session was established, e.g. by a storage clear. The
+        // stored session is now permanently unusable; every retry would hit
+        // the exact same error forever. Clear it so the next attempt goes
+        // through a fresh connect handshake instead of dead-ending again.
+        const msg = err instanceof Error ? err.message : '';
+        if (msg.includes('payloadDecryptionFailed')) {
+          pc.clearSession();
+          pc.clearPendingBooking();
+          showNotif('Wallet connection was out of sync — reconnected state cleared, please tap Pay again', 'denied');
+        } else {
+          showNotif(msg || 'Wallet return failed — please try again', 'denied');
+        }
         cleanUrl();
       }
     })();
