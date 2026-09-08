@@ -1402,6 +1402,21 @@ function OverlayContent() {
             booking_id: '', cancel_token: '', escrow_pda: '',
             viewer_wallet: effectivePublicKey.toBase58(),
           });
+          // DEBUG (2026-09-08, pending payloadDecryptionFailed investigation):
+          // this is the branch that runs when getStoredSession() ALREADY
+          // returned non-null at click time — no connect round trip this
+          // attempt. If this fires even right after a payloadDecryptionFailed
+          // auto-clear from the previous attempt, the stored session is
+          // somehow surviving clearSession() (or being re-saved from
+          // somewhere else) rather than actually being stale/mismatched key
+          // material. Remove once resolved.
+          const { reportClientError: rceDirect } = await import('@/lib/report-client-error');
+          rceDirect('overlay/pay-with-sol/debug-sign-direct-existing-session', 'signing with a pre-existing stored session (no connect this attempt)', {
+            dappPublicKeyAtSign: bs58.encode(pc.getOrCreateDappKeypair().publicKey),
+            sessionWalletPublicKey: session.phantomEncryptionPublicKey,
+            sessionToken: session.session,
+            wallet: session.wallet,
+          });
           window.location.href = pc.buildSignTransactionUrl({
             session,
             transactionB58: txB58,
