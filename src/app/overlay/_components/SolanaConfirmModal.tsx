@@ -7,6 +7,14 @@ import { formatTime } from './time';
 
 export type TxStatus = 'idle' | 'booking' | 'streaming' | 'waiting' | 'error';
 
+/** Live SOL→USDC quote state for the "pay with SOL" toggle — see
+ *  src/lib/jupiter-swap.ts. solRequired is UI SOL (not lamports). */
+export type SwapQuoteState = {
+  loading: boolean;
+  solRequired: number | null;
+  error: string | null;
+};
+
 type Props = {
   slot: {
     price_value: number | string;
@@ -18,6 +26,17 @@ type Props = {
   username: string;
   recipientWallet: string | null;
   usdcBalance: number | null;
+  /** Viewer's SOL balance — drives both the pay-with-SOL toggle's
+   *  availability (implicitly, via the parent knowing whether to bother)
+   *  and the "insufficient" check once that path is selected. */
+  solBalance: number | null;
+  /** True once the viewer has opted into paying with SOL instead of USDC
+   *  (only offered when USDC alone doesn't cover the booking). */
+  paySol: boolean;
+  onTogglePaySol: (v: boolean) => void;
+  /** Live quote for the SOL amount the swap would need — null until the
+   *  parent starts fetching one (i.e. before paySol is ever toggled on). */
+  swapQuote: SwapQuoteState | null;
   txStatus: TxStatus;
   txError: string | null;
   txId: string | null;
@@ -34,12 +53,18 @@ type Props = {
  * data as before — this is a re-skin, not a behavior change.
  */
 export default function SolanaConfirmModal({
-  slot, duration, estimatedCost, username, recipientWallet, usdcBalance,
+  slot, duration, estimatedCost, username, recipientWallet, usdcBalance, solBalance,
+  paySol, onTogglePaySol, swapQuote,
   txStatus, txError, txId, submitting, onConfirm, onCancel,
 }: Props) {
-  const hasInsufficient = usdcBalance !== null
-    && usdcBalance < parseFloat(estimatedCost)
-    && (txStatus === 'idle' || txStatus === 'error');
+  const usdcShort = usdcBalance !== null && usdcBalance < parseFloat(estimatedCost);
+  // Only offer the SOL-swap path while nothing's in flight — flipping
+  // payment method under an in-progress submit would race the pre-flight
+  // logic in submitSolanaBooking.
+  const canOfferSwap = usdcShort && (txStatus === 'idle' || txStatus === 'error');
+  const hasInsufficient = paySol
+    ? !swapQuote?.solRequired || (solBalance !== null && solBalance < swapQuote.solRequired)
+    : usdcShort && (txStatus === 'idle' || txStatus === 'error');
   const inProgress = submitting && txStatus !== 'idle' && txStatus !== 'error';
   const stepIcon = (active: boolean, done: boolean) => (done ? '✓' : active ? '⟳' : '○');
   const shortWallet = recipientWallet
@@ -97,12 +122,49 @@ export default function SolanaConfirmModal({
             </span>
           </div>
           <div style={{ height: 1, background: 'var(--line)' }} />
-          {usdcBalance !== null && (
+          {usdcBalance !== null && !paySol && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0' }}>
               <span style={{ fontFamily: 'var(--S)', fontSize: 15, color: 'var(--text-3)' }}>Your balance</span>
               <span style={{ fontFamily: 'var(--M)', fontSize: 14, fontVariantNumeric: 'tabular-nums', color: hasInsufficient ? '#f87171' : 'var(--text)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                 <UsdcIcon size={11} />
                 {usdcBalance.toFixed(2)}{hasInsufficient ? ' — insufficient' : ''}
+              </span>
+            </div>
+          )}
+
+          {/* Not enough USDC — offer swapping SOL for it in the same
+              signature. Reads as reassurance, not a fee disclosure: the
+              added cost is a trivial network fee, most of which comes back
+              as unused USDC anyway. See docs/pay-with-sol-design-brief.md. */}
+          {canOfferSwap && (
+            <label
+              style={{
+                display: 'flex', alignItems: 'center', gap: 9, padding: '9px 0',
+                fontFamily: 'var(--S)', fontStyle: 'italic', fontSize: 14, color: 'var(--text-3)',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={paySol}
+                onChange={(e) => onTogglePaySol(e.target.checked)}
+                style={{ width: 15, height: 15, accentColor: 'var(--ink)', flexShrink: 0 }}
+              />
+              Not enough USDC — pay with SOL instead (swapped automatically, one signature)
+            </label>
+          )}
+
+          {paySol && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0' }}>
+              <span style={{ fontFamily: 'var(--S)', fontSize: 15, color: 'var(--text-3)' }}>Paying with</span>
+              <span style={{ fontFamily: 'var(--M)', fontSize: 14, fontVariantNumeric: 'tabular-nums', color: hasInsufficient ? '#f87171' : 'var(--text)' }}>
+                {swapQuote?.loading
+                  ? 'getting quote…'
+                  : swapQuote?.error
+                    ? swapQuote.error
+                    : swapQuote?.solRequired
+                      ? `≈ ${swapQuote.solRequired.toFixed(4)} SOL${solBalance !== null && solBalance < swapQuote.solRequired ? ' — insufficient' : ''}`
+                      : '—'}
               </span>
             </div>
           )}
