@@ -87,7 +87,15 @@ export function validateMediaUrl(
 export const BANNER_FONT_PX_RANGE   = { min: 16, max: 96, default: 28 } as const;
 export const BANNER_SPEED_SECS_RANGE = { min: 5,  max: 60, default: 20 } as const;
 export const MEDIA_OFFSET_RANGE     = { min: 0,  max: 100, default: 50 } as const;
-export const MEDIA_ZOOM_RANGE       = { min: 1,  max: 4,   default: 1  } as const;
+// max raised 4→20 2026-09-08 at the user's request ("any size that works,
+// as long as it looks like the preview") — verified the live overlay
+// canvas render and the CustomizePanel preview use the identical
+// transform:scale()+objectFit logic, so there's no rendering divergence at
+// higher zoom, just a more extreme crop. 20 comfortably fits the DB
+// column's numeric(4,2) ceiling (99.99) while still being a defensive
+// sanity bound, not truly unbounded — see the matching migration that
+// raises the check constraint to stay in sync.
+export const MEDIA_ZOOM_RANGE       = { min: 1,  max: 20,   default: 1  } as const;
 
 function clampOrNull(v: unknown, lo: number, hi: number): number | null {
   const n = Number(v);
