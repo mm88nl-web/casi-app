@@ -47,6 +47,12 @@ type Props = {
   /** Live quote for the SOL amount the swap would need — null until the
    *  parent starts fetching one (i.e. before paySol is ever toggled on). */
   swapQuote: SwapQuoteState | null;
+  /** True right after the swap step has landed and the viewer is back here
+   *  for the second, plain-USDC confirm. Without this, that second confirm
+   *  is visually identical to an ordinary single-step USDC payment — two
+   *  "one step" screens back to back instead of one visibly two-step flow.
+   *  Drives the "Step 1 of 2" / "Step 2 of 2" badge below. */
+  justSwapped: boolean;
   txStatus: TxStatus;
   txError: string | null;
   txId: string | null;
@@ -64,7 +70,7 @@ type Props = {
  */
 export default function SolanaConfirmModal({
   slot, duration, estimatedCost, username, recipientWallet, usdcBalance, solBalance,
-  paySol, onTogglePaySol, swapQuote,
+  paySol, onTogglePaySol, swapQuote, justSwapped,
   txStatus, txError, txId, submitting, onConfirm, onCancel,
 }: Props) {
   const usdcShort = usdcBalance !== null && usdcBalance < parseFloat(estimatedCost);
@@ -89,7 +95,16 @@ export default function SolanaConfirmModal({
     ? `https://solscan.io/tx/${txId}${EXPLORER_CLUSTER_QUERY}`
     : null;
   const rateLabel = formatSlotPrice(slot, { prefer: 'usdc' }).label;
-  const ctaLabel = inProgress ? 'Signing…' : hasInsufficient ? 'Not enough to cover it' : txStatus === 'error' ? 'Retry →' : 'Confirm & sign →';
+  const ctaLabel = inProgress
+    ? 'Signing…'
+    : hasInsufficient
+      ? 'Not enough to cover it'
+      : txStatus === 'error'
+        ? 'Retry →'
+        // Step 1's tap only signs the swap, not the booking — say so,
+        // rather than reusing "Confirm & sign" for a button that doesn't
+        // actually confirm the booking yet.
+        : paySol ? 'Swap & continue →' : 'Confirm & sign →';
 
   return (
     <div
@@ -118,6 +133,21 @@ export default function SolanaConfirmModal({
               ×
             </button>
           </div>
+          {/* Paying with SOL is two separate signatures (swap, then the
+              actual escrow deposit) — this badge is the only thing telling
+              the viewer they're on a multi-step flow instead of looking at
+              two back-to-back, visually-identical single-step screens. */}
+          {(paySol || justSwapped) && (
+            <div
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10,
+                padding: '4px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.16)',
+                fontFamily: 'var(--B)', fontWeight: 600, fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase',
+              }}
+            >
+              {justSwapped ? '✓ Step 1 done · Step 2 of 2 — fund escrow' : 'Step 1 of 2 · Swap SOL → USDC'}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 16 }}>
             <span style={{ fontFamily: 'var(--H)', fontWeight: 700, fontSize: 48, lineHeight: 0.9, letterSpacing: '-0.03em' }}>
               {estimatedCost}

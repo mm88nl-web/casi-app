@@ -133,6 +133,14 @@ function OverlayContent() {
   // booking. See jupiter-swap.ts + submitSolanaBooking's pre-flight branch.
   const [paySol, setPaySol] = useState(false);
   const [swapQuote, setSwapQuote] = useState<SwapQuoteState | null>(null);
+  // True right after the swap step lands and paySol flips back to false so
+  // the modal's SECOND confirm reuses the plain USDC flow — without this,
+  // that second confirm looks identical to an ordinary single-step USDC
+  // payment, with nothing telling the viewer they're on step 2 of a flow
+  // they already approved once. Reset wherever paySol/swapQuote reset
+  // (fresh Pay tap, modal cancel) so it can't leak into an unrelated later
+  // booking.
+  const [justSwapped, setJustSwapped] = useState(false);
   // Stripe Embedded Checkout — replaces the old redirect-to-checkout_url
   // flow. null = modal hidden. bookingId is kept alongside the secret so
   // onComplete/onClose know which booking they're reacting to without
@@ -444,6 +452,7 @@ function OverlayContent() {
                 setMediaOffsetY(typeof ctx.mediaOffsetY === 'number' ? ctx.mediaOffsetY : 50);
                 setMediaZoom(typeof ctx.mediaZoom === 'number' ? ctx.mediaZoom : 1);
                 setPaySol(false);
+                setJustSwapped(true);
                 setShowConfirmModal(true);
                 restored = true;
               } catch (ctxErr) {
@@ -1541,6 +1550,7 @@ function OverlayContent() {
         await connection.confirmTransaction(sig, 'confirmed');
         refreshWalletNav();
         setPaySol(false);
+        setJustSwapped(true);
         showNotif('◎ Swap complete — tap Pay again to finish your booking with USDC', 'success');
         setSubmitting(false);
         return;
@@ -3747,7 +3757,7 @@ function OverlayContent() {
                     openWalletModal();
                   } else {
                     setTxStatus('idle'); setTxError(null); setShowConfirmModal(true);
-                    setPaySol(false); setSwapQuote(null);
+                    setPaySol(false); setSwapQuote(null); setJustSwapped(false);
                   }
                 }}
               />
@@ -3810,12 +3820,13 @@ function OverlayContent() {
           paySol={paySol}
           onTogglePaySol={setPaySol}
           swapQuote={swapQuote}
+          justSwapped={justSwapped}
           txStatus={txStatus}
           txError={txError}
           txId={confirmedTxId}
           submitting={submitting}
           onConfirm={submitSolanaBooking}
-          onCancel={() => { if (!submitting) { setShowConfirmModal(false); setTxStatus('idle'); setTxError(null); setConfirmedTxId(null); setPaySol(false); setSwapQuote(null); } }}
+          onCancel={() => { if (!submitting) { setShowConfirmModal(false); setTxStatus('idle'); setTxError(null); setConfirmedTxId(null); setPaySol(false); setSwapQuote(null); setJustSwapped(false); } }}
         />
       )}
     </>
