@@ -261,6 +261,8 @@ The v9 design system replaces v7's 7-skin variable bag with a **two-color contra
 
 **Important**: the Solana rail does **not** auto-promote the next queued booking on expire. The admin page's `playNow` handler explicitly kicks the current and starts the next. Don't add auto-promotion to the Solana rail without also updating the escrow program.
 
+**Pay with SOL**: a viewer who holds SOL but no USDC can still book — a checkbox on the confirm modal swaps SOL→USDC via Jupiter as a standalone first transaction, then the viewer signs a second, ordinary time to fund the same unmodified USDC escrow deposit. Two signatures, not one — a combined swap+deposit transaction doesn't fit Solana's 1232-byte legacy limit even in the best case, confirmed by measuring real Jupiter API responses. The escrow program itself is completely untouched by this; it's a purely client-side path to the same `initialize_escrow` call every direct-USDC booking already uses. Full design history, the two-signature rationale, and the real bugs found shipping it (Solflare's `?`-vs-`&` response-param quirk, dapp-keypair reuse, a return-handler double-fire, an under-budgeted SOL pre-flight) live in `docs/pay-with-sol-design-brief.md` — read that before touching `src/lib/jupiter-swap.ts`, the `paySol` branch in `overlay/page.tsx::submitSolanaBooking`, or `PendingBooking['swap_ctx']` in `phantom-connect.ts`.
+
 ## Phase 3 — session-key delegation (the "no popup on approve" flow)
 
 Phase 3 added a scoped delegation layer to the escrow program so the streamer doesn't have to sign a wallet popup every time a beam starts OR gets kicked early. The program still works without any of this — it's pure UX glue on top of `start_beam` / `settle_beam`.

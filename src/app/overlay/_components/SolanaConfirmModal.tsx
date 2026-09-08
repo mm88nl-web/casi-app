@@ -177,13 +177,17 @@ export default function SolanaConfirmModal({
             </div>
           )}
 
-          {/* Offer swapping SOL for USDC in the same signature — available
-              whether or not USDC is actually short, since a viewer might
-              simply prefer to pay in SOL. Reads as reassurance, not a fee
-              disclosure: the added cost is a trivial network fee, most of
-              which comes back as unused USDC anyway (any real one-time
-              wallet-setup cost is broken out separately below, once
-              known). See docs/pay-with-sol-design-brief.md. */}
+          {/* Offer swapping SOL for USDC — available whether or not USDC is
+              actually short, since a viewer might simply prefer to pay in
+              SOL. Reads as reassurance, not a fee disclosure: the added cost
+              is a trivial network fee, most of which comes back as unused
+              USDC anyway (any real one-time wallet-setup cost is broken out
+              separately below, once known). Two signatures, not one — a
+              combined swap+deposit transaction doesn't fit Solana's legacy
+              size limit even in the best case (measured live, see the
+              design brief) — the "Step 1 of 2" badge above communicates
+              that once checked; this label sets the expectation up front.
+              See docs/pay-with-sol-design-brief.md. */}
           {canOfferSwap && (
             <label
               style={{
@@ -198,7 +202,7 @@ export default function SolanaConfirmModal({
                 onChange={(e) => onTogglePaySol(e.target.checked)}
                 style={{ width: 15, height: 15, accentColor: 'var(--ink)', flexShrink: 0 }}
               />
-              {usdcShort ? 'Not enough USDC — pay with SOL instead' : 'Pay with SOL instead'} (swapped automatically, one signature)
+              {usdcShort ? 'Not enough USDC — pay with SOL instead' : 'Pay with SOL instead'} (auto-swapped via Jupiter, two quick signatures)
             </label>
           )}
 

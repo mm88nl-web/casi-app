@@ -2,13 +2,16 @@
  * jupiter-swap.ts
  *
  * Client-side helper for the "pay with SOL" booking path: viewer holds SOL,
- * not USDC, so we swap SOL → USDC via Jupiter and splice the swap
- * instructions onto the front of the existing initialize_escrow transaction.
- * The escrow deposit instruction is untouched and still pulls a fixed,
- * server-derived USDC amount — this module's only job is making sure that
- * amount exists in the viewer's USDC ATA by the time it runs, in the same
- * atomic transaction. See CasiEscrowClient.buildInitializeBeamTx /
- * buildInitializeFlashTx for the instruction this gets merged with.
+ * not USDC, so we swap SOL → USDC via Jupiter as its own STANDALONE
+ * transaction, submitted and confirmed before the caller ever touches the
+ * escrow deposit. Originally designed to splice the swap onto the front of
+ * the same initialize_escrow transaction (one signature) — abandoned after
+ * measuring live that even the smallest real swap route combined with the
+ * deposit instruction exceeds Solana's 1232-byte legacy transaction limit.
+ * See docs/pay-with-sol-design-brief.md for the full two-signature design
+ * and CasiEscrowClient.buildInitializeBeamTx / buildInitializeFlashTx for
+ * the (now completely unmodified, never spliced) deposit instruction that
+ * runs as its own separate transaction right after this one confirms.
  *
  * Deliberately ExactIn, not ExactOut: Jupiter's own docs advise against
  * ExactOut for most cases (it's restricted to three AMMs — Orca Whirlpool,
@@ -16,9 +19,10 @@
  * SOL input from a cheap reference quote, add a slippage/price-move buffer,
  * and verify the real quote's outAmount clears the target before using it.
  * If it doesn't, we bump the buffer and retry. Worst case on a bad estimate
- * is a failed transaction (Solana is all-or-nothing — the swap only commits
- * if the following deposit instruction also succeeds), never a fund-loss:
- * the viewer keeps their SOL and can retry.
+ * is the swap under-delivering slightly, caught by the SEPARATE deposit
+ * transaction's own balance check rather than a same-transaction revert —
+ * never a fund-loss either way: the viewer keeps whatever USDC the swap did
+ * produce and can retry the booking step.
  */
 
 import { PublicKey, TransactionInstruction } from '@solana/web3.js';
@@ -202,15 +206,17 @@ export async function getSolToUsdcQuote(params: {
 
 /**
  * Fetch the composable instructions for a quote (NOT a serialized
- * transaction — this is /swap-instructions specifically so the caller can
- * splice the escrow deposit instruction onto the end). Requests
- * asLegacyTransaction so no Address Lookup Tables come back — CASI's whole
- * booking-tx pipeline (mobile Phantom Connect deeplink, wallet-adapter,
- * the PDA-poll race) is built around legacy Transaction, and this keeps
- * the swap compatible with all of it unchanged. Throws rather than silently
- * dropping ALTs if the assumption ever breaks — a transaction missing an
- * ALT account fails clearly on submit anyway, so failing here is no worse
- * and easier to diagnose.
+ * transaction — this is /swap-instructions specifically so the caller
+ * builds its own standalone swap-only Transaction from them; see the
+ * getSolToUsdcQuote doc comment and docs/pay-with-sol-design-brief.md for
+ * why this is its own transaction rather than combined with the escrow
+ * deposit). Requests asLegacyTransaction so no Address Lookup Tables come
+ * back — CASI's whole booking-tx pipeline (mobile Phantom Connect deeplink,
+ * wallet-adapter, the PDA-poll race) is built around legacy Transaction,
+ * and this keeps the swap compatible with all of it unchanged. Throws
+ * rather than silently dropping ALTs if the assumption ever breaks — a
+ * transaction missing an ALT account fails clearly on submit anyway, so
+ * failing here is no worse and easier to diagnose.
  */
 export async function getSwapInstructions(params: {
   quote: JupiterQuote;
@@ -250,10 +256,12 @@ export async function getSwapInstructions(params: {
   // VersionedTransaction referencing it; a legacy Transaction built from
   // these same instructions and never mentioning the ALT works fine as
   // long as it's under Solana's 1232-byte legacy tx size limit. Rejecting
-  // on this field alone was rejecting nearly every real quote. The real
-  // constraint (actual serialized size) is checked by the caller once
-  // these instructions are spliced onto the full booking transaction —
-  // see overlay/page.tsx's submitSolanaBooking, right after the splice.
+  // on this field alone was rejecting nearly every real quote. (This swap
+  // now ships as its OWN standalone transaction — see
+  // docs/pay-with-sol-design-brief.md — so the real size constraint is
+  // just the swap alone, which fits comfortably; it stopped being the
+  // tight constraint it was under the original combined-transaction
+  // design.)
   if (body.addressLookupTableAddresses?.length) {
     console.warn(LOG, 'route reports ALT addresses (informational only, not necessarily required)', { count: body.addressLookupTableAddresses.length });
   }

@@ -333,22 +333,6 @@ function OverlayContent() {
           if (pending?.pending_tx) {
             const sep = window.location.search ? '&' : '?';
             const here = window.location.origin + window.location.pathname + window.location.search + `${sep}phantom_action=sign-resume`;
-            // DEBUG (2026-09-08, pending payloadDecryptionFailed investigation):
-            // snapshot the exact key material used to build this chained sign
-            // request, so a repeat failure tells us definitively whether the
-            // dapp keypair drifted between the connect leg and this immediate
-            // follow-up sign leg (the leading theory — an Android App Link
-            // round-trip landing in a browsing context that doesn't share
-            // localStorage with the tab that started it). Remove once resolved.
-            const { reportClientError: rce } = await import('@/lib/report-client-error');
-            const bs58DebugMod = await import('bs58');
-            const bs58Debug = bs58DebugMod.default;
-            rce('overlay/pay-with-sol/debug-chain-to-sign', 'connect-resume chaining to sign', {
-              dappPublicKeyAtSign: bs58Debug.encode(pc.getOrCreateDappKeypair().publicKey),
-              sessionWalletPublicKey: session.phantomEncryptionPublicKey,
-              sessionToken: session.session,
-              wallet: session.wallet,
-            });
             window.location.href = pc.buildSignTransactionUrl({
               session,
               transactionB58: pending.pending_tx,
@@ -1496,15 +1480,6 @@ function OverlayContent() {
             // buildConnectUrl so the connect handshake and the resulting
             // session are both anchored to the same, definitely-current key.
             pc.regenerateDappKeypair();
-            // DEBUG (2026-09-08, pending payloadDecryptionFailed investigation):
-            // snapshot the dapp keypair used to INITIATE this connect, to
-            // compare against the one logged at the chained sign leg in the
-            // connect-resume handler above. Remove once resolved.
-            const { reportClientError: rceInit } = await import('@/lib/report-client-error');
-            rceInit('overlay/pay-with-sol/debug-connect-init', 'initiating fresh connect for swap (regenerated keypair)', {
-              dappPublicKeyAtConnectInit: bs58.encode(pc.getOrCreateDappKeypair().publicKey),
-              wallet: walletName,
-            });
             window.location.href = pc.buildConnectUrl({
               wallet: walletName,
               cluster: WALLET_ADAPTER_CLUSTER,
@@ -1517,21 +1492,6 @@ function OverlayContent() {
             booking_id: '', cancel_token: '', escrow_pda: '',
             viewer_wallet: effectivePublicKey.toBase58(),
             swap_ctx: swapCtx,
-          });
-          // DEBUG (2026-09-08, pending payloadDecryptionFailed investigation):
-          // this is the branch that runs when getStoredSession() ALREADY
-          // returned non-null at click time — no connect round trip this
-          // attempt. If this fires even right after a payloadDecryptionFailed
-          // auto-clear from the previous attempt, the stored session is
-          // somehow surviving clearSession() (or being re-saved from
-          // somewhere else) rather than actually being stale/mismatched key
-          // material. Remove once resolved.
-          const { reportClientError: rceDirect } = await import('@/lib/report-client-error');
-          rceDirect('overlay/pay-with-sol/debug-sign-direct-existing-session', 'signing with a pre-existing stored session (no connect this attempt)', {
-            dappPublicKeyAtSign: bs58.encode(pc.getOrCreateDappKeypair().publicKey),
-            sessionWalletPublicKey: session.phantomEncryptionPublicKey,
-            sessionToken: session.session,
-            wallet: session.wallet,
           });
           window.location.href = pc.buildSignTransactionUrl({
             session,
