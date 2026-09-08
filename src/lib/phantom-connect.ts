@@ -155,6 +155,35 @@ export function getOrCreateDappKeypair(): DappKeypair {
   return kp;
 }
 
+/** Forces a brand-new x25519 dapp keypair, discarding whatever was
+ *  persisted before. Call this immediately before starting a FRESH connect
+ *  handshake (buildConnectUrl) — never before a sign call, which must keep
+ *  using the same keypair the corresponding connect used, or its shared
+ *  secret with the wallet won't match.
+ *
+ *  Solflare's own deeplink docs (docs.solflare.com/solflare/technical/
+ *  deeplinks/encryption, checked 2026-09-08) recommend generating a new
+ *  keypair per connect session — this codebase previously reused one
+ *  keypair forever via getOrCreateDappKeypair's persistence, which is a
+ *  real deviation from that guidance. Investigating a live, reproducible
+ *  DeeplinkErrorCode.payloadDecryptionFailed on Solflare's mobile sign
+ *  step (two connect+sign round trips in the same test session both
+ *  failed identically) that a stale/reused keypair is the leading
+ *  candidate for, even without being able to pin the exact mechanism from
+ *  outside Solflare's own app. This closes the gap regardless of the
+ *  precise cause. */
+export function regenerateDappKeypair(): DappKeypair {
+  if (typeof window === 'undefined') {
+    throw new Error('phantom-connect: SSR call');
+  }
+  const kp = nacl.box.keyPair();
+  window.localStorage.setItem(KEY_DAPP_KEYPAIR, JSON.stringify({
+    pk: bs58.encode(kp.publicKey),
+    sk: bs58.encode(kp.secretKey),
+  }));
+  return kp;
+}
+
 // ── Session persistence ──────────────────────────────────────────────────
 
 /** Storage event we dispatch ourselves when saveSession/clearSession runs.

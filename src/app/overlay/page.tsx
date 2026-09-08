@@ -1405,12 +1405,17 @@ function OverlayContent() {
               viewer_wallet: effectivePublicKey.toBase58(),
               pending_tx: txB58,
             });
+            // Force a fresh dapp keypair for this connect (see
+            // regenerateDappKeypair's doc comment) — must happen before
+            // buildConnectUrl so the connect handshake and the resulting
+            // session are both anchored to the same, definitely-current key.
+            pc.regenerateDappKeypair();
             // DEBUG (2026-09-08, pending payloadDecryptionFailed investigation):
             // snapshot the dapp keypair used to INITIATE this connect, to
             // compare against the one logged at the chained sign leg in the
             // connect-resume handler above. Remove once resolved.
             const { reportClientError: rceInit } = await import('@/lib/report-client-error');
-            rceInit('overlay/pay-with-sol/debug-connect-init', 'initiating fresh connect for swap', {
+            rceInit('overlay/pay-with-sol/debug-connect-init', 'initiating fresh connect for swap (regenerated keypair)', {
               dappPublicKeyAtConnectInit: bs58.encode(pc.getOrCreateDappKeypair().publicKey),
               wallet: walletName,
             });
@@ -1759,6 +1764,9 @@ function OverlayContent() {
             viewer_wallet: effectivePublicKey.toBase58(),
             pending_tx:    txB58,
           });
+          // Force a fresh dapp keypair for this connect — see
+          // regenerateDappKeypair's doc comment in phantom-connect.ts.
+          pc.regenerateDappKeypair();
           window.location.href = pc.buildConnectUrl({
             wallet,
             cluster: WALLET_ADAPTER_CLUSTER,
