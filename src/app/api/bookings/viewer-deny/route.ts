@@ -17,6 +17,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { timingSafeEqual } from 'node:crypto';
+import { clearElementIfNoActiveBooking } from '@/lib/overlay-element-cleanup';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
 
   const { data: booking } = await supabase
     .from('bookings')
-    .select('id, status, cancel_token')
+    .select('id, status, cancel_token, element_id')
     .eq('id', booking_id)
     .single();
 
@@ -75,5 +76,13 @@ export async function POST(req: Request) {
   if (nullEscrow) update.escrow_pda = null;
 
   await supabase.from('bookings').update(update).eq('id', booking.id);
+  // null_escrow means the caller (reclaimSolanaEscrow's clearPdaInDb) just
+  // confirmed on-chain that this booking's escrow is closed for good — the
+  // slot's canvas image, if it's still this booking's, is stale and should
+  // clear too. Guarded: only clears if no OTHER booking is currently active
+  // on the same element (see overlay-element-cleanup.ts's doc comment).
+  if (nullEscrow && booking.element_id) {
+    await clearElementIfNoActiveBooking(supabase, booking.element_id);
+  }
   return NextResponse.json({ success: true });
 }

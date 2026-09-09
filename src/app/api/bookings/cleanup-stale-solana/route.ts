@@ -47,6 +47,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { logError } from '@/lib/observability';
 import { inMemoryRateLimit, clientIpFrom } from '@/lib/rate-limit';
+import { clearElementIfNoActiveBooking } from '@/lib/overlay-element-cleanup';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,7 +87,7 @@ export async function POST(req: Request) {
 
   let query = supabase
     .from('bookings')
-    .select('id, escrow_pda')
+    .select('id, escrow_pda, element_id')
     .or(orClauses.join(','))
     .eq('payment_method', 'solana')
     .not('escrow_pda', 'is', null)
@@ -122,6 +123,7 @@ export async function POST(req: Request) {
     } catch {
       // Garbage escrow_pda value — safe to null out.
       await supabase.from('bookings').update({ escrow_pda: null }).eq('id', row.id);
+      if (row.element_id) await clearElementIfNoActiveBooking(supabase, row.element_id);
       cleaned++;
       continue;
     }
@@ -129,6 +131,11 @@ export async function POST(req: Request) {
       const info = await conn.getAccountInfo(pda);
       if (!info) {
         await supabase.from('bookings').update({ escrow_pda: null }).eq('id', row.id);
+        // Guarded — see overlay-element-cleanup.ts. This row's been
+        // terminal for a while (only 'denied'/'expired'/'cancelled' rows
+        // are scanned above), so a different booking may have since taken
+        // over the same slot.
+        if (row.element_id) await clearElementIfNoActiveBooking(supabase, row.element_id);
         cleaned++;
       } else {
         stillOpen++;
