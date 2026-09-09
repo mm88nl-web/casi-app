@@ -423,6 +423,21 @@ export default function SendFlashSection({
     }
   };
 
+  // Found live 2026-09-09: paySol/swapQuote/justSwapped were only reset on
+  // handleSend's success path and the payment-method-change effect — not
+  // here. Toggle "Pay with SOL", complete the swap (justSwapped -> true),
+  // then close via ✕ instead of sending: reopening later to send an
+  // unrelated ordinary USDC flash wrongly showed "✓ Step 1 done · Step 2 of
+  // 2" for what should be a fresh single-step send. Not a financial-safety
+  // bug (paySol itself was already false, so it took the normal path with
+  // the correct amount) — just a misleading badge, but worth killing.
+  const handleClose = () => {
+    setOpen(false);
+    setPaySol(false);
+    setSwapQuote(null);
+    setJustSwapped(false);
+  };
+
   // Embedded Checkout completed — the flash's own realtime subscription
   // above will surface the approve/deny outcome later; this just closes the
   // modal and gives immediate feedback that the payment itself went through.
@@ -506,7 +521,7 @@ export default function SendFlashSection({
           {embedded ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)' }}>⚡ Flash</span>
-              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 14, padding: 2 }}>✕</button>
+              <button onClick={handleClose} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 14, padding: 2 }}>✕</button>
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -514,7 +529,7 @@ export default function SendFlashSection({
                 <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)', marginBottom: 3 }}>⚡ Flash</div>
                 <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 17, fontWeight: 800, color: 'var(--casi-text)' }}>Send a Flash</div>
               </div>
-              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
+              <button onClick={handleClose} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
             </div>
           )}
 
