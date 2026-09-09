@@ -12,7 +12,7 @@ import { openSessionSecret } from '@/lib/delegate-crypto';
 import { loadCrankerKeypair } from '@/lib/cranker-keypair';
 import { CasiEscrowClient, solscanTxUrl } from '@/lib/casi-escrow';
 import { logError, logWarn } from '@/lib/observability';
-import { parseCasiError } from '@/lib/casi-errors';
+import { parseCasiError, isBenignEscrowRace } from '@/lib/casi-errors';
 import { distributedRateLimit } from '@/lib/rate-limit';
 
 /**
@@ -186,8 +186,12 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('already been processed')) {
-      logWarn('delegates-approve-flash', 'tx already processed — treating as success', {
+    // isBenignEscrowRace — see settle-beam/route.ts's identical comment for
+    // why a plain "already been processed" substring match misses the
+    // AccountNotInitialized/AlreadySettled shape a bare
+    // sendAndConfirmTransaction call can throw.
+    if (isBenignEscrowRace(err)) {
+      logWarn('delegates-approve-flash', 'benign race — treating as success', {
         flash_id: flash.id,
       });
       return NextResponse.json({ ok: true, alreadyProcessed: true });

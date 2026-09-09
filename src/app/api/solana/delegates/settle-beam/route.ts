@@ -12,7 +12,7 @@ import { openSessionSecret } from '@/lib/delegate-crypto';
 import { loadCrankerKeypair } from '@/lib/cranker-keypair';
 import { CasiEscrowClient, solscanTxUrl } from '@/lib/casi-escrow';
 import { logError, logWarn } from '@/lib/observability';
-import { parseCasiError } from '@/lib/casi-errors';
+import { parseCasiError, isBenignEscrowRace } from '@/lib/casi-errors';
 import { distributedRateLimit } from '@/lib/rate-limit';
 
 /**
@@ -231,8 +231,16 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('already been processed')) {
-      logWarn('delegates-settle-beam', 'tx already processed — treating as success', {
+    // isBenignEscrowRace, not just an "already been processed" substring
+    // match — this submits via a bare sendAndConfirmTransaction (never
+    // through Anchor's translateError), so a race against something else
+    // closing the same escrow (a viewer's own reclaim, the permissionless
+    // expire crank) surfaces as AccountNotInitialized/AlreadySettled, not
+    // "already processed". This is the server-side delegate path — the
+    // no-wallet-popup happy path most streamers actually use — so missing
+    // this meant the most-exercised copy of the bug in the app.
+    if (isBenignEscrowRace(err)) {
+      logWarn('delegates-settle-beam', 'benign settle race — treating as success', {
         booking_id: booking.id,
       });
       return NextResponse.json({ ok: true, alreadyProcessed: true });

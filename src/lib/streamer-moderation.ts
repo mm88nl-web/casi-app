@@ -597,10 +597,13 @@ export async function moderateFlash(
       sig = result.sig;
     } catch (err) {
       // Mid-flight drift — PDA closed between probe and tx. Fall back to
-      // db_only if the account is gone now.
-      const { isAlreadyProcessed } = await import('@/lib/casi-errors');
-      const msg = err instanceof Error ? err.message : String(err);
-      if (isAlreadyProcessed(err) || /AccountNotInitialized|account.*not.*exist|AlreadySettled/i.test(msg)) {
+      // db_only if the account is gone now. isBenignEscrowRace (not a plain
+      // message regex) — this uses Anchor's typed .rpc(), so a benign race
+      // can surface as a real AnchorError, a ProgramError (whose .message
+      // is ALWAYS empty — see its doc comment in casi-errors.ts), or raw
+      // text, and the old regex here only ever matched the first shape.
+      const { isBenignEscrowRace } = await import('@/lib/casi-errors');
+      if (isBenignEscrowRace(err)) {
         const stillThere = await ctx.connection.getAccountInfo(escrowPk).catch(() => null);
         if (!stillThere) {
           await dbOnlyModerate();
@@ -859,9 +862,17 @@ async function settleOrClearSolanaEscrow(
     });
     return { outcome: 'settled' };
   } catch (err) {
-    const { parseCasiError, isAlreadyProcessed } = await import('@/lib/casi-errors');
+    const { parseCasiError, isBenignEscrowRace } = await import('@/lib/casi-errors');
     if (parseCasiError(err) === 'NotActive') return { outcome: 'pending-chain' };
-    if (isAlreadyProcessed(err)) return { outcome: 'settled' };
+    // isBenignEscrowRace (not just isAlreadyProcessed) — this uses Anchor's
+    // typed .rpc(), so a race against something else settling this same
+    // escrow (a viewer's reclaim, the permissionless expire crank) can
+    // surface as AccountNotInitialized/AlreadySettled too, not just
+    // "already processed". Missing this meant a streamer denying/kicking a
+    // beam that lost that race saw a spurious "Could not settle escrow"
+    // error on the first attempt even though the funds already moved
+    // correctly.
+    if (isBenignEscrowRace(err)) return { outcome: 'settled' };
     return { outcome: 'error', error: err };
   }
 }
