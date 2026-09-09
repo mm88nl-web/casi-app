@@ -135,6 +135,7 @@ type LeakedRow = {
   escrow_seed: string | null;
   viewer_wallet: string | null;
   profile_id: string;
+  element_id: string | null;
 };
 
 export async function GET(req: Request) {
@@ -184,7 +185,7 @@ export async function GET(req: Request) {
       .limit(200),
     supabase
       .from('bookings')
-      .select('id, escrow_pda, escrow_seed, viewer_wallet, profile_id')
+      .select('id, escrow_pda, escrow_seed, viewer_wallet, profile_id, element_id')
       .eq('status', 'expired')
       .eq('payment_method', 'solana')
       .not('escrow_pda', 'is', null)
@@ -498,6 +499,32 @@ async function reconcileActive(
 // (isSolanaKickLeaked). reconcileActive can never reach these rows (it
 // filters on status = 'active'). See the doc comment at the top of this
 // file for the live incident this closes.
+// Shared by both branches of reconcileLeaked below — a row that reaches
+// either one is, by definition, done: the escrow is closed (or was just
+// confirmed-settled) and DB status is already 'expired'. Clears escrow_pda
+// (stops the "recover" chip) AND overlay_elements.image_url (stops the
+// canvas rendering stale media for the slot) in the same pass — found live
+// 2026-09-09: the original pre-#197 bug's DB-flip path never cleared the
+// canvas at all (only reconcileActive's "closed" branch does that, and
+// this row is invisible to that scan by definition — see the file's top
+// doc comment), so a settled beam kept showing its old video/image
+// indefinitely until this ran.
+async function clearLeakedRow(row: LeakedRow): Promise<void> {
+  const { error } = await supabase
+    .from('bookings')
+    .update({ escrow_pda: null })
+    .eq('id', row.id)
+    .eq('status', 'expired')
+    .not('escrow_pda', 'is', null);
+  if (error) throw error;
+  if (row.element_id) {
+    await supabase
+      .from('overlay_elements')
+      .update({ image_url: null })
+      .eq('id', row.element_id);
+  }
+}
+
 async function reconcileLeaked(
   connection: Connection,
   row: LeakedRow,
@@ -508,16 +535,8 @@ async function reconcileLeaked(
 
   if (!info) {
     // Already closed by something else since — a viewer's own wallet
-    // finally going through, a previous run of this same crank. Just clear
-    // the stale escrow_pda so the "recover" chip stops showing; status is
-    // already 'expired', nothing else to flip.
-    const { error } = await supabase
-      .from('bookings')
-      .update({ escrow_pda: null })
-      .eq('id', row.id)
-      .eq('status', 'expired')
-      .not('escrow_pda', 'is', null);
-    if (error) throw error;
+    // finally going through, a previous run of this same crank.
+    await clearLeakedRow(row);
     return 'cleared';
   }
 
@@ -532,6 +551,10 @@ async function reconcileLeaked(
   if (cranker && streamerWallet && row.viewer_wallet) {
     try {
       await crankExpiredActive(connection, cranker, row, streamerWallet);
+      // Settle just confirmed (crankExpiredActive awaits the Anchor .rpc()
+      // call) — safe to clear now rather than waiting for next run to
+      // re-probe and find it closed.
+      await clearLeakedRow(row);
       return 'cranked';
     } catch (err) {
       const { isBenignEscrowRace } = await import('@/lib/casi-errors');
