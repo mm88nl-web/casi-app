@@ -201,16 +201,48 @@ export async function POST(req: Request) {
   // non-terminal statuses to avoid stomping a legitimate later lifecycle.
   if (event.type === 'payment_intent.canceled') {
     const pi = event.data.object as Stripe.PaymentIntent;
-    await supabase
+    // .select() to get back which row(s) actually flipped and what their
+    // PRE-cancel status was — found live 2026-09-09: this used to be a bare
+    // update with no cleanup, so a PI cancelled out-of-band (Stripe
+    // dashboard, a fraud/risk hold) while its booking was 'active' left the
+    // OBS canvas showing that beam's media indefinitely and never advanced
+    // the queue — same shape as the Solana leaked-escrow bug fixed earlier
+    // this session, just on the Stripe rail.
+    const { data: cancelledBookings } = await supabase
       .from('bookings')
       .update({ status: 'denied' })
       .eq('payment_intent_id', pi.id)
-      .in('status', ['pending', 'active', 'approved_queued']);
+      .in('status', ['pending', 'active', 'approved_queued'])
+      .select('id, status, element_id')
+      .returns<{ id: string; status: string; element_id: string | null }[]>();
     await supabase
       .from('flashes')
       .update({ status: 'denied' })
       .eq('payment_intent_id', pi.id)
       .eq('status', 'pending');
+
+    // Only a row that WAS 'active' was actually occupying the canvas —
+    // pending/approved_queued bookings never aired, nothing to clean up.
+    // Stripe-only here (this handler only ever matches payment_intent_id
+    // rows), so no on-chain step — mirrors expire-and-advance's plain
+    // Stripe auto-advance branch, simplified since there's no escrow leg.
+    for (const row of cancelledBookings ?? []) {
+      if (row.status !== 'active' || !row.element_id) continue;
+      const { data: next } = await supabase
+        .from('bookings')
+        .select('id, image_url')
+        .eq('element_id', row.element_id)
+        .eq('status', 'approved_queued')
+        .order('approved_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (next) {
+        await supabase.from('bookings').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', next.id);
+        await supabase.from('overlay_elements').update({ image_url: next.image_url }).eq('id', row.element_id);
+      } else {
+        await supabase.from('overlay_elements').update({ image_url: null }).eq('id', row.element_id);
+      }
+    }
   }
 
   if (event.type === 'payment_intent.payment_failed') {
