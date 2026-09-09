@@ -48,6 +48,27 @@ export const WSOL_MINT = 'So11111111111111111111111111111111111111112';
 // time-USDC viewer, the majority case for a SOL-only holder.
 export const ATA_RENT_LAMPORTS = 2_039_280;
 
+// SOL a viewer's wallet needs on hand for the SEPARATE deposit transaction
+// that follows a pay-with-SOL swap — rent for the fresh escrow state
+// account + vault ATA that initialize_escrow creates on EVERY booking OR
+// flash (not a one-time cost, a new escrow PDA is created per booking/
+// flash) plus network fees. Verified against a real mainnet tx 2026-09-08:
+// escrow-state rent 1,899,900 + vault-ATA rent 1,855,569 + program's own
+// SOL transfer 4,078,560 + network fee ~80,000 lamports ≈ 0.0078 SOL —
+// 0.015 leaves comfortable headroom. Shared between the beam booking flow
+// (overlay/page.tsx::submitSolanaBooking) and the flash composer
+// (SendFlashSection.tsx) — both create the same EscrowState shape, just
+// escrow_type Beam vs Flash, so both need the same reserve. Originally
+// beam-only and beam-scoped as MIN_SOL_FOR_BOOKING_LAMPORTS; hoisted here
+// when flash pay-with-SOL was added so the two don't duplicate (and
+// potentially drift on) the same constant.
+export const MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS = 0.015 * 1e9;
+
+// Network-fee margin for the pay-with-SOL swap tx itself — shared between
+// the live quote display and the swap step's own pre-flight check so the
+// two never silently disagree about what "enough SOL" means.
+export const SWAP_TX_FEE_MARGIN_LAMPORTS = 0.005 * 1e9;
+
 // Reference probe amount used only to learn the current SOL/USDC rate —
 // arbitrary, doesn't need to be close to the real swap size.
 const PROBE_LAMPORTS = 10_000_000; // 0.01 SOL

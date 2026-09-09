@@ -17,13 +17,25 @@ import { PublicKey } from '@solana/web3.js';
 import { createClient } from '@/utils/supabase/client';
 import { sendFlash, SOLANA_ENABLED, type PaymentMethod } from '@/lib/payment-manager';
 import { useStoredPhantomConnectSession } from '@/lib/phantom-connect';
+import { useWalletBalances } from '@/lib/wallet-balances';
 import { rememberFlashToken } from '@/app/overlay/_components/viewerStorage';
-import { EXPLORER_CLUSTER_QUERY } from '@/lib/solana-network';
+import { EXPLORER_CLUSTER_QUERY, USDC_MINT, SOLANA_RPC, WALLET_ADAPTER_CLUSTER } from '@/lib/solana-network';
 import { TurnstileWidget } from '@/components/TurnstileWidget';
 import EmbeddedCheckoutModal from '@/components/EmbeddedCheckoutModal';
 import StripeIcon from '@/components/icons/StripeIcon';
 import UsdcIcon from '@/components/icons/UsdcIcon';
 import { fiatSymbol, formatFiat } from '@/lib/currency';
+
+/** Mirrors SolanaConfirmModal's SwapQuoteState (overlay/_components) — same
+ *  shape, kept local rather than shared since this component's UI doesn't
+ *  reuse that modal at all, just the same underlying numbers. */
+type FlashSwapQuoteState = {
+  loading: boolean;
+  solRequired: number | null;
+  swapOnlySol: number | null;
+  needsSetup: boolean;
+  error: string | null;
+};
 
 // Minimal shape of the streamer profile we actually read.
 interface StreamerProfileLite {
@@ -87,18 +99,33 @@ export default function SendFlashSection({
   // Stripe Embedded Checkout — replaces the old redirect-to-checkout_url
   // flow (see EmbeddedCheckoutModal.tsx). null = modal hidden.
   const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
+  // Pay-with-SOL — mirrors overlay/page.tsx::submitSolanaBooking's paySol
+  // branch, adapted to this component's own (much simpler) form shape. See
+  // that file's PendingBooking['swap_target'] and stashFlashSwapRestore doc
+  // comments for why this needed its own mobile-restore mechanism rather
+  // than reusing the beam booking's swap_ctx restore directly.
+  const [paySol, setPaySol] = useState(false);
+  const [swapQuote, setSwapQuote] = useState<FlashSwapQuoteState | null>(null);
+  // True right after the swap step lands and paySol flips back to false —
+  // without this, the follow-up Send tap looks identical to an ordinary
+  // single-step USDC flash, with nothing telling the viewer they're on
+  // step 2 of a flow they already approved once.
+  const [justSwapped, setJustSwapped] = useState(false);
   const onTurnstileVerify = useCallback((t: string) => setTurnstileToken(t), []);
   const onTurnstileExpire = useCallback(() => setTurnstileToken(null), []);
   const supabase = useRef(createClient()).current;
 
   const { connection } = useConnection();
-  const { publicKey, signTransaction, signAllTransactions, connected } = useWallet();
+  const { publicKey, signTransaction, signAllTransactions, sendTransaction, connected } = useWallet();
   // Phantom Connect deeplink session — viewer connected via the encrypted
   // mobile path won't have a wallet-adapter publicKey/signTransaction but
   // they DO have a session pubkey. Treat that as connected.
   const pcSession = useStoredPhantomConnectSession();
   const effectivePublicKey = publicKey ?? (pcSession ? new PublicKey(pcSession.walletPublicKey) : null);
   const isWalletConnected = connected || !!pcSession;
+  // Shared module-level store (see wallet-balances.ts) — same numbers the
+  // top nav / booking form already show, no extra RPC subscription.
+  const { sol: solBalance, usdc: usdcBalance } = useWalletBalances();
 
   const freeAllowed   = !!profile?.allow_free_flashes;
   const solanaAllowed = SOLANA_ENABLED && !!profile?.solana_wallet;
@@ -108,6 +135,37 @@ export default function SendFlashSection({
     if (paymentMethod === 'solana' && !solanaAllowed) setPaymentMethod('stripe');
     if (paymentMethod === 'free'   && !freeAllowed)   setPaymentMethod('stripe');
   }, [paymentMethod, solanaAllowed, freeAllowed]);
+
+  // Leaving the Solana rail (manual switch or the fallback above) clears
+  // pay-with-SOL state so it can't leak into an unrelated later send.
+  useEffect(() => {
+    if (paymentMethod !== 'solana') { setPaySol(false); setSwapQuote(null); setJustSwapped(false); }
+  }, [paymentMethod]);
+
+  // Restore after a mobile pay-with-SOL swap round-trip. The redirect is a
+  // full page navigation, so this component was unmounted and every piece
+  // of local state (message, amount, paymentMethod, open) was lost by the
+  // time it remounts here — consumeFlashSwapRestore is the one-shot
+  // localStorage handoff the phantom-connect-return handler in
+  // overlay/page.tsx wrote right when the swap confirmed (see its
+  // swap_target === 'flash' branch). Runs once on mount; deliberately not
+  // re-checked later — a real navigation is the only way this component
+  // remounts, so polling for it after mount would just be dead code.
+  useEffect(() => {
+    (async () => {
+      const pc = await import('@/lib/phantom-connect');
+      const restore = pc.consumeFlashSwapRestore();
+      if (!restore) return;
+      setMessage(restore.message);
+      setAmount(restore.amount);
+      setPaymentMethod('solana');
+      setPaySol(false);
+      setJustSwapped(true);
+      setOpen(true);
+      showNotif('◎ Swap complete — confirm your flash below to finish', 'success');
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Realtime subscription — keep `myFlash` in sync with this viewer's latest row.
   useEffect(() => {
@@ -156,14 +214,154 @@ export default function SendFlashSection({
     paymentMethod !== 'solana' ||
     (isWalletConnected && !!effectivePublicKey && !!profile?.solana_wallet);
 
+  const usdcShort = paymentMethod === 'solana' && usdcBalance !== null && usdcBalance < amountCents / 100;
+  // Offered any time nothing's in flight and USDC is the active rail — not
+  // just when USDC is short, mirrors the beam booking flow's own toggle
+  // (a viewer might simply prefer paying in SOL).
+  const canOfferSwap = paymentMethod === 'solana' && !submitting;
+  const solInsufficient = paySol && (!swapQuote?.solRequired || (solBalance !== null && solBalance < swapQuote.solRequired));
+
   const canSend =
     !submitting &&
     message.trim().length > 0 &&
     (paymentMethod === 'free' ? !!turnstileToken : amountCents >= 100 && !isNaN(amountCents)) &&
-    solanaReady;
+    solanaReady &&
+    !(paySol && solInsufficient);
+
+  // Live SOL→USDC quote for the "pay with SOL" toggle — mirrors
+  // overlay/page.tsx's matching effect for the beam booking flow exactly,
+  // including the same MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS reserve (a flash's
+  // own on-chain creation is the same EscrowState shape as a beam's, just
+  // escrow_type Flash instead of Beam, so it needs the same SOL reserve for
+  // the transaction that follows this swap).
+  useEffect(() => {
+    if (!paySol || paymentMethod !== 'solana') return;
+    let cancelled = false;
+    setSwapQuote({ loading: true, solRequired: null, swapOnlySol: null, needsSetup: false, error: null });
+    const fetchQuote = async () => {
+      try {
+        if (!effectivePublicKey) throw new Error('Connect your wallet first');
+        const { getSolToUsdcQuote, ATA_RENT_LAMPORTS, MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS, SWAP_TX_FEE_MARGIN_LAMPORTS } = await import('@/lib/jupiter-swap');
+        const { value: existingUsdcAtas } = await connection.getParsedTokenAccountsByOwner(
+          effectivePublicKey, { mint: new PublicKey(USDC_MINT) },
+        );
+        const needsSetup = existingUsdcAtas.length === 0;
+        const { lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget: amountUsdc });
+        const swapOnlyLamports = lamportsRequired + (needsSetup ? ATA_RENT_LAMPORTS : 0);
+        const totalLamports = swapOnlyLamports + SWAP_TX_FEE_MARGIN_LAMPORTS + MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS;
+        if (!cancelled) setSwapQuote({ loading: false, solRequired: totalLamports / 1e9, swapOnlySol: swapOnlyLamports / 1e9, needsSetup, error: null });
+      } catch (err) {
+        if (!cancelled) setSwapQuote({ loading: false, solRequired: null, swapOnlySol: null, needsSetup: false, error: err instanceof Error ? err.message : 'Quote failed' });
+      }
+    };
+    fetchQuote();
+    const interval = setInterval(fetchQuote, 20_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [paySol, paymentMethod, amountUsdc, effectivePublicKey, connection]);
+
+  /**
+   * Standalone SOL→USDC swap step — mirrors overlay/page.tsx::
+   * submitSolanaBooking's paySol branch. No flash gets created here at
+   * all; this only swaps, then (desktop) falls straight through to the
+   * unmodified normal sendFlash() call below with a now-sufficient USDC
+   * balance, or (mobile) stashes flash-shaped restore context and redirects
+   * — see stashFlashSwapRestore's doc comment for why that's a separate
+   * localStorage handoff rather than direct React state.
+   */
+  const handleSolSwap = async () => {
+    if (!effectivePublicKey) { showNotif('Connect your wallet first', 'denied'); return; }
+    setSubmitting(true);
+    try {
+      const { Connection: Conn, PublicKey: PK, Transaction: Tx } = await import('@solana/web3.js');
+      const conn = new Conn(SOLANA_RPC);
+      const solLamports = await conn.getBalance(effectivePublicKey);
+      const { value: existingUsdcAtas } = await conn.getParsedTokenAccountsByOwner(
+        effectivePublicKey, { mint: new PK(USDC_MINT) },
+      );
+      const { getSolToUsdcQuote, getSwapInstructions, ATA_RENT_LAMPORTS, MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS, SWAP_TX_FEE_MARGIN_LAMPORTS } = await import('@/lib/jupiter-swap');
+      const ataRentLamports = existingUsdcAtas.length === 0 ? ATA_RENT_LAMPORTS : 0;
+      const { quote, lamportsRequired } = await getSolToUsdcQuote({ usdcMint: USDC_MINT, usdcMicroTarget: amountUsdc });
+      // Reserve for the SEPARATE flash-creation tx that follows — see
+      // MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS's doc comment in jupiter-swap.ts.
+      const totalLamportsNeeded = SWAP_TX_FEE_MARGIN_LAMPORTS + lamportsRequired + ataRentLamports + MIN_SOL_FOR_DEPOSIT_TX_LAMPORTS;
+      if (solLamports < totalLamportsNeeded) {
+        showNotif(
+          `Need ~${(totalLamportsNeeded / 1e9).toFixed(4)} SOL total (swap + fees${ataRentLamports ? ' + one-time USDC wallet setup' : ''} + flash tx). You have ${(solLamports / 1e9).toFixed(4)} SOL.`,
+          'denied',
+        );
+        return;
+      }
+      const swapInstructions = await getSwapInstructions({ quote, userPublicKey: effectivePublicKey });
+      const swapTx = new Tx();
+      swapTx.add(...swapInstructions);
+      swapTx.feePayer = effectivePublicKey;
+      const { blockhash } = await conn.getLatestBlockhash();
+      swapTx.recentBlockhash = blockhash;
+
+      const { needsMobileHandoff, isInWalletBrowser } = await import('@/lib/mobile-wallet');
+      if (needsMobileHandoff() && !isInWalletBrowser()) {
+        const pc = await import('@/lib/phantom-connect');
+        const bs58Mod = await import('bs58');
+        const bs58 = bs58Mod.default;
+        const txB58 = bs58.encode(swapTx.serialize({ requireAllSignatures: false, verifySignatures: false }));
+        const session = pc.getStoredSession();
+        const baseHere = window.location.origin + window.location.pathname + window.location.search;
+        const sep = window.location.search ? '&' : '?';
+        const swapCtx = JSON.stringify({ message: message.trim(), amount });
+        if (!session) {
+          const walletName = pc.getPreferredDeeplinkWallet();
+          pc.stashPendingBooking({
+            kind: 'swap', swap_target: 'flash',
+            booking_id: '', cancel_token: '', escrow_pda: '',
+            viewer_wallet: effectivePublicKey.toBase58(),
+            pending_tx: txB58, swap_ctx: swapCtx,
+          });
+          // Force a fresh dapp keypair for this connect — see
+          // regenerateDappKeypair's doc comment in phantom-connect.ts.
+          pc.regenerateDappKeypair();
+          window.location.href = pc.buildConnectUrl({
+            wallet: walletName,
+            cluster: WALLET_ADAPTER_CLUSTER,
+            redirectTo: `${baseHere}${sep}phantom_action=connect-resume&casi_wallet=${walletName}`,
+          });
+          return;
+        }
+        pc.stashPendingBooking({
+          kind: 'swap', swap_target: 'flash',
+          booking_id: '', cancel_token: '', escrow_pda: '',
+          viewer_wallet: effectivePublicKey.toBase58(), swap_ctx: swapCtx,
+        });
+        window.location.href = pc.buildSignTransactionUrl({
+          session, transactionB58: txB58,
+          redirectTo: `${baseHere}${sep}phantom_action=sign-resume`,
+        });
+        return;
+      }
+
+      // Desktop / wallet-adapter path — no page navigation, await it
+      // directly, same as the beam flow's own desktop swap path.
+      if (!sendTransaction) throw new Error('Wallet does not support sending transactions');
+      const sig = await sendTransaction(swapTx, conn);
+      await conn.confirmTransaction(sig, 'confirmed');
+      setPaySol(false);
+      setJustSwapped(true);
+      showNotif('◎ Swap complete — tap Send again to finish your flash with USDC', 'success');
+    } catch (err) {
+      console.error('[flash][pay-with-sol] swap step failed', err);
+      const { reportClientError } = await import('@/lib/report-client-error');
+      reportClientError('overlay/flash-pay-with-sol/swap-step', err, {});
+      showNotif(err instanceof Error ? err.message : 'Could not complete the SOL swap — try again', 'denied');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleSend = async () => {
     if (!canSend) return;
+    if (paymentMethod === 'solana' && paySol) {
+      await handleSolSwap();
+      return;
+    }
     setSubmitting(true);
     setOnChainStatus(null);
     setOnChainTx(null);
@@ -212,6 +410,9 @@ export default function SendFlashSection({
       // handleStripeCheckoutComplete below collapses the composer once that
       // payment actually completes.
       setOpen(false);
+      setPaySol(false);
+      setSwapQuote(null);
+      setJustSwapped(false);
       onSent?.();
     } catch (err: unknown) {
       const { formatEscrowError } = await import('@/lib/casi-errors');
@@ -220,6 +421,21 @@ export default function SendFlashSection({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Found live 2026-09-09: paySol/swapQuote/justSwapped were only reset on
+  // handleSend's success path and the payment-method-change effect — not
+  // here. Toggle "Pay with SOL", complete the swap (justSwapped -> true),
+  // then close via ✕ instead of sending: reopening later to send an
+  // unrelated ordinary USDC flash wrongly showed "✓ Step 1 done · Step 2 of
+  // 2" for what should be a fresh single-step send. Not a financial-safety
+  // bug (paySol itself was already false, so it took the normal path with
+  // the correct amount) — just a misleading badge, but worth killing.
+  const handleClose = () => {
+    setOpen(false);
+    setPaySol(false);
+    setSwapQuote(null);
+    setJustSwapped(false);
   };
 
   // Embedded Checkout completed — the flash's own realtime subscription
@@ -305,7 +521,7 @@ export default function SendFlashSection({
           {embedded ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)' }}>⚡ Flash</span>
-              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 14, padding: 2 }}>✕</button>
+              <button onClick={handleClose} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 14, padding: 2 }}>✕</button>
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -313,7 +529,7 @@ export default function SendFlashSection({
                 <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--casi-accent)', marginBottom: 3 }}>⚡ Flash</div>
                 <div style={{ fontFamily: "var(--font-casi-sans), sans-serif", fontSize: 17, fontWeight: 800, color: 'var(--casi-text)' }}>Send a Flash</div>
               </div>
-              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
+              <button onClick={handleClose} style={{ background: 'none', border: 'none', color: 'var(--casi-text-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
             </div>
           )}
 
@@ -455,6 +671,50 @@ export default function SendFlashSection({
             );
           })()}
 
+          {/* Pay-with-SOL toggle + breakdown — mirrors SolanaConfirmModal's
+              swap offer (see docs/pay-with-sol-design-brief.md) in this
+              component's own inline-style vocabulary, since this form
+              doesn't render that modal at all. Available any time nothing's
+              in flight on the Solana rail, not just when USDC is short — a
+              viewer might simply prefer paying in SOL. */}
+          {canOfferSwap && (
+            <div style={{ marginBottom: 14 }}>
+              {(paySol || justSwapped) && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '4px 10px', borderRadius: 999, background: 'rgba(153,69,255,0.14)', fontFamily: "var(--font-casi-mono), monospace", fontWeight: 700, fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#c4a0ff' }}>
+                  {justSwapped ? '✓ Step 1 done · Step 2 of 2 — send flash' : 'Step 1 of 2 · Swap SOL → USDC'}
+                </div>
+              )}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>
+                <input type="checkbox" checked={paySol} onChange={e => setPaySol(e.target.checked)}
+                  style={{ width: 14, height: 14, accentColor: '#9945FF', flexShrink: 0 }} />
+                {usdcShort ? 'Not enough USDC — pay with SOL instead' : 'Pay with SOL instead'} (auto-swapped via Jupiter, two quick signatures)
+              </label>
+              {paySol && (
+                <div style={{ marginTop: 8, background: 'var(--casi-bg)', border: '1px solid var(--casi-border)', borderRadius: 10, padding: '10px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 11, color: 'var(--casi-text-muted)' }}>Paying with</span>
+                    <span style={{ fontFamily: "var(--M), var(--font-casi-mono), monospace", fontSize: 12, color: solInsufficient ? '#f87171' : 'var(--casi-text)' }}>
+                      {swapQuote?.loading
+                        ? 'getting quote…'
+                        : swapQuote?.error
+                          ? swapQuote.error
+                          : swapQuote?.swapOnlySol
+                            ? `≈ ${swapQuote.swapOnlySol.toFixed(4)} SOL`
+                            : '—'}
+                    </span>
+                  </div>
+                  {!swapQuote?.loading && !swapQuote?.error && swapQuote?.solRequired != null && (
+                    <div style={{ fontFamily: "var(--font-casi-mono), monospace", fontSize: 9, color: '#333', marginTop: 6, lineHeight: 1.6 }}>
+                      Your wallet needs ≈ {swapQuote.solRequired.toFixed(4)} SOL on hand in total
+                      {solInsufficient ? <span style={{ color: '#f87171' }}> — insufficient</span> : null}
+                      : the swap above, a small network-fee margin{swapQuote.needsSetup ? ', a one-time ~0.002 SOL cost to open your USDC wallet' : ''}, and ~0.015 SOL reserved for the flash step right after.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Captcha — only needed for free rail */}
           {paymentMethod === 'free' && (
             <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center' }}>
@@ -487,7 +747,9 @@ export default function SendFlashSection({
               <StripeIcon size={11} mono="#050505" />
             )}
             {paymentMethod === 'solana'
-              ? (submitting ? (onChainStatus === 'locking' ? 'Locking on-chain…' : 'Submitting…') : `${(amountCents / 100).toFixed(2)} USDC Flash`)
+              ? (submitting
+                  ? (paySol ? 'Swapping SOL…' : onChainStatus === 'locking' ? 'Locking on-chain…' : 'Submitting…')
+                  : paySol ? 'Swap & continue →' : `${(amountCents / 100).toFixed(2)} USDC Flash`)
               : paymentMethod === 'free'
                 ? (submitting ? 'Sending…' : 'Send Free Flash')
                 : (submitting ? 'Preparing…' : `${formatFiat(profile.settlement_currency, amountCents / 100)} Flash`)}
