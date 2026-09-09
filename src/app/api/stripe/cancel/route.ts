@@ -91,8 +91,42 @@ export async function POST(req: Request) {
         await stripe.refunds.create({ payment_intent: booking.payment_intent_id }, opts);
       }
     } catch (err: unknown) {
+      // Found live 2026-09-09: this used to log-and-continue unconditionally,
+      // so a refund that genuinely failed (network blip, Stripe API error,
+      // insufficient connected-account balance, a disputed charge) still
+      // flipped the booking to 'denied' with the viewer fully charged and no
+      // refund ever issued — silently, with no error surfaced to anyone, and
+      // no cron rescans denied Stripe bookings the way the Solana reconciler
+      // now does for its own rail. Same shape as the settleSolanaBeam bug
+      // fixed earlier this session.
+      //
+      // Stripe's own state is authoritative — a thrown error here doesn't
+      // necessarily mean the cancel/refund didn't happen (e.g. the response
+      // was lost after Stripe already processed it, or this raced
+      // stripe-janitor / the webhook doing the same thing concurrently).
+      // Re-check before concluding it's a real failure, mirroring this
+      // session's "verify on-chain state, don't trust the thrown error"
+      // pattern for the Solana rail.
       const message = err instanceof Error ? err.message : String(err);
-      console.error('[stripe/cancel] stripe call failed:', message);
+      let resolved = false;
+      try {
+        const fresh = await stripe.paymentIntents.retrieve(booking.payment_intent_id, undefined, opts);
+        if (fresh.status === 'canceled') {
+          resolved = true;
+        } else if (fresh.status === 'succeeded') {
+          const refunds = await stripe.refunds.list({ payment_intent: booking.payment_intent_id }, opts);
+          resolved = refunds.data.some(r => r.status === 'succeeded' || r.status === 'pending');
+        }
+      } catch (verifyErr) {
+        console.error('[stripe/cancel] verify-after-failure probe also failed:', verifyErr);
+      }
+      if (!resolved) {
+        console.error('[stripe/cancel] stripe call failed and no cancel/refund landed:', message);
+        return NextResponse.json(
+          { error: 'Could not cancel/refund on Stripe — please try again' },
+          { status: 502 },
+        );
+      }
     }
   }
 

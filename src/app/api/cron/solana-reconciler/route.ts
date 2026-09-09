@@ -509,6 +509,14 @@ async function reconcileActive(
 // this row is invisible to that scan by definition — see the file's top
 // doc comment), so a settled beam kept showing its old video/image
 // indefinitely until this ran.
+//
+// Corrected same day: the canvas clear here must be guarded, not
+// unconditional. This row can have been 'expired' for an arbitrary amount
+// of time before the reconciler ever reaches it (that's the whole shape of
+// the bug) — long enough for a completely different, currently-active
+// booking to have legitimately taken over the same element_id in the
+// meantime. clearElementIfNoActiveBooking only nulls the canvas if nothing
+// is actually live on that slot right now.
 async function clearLeakedRow(row: LeakedRow): Promise<void> {
   const { error } = await supabase
     .from('bookings')
@@ -518,10 +526,8 @@ async function clearLeakedRow(row: LeakedRow): Promise<void> {
     .not('escrow_pda', 'is', null);
   if (error) throw error;
   if (row.element_id) {
-    await supabase
-      .from('overlay_elements')
-      .update({ image_url: null })
-      .eq('id', row.element_id);
+    const { clearElementIfNoActiveBooking } = await import('@/lib/overlay-element-cleanup');
+    await clearElementIfNoActiveBooking(supabase, row.element_id);
   }
 }
 
