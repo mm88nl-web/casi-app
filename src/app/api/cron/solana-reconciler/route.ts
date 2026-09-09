@@ -35,6 +35,22 @@
  *          reconciler run, via the branch above) flips DB status once the
  *          PDA actually closes — this function only fires the crank.
  *
+ *   3. `expired` Solana bookings that STILL have `escrow_pda` set — the same
+ *      set the viewer overlay's "Ended early — USDC recoverable" chip is
+ *      built from (isSolanaKickLeaked). This is the case where DB status
+ *      already says expired (a prior settle attempt threw and, before
+ *      #197, the status got flipped anyway) but nothing ever actually
+ *      closed the escrow on-chain — scan 2 above can never reach these,
+ *      since it filters on `status = 'active'` and these rows aren't.
+ *      Probe the PDA:
+ *        - `null` (account closed) → something settled it since (a
+ *          viewer's own wallet, a previous run of this same crank) — null
+ *          `escrow_pda` so the stale "recover" chip clears.
+ *        - still Active             → crank settle_beam, same as scan 2.
+ *        - Pending                  → shouldn't happen for a DB row that's
+ *          already 'expired'; leave for a human to look at rather than
+ *          guess at a recovery action here.
+ *
  * Idempotent: every write uses a WHERE clause that matches the pre-transition
  * status so repeated runs after the drift is fixed are no-ops.
  *
@@ -107,6 +123,20 @@ type ActiveRow = {
   profile_id: string;
 };
 
+// A booking DB status can say 'expired' while the escrow is still Active
+// on-chain — the viewer-facing "Ended early — USDC recoverable" chip
+// (isSolanaKickLeaked in MyBeamsSection.tsx) already surfaces exactly this
+// set. Same shape as ActiveRow minus the fields only needed for the
+// duration check, which doesn't apply here (an already-'expired' row gets
+// probed unconditionally, not gated on wall-clock).
+type LeakedRow = {
+  id: number | string;
+  escrow_pda: string;
+  escrow_seed: string | null;
+  viewer_wallet: string | null;
+  profile_id: string;
+};
+
 export async function GET(req: Request) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
@@ -135,7 +165,7 @@ export async function GET(req: Request) {
     Date.now() - PENDING_STALE_AFTER_HOURS * 60 * 60 * 1000,
   ).toISOString();
 
-  const [pending, active] = await Promise.all([
+  const [pending, active, leaked] = await Promise.all([
     supabase
       .from('bookings')
       .select('id, escrow_pda, escrow_seed, created_at, image_url, element_id, viewer_wallet')
@@ -152,24 +182,34 @@ export async function GET(req: Request) {
       .not('escrow_pda', 'is', null)
       .not('started_at', 'is', null)
       .limit(200),
+    supabase
+      .from('bookings')
+      .select('id, escrow_pda, escrow_seed, viewer_wallet, profile_id')
+      .eq('status', 'expired')
+      .eq('payment_method', 'solana')
+      .not('escrow_pda', 'is', null)
+      .limit(200),
   ]);
 
   if (pending.error) logError('solana-reconciler', pending.error, { scope: 'select pending' });
   if (active.error) logError('solana-reconciler', active.error, { scope: 'select active' });
+  if (leaked.error) logError('solana-reconciler', leaked.error, { scope: 'select leaked' });
 
-  // Streamer wallets for whatever active rows we actually need to consider
-  // cranking — a second, cheap query rather than an embedded join (this
-  // file doesn't use those anywhere else, so keeping the same plain-select
-  // style is more consistent than introducing new join syntax here).
-  const activeProfileIds = Array.from(
-    new Set(((active.data ?? []) as ActiveRow[]).map(r => r.profile_id).filter(Boolean)),
-  );
+  // Streamer wallets for whatever active/leaked rows we actually need to
+  // consider cranking — a second, cheap query rather than an embedded join
+  // (this file doesn't use those anywhere else, so keeping the same
+  // plain-select style is more consistent than introducing new join syntax
+  // here). Both scans share the same map.
+  const neededProfileIds = Array.from(new Set([
+    ...((active.data ?? []) as ActiveRow[]).map(r => r.profile_id),
+    ...((leaked.data ?? []) as LeakedRow[]).map(r => r.profile_id),
+  ].filter(Boolean)));
   const streamerWalletByProfile = new Map<string, string | null>();
-  if (activeProfileIds.length) {
+  if (neededProfileIds.length) {
     const { data: profiles, error: profilesErr } = await supabase
       .from('profiles')
       .select('id, solana_wallet')
-      .in('id', activeProfileIds);
+      .in('id', neededProfileIds);
     if (profilesErr) logError('solana-reconciler', profilesErr, { scope: 'select active-profiles' });
     for (const p of profiles ?? []) streamerWalletByProfile.set(p.id, p.solana_wallet);
   }
@@ -180,6 +220,8 @@ export async function GET(req: Request) {
     activeToExpired: 0,
     activeCranked: 0,
     stalePendingCranked: 0,
+    leakedCranked: 0,
+    leakedCleared: 0,
   };
 
   for (const row of (pending.data ?? []) as PendingRow[]) {
@@ -203,6 +245,17 @@ export async function GET(req: Request) {
       else if (result === 'cranked') healed.activeCranked++;
     } catch (err) {
       logError('solana-reconciler', err, { booking_id: row.id, stage: 'active' });
+    }
+  }
+
+  for (const row of (leaked.data ?? []) as LeakedRow[]) {
+    try {
+      const streamerWallet = streamerWalletByProfile.get(row.profile_id) ?? null;
+      const result = await reconcileLeaked(connection, row, cranker, streamerWallet);
+      if (result === 'cranked') healed.leakedCranked++;
+      else if (result === 'cleared') healed.leakedCleared++;
+    } catch (err) {
+      logError('solana-reconciler', err, { booking_id: row.id, stage: 'leaked' });
     }
   }
 
@@ -244,6 +297,7 @@ export async function GET(req: Request) {
     scanned: {
       pending: pending.data?.length ?? 0,
       active: active.data?.length ?? 0,
+      leaked: leaked.data?.length ?? 0,
       staleFlashes: staleFlashes?.length ?? 0,
     },
     healed: { ...healed, flashesDenied },
@@ -362,11 +416,14 @@ async function crankStalePending(
 // src/lib.rs) — any signer can crank it once elapsed ≥ duration, which pays
 // 100% of the vested amount to the streamer. This is the fallback for when
 // no one's own wallet ever cranks it (see the doc comment at the top of
-// this file for the live incident that motivated adding this).
+// this file for the live incident that motivated adding this). Shared by
+// both reconcileActive (DB still says 'active') and reconcileLeaked (DB
+// already flipped to 'expired' but the escrow never actually closed) —
+// narrowed to just the fields either row shape can supply.
 async function crankExpiredActive(
   connection: Connection,
   cranker: Keypair,
-  row: ActiveRow,
+  row: { id: number | string; escrow_seed: string | null; viewer_wallet: string | null },
   streamerWallet: string,
 ): Promise<void> {
   if (!row.viewer_wallet) return;
@@ -434,4 +491,54 @@ async function reconcileActive(
       .eq('id', row.element_id);
   }
   return 'expired';
+}
+
+// DB already says 'expired' but escrow_pda is still set — the same set
+// that powers the viewer overlay's "Ended early — USDC recoverable" chip
+// (isSolanaKickLeaked). reconcileActive can never reach these rows (it
+// filters on status = 'active'). See the doc comment at the top of this
+// file for the live incident this closes.
+async function reconcileLeaked(
+  connection: Connection,
+  row: LeakedRow,
+  cranker: Keypair | null,
+  streamerWallet: string | null,
+): Promise<'cranked' | 'cleared' | 'noop'> {
+  const info = await connection.getAccountInfo(new PublicKey(row.escrow_pda));
+
+  if (!info) {
+    // Already closed by something else since — a viewer's own wallet
+    // finally going through, a previous run of this same crank. Just clear
+    // the stale escrow_pda so the "recover" chip stops showing; status is
+    // already 'expired', nothing else to flip.
+    const { error } = await supabase
+      .from('bookings')
+      .update({ escrow_pda: null })
+      .eq('id', row.id)
+      .eq('status', 'expired')
+      .not('escrow_pda', 'is', null);
+    if (error) throw error;
+    return 'cleared';
+  }
+
+  const status = info.data[ESCROW_STATUS_OFFSET];
+  if (status !== ESCROW_STATUS_ACTIVE) {
+    // Pending on-chain while DB already says expired is an unexpected
+    // combination (a beam that never started can't have "expired") —
+    // leave it alone rather than guess at a recovery action here.
+    return 'noop';
+  }
+
+  if (cranker && streamerWallet && row.viewer_wallet) {
+    try {
+      await crankExpiredActive(connection, cranker, row, streamerWallet);
+      return 'cranked';
+    } catch (err) {
+      const { isBenignEscrowRace } = await import('@/lib/casi-errors');
+      if (!isBenignEscrowRace(err)) {
+        logError('solana-reconciler', err, { booking_id: row.id, stage: 'crank-leaked' });
+      }
+    }
+  }
+  return 'noop';
 }
