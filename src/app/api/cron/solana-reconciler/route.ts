@@ -21,8 +21,19 @@
  *      + duration ≤ now). Probe the PDA:
  *        - `null` (account closed) → settle_beam already ran on-chain, flip
  *          DB to 'expired' and null image_url.
- *        - still Active             → settle hasn't cranked yet; leave alone.
- *          The next admin action or viewer overlay visit will crank it.
+ *        - still Active             → past duration, settle_beam is
+ *          PERMISSIONLESS at this point (see programs/casi-escrow/src/lib.rs)
+ *          — crank it ourselves with the cranker keypair, same pattern as
+ *          crankStalePending below. 100% of the vested amount goes to the
+ *          streamer once fully elapsed; nothing for the cranker to hold or
+ *          route. Found live 2026-09-09: nothing previously called
+ *          settle_beam for this case at all — a viewer's own wallet is the
+ *          ONLY thing that used to crank it, and if their wallet's own
+ *          preflight simulation balked (seen live: Solflare refusing to
+ *          simulate an unfamiliar program), the escrow just sat stuck
+ *          forever with no automatic fallback. The webhook (or tomorrow's
+ *          reconciler run, via the branch above) flips DB status once the
+ *          PDA actually closes — this function only fires the crank.
  *
  * Idempotent: every write uses a WHERE clause that matches the pre-transition
  * status so repeated runs after the drift is fixed are no-ops.
@@ -88,9 +99,12 @@ type PendingRow = {
 type ActiveRow = {
   id: number | string;
   escrow_pda: string;
+  escrow_seed: string | null;
   started_at: string | null;
   duration_minutes: number | string | null;
   element_id: string | null;
+  viewer_wallet: string | null;
+  profile_id: string;
 };
 
 export async function GET(req: Request) {
@@ -114,7 +128,7 @@ export async function GET(req: Request) {
   // the on-chain program allows for anyone.
   const cranker = loadCrankerKeypair('solana-reconciler');
   if (!cranker) {
-    logWarn('solana-reconciler', 'SOLANA_CRANKER_KEYPAIR not set — stale-pending cancels will be skipped');
+    logWarn('solana-reconciler', 'SOLANA_CRANKER_KEYPAIR not set — stale-pending cancels and past-duration settles will be skipped');
   }
 
   const pendingCutoff = new Date(
@@ -132,7 +146,7 @@ export async function GET(req: Request) {
       .limit(200),
     supabase
       .from('bookings')
-      .select('id, escrow_pda, started_at, duration_minutes, element_id')
+      .select('id, escrow_pda, escrow_seed, started_at, duration_minutes, element_id, viewer_wallet, profile_id')
       .eq('status', 'active')
       .eq('payment_method', 'solana')
       .not('escrow_pda', 'is', null)
@@ -143,10 +157,28 @@ export async function GET(req: Request) {
   if (pending.error) logError('solana-reconciler', pending.error, { scope: 'select pending' });
   if (active.error) logError('solana-reconciler', active.error, { scope: 'select active' });
 
+  // Streamer wallets for whatever active rows we actually need to consider
+  // cranking — a second, cheap query rather than an embedded join (this
+  // file doesn't use those anywhere else, so keeping the same plain-select
+  // style is more consistent than introducing new join syntax here).
+  const activeProfileIds = Array.from(
+    new Set(((active.data ?? []) as ActiveRow[]).map(r => r.profile_id).filter(Boolean)),
+  );
+  const streamerWalletByProfile = new Map<string, string | null>();
+  if (activeProfileIds.length) {
+    const { data: profiles, error: profilesErr } = await supabase
+      .from('profiles')
+      .select('id, solana_wallet')
+      .in('id', activeProfileIds);
+    if (profilesErr) logError('solana-reconciler', profilesErr, { scope: 'select active-profiles' });
+    for (const p of profiles ?? []) streamerWalletByProfile.set(p.id, p.solana_wallet);
+  }
+
   const healed = {
     pendingToActive: 0,
     pendingToDenied: 0,
     activeToExpired: 0,
+    activeCranked: 0,
     stalePendingCranked: 0,
   };
 
@@ -165,8 +197,10 @@ export async function GET(req: Request) {
   for (const row of (active.data ?? []) as ActiveRow[]) {
     try {
       if (!isDurationExceeded(row, now)) continue;
-      const result = await reconcileActive(connection, row);
+      const streamerWallet = streamerWalletByProfile.get(row.profile_id) ?? null;
+      const result = await reconcileActive(connection, row, cranker, streamerWallet);
       if (result === 'expired') healed.activeToExpired++;
+      else if (result === 'cranked') healed.activeCranked++;
     } catch (err) {
       logError('solana-reconciler', err, { booking_id: row.id, stage: 'active' });
     }
@@ -294,16 +328,11 @@ async function reconcilePending(
 }
 
 
-async function crankStalePending(
-  connection: Connection,
-  cranker: Keypair,
-  row: PendingRow,
-): Promise<void> {
-  if (!row.viewer_wallet) return;
-  // CasiEscrowClient expects an AnchorWallet — build a minimal shim so we can
-  // reuse the existing `cancelStalePending` helper rather than duplicate the
-  // instruction-build logic here.
-  const wallet = {
+// CasiEscrowClient expects an AnchorWallet — this shim is shared by both
+// crank helpers below so the cranker keypair can drive it without going
+// through the wallet-adapter.
+function crankerWallet(cranker: Keypair): import('@solana/wallet-adapter-react').AnchorWallet {
+  return {
     publicKey: cranker.publicKey,
     signTransaction: async <T>(t: T): Promise<T> => {
       (t as { partialSign(k: Keypair): void }).partialSign(cranker);
@@ -314,23 +343,67 @@ async function crankStalePending(
       return ts;
     },
   } as unknown as import('@solana/wallet-adapter-react').AnchorWallet;
+}
 
-  const client = new CasiEscrowClient(connection, wallet, WALLET_ADAPTER_CLUSTER);
+async function crankStalePending(
+  connection: Connection,
+  cranker: Keypair,
+  row: PendingRow,
+): Promise<void> {
+  if (!row.viewer_wallet) return;
+  const client = new CasiEscrowClient(connection, crankerWallet(cranker), WALLET_ADAPTER_CLUSTER);
   await client.cancelStalePending({
     escrowId: row.escrow_seed ?? row.id,
     viewer:   new PublicKey(row.viewer_wallet),
   });
 }
 
+// Past-duration settle_beam is permissionless (see programs/casi-escrow/
+// src/lib.rs) — any signer can crank it once elapsed ≥ duration, which pays
+// 100% of the vested amount to the streamer. This is the fallback for when
+// no one's own wallet ever cranks it (see the doc comment at the top of
+// this file for the live incident that motivated adding this).
+async function crankExpiredActive(
+  connection: Connection,
+  cranker: Keypair,
+  row: ActiveRow,
+  streamerWallet: string,
+): Promise<void> {
+  if (!row.viewer_wallet) return;
+  const client = new CasiEscrowClient(connection, crankerWallet(cranker), WALLET_ADAPTER_CLUSTER);
+  await client.settleBeam({
+    escrowId: row.escrow_seed ?? row.id,
+    viewer:   new PublicKey(row.viewer_wallet),
+    streamer: new PublicKey(streamerWallet),
+  });
+}
+
 async function reconcileActive(
   connection: Connection,
   row: ActiveRow,
-): Promise<'expired' | 'noop'> {
+  cranker: Keypair | null,
+  streamerWallet: string | null,
+): Promise<'expired' | 'cranked' | 'noop'> {
   const info = await connection.getAccountInfo(new PublicKey(row.escrow_pda));
   if (info) {
-    // Still Active on chain even though duration has elapsed. Someone has
-    // to crank settle_beam; that's not this cron's job (we don't hold a
-    // signing key here). Leave it.
+    // Still Active on chain even though duration has elapsed — permissionless
+    // settle_beam window. Crank it ourselves if we have a signer and both
+    // wallets; otherwise leave it for the next viewer/streamer action.
+    if (cranker && streamerWallet && row.viewer_wallet) {
+      try {
+        await crankExpiredActive(connection, cranker, row, streamerWallet);
+        return 'cranked';
+      } catch (err) {
+        const { isBenignEscrowRace } = await import('@/lib/casi-errors');
+        // A race against something else settling this same escrow between
+        // our probe and our tx (a viewer's own wallet action, another
+        // reconciler run) isn't a real failure — the escrow's closed
+        // either way. Anything else gets logged for a human to look at.
+        if (!isBenignEscrowRace(err)) {
+          logError('solana-reconciler', err, { booking_id: row.id, stage: 'crank-active' });
+        }
+      }
+    }
     return 'noop';
   }
 
