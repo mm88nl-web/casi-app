@@ -4,7 +4,7 @@ export default function PrivacyPage() {
   return (
     <>
       <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Privacy Policy</h1>
-      <p style={{ color: 'var(--casi-text-muted)', fontSize: 13, marginBottom: 32 }}>Last updated: 15 May 2026 · v1.0.</p>
+      <p style={{ color: 'var(--casi-text-muted)', fontSize: 13, marginBottom: 32 }}>Last updated: 28 September 2026 · v1.1.</p>
 
       <h2 style={h2}>0. Controller</h2>
       <p>
@@ -43,6 +43,32 @@ export default function PrivacyPage() {
         <li><strong>Solana RPC providers</strong> — public-blockchain transactions (on-chain data is public by nature of the blockchain).</li>
       </ul>
       <p>Each processor receives only the minimum data needed to perform their function.</p>
+
+      <h2 style={h2}>3a. YouTube</h2>
+      <p>
+        We use YouTube API Services to upload recordings of the CASI channel&apos;s own live shows, and
+        short clips from them, to the CASI YouTube channel. This upload tool is used only by the casi team,
+        signed in with the CASI channel&apos;s own Google account. It does not access, store or share any
+        viewer&apos;s YouTube or Google account data.
+      </p>
+      <p>
+        Recordings of CASI&apos;s own shows can include the display names, words and messages viewers
+        submitted to the CASI stream through casi, as they appeared or were read out on stream. We never
+        publish names that our moderation filters rejected. To have your name or submission removed from a
+        published CASI video, email <a href="mailto:privacy@casi.gg" style={a}>privacy@casi.gg</a>.
+        Streams of other streamers on casi are not recorded or uploaded by this tool.
+      </p>
+      <p>
+        Watching CASI on YouTube is also subject to the{' '}
+        <a href="https://www.youtube.com/t/terms" style={a}>YouTube Terms of Service</a> and the{' '}
+        <a href="https://policies.google.com/privacy" style={a}>Google Privacy Policy</a>.
+      </p>
+      <p>
+        The only Google data the tool stores is the access token for the CASI channel, kept on our own
+        computers and deleted when we disconnect the tool. The channel owner can remove its access at any
+        time at{' '}
+        <a href="https://myaccount.google.com/permissions" style={a}>myaccount.google.com/permissions</a>.
+      </p>
 
       <h2 style={h2}>4. Cookies and local storage</h2>
       <p>
