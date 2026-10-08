@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { timingSafeEqual } from 'node:crypto';
 import { stripe } from '@/lib/stripe';
+import { proRataCaptureCents } from '@/lib/payment-math';
+import { stripeMinAmount } from '@/lib/currency';
 
 // Vercel Cron calls this with Authorization: Bearer $CRON_SECRET.
 // Runs once per day on Hobby (Hobby plans cap crons at daily). The normal
@@ -37,12 +39,11 @@ export async function GET(req: Request) {
     .not('payment_intent_id', 'is', null)
     .neq('payment_method', 'solana');
 
-  if (!expired?.length) {
-    return NextResponse.json({ captured: 0 });
-  }
-
+  // No early return when this is empty: the sweeps below must still run.
+  // (An every-minute pg_cron job, expire_stale_bookings, flips overdue rows
+  // to 'expired' long before this daily run, so this list is usually empty.)
   const now = Date.now();
-  const overdue = expired.filter((b: any) => {
+  const overdue = (expired ?? []).filter((b: any) => {
     if (!b.started_at || !b.duration_minutes) return false;
     const endsAt = new Date(b.started_at).getTime() + b.duration_minutes * 60 * 1000;
     return now >= endsAt;
@@ -122,6 +123,73 @@ export async function GET(req: Request) {
       }
     } catch (err: any) {
       console.error(`[stripe-janitor] booking ${booking.id} failed:`, err.message);
+    }
+  }
+
+  // ── Expired-but-uncaptured sweep ────────────────────────────────────────
+  // A Stripe beam that runs its full time is flipped to 'expired' by
+  // expire_stale_bookings (pg_cron) or /api/bookings/expire-and-advance,
+  // neither of which talks to Stripe. The loop above only sees rows still
+  // 'active', so without this sweep the PaymentIntent sat in
+  // requires_capture until the card authorization lapsed (~7 days) and the
+  // streamer was never paid. Every path that settles a PI on purpose
+  // (end-early, cancel, deny) leaves it captured or cancelled, so an expired
+  // row whose PI is still requires_capture is one nobody collected.
+  type UncapturedRow = {
+    id: number; profile_id: string; payment_intent_id: string;
+    original_amount_cents: number | null; started_at: string | null;
+    ended_at: string | null; duration_minutes: number | string | null;
+  };
+  const CAPTURE_WINDOW_DAYS = 7;
+  const captureCutoff = new Date(Date.now() - CAPTURE_WINDOW_DAYS * 86400 * 1000).toISOString();
+  const { data: uncaptured } = await supabase
+    .from('bookings')
+    .select('id, profile_id, payment_intent_id, original_amount_cents, started_at, ended_at, duration_minutes')
+    .eq('status', 'expired')
+    .not('payment_intent_id', 'is', null)
+    .neq('payment_method', 'solana')
+    .gte('started_at', captureCutoff)
+    .returns<UncapturedRow[]>();
+
+  let lateCaptured = 0;
+  let lateCancelled = 0;
+  if (uncaptured?.length) {
+    const lateProfileIds = Array.from(new Set(uncaptured.map((b) => b.profile_id).filter(Boolean)));
+    const lateProfiles = new Map<string, { stripe_account_id: string | null; settlement_currency: string | null }>();
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, stripe_account_id, settlement_currency')
+      .in('id', lateProfileIds);
+    for (const p of profs || []) lateProfiles.set(p.id, p);
+
+    for (const b of uncaptured) {
+      try {
+        const prof = lateProfiles.get(b.profile_id);
+        if (!prof?.stripe_account_id || !b.original_amount_cents) continue;
+        const opts = { stripeAccount: prof.stripe_account_id };
+        const pi = await stripe.paymentIntents.retrieve(b.payment_intent_id, undefined, opts);
+        if (pi.status !== 'requires_capture') continue;
+
+        // ended_at is only set when the streamer cut the beam short; charge
+        // for the time it actually aired, same rule as /api/stripe/end-early.
+        const totalMinutes = Number(b.duration_minutes);
+        const airedMinutes = b.ended_at && b.started_at
+          ? (new Date(b.ended_at).getTime() - new Date(b.started_at).getTime()) / 60_000
+          : totalMinutes;
+        const amount = airedMinutes < totalMinutes
+          ? proRataCaptureCents(b.original_amount_cents, totalMinutes, airedMinutes)
+          : b.original_amount_cents;
+
+        if (amount >= stripeMinAmount(prof.settlement_currency)) {
+          await stripe.paymentIntents.capture(b.payment_intent_id, { amount_to_capture: amount }, opts);
+          lateCaptured++;
+        } else {
+          await stripe.paymentIntents.cancel(b.payment_intent_id, undefined, opts);
+          lateCancelled++;
+        }
+      } catch (err) {
+        console.error(`[stripe-janitor] expired booking ${b.id} late capture failed:`, err instanceof Error ? err.message : err);
+      }
     }
   }
 
@@ -238,10 +306,12 @@ export async function GET(req: Request) {
     }
   }
 
-  console.log(`[stripe-janitor] processed ${overdue.length} overdue, captured ${captured}; stale bookings ${stale?.length ?? 0}, cancelled ${cancelled}; stale flashes ${staleFlashes?.length ?? 0}, cancelled ${flashesCancelled}`);
+  console.log(`[stripe-janitor] processed ${overdue.length} overdue, captured ${captured}; expired uncaptured ${uncaptured?.length ?? 0}, late-captured ${lateCaptured}, late-cancelled ${lateCancelled}; stale bookings ${stale?.length ?? 0}, cancelled ${cancelled}; stale flashes ${staleFlashes?.length ?? 0}, cancelled ${flashesCancelled}`);
   return NextResponse.json({
     overdue: overdue.length,
     captured,
+    lateCaptured,
+    lateCancelled,
     stale: stale?.length ?? 0,
     cancelled,
     staleFlashes: staleFlashes?.length ?? 0,

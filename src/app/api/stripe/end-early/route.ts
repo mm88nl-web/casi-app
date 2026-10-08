@@ -69,11 +69,13 @@ export async function POST(req: Request) {
     // case here — a 30-minute €0.50 beam ended after 8 minutes pro-rates
     // to 13 cents, below the floor. Three branches:
     //   - proRata >= min:           normal partial capture
-    //   - 0 < proRata < min:        cancel the PI (full refund to viewer).
+    //   - proRata < min (incl. 0):  cancel the PI (full refund to viewer).
     //                               Streamer eats the visible time but
     //                               doesn't accidentally charge full price
-    //                               for a few seconds of beam.
-    //   - proRata == 0:             nothing to do, fall through to expire.
+    //                               for a few seconds of beam. Zero cancels
+    //                               too: a PI left in requires_capture on an
+    //                               expired row is what the janitor's late
+    //                               capture sweep collects.
     const min = stripeMinAmount(settlementCurrency);
 
     try {
@@ -86,7 +88,7 @@ export async function POST(req: Request) {
           opts,
         );
         console.log('End early capture:', proRata, 'of', booking.original_amount_cents);
-      } else if (pi.status === 'requires_capture' && proRata > 0 && proRata < min) {
+      } else if (pi.status === 'requires_capture' && proRata < min) {
         // Pro-rated amount is below the Stripe floor. Cancel the
         // authorization so the viewer's card hold drops without a charge.
         // Logged at warn-ish level so we can spot streamers hitting this
